@@ -1,4 +1,6 @@
-//! Main-track edits. Deletions ripple: gaps close and attached layers follow their content.
+//! Main-track edits. Deletions ripple: gaps close and attached layers follow their content. Free layers keep their
+//! time; those a cut leaves past the video's new end are trimmed to it or go, and those placed after the end move with
+//! it.
 //!
 //! Layers move by timeline lengths but are re-anchored in source time against the main track as
 //! it was before the cut, so rounding at non-unit speeds can never hand a layer to a neighbouring
@@ -7,13 +9,18 @@
 //! Op-supplied times are checked against `0..=MAX_TIME_US` before use, and all other arithmetic
 //! saturates, so even a corrupt project only ever fails validation.
 
+use std::collections::HashSet;
+
 use crate::error::{invalid, invalid_with, not_found, Result};
 use crate::ids::Id;
+use crate::media::music::is_music;
 use crate::messages::{code, msg};
 use crate::motion::{self, Motion};
 use crate::ops::{ClipPatch, Edge};
 use crate::project::{AssetKind, Project};
-use crate::query::{anchor_at, clip_at, main_track_duration, MainIndex};
+use crate::query::{
+    anchor_at, anchored_end, clip_at, main_track_duration, video_duration, MainIndex,
+};
 use crate::time::{
     drifted, kept_parts, merge_ranges, scaled, unscaled, RangeUs, Ripple, Us, MIN_DURATION_US,
 };
@@ -24,7 +31,7 @@ use crate::timeline::{
 use crate::transitions::{max_transition_us, MIN_TRANSITION_US};
 
 use super::generator_pieces;
-use super::item_ops::{advance_source, fit_fades};
+use super::item_ops::{advance_source, end_at, fit_fades};
 use super::places::Places;
 use super::{check_time, insert_sorted, IdPool};
 
@@ -382,20 +389,83 @@ pub(super) fn remove_clip(p: &mut Project, id: &str, places: &mut Places) -> Res
     ripple_delete(p, &[RangeUs { start, end }])
 }
 
-/// Cut `ranges` out of the main track, close the gaps and carry attached layers along. The removed ranges are indexed
-/// once (`Ripple`), so each clip and layer finds its cuts by binary search: O((C + L) log R) plus the
-/// pieces made, not O((C + L) × R).
+/// Cut `ranges` out of the main track, close the gaps and carry attached layers along. Free layers keep their time,
+/// those the cut leaves past the video's new end are trimmed to it or go, and those placed after the end move with it
+/// ([`end_free_layers`]). The removed ranges are indexed once (`Ripple`), so each clip and layer finds its cuts by
+/// binary search: O((C + L) log R) plus the pieces made, not O((C + L) × R).
 fn ripple_delete(p: &mut Project, ranges: &[RangeUs]) -> Result<()> {
     let merged = merge_ranges(ranges, main_track_duration(&p.timeline.main));
     if merged.is_empty() {
         return Err(invalid(code!("model.clip.nothingToRemove")));
     }
+    let free = FreeLayers::before_cut(p);
     let removed = Ripple::new(&with_slivers(&p.timeline.main, merged));
     let mut ids = IdPool::of(p);
     let starts = ripple_items(p, &removed, &mut ids);
     let origins = cut_main(&mut p.timeline.main, &removed, &mut ids);
+    let new_end = anchored_end(&p.timeline);
     reanchor(p, &starts, &origins);
+    end_free_layers(p, &free, new_end);
     Ok(())
+}
+
+/// The free layers on unlocked tracks a cut changes, read before it, with the video's end then (`anchored_end`): those
+/// over the video (starting before the end; music is left to its refit, `media::music`), and those placed after it
+/// (an end card, a closing sound or song), which stay after it.
+struct FreeLayers {
+    end: Us,
+    over: HashSet<Id>,
+    after: HashSet<Id>,
+}
+
+impl FreeLayers {
+    fn before_cut(p: &Project) -> Self {
+        let end = anchored_end(&p.timeline);
+        let (mut over, mut after) = (HashSet::new(), HashSet::new());
+        let free = (p.timeline.tracks.iter().filter(|t| !t.locked))
+            .flat_map(|t| &t.items)
+            .filter(|i| i.attach.is_none());
+        for item in free {
+            if item.start_us >= end {
+                after.insert(item.id.clone());
+            } else if !is_music(item) {
+                over.insert(item.id.clone());
+            }
+        }
+        Self { end, over, after }
+    }
+}
+
+/// After a cut that brought the video's end in to `new_end`: a free layer placed after the end keeps its distance from
+/// it (its new start is the new end plus its old start's distance from the old end), and one over the video now
+/// wholly past the end goes, one across it trimmed to it, as a hand trim of its end does. Nothing changes when the
+/// video is now empty: the layers wait for the footage that comes next, as music does.
+fn end_free_layers(p: &mut Project, free: &FreeLayers, new_end: Us) {
+    if (free.over.is_empty() && free.after.is_empty()) || new_end <= 0 || new_end >= free.end {
+        return;
+    }
+    let shift = new_end.saturating_sub(free.end);
+    for track in &mut p.timeline.tracks {
+        let mut moved = false;
+        track.items.retain_mut(|item| {
+            if free.after.contains(&item.id) {
+                item.start_us = item.start_us.saturating_add(shift);
+                moved = true;
+                return true;
+            }
+            if !free.over.contains(&item.id) || item.end_us() <= new_end {
+                return true;
+            }
+            if new_end.saturating_sub(item.start_us) < MIN_DURATION_US {
+                return false;
+            }
+            end_at(item, new_end);
+            true
+        });
+        if moved {
+            track.items.sort_by_key(|i| i.start_us);
+        }
+    }
 }
 
 pub(super) fn trim_clip(
@@ -441,10 +511,13 @@ pub(super) fn trim_clip(
     if let Some(origin) = origins.get_mut(i) {
         origin.1 = kept;
     }
+    let free = FreeLayers::before_cut(p);
     let mut ids = IdPool::of(p);
     let starts = ripple_items(p, &removed, &mut ids);
     p.timeline.main[i] = trimmed;
+    let new_end = anchored_end(&p.timeline);
     reanchor(p, &starts, &origins);
+    end_free_layers(p, &free, new_end);
     Ok(())
 }
 
@@ -546,6 +619,9 @@ pub(super) fn update_clip_at(
     }
     if let Some(v) = &patch.framing {
         clip.framing = v.clone();
+    }
+    if let Some(v) = patch.crop {
+        clip.crop = (!v.is_none()).then_some(v);
     }
     if let Some(v) = &patch.effects {
         clip.effects = v.clone();
@@ -744,6 +820,7 @@ fn cut_main(main: &mut Vec<Clip>, removed: &Ripple, ids: &mut IdPool) -> Origins
 fn ripple_items(p: &mut Project, removed: &Ripple, ids: &mut IdPool) -> Vec<Option<LayerStart>> {
     let layers: usize = p.timeline.tracks.iter().map(|t| t.items.len()).sum();
     let mut starts = Vec::with_capacity(layers);
+    let video_end = video_duration(&p.timeline);
     let main = MainIndex::new(&p.timeline.main);
     for track in p.timeline.tracks.iter_mut() {
         let mut next = Vec::with_capacity(track.items.len());
@@ -761,7 +838,7 @@ fn ripple_items(p: &mut Project, removed: &Ripple, ids: &mut IdPool) -> Vec<Opti
             };
             // Start from where the anchor puts the layer (stored starts can be stale).
             item.start_us = at;
-            let pieces = ripple_item(item, removed, ids);
+            let pieces = ripple_item(item, removed, video_end, ids);
             // A long video layer can be cut into thousands of pieces: room for them at once.
             next.reserve(pieces.len());
             starts.reserve(pieces.len());
@@ -779,11 +856,26 @@ fn ripple_items(p: &mut Project, removed: &Ripple, ids: &mut IdPool) -> Vec<Opti
 /// Static layers (text, image, zoom) map their start and end through the ripple; video and audio
 /// layers keep only the footage that stays, split into pieces. Pieces under 10 ms are dropped.
 /// Each piece comes with the old timeline moment it now starts at.
-fn ripple_item(item: Item, removed: &Ripple, ids: &mut IdPool) -> Vec<(Item, Us)> {
+///
+/// A sound that plays before `video_end` (the video's end before the cut) keeps nothing past it, where it was never
+/// heard, so no cut leaves one running past the new end. Music keeps its own rules (`media::music`), and a sound
+/// placed after the end only moves.
+fn ripple_item(item: Item, removed: &Ripple, video_end: Us, ids: &mut IdPool) -> Vec<(Item, Us)> {
     let (s, e) = (item.start_us, item.end_us());
+    let heard_to =
+        (matches!(item.content, ItemContent::Audio { .. }) && !is_music(&item) && s < video_end)
+            .then_some(video_end);
     let parts: Vec<RangeUs> = removed
         .kept(s, e)
         .into_iter()
+        .filter_map(|r| match heard_to {
+            Some(end) if r.start >= end => None,
+            Some(end) => Some(RangeUs {
+                start: r.start,
+                end: r.end.min(end),
+            }),
+            None => Some(r),
+        })
         .filter(|r| r.len() >= MIN_DURATION_US)
         .collect();
     if parts.is_empty() {

@@ -47,6 +47,7 @@ describe('undo labels as message ids', () => {
       'setTransition',
       'setFormat',
       'setCaptions',
+      'setBackground',
       'fixCaptionWords',
       'addMusic',
       'addSound',
@@ -60,6 +61,11 @@ describe('undo labels as message ids', () => {
     }
     expect(historyAction('undo', 'chat.addText', { text: 'Day 1 in Lisbon', preset: 'title' })).toBe(
       'Undo add the words Day 1 in Lisbon',
+    );
+    expect(historyAction('undo', 'chat.setBackground', { kind: 'blur' })).toBe('Undo blur the video behind it');
+    // Only the inset changed: no kind.
+    expect(historyAction('undo', 'chat.setBackground', { kind: 'same', padding: 0.1 })).toBe(
+      'Undo change the background',
     );
   });
 

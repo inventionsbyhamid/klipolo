@@ -44,6 +44,12 @@ export const CHAT_LABELS: Record<string, MessageDescriptor> = {
     message: '{on, select, on {Turn on captions} other {Turn off captions}}',
     comment: 'Undo history entry',
   }),
+  'chat.setBackground': msg({
+    id: 'chat.setBackground',
+    message:
+      '{kind, select, blur {Blur the video behind it} color {Use a color background} gradient {Use a gradient background} none {Use a black background} other {Change the background}}',
+    comment: 'Undo history entry: what shows behind the video where it doesn’t fill the frame changed',
+  }),
   'chat.fixCaptionWords': msg({
     id: 'chat.fixCaptionWords',
     message: 'Change {find} to {replace}',

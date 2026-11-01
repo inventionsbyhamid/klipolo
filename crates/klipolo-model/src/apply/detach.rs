@@ -272,6 +272,8 @@ fn video_layers(p: &Project, clip: &Clip, start: Us, source: &RecordingSource) -
                     volume: 1.0,
                     muted: true,
                     mirror,
+                    fill: false,
+                    crop: None,
                     tie: None,
                 },
                 effects: Vec::new(),

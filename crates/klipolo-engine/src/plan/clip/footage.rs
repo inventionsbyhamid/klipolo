@@ -1,22 +1,29 @@
-//! A main clip's footage at an instant: the screen, the camera or the imported video, framed for the
-//! format (its effective framing: `klipolo_model::framing::effective_framing`), and a recording's camera bubble
-//! or split pane. A screen whose framing is Fill with `follow` crops where its take's follow path is at that instant:
+//! A main clip's footage at an instant: the screen, the camera or the imported video, cut by the clip's crop and framed
+//! for the format (its effective framing: `klipolo_model::framing::effective_framing`), and a recording's camera bubble
+//! or split pane. The crop is the clip's in every format: Fit shows what it leaves whole, Fill covers its area from
+//! it, and the focus and the follow-crop move inside it. A camera bubble keeps its whole picture. With the blurred video
+//! background, the main footage covers the frame again under itself, blurred and dimmed, wherever it leaves some of the
+//! frame uncovered (`backdrop`). A screen whose framing is Fill with `follow` crops where its take's follow path is at that instant:
 //! the path built from the raw cursor for that crop (`follow_crop_for`), found in the context's snapshot (`Follows`),
 //! or the Fill crop at its focus until it is built (preview only: export loads it first). Follow on a Fit framing is
 //! ignored: it follows the Fill crop.
 
 use std::sync::Arc;
 
+use klipolo_model::crop::{Crop, within};
 use klipolo_model::framing::effective_framing;
 use klipolo_model::layout::BoxN;
 use klipolo_model::motion::{Blend, sample};
-use klipolo_model::project::{Asset, AssetKind, FormatKind, Project, Recording, RecordingSource};
+use klipolo_model::project::{
+    Asset, AssetKind, BackgroundKind, FormatKind, Project, Recording, RecordingSource,
+};
 use klipolo_model::time::Us;
 use klipolo_model::timeline::{CameraMode, Clip, ClipSource, Framing, FramingMode};
 
+use super::super::effects::{self, Clock};
 use super::super::framing::{
     self, FULL, area_aspect, as_shown, aspect_of, camera_rect_for, content_box, cover_crop,
-    fit_rect, follow_crop, follow_crop_key, split_panes,
+    fit_rect, follow_crop_in, follow_crop_key, split_panes,
 };
 use super::super::strings::Table;
 use super::super::takes::Follows;
@@ -30,6 +37,11 @@ const CENTRE_FILL: Framing = Framing {
     focus_y: 0.5,
     follow: None,
 };
+
+/// How blurred the footage behind a clip is: the built-in blur's largest radius, in 1080p pixels.
+const BACKDROP_BLUR_PX: f64 = 64.0;
+/// How bright it shows over the black under it.
+const BACKDROP_OPACITY: f64 = 0.6;
 
 /// The main footage and, for recordings, the camera.
 #[allow(clippy::too_many_arguments)]
@@ -46,19 +58,22 @@ pub(super) fn main_layers(
     let content = content_box(p.background.padding, format);
     let video = |id: &str| p.asset(id).filter(|a| a.kind == AssetKind::Video);
     let main_id = s.str(&clip.id);
+    let crop = clip.crop.unwrap_or_default();
     match &clip.source {
         ClipSource::Asset { id } => {
             if let Some(asset) = video(id) {
                 let framing = effective_framing(p, clip, format);
-                out.push(Layer::Video(framed(
+                let main = framed(
                     VideoRole::Main,
                     main_id,
                     source_at(asset, source_us, media, registry, s),
                     content,
-                    framing,
+                    (framing, crop),
                     format,
                     false,
-                )));
+                );
+                backdrop(p, registry, (clip, &main, content), format, s, out);
+                out.push(Layer::Video(main));
             }
         }
         ClipSource::Recording { id } => {
@@ -71,15 +86,17 @@ pub(super) fn main_layers(
                 if let Some((camera, camera_us)) = footage(p, rec.primary_source(), source_us) {
                     let mirror = clip.camera.as_ref().is_some_and(|c| c.mirror);
                     let framing = effective_framing(p, clip, format);
-                    out.push(Layer::Video(framed(
+                    let main = framed(
                         VideoRole::Main,
                         main_id,
                         source_at(camera, camera_us, media, registry, s),
                         content,
-                        framing,
+                        (framing, crop),
                         format,
                         mirror,
-                    )));
+                    );
+                    backdrop(p, registry, (clip, &main, content), format, s, out);
+                    out.push(Layer::Video(main));
                 }
                 return;
             };
@@ -112,13 +129,15 @@ pub(super) fn main_layers(
                 main_id,
                 source_at(screen, screen_us, media, registry, s),
                 area,
-                framing,
+                (framing, crop),
                 format,
                 false,
             );
             if let (FramingMode::Fill, Some(follow)) = (framing.mode, framing.follow) {
-                main.crop = followed(follows, rec, main.crop, follow.closer, source_us);
+                let base = (main.crop, crop.kept());
+                main.crop = followed(follows, rec, base, follow.closer, source_us);
             }
+            backdrop(p, registry, (clip, &main, area), format, s, out);
             out.push(Layer::Video(main));
             if let Some((asset, camera_us, layout, rect)) = shown {
                 // The bubble's keys are in the recording's source time (the clip's, not the camera file's), so cuts
@@ -143,7 +162,7 @@ pub(super) fn main_layers(
                     s.camera(&clip.id),
                     source_at(asset, camera_us, media, registry, s),
                     rect,
-                    CENTRE_FILL,
+                    (CENTRE_FILL, Crop::NONE),
                     format,
                     layout.mirror,
                 );
@@ -162,6 +181,65 @@ pub(super) fn main_layers(
             }
         }
     }
+}
+
+/// With the blurred video background (`BackgroundKind::Blur`), `main` (`clip`'s footage, framed in `area`) again under
+/// it, onto `out`: covering the frame from the middle of what the clip's crop leaves, mirrored as `main` is, blurred
+/// and dimmed over the black under it. Only where `main` leaves some of the frame uncovered: the background's padding,
+/// or Fit's bars in `area` (a split's camera pane covers the rest). The same frame of the same file as `main`, so the
+/// decoder reads it once; `clip_layers` gives it the clip's look, never its effects or the zoom.
+fn backdrop(
+    p: &Project,
+    registry: &Registry,
+    (clip, main, area): (&Clip, &VideoLayer, BoxN),
+    format: FormatKind,
+    s: &mut Table,
+    out: &mut Vec<Layer>,
+) {
+    if p.background.kind != BackgroundKind::Blur
+        || (p.background.padding <= 0.0 && covers(main.dest, area))
+    {
+        return;
+    }
+    let crop = clip.crop.unwrap_or_default();
+    let frame = area_aspect(FULL, format);
+    let aspect = crop.aspect_of(aspect_of(main.source.width, main.source.height, frame));
+    let shown = within(crop.kept(), cover_crop(aspect, frame, 0.5, 0.5));
+    let id = s.backdrop(&clip.id);
+    // A still blur: its pass reads no time. The effect stage samples past the frame's edge as the edge, so the blur
+    // reaches the edges at full strength.
+    let clock = Clock {
+        local_us: 0,
+        duration_us: 0,
+        fps: p.settings.fps,
+    };
+    let blur = effects::blur_pass(registry, &id, BACKDROP_BLUR_PX, clock);
+    out.push(Layer::Video(VideoLayer {
+        role: VideoRole::Backdrop,
+        id,
+        source: main.source.clone(),
+        dest: FULL,
+        crop: as_shown(main.mirror, shown),
+        rotation: 0.0,
+        opacity: BACKDROP_OPACITY,
+        radius: 0.0,
+        mirror: main.mirror,
+        border: false,
+        look: None,
+        effects: blur.into_iter().collect(),
+        pad_px: 0.0,
+        blend: Blend::Normal,
+        reach: 1.0,
+    }));
+}
+
+/// Whether `rect` covers all of `area` (to a hair: framing's floating point).
+fn covers(rect: BoxN, area: BoxN) -> bool {
+    const EPS: f64 = 1e-6;
+    rect.x <= area.x + EPS
+        && rect.y <= area.y + EPS
+        && rect.x + rect.w >= area.x + area.w - EPS
+        && rect.y + rect.h >= area.y + area.h - EPS
 }
 
 /// The y share where a portrait split's two halves meet at `at_us` (the screen above, the camera below), or None when
@@ -198,21 +276,28 @@ fn footage<'a>(
 }
 
 /// `base` (the screen's Fill crop at its focus) where `rec`'s follow path for it is at recording time `source_us` (the
-/// cursor rides the screen's frames, so the screen's nudge moves it too); the path's first centre before its first
-/// sample, and `base`'s own centre until the path is built. O(log paths), no allocation.
-fn followed(follows: &Follows, rec: &Recording, base: BoxN, closer: f64, source_us: Us) -> BoxN {
+/// cursor rides the screen's frames, so the screen's nudge moves it too), kept inside `kept` (what the clip's crop
+/// leaves); the path's first centre before its first sample, and `base`'s own centre until the path is built.
+/// O(log paths), no allocation.
+fn followed(
+    follows: &Follows,
+    rec: &Recording,
+    (base, kept): (BoxN, BoxN),
+    closer: f64,
+    source_us: Us,
+) -> BoxN {
     let nudge = rec.screen().map_or(0, |s| s.nudge_us);
     let centre = (rec.cursor_path())
         .and_then(|path| follows.get(path, follow_crop_key(base, closer)))
         .and_then(|f| f.centre_at(source_us.saturating_sub(nudge)))
         .unwrap_or((base.x + base.w / 2.0, base.y + base.h / 2.0));
-    follow_crop(base, centre, closer)
+    follow_crop_in(kept, base, centre, closer)
 }
 
-/// Which part of `clip`'s main footage (source-normalised) its Fill shows from the centre in `format`, as
-/// `main_layers` frames it: narrower than the footage where Fill crops across, shorter where it crops down, all of it
-/// where the footage fits its area exactly. None when the clip has no video to draw. The clip card offers the Fill
-/// focus only the way Fill crops (`cover_crop` moves the crop along that axis alone).
+/// Which part of `clip`'s main footage its Fill shows from the centre in `format`, as `main_layers` frames it, in the
+/// coordinates of what the clip's crop leaves of it (0 to 1 on both axes): narrower than that where Fill crops across,
+/// shorter where it crops down, all of it where it fits its area exactly. None when the clip has no video to draw. The
+/// clip card offers the Fill focus only the way Fill crops (`cover_crop` moves the crop along that axis alone).
 pub fn fill_crop(p: &Project, clip: &Clip, format: FormatKind) -> Option<BoxN> {
     let content = content_box(p.background.padding, format);
     let (footage, area) = match &clip.source {
@@ -230,7 +315,8 @@ pub fn fill_crop(p: &Project, clip: &Clip, format: FormatKind) -> Option<BoxN> {
         return None;
     }
     let target = area_aspect(area, format);
-    let aspect = aspect_of(footage.width, footage.height, target);
+    let crop = clip.crop.unwrap_or_default();
+    let aspect = crop.aspect_of(aspect_of(footage.width, footage.height, target));
     Some(cover_crop(aspect, target, 0.5, 0.5))
 }
 
@@ -260,7 +346,8 @@ fn screen_area(p: &Project, clip: &Clip, rec: &Recording, format: FormatKind) ->
 
 /// The follow path `clip` (playing `rec`) crops with in `format`, as its crop key (`follow_crop_key`), when its
 /// effective framing follows: what the take's loader builds (`media::cursor::wanted`) and a frame finds. The crop is
-/// the screen's Fill crop in its area (the split's top pane, else the content box), as `main_layers` frames it.
+/// the screen's Fill crop in its area (the split's top pane, else the content box) of what the clip's crop leaves, as
+/// `main_layers` frames it.
 pub fn follow_crop_for(
     p: &Project,
     clip: &Clip,
@@ -273,37 +360,45 @@ pub fn follow_crop_for(
         .filter(|_| framing.mode == FramingMode::Fill)?;
     let screen = first_video(p, rec.screen())?;
     let target = area_aspect(screen_area(p, clip, rec, format), format);
-    let base = cover_crop(
-        aspect_of(screen.width, screen.height, target),
-        target,
-        0.5,
-        0.5,
+    let crop = clip.crop.unwrap_or_default();
+    let base = within(
+        crop.kept(),
+        cover_crop(
+            crop.aspect_of(aspect_of(screen.width, screen.height, target)),
+            target,
+            0.5,
+            0.5,
+        ),
     );
     Some(follow_crop_key(base, follow.closer))
 }
 
+/// `source` cut by `crop` and framed in `area` by `framing`: Fit shows what the crop leaves whole, Fill covers `area`
+/// from it at the framing's focus. The crop and the focus are on the picture as shown, so on mirrored footage "left"
+/// cuts, and "right" keeps, the side the person sees.
 fn framed(
     role: VideoRole,
     id: Arc<str>,
     source: SourceRef,
     area: BoxN,
-    framing: Framing,
+    (framing, crop): (Framing, Crop),
     format: FormatKind,
     mirror: bool,
 ) -> VideoLayer {
     let target = area_aspect(area, format);
-    let aspect = aspect_of(source.width, source.height, target);
-    let (dest, crop) = match framing.mode {
-        FramingMode::Fit => (fit_rect(area, aspect, format), FULL),
-        // The focus is on the picture as shown, so on mirrored footage "right" keeps the side the person sees.
+    let kept = crop.kept();
+    let aspect = crop.aspect_of(aspect_of(source.width, source.height, target));
+    let (dest, shown) = match framing.mode {
+        FramingMode::Fit => (fit_rect(area, aspect, format), kept),
         FramingMode::Fill => (
             area,
-            as_shown(
-                mirror,
+            within(
+                kept,
                 cover_crop(aspect, target, framing.focus_x, framing.focus_y),
             ),
         ),
     };
+    let crop = as_shown(mirror, shown);
     VideoLayer {
         role,
         id,

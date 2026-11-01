@@ -58,6 +58,7 @@ export function noRemovals(): Removals {
     markers: [],
     sounds: [],
     formats: [],
+    moved: [],
   };
 }
 

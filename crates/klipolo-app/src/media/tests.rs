@@ -2,7 +2,7 @@ use super::*;
 use klipolo_engine::render::probe::MediaInfo;
 
 #[path = "../../../klipolo-engine/tests/support/fixture_set.rs"]
-mod fixture_set;
+pub(crate) mod fixture_set;
 
 fn info(kind: MediaKind, width: u32, height: u32, fps: f64) -> MediaInfo {
     MediaInfo {

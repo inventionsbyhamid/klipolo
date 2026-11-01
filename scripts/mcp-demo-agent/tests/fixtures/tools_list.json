@@ -299,6 +299,60 @@
       "annotations": {
         "readOnlyHint": false
       },
+      "description": "What shows behind the video where it doesn't fill the frame, and an inset round it. Clips that fill the frame are set to fit so it shows: no setClip needed. blur is the usual look for vertical shorts. Null keeps a value.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "description": "Hex like #1A2B3C; a gradient's first colour.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "colorEnd": {
+            "description": "Hex: a gradient's second colour.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "description": "blur: the video itself, blurred. none: black.",
+            "enum": [
+              "blur",
+              "color",
+              "gradient",
+              "none",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "padding": {
+            "description": "Inset round the video, 0 to 40 percent of the frame's shorter side.",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "color",
+          "colorEnd",
+          "padding"
+        ],
+        "type": "object"
+      },
+      "name": "setBackground"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
       "description": "Set the video's shape. It becomes the main format.",
       "inputSchema": {
         "additionalProperties": false,

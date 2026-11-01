@@ -22,6 +22,8 @@ fn planned(mirror: bool, blur: bool) -> (bool, bool, usize) {
         volume: 1.0,
         muted: true,
         mirror,
+        fill: false,
+        crop: None,
         tie: None,
     };
     let mut layer = item("v", 1.0, 3.0, bx(0.5, 0.5, 0.25, 0.25), content);

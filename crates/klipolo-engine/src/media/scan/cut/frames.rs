@@ -19,7 +19,7 @@ impl Cutter {
                     self.write(p);
                     self.bridge(p, chunk);
                 }
-                let Some(tile) = self.video.as_ref().map(|v| v.tile) else {
+                let Some(tile) = self.video.as_ref().map(|v| v.tile()) else {
                     return;
                 };
                 let mut next = Sprite::new(chunk, tile);
@@ -32,12 +32,22 @@ impl Cutter {
         self.put(slot_of(us));
     }
 
-    /// The decoder's current frame into `slot` of the chunk being filled.
+    /// The decoder's current frame into `slot` of the chunk being filled. The first one chunk 0 gets (what its tile 0
+    /// shows) is the poster too, while there is none.
     pub(super) fn put(&mut self, slot: u64) {
+        let first = self
+            .sprite
+            .as_ref()
+            .is_some_and(|s| s.chunk == 0 && s.is_empty());
+        let mut placed = false;
         if let (Some(video), Some(sprite)) = (self.video.as_mut(), self.sprite.as_mut())
             && let Some((planes, strides)) = video.tile_planes()
         {
             sprite.put(slot, planes, strides);
+            placed = true;
+        }
+        if placed && first && self.want_poster {
+            self.poster();
         }
     }
 

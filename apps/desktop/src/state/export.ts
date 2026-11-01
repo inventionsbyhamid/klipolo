@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { CaptionFile } from '../bindings/CaptionFile';
 import type { ExportedFile } from '../bindings/ExportedFile';
 import type { ExportEvent } from '../bindings/ExportEvent';
 import type { ExportQuality } from '../bindings/ExportQuality';
@@ -7,22 +8,37 @@ import { exporter } from '../bridge/exporter';
 import { errorMessage } from '../lib/errors';
 import { flushBursts } from './bursts';
 import { commitsDone } from './commitQueue';
-import { applyEvent, exportedTitle, idleRun, refusalReason, unsavedFormats, type ExportRun } from './exportRun';
+import { applyEvent, exportedText, idleRun, refusalReason, unsavedFormats, type ExportRun } from './exportRun';
 import { settled, useProject } from './project';
 import { toast } from './toasts';
 
 export { exportPercent, type ExportPhase } from './exportRun';
 
+/** "Also save captions as a file": whether, and as which kind. Kept on this Mac, whatever the project. */
+export interface CaptionFileChoice {
+  save: boolean;
+  kind: CaptionFile;
+}
+
+/** What an export asks for besides its formats and quality. */
+export interface StartOptions {
+  /** Also save the captions as this kind of file beside the 16:9 video. */
+  captionFile?: CaptionFile | null;
+}
+
 interface ExportStore extends ExportRun {
   /** The export dialog is on screen. */
   open: boolean;
-  /** The quality the dialog has picked: High unless the person picks Smaller file. */
+  /** The quality the dialog has picked: High unless the person picks another. */
   quality: ExportQuality;
   /** The formats the person checked in the dialog; null: the format the preview shows, until they pick. */
   picked: FormatKind[] | null;
+  /** Whether a 16:9 export also saves its captions as a file, and which kind (off, SRT, until chosen). Kept. */
+  captionFile: CaptionFileChoice;
   /** What the running (or last) export asked for: Try again asks the same, less what is in place. */
   formats: FormatKind[];
   runQuality: ExportQuality;
+  runCaptionFile: CaptionFile | null;
   /** The project the run on screen exports: Try again never exports another one. */
   projectId: string | null;
   /** Where the files go, as the dialog names it ("Movies / Klipolo"), once a plan or Change has said. */
@@ -32,17 +48,43 @@ interface ExportStore extends ExportRun {
   setOpen: (open: boolean) => void;
   setQuality: (quality: ExportQuality) => void;
   setPicked: (formats: FormatKind[]) => void;
+  setCaptionFile: (patch: Partial<CaptionFileChoice>) => void;
   setFolder: (folder: string) => void;
   /** Asks for the folder the files go to (Change); true when one was picked. */
   pickFolder: () => Promise<boolean>;
-  /** Exports `formats` of the open project, every edit already made included. */
-  start: (formats: FormatKind[], quality?: ExportQuality) => Promise<void>;
+  /** Exports `formats` of the open project, every edit already made included; `captionFile` beside the 16:9 one. */
+  start: (formats: FormatKind[], quality?: ExportQuality, options?: StartOptions) => Promise<void>;
   /** The formats a failed run didn't save, again (a run that never got a job: all of them). */
   retry: () => Promise<void>;
   /** Stops the run on screen. Resolves on Rust's answer: null, or why not (worded). */
   cancel: () => Promise<string | null>;
   onEvent: (event: ExportEvent) => void;
   reset: () => void;
+}
+
+/** Where the captions file choice is kept (local storage, as JSON). */
+const CAPTION_FILE = 'klipolo.captionFile';
+const NO_CAPTION_FILE: CaptionFileChoice = { save: false, kind: 'srt' };
+
+/** The captions file choice as the person left it; off, SRT, when nothing was kept or storage is refused. */
+function keptCaptionFile(): CaptionFileChoice {
+  try {
+    const kept: unknown = JSON.parse(localStorage.getItem(CAPTION_FILE) ?? 'null');
+    if (typeof kept !== 'object' || kept === null) return NO_CAPTION_FILE;
+    const { save, kind } = kept as Partial<CaptionFileChoice>;
+    return { save: save === true, kind: kind === 'vtt' ? 'vtt' : 'srt' };
+  } catch {
+    return NO_CAPTION_FILE;
+  }
+}
+
+/**
+ * The captions file an export of `formats` saves: the kind the person chose, when they chose to save one, the dialog
+ * offers it (`offered`: some clip's words are heard) and a 16:9 video is among them; else none.
+ */
+export function chosenCaptionFile(formats: FormatKind[], offered: boolean): CaptionFile | null {
+  const { save, kind } = useExport.getState().captionFile;
+  return save && offered && formats.includes('landscape') ? kind : null;
 }
 
 /**
@@ -91,8 +133,10 @@ export const useExport = create<ExportStore>((set, get) => {
     open: false,
     quality: 'high',
     picked: null,
+    captionFile: keptCaptionFile(),
     formats: [],
     runQuality: 'high',
+    runCaptionFile: null,
     projectId: null,
     folder: null,
     written: [],
@@ -112,6 +156,15 @@ export const useExport = create<ExportStore>((set, get) => {
     },
     setQuality: (quality) => set({ quality }),
     setPicked: (picked) => set({ picked }),
+    setCaptionFile: (patch) => {
+      const captionFile = { ...get().captionFile, ...patch };
+      try {
+        localStorage.setItem(CAPTION_FILE, JSON.stringify(captionFile));
+      } catch {
+        // Storage refused: the choice holds for this session.
+      }
+      set({ captionFile });
+    },
     setFolder: (folder) => set({ folder }),
     pickFolder: async () => {
       try {
@@ -124,13 +177,14 @@ export const useExport = create<ExportStore>((set, get) => {
         return false;
       }
     },
-    start: async (formats, quality = get().quality) => {
+    start: async (formats, quality = get().quality, { captionFile = null } = {}) => {
       const id = ++batch;
       set({
         ...idleRun,
         phase: 'running',
         formats,
         runQuality: quality,
+        runCaptionFile: captionFile,
         projectId: openProjectId(),
         written: [],
       });
@@ -147,7 +201,9 @@ export const useExport = create<ExportStore>((set, get) => {
         if (id !== batch) return;
         // Stopped before it reached Rust: nothing to undo.
         if (get().stopping) return get().onEvent({ type: 'cancelled' });
-        await exporter.start(formats, quality, listener(id));
+        await (captionFile
+          ? exporter.start(formats, quality, listener(id), { captionFile })
+          : exporter.start(formats, quality, listener(id)));
         // Stopped while Rust was taking the export slot: said again now that it holds it.
         if (id === batch && get().stopping && get().phase === 'running') void get().cancel();
       } catch (error) {
@@ -158,7 +214,7 @@ export const useExport = create<ExportStore>((set, get) => {
       }
     },
     retry: () => {
-      const { files, ready, formats, projectId, runQuality } = get();
+      const { files, ready, formats, projectId, runQuality, runCaptionFile } = get();
       // A run that never got a job is its project's: in another project it is gone, not exported again.
       if (projectId !== openProjectId()) {
         get().reset();
@@ -166,7 +222,10 @@ export const useExport = create<ExportStore>((set, get) => {
       }
       // The files already in place stay: only what wasn't saved is made again.
       const again = files.length > 0 ? unsavedFormats({ files, ready }) : formats;
-      return get().start(again.length > 0 ? again : formats, runQuality);
+      const next = again.length > 0 ? again : formats;
+      // The captions file goes with the 16:9 video: asked again only when that is made again.
+      const captionFile = next.includes('landscape') ? runCaptionFile : null;
+      return get().start(next, runQuality, { captionFile });
     },
     cancel: () => {
       const own = get().phase === 'running';
@@ -191,7 +250,7 @@ export const useExport = create<ExportStore>((set, get) => {
       // With the dialog open it says so itself; closed, a toast does.
       if (s.open) return;
       if (e.type === 'finished')
-        toast.info(`${exportedTitle(s.files.length)}.`, {
+        toast.info(exportedText(s), {
           done: true,
           actions: [{ label: 'Show in Finder', run: () => void revealExported() }],
         });

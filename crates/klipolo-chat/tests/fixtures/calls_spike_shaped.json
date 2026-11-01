@@ -118,6 +118,10 @@
       "calls": [{"name": "setTransition", "call_id": "call_42", "arguments": "{\"kind\": \"dissolve\", \"after\": \"c1\", \"durationSec\": null}"}]
     },
     {
+      "request": "put a blurred background behind it",
+      "calls": [{"name": "setBackground", "call_id": "call_43", "arguments": "{\"padding\": null, \"kind\": \"blur\", \"colorEnd\": null, \"color\": null}"}]
+    },
+    {
       "request": "add lofi as background music, quieter when I talk",
       "calls": [{"name": "addMusic", "call_id": "call_25", "arguments": "{\"duck\": true, \"file\": \"lofi-beat.mp3\", \"volume\": null, \"atSec\": 0}"}]
     },

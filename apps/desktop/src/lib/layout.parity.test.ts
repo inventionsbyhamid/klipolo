@@ -1,10 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import type { BoxN } from '../bindings/BoxN';
 import type { CameraLayout } from '../bindings/CameraLayout';
+import type { Crop } from '../bindings/Crop';
 import type { FormatKind } from '../bindings/FormatKind';
 import type { Item } from '../bindings/Item';
 import type { Layout } from '../bindings/Layout';
-import { cameraRect, containRect, fullFrame, pictureRect, resolveRect, textScale, titleLayout } from './layout';
+import {
+  cameraRect,
+  containRect,
+  fullFrame,
+  pictureRect,
+  resolveRect,
+  textScale,
+  titleLayout,
+  videoRect,
+} from './layout';
 import parity from './layout-parity.json';
 import { safeRect } from './safeAreas';
 import { shownFromUs } from './timeline';
@@ -20,6 +30,15 @@ interface Fixture {
   }[];
   contains: { rect: BoxN; width: number; height: number; format: FormatKind; box: BoxN }[];
   pictures: { rect: BoxN; width: number; height: number; format: FormatKind; box: BoxN }[];
+  videos: {
+    rect: BoxN;
+    width: number;
+    height: number;
+    fill: boolean;
+    crop: Crop | null;
+    format: FormatKind;
+    box: BoxN;
+  }[];
   texts: { layout: Layout; primary: FormatKind; format: FormatKind; scale: number }[];
   shown: { item: Item; shownUs: number }[];
   fullFrame: Layout;
@@ -53,6 +72,12 @@ describe('layout parity with the engine', () => {
     expect(fixture.pictures.length).toBe(24);
     expect(fixture.pictures.some((c) => c.box.x < 0 || c.box.y < 0)).toBe(true);
     for (const c of fixture.pictures) same(pictureRect(c.rect, c.width, c.height, c.format), c.box);
+  });
+
+  it('places video layers exactly like Rust: what the crop leaves inside the box, or the box when they fill it', () => {
+    expect(fixture.videos.length).toBe(72);
+    for (const c of fixture.videos)
+      same(videoRect(c.rect, c.width, c.height, c.fill, c.crop, c.format), c.box);
   });
 
   it('scales text with its box per format exactly like Rust', () => {

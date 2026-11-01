@@ -305,3 +305,43 @@ fn a_cancelled_extraction_stops_and_leaves_nothing() {
         .collect();
     assert_eq!(left, [std::ffi::OsString::from("tone.wav")]);
 }
+
+/// A paced extraction calls `between` between decoded blocks, where a wait holds the decode where it is (playback goes
+/// first): it goes on afterwards to the very WAV an unpaced one writes. A cancel set while it waits stops it as a cancel
+/// does, leaving nothing.
+#[test]
+fn a_paced_extraction_waits_between_blocks_and_writes_the_same_wav() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("tone.wav");
+    write_wav(&src, 48_000, 1, &tone(1_000.0, 0.5, 3.0));
+    let (plain, samples) = extract(&src);
+    let out = dir.path().join("paced.wav");
+    let mut waits = 0;
+    let paced = audio::extract_wav_16k_paced(
+        &src,
+        &out,
+        &std::sync::atomic::AtomicBool::new(false),
+        &mut || {
+            waits += 1;
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        },
+    )
+    .unwrap();
+    assert!(waits > 1, "between blocks, not once: {waits}");
+    assert_eq!(paced, plain);
+    let pcm = audio::read_pcm(&std::fs::read(&out).unwrap()).unwrap();
+    assert_eq!(pcm.samples, samples, "the same sound");
+
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let stopped_out = dir.path().join("stopped.wav");
+    let stopped = audio::extract_wav_16k_paced(&src, &stopped_out, &cancel, &mut || {
+        cancel.store(true, std::sync::atomic::Ordering::Relaxed)
+    });
+    assert!(
+        matches!(stopped, Err(audio::AudioError::Stopped)),
+        "{stopped:?}"
+    );
+    assert!(!stopped_out.exists());
+    let left = std::fs::read_dir(dir.path()).unwrap().count();
+    assert_eq!(left, 2, "the source and the paced WAV, no temporary file");
+}

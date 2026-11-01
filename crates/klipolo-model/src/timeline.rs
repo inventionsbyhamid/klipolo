@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::contrib::ContribId;
+use crate::crop::Crop;
 use crate::cursor_style::{CursorStyle, FocusKind, Follow};
 use crate::font::FontRef;
 use crate::ids::{new_id, Id};
@@ -260,6 +261,12 @@ pub struct Clip {
     /// Per-format framing. A format without an entry uses `framing::default_framing`.
     #[serde(default)]
     pub framing: BTreeMap<FormatKind, Framing>,
+    /// The edges cut off its main footage before it is framed, in every format (a camera bubble keeps its whole
+    /// picture); None keeps the whole picture. Never a crop of nothing (`Crop::is_none`), and left out of the JSON
+    /// while None.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub crop: Option<Crop>,
     /// The main footage's effects, in order. The camera bubble isn't affected.
     #[serde(default)]
     pub effects: Vec<EffectInstance>,
@@ -326,6 +333,7 @@ impl Clip {
             look: Look::default(),
             camera: None,
             framing: BTreeMap::new(),
+            crop: None,
             effects: Vec::new(),
             transition_out: None,
             source_mix: BTreeMap::new(),
@@ -538,6 +546,15 @@ pub enum ItemContent {
         /// drawn: the file is its own. Left out of the JSON while off.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         mirror: bool,
+        /// The picture covers its box, cutting off what reaches past it from the centre (Fill), instead of being
+        /// contained in it whole (Fit). Left out of the JSON while off.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        fill: bool,
+        /// The edges cut off its picture before it is placed in its box; None keeps the whole picture. Left out of
+        /// the JSON while None.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        crop: Option<Crop>,
         /// The recording source this layer is that source's own sound or picture of: set when
         /// `DetachSource` separates it, or when Sync lines it up; a nudge or a sync again of that source moves it.
         /// Splits and edge trims keep it; slipping its file time by hand drops it. Left out of the JSON while None.

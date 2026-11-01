@@ -1145,6 +1145,8 @@ fn phone_overlay(
             volume: 1.0,
             muted: true,
             mirror: false,
+            fill: false,
+            crop: None,
             tie: None,
         },
     );

@@ -56,6 +56,8 @@
 .start-card {
   display: flex;
   flex-direction: column;
+  /* Its parts as wide as the card: a button keeps them at their own width in some WebKit builds. */
+  align-items: stretch;
   gap: var(--space-1);
   width: 100%;
   padding: var(--space-4);
@@ -114,6 +116,8 @@
   position: relative;
   display: grid;
   place-items: center;
+  /* The whole card's width by its own rule, so the 16:9 box never shrinks to the clip art. */
+  width: 100%;
   aspect-ratio: 16 / 9;
   margin-bottom: var(--space-4);
   overflow: hidden;

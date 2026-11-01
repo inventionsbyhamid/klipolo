@@ -23,9 +23,9 @@ def klipolo_tool(name):
     return next(t for t in KLIPOLO_TOOLS if t["name"] == name)
 
 
-def test_klipolo_lists_32_tools():
+def test_klipolo_lists_33_tools():
     names = [t["name"] for t in KLIPOLO_TOOLS]
-    assert len(names) == 32
+    assert len(names) == 33
     for name in (
         "getContext",
         "setFormat",
@@ -33,6 +33,7 @@ def test_klipolo_lists_32_tools():
         "setClip",
         "setTransition",
         "freezeFrame",
+        "setBackground",
         "keepOnly",
         "addText",
         "getProposal",

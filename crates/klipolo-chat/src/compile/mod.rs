@@ -1,12 +1,12 @@
 //! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's context was
 //! built from, out as edits.
-//! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, `freezeFrame`, a trim that makes a clip
-//!   longer, the clip tools `setClip` and `setTransition`, the media: `addMusic`, `addSound`, `addText`, `addImage` and
-//!   `makeTitleCard`'s title, and a recording's camera and sounds: `setCameraMode`, `adjustCamera`, `detachCamera`,
-//!   `muteSource`, `setSourceVolume`, `separateSound`) are one `Transaction` the app applies at once: one undo step. An
-//!   addition is judged by what its part does, not by its tool: one that takes something away (the model's own
-//!   `removals`, as a format dropped with what was placed in it) is compiled again with the removals and proposed: a
-//!   speed that leaves a transition no room, or a transition taken away.
+//! - Additions (`setFormat`, `setCaptions`, `setBackground`, `fixCaptionWords`, `splitAt`, `freezeFrame`, a trim that
+//!   makes a clip longer, the clip tools `setClip` and `setTransition`, the media: `addMusic`, `addSound`, `addText`,
+//!   `addImage` and `makeTitleCard`'s title, and a recording's camera and sounds: `setCameraMode`, `adjustCamera`,
+//!   `detachCamera`, `muteSource`, `setSourceVolume`, `separateSound`) are one `Transaction` the app applies at once:
+//!   one undo step. An addition is judged by what its part does, not by its tool: one that takes something away (the
+//!   model's own `removals`, as a format dropped with what was placed in it) is compiled again with the removals and
+//!   proposed: a speed that leaves a transition no room, or a transition taken away.
 //! - Removals (`cutRange`, `keepOnly`, `removeSilences`, `removeFillers`, a trim that makes a clip shorter) are one
 //!   `Proposal`: a `Transaction` for the project as the additions leave it, judged by the model's own review (what it
 //!   takes away, on the timeline), applied as one undo step when the person says so.
@@ -37,10 +37,12 @@
 //! `chat.andMore {first, more}` for a step of several calls. What an addition did beyond what was asked, or what a
 //! recording tool left as it was, is a note for the person (`Compiled::notes`). Splitting by concern: `additions`,
 //! `removals`, `trim` (both), `media` (the library's music, sounds, words and pictures, and the pictures to draw),
-//! `clips` (a clip's speed, volume, mute and framing, and the transitions at its cuts), `recorded` (a recording's
-//! camera, in `cameras` and `bubble`, and its sounds, in `sources`), `map`.
+//! `clips` (a clip's speed, volume, mute and framing, and the transitions at its cuts), `background` (what shows
+//! behind the video), `recorded` (a recording's camera, in `cameras` and `bubble`, and its sounds, in `sources`),
+//! `map`.
 
 mod additions;
+mod background;
 mod bubble;
 mod cameras;
 mod clips;
@@ -162,7 +164,8 @@ pub struct Compiled {
     pub unchanged: Vec<usize>,
     /// Klipolo's own sentences on what the additions did beyond what was asked, or left as they were, for the reply
     /// after what is said of them: a new speed that shortens a transition ("A transition is shortened.", as the clip
-    /// card says it), cameras that are their own layer ("Cameras that are their own layer were left as they are."). In
+    /// card says it), a background that sets clips to Fit so it shows ("A clip is set to Fit so the background shows
+    /// round it."), cameras that are their own layer ("Cameras that are their own layer were left as they are."). In
     /// call order, each once.
     pub notes: Vec<String>,
     /// Klipolo's own sentences on why a change the person asked for waits in `proposal`: a new speed that leaves a
@@ -511,7 +514,8 @@ impl Compiler<'_> {
                 waiting.push((i, Removal::Moved(call)));
                 continue;
             }
-            // `setTransition`'s sentence on the cuts with no room, said once its edit is in.
+            // A sentence on what the edit did beyond what was asked, said once its edit is in: `setTransition`'s cuts
+            // with no room, `setBackground`'s clips set to Fit.
             let mut skipped: Option<String> = None;
             let addition = match call {
                 ToolCall::Undo => continue,
@@ -581,6 +585,18 @@ impl Compiler<'_> {
                 | ToolCall::FixCaptionWords { .. }
                 | ToolCall::SetClip { .. } => {
                     (self.addition(&adding.work, call), Removal::Moved(call))
+                }
+                ToolCall::SetBackground {
+                    kind,
+                    color,
+                    color_end,
+                    padding,
+                } => {
+                    let colours = (color.as_deref(), color_end.as_deref());
+                    let (edit, said) =
+                        background::set_background(&adding.work, *kind, colours, *padding);
+                    skipped = said;
+                    (Ok(edit), Removal::Moved(call))
                 }
                 ToolCall::SetTransition {
                     after,
@@ -786,6 +802,18 @@ impl Compiler<'_> {
                 keep_others,
             } => Ok(additions::set_format(work, *format, *keep_others)),
             ToolCall::SetCaptions { on, style } => Ok(additions::set_captions(work, *on, *style)),
+            ToolCall::SetBackground {
+                kind,
+                color,
+                color_end,
+                padding,
+            } => Ok(background::set_background(
+                work,
+                *kind,
+                (color.as_deref(), color_end.as_deref()),
+                *padding,
+            )
+            .0),
             ToolCall::FixCaptionWords { find, replace } => {
                 additions::fix_caption_words(self, work, find, replace)
             }

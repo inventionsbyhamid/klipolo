@@ -155,6 +155,9 @@ pub enum BackgroundKind {
     Solid,
     Gradient,
     Image,
+    /// The main footage itself, covering the frame behind it, blurred and dimmed: where a clip doesn't fill the frame
+    /// (Fit, or the padding) it shows its own picture around it rather than bars.
+    Blur,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS, schemars::JsonSchema)]

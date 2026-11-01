@@ -15,7 +15,7 @@ use crate::ids::Id;
 use crate::layout::Layout;
 use crate::ops::{Op, Origin, Transaction};
 use crate::project::{FormatKind, Marker, Project};
-use crate::query::piece_of;
+use crate::query::{anchored_end, piece_of};
 use crate::time::{drifted, merge_ranges, scaled, unscaled, RangeUs, Us};
 use crate::timeline::{Clip, ClipSource, EffectInstance, Item, ItemContent};
 
@@ -212,6 +212,10 @@ pub struct Removals {
     /// Formats the batch drops together with work stored for them: a layout placed by hand for that format (a
     /// layer's, the captions', a camera bubble's), or any other per-format setting that doesn't survive the change.
     pub formats: Vec<FormatKind>,
+    /// Free layers placed after the video's end (an end card, a closing sound) that a cut moved with it, so they stay
+    /// right after it. Not a removal: never counted, so it never makes a batch one.
+    #[serde(default)]
+    pub moved: Vec<Id>,
 }
 
 impl Removals {
@@ -300,7 +304,23 @@ fn removals_with(before: &Project, after: &Project, inserted: &HashSet<&str>) ->
         markers: lost_markers(before, after),
         sounds: sound::shrunk(before, after),
         formats: lost_formats(before, after, &clips_after, &items_after),
+        moved: moved_with_end(before, &items_after),
     }
+}
+
+/// Free layers placed after the video's end (`query::anchored_end`) that now start elsewhere: moved with the end by a
+/// cut. O(layers) with hashing.
+fn moved_with_end(before: &Project, items_after: &HashMap<&str, &Item>) -> Vec<Id> {
+    let end = anchored_end(&before.timeline);
+    layers(before)
+        .filter(|i| i.attach.is_none() && i.start_us >= end)
+        .filter(|i| {
+            items_after
+                .get(i.id.as_str())
+                .is_some_and(|now| now.start_us != i.start_us)
+        })
+        .map(|i| i.id.clone())
+        .collect()
 }
 
 /// The markers of each recording in both that `after`'s copy lacks by id, or holds at another time or with another

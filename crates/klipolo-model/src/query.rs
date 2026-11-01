@@ -43,6 +43,19 @@ pub fn video_duration(timeline: &Timeline) -> Us {
         .fold(main_track_duration(&timeline.main), Us::max)
 }
 
+/// Where the video ends as the clips and the layers that follow them make it: the main track, or a later attached layer
+/// with a picture of its own. Free layers keep their time through a cut, so they don't hold this end: a cut trims or
+/// removes those over the video that it leaves past the new end, and moves those placed after the end with it.
+pub fn anchored_end(timeline: &Timeline) -> Us {
+    timeline
+        .tracks
+        .iter()
+        .flat_map(|t| &t.items)
+        .filter(|i| i.attach.is_some() && i.content.has_own_picture())
+        .map(Item::end_us)
+        .fold(main_track_duration(&timeline.main), Us::max)
+}
+
 /// Index and start of the main clip with `start <= at < end`; None past the main track's end, where the video may
 /// still go on (layers alone).
 pub fn clip_at(main: &[Clip], at: Us) -> Option<(usize, Us)> {
