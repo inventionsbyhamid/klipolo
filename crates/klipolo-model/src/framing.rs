@@ -2,8 +2,13 @@
 //! engine, chat's tools and the UI (through the app) read the same answer.
 
 use crate::cursor_style::Follow;
-use crate::project::{FormatKind, Project, SourceRole};
-use crate::timeline::{Clip, ClipSource, Framing, FramingMode};
+use crate::project::{AssetKind, FormatKind, Project, SourceRole};
+use crate::recording::RecordingSource;
+use crate::timeline::{CameraMode, Clip, ClipSource, Framing, FramingMode};
+
+/// How far the footage's shape may differ from its area's (a share of the area's width ÷ height) and Fill still count as
+/// cropping nothing: rounding in a file's size, not a crop anyone sees.
+pub const SHAPE_TOLERANCE: f64 = 0.01;
 
 /// Landscape → Fit for recordings with a screen; Portrait and Square → Fill + follow (closer 1) when the
 /// clip's screen recording has a cursor, else Fit; camera-only recordings and imported videos → Fill from the centre.
@@ -46,4 +51,47 @@ pub fn can_follow(p: &Project, clip: &Clip) -> bool {
     p.recording(id).is_some_and(|r| {
         r.cursor.is_some() && r.screen().is_some_and(|s| s.role == SourceRole::Screen)
     })
+}
+
+/// Whether Fill crops `clip`'s footage in `format`: what the clip's crop leaves of it has another shape than the area it
+/// fills (the frame less the background's padding, or a split's top pane while the recording's camera is split below
+/// it), by more than `SHAPE_TOLERANCE`. Footage of no known size crops nothing. The engine frames by the same areas.
+pub fn fill_crops(p: &Project, clip: &Clip, format: FormatKind) -> bool {
+    let video = |source: Option<&RecordingSource>| {
+        let run = source?.runs.first()?;
+        p.asset(&run.asset_id)
+            .filter(|a| a.kind == AssetKind::Video)
+    };
+    let (footage, split) = match &clip.source {
+        ClipSource::Asset { id } => (p.asset(id).filter(|a| a.kind == AssetKind::Video), false),
+        ClipSource::Recording { id } => {
+            let Some(rec) = p.recording(id) else {
+                return false;
+            };
+            match video(rec.screen()) {
+                Some(screen) => {
+                    let split = video(rec.camera()).is_some()
+                        && (clip.camera.as_ref())
+                            .is_some_and(|c| c.mode_for(format) == CameraMode::SplitBottom);
+                    (Some(screen), split)
+                }
+                // A camera-only take: the camera is the footage, in the whole area.
+                None => (video(rec.primary_source()), false),
+            }
+        }
+    };
+    let Some(footage) = footage.filter(|a| a.width > 0 && a.height > 0) else {
+        return false;
+    };
+    let (w, h) = format.size();
+    let (w, h) = (f64::from(w), f64::from(h));
+    let inset = p.background.padding.clamp(0.0, 0.4) * w.min(h);
+    let (aw, ah) = (w - 2.0 * inset, h - 2.0 * inset);
+    let ah = if split { ah / 2.0 } else { ah };
+    let area = aw / ah;
+    let shape = clip
+        .crop
+        .unwrap_or_default()
+        .aspect_of(f64::from(footage.width) / f64::from(footage.height));
+    (shape / area - 1.0).abs() > SHAPE_TOLERANCE
 }
