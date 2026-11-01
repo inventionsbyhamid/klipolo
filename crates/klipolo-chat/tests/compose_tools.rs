@@ -1137,15 +1137,35 @@ fn a_layer_ref_holds_only_while_the_layers_do_and_a_clips_while_the_timeline_doe
 }
 
 #[test]
-fn the_prompt_names_every_effect_setting_look_and_preset_the_catalogue_has() {
+fn the_catalogues_name_exactly_the_effects_looks_and_presets_klipolo_has() {
+    use std::collections::BTreeSet;
+
     use klipolo_model::contrib::{Catalog, ContribKind};
-    let prompt = klipolo_chat::prompt::SYSTEM_PROMPT;
+    let catalogues = klipolo_chat::prompt::CATALOGUES;
+    assert!(klipolo_chat::prompt::SYSTEM_PROMPT.contains(catalogues));
     let line = |start: &str| {
-        (prompt.lines())
-            .find(|l| l.starts_with(start))
+        (catalogues.lines())
+            .find_map(|l| l.strip_prefix(start))
             .unwrap_or_else(|| panic!("no line {start}"))
     };
-    let (effects, presets) = (line("- Effects:"), line("- Presets:"));
+    // `name (key, key)`, each effect once, up to the list's end.
+    let effects = line("- Effects and their settings: ");
+    let effects = &effects[..effects.find(").").expect("the list ends") + 1];
+    let said: BTreeSet<(String, Vec<String>)> = (effects.split("), "))
+        .map(|e| {
+            let (name, keys) = e
+                .trim_end_matches(')')
+                .split_once(" (")
+                .expect("name (keys)");
+            let mut keys: Vec<String> = keys.split(", ").map(str::to_owned).collect();
+            keys.sort();
+            (name.to_owned(), keys)
+        })
+        .collect();
+    let looks = line("- Looks, for clips: ");
+    let looks: BTreeSet<&str> = looks[..looks.find(" (").unwrap()].split(", ").collect();
+    let presets = line("- Presets: ");
+    let (mut has_effects, mut has_looks) = (BTreeSet::new(), BTreeSet::new());
     for def in Catalog::builtin().defs() {
         let Some(word) = (def.id.as_str().strip_prefix("klipolo.builtin/"))
             .and_then(|local| local.split_once('.'))
@@ -1155,18 +1175,29 @@ fn the_prompt_names_every_effect_setting_look_and_preset_the_catalogue_has() {
         };
         match def.kind {
             ContribKind::Effect => {
-                assert!(effects.contains(&format!("{word} (")), "{word}");
-                for p in &def.params {
-                    assert!(effects.contains(&p.key), "{word}'s {}", p.key);
-                }
+                let mut keys: Vec<String> = def.params.iter().map(|p| p.key.clone()).collect();
+                keys.sort();
+                has_effects.insert((word.to_owned(), keys));
             }
-            ContribKind::Look => assert!(effects.contains(word), "look {word}"),
+            ContribKind::Look => {
+                has_looks.insert(word);
+            }
             ContribKind::Motion => {
                 let said = if word == "blur-in" { "blur" } else { word };
                 assert!(presets.contains(said), "preset {word}");
             }
             _ => {}
         }
+    }
+    assert_eq!(said, has_effects);
+    assert_eq!(looks, has_looks);
+    // The fonts named are bundled with Klipolo (`assets/fonts/<family without spaces>`).
+    let fonts = line("- Fonts: ");
+    for family in fonts.split(", ").filter(|f| !f.starts_with("or ")) {
+        let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets/fonts")
+            .join(family.replace(' ', ""));
+        assert!(folder.is_dir(), "{family} is not bundled");
     }
 }
 

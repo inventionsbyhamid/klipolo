@@ -273,7 +273,10 @@ fn any_settings_the_card_stores_draw_a_scene_that_checks() {
     };
     let mut params = text_motion::params("Day one", &TextStyle::default(), &blur_in);
     check_scene(&scene_of(&params), Catalog::builtin()).expect("as chat made it");
-    params.insert("title".into(), ParamValue::Text("A twenty letter titl".into()));
+    params.insert(
+        "title".into(),
+        ParamValue::Text("A twenty letter titl".into()),
+    );
     check_scene(&scene_of(&params), Catalog::builtin()).expect("as the card left it");
     let extreme = TextMotion {
         from: From {

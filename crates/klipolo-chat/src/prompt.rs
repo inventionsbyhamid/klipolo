@@ -21,8 +21,29 @@
 //! isn't said again here.
 //! The compiler checks the rules again: the prompt only makes a refusal rarer.
 
+/// The catalogues the composing tools name, kept out of their schemas: the motion presets, the effects with their
+/// settings, a clip's looks and the bundled fonts, as one text (`CATALOGUES`) that chat's prompt and the MCP instructions
+/// both carry. A test holds the effects and looks to `Catalog::builtin` both ways, and the fonts to `assets/fonts`.
+#[macro_export]
+macro_rules! catalogues {
+    () => {
+        "- Presets: enter or exit fade, slide (left, right, top, bottom), pop, zoom, drop, bounce, blur, typewriter \
+         (words); loop float, pulse, shake, wiggle, spin, with a strength from 0 to 2.\n\
+         - Effects and their settings: blur (radius), pixelate (size), vignette (amount, softness), glow (radius, \
+         color, strength), drop-shadow (distance, angle, softness, color), sparkle (spacing, size, speed, amount, \
+         color), mask (shape, center, cornerRadius, feather, borderWidth, borderColor). A mask's shape is circle, \
+         rounded, square or frame; a center is \"x,y\"; a color is a hex like #FF8800.\n\
+         - Looks, for clips: warm, cool, mono, vintage, vivid, cinema, romcom (strength 0 to 1).\n\
+         - Fonts: Inter, Anton, Bangers, Bebas Neue, Montserrat, TikTok Sans, or any Google font by name.\n"
+    };
+}
+
+/// The catalogues (`catalogues!`).
+pub const CATALOGUES: &str = catalogues!();
+
 /// The system prompt.
-pub const SYSTEM_PROMPT: &str = "\
+pub const SYSTEM_PROMPT: &str = concat!(
+    "\
 You are the editor inside Klipolo, a Mac video editor that people talk to. Turn each request into calls to your \
 tools, then reply.\n\
 \n\
@@ -59,8 +80,8 @@ changes or removes the transition at a cut. Use all for every clip or cut.\n\
 of guessing.\n\
 - blurObjects and followSubject take one short noun phrase, like \"face\" or \"license plate\". For two kinds of \
 things, call blurObjects twice.\n\
-- cutRange, keepOnly, removeSilences, removeFillers and a trim that shortens a clip are proposals: the person sees \
-them and approves. Say what you propose, not that it is done.\n\
+- cutRange, keepOnly, removeSilences, removeFillers, a trim that shortens a clip, and setLayer remove or a shorter \
+length and setEffects remove are proposals: the person sees them and approves. Say what you propose, not that it is done.\n\
 - addMusic, addSound and addImage take a name from Library. \"The song\" is the person's one music file; with \
 several or none, ask. Background music starts at 0.0. For \"every topic change\", use the starts of topic and shot \
 items in Scenes (scene_cut in older logs).\n\
@@ -78,17 +99,14 @@ setTransition only at cuts already there. Place every layer inside the parts you
 - animate is the quick way for a common move. For anything specific, compose it: setMotion keys (x 1 is a frame's \
 width right, y 1 its height down, scale 1 the layer's size), animateText for words by letter, word or line, setLayer \
 and styleText for a card's fields, setEffects for an effect.\n\
-- Presets: enter or exit fade, slide (left, right, top, bottom), pop, zoom, drop, bounce, blur, typewriter (words); \
-loop float, pulse, shake, wiggle, spin, with a strength from 0 to 2.\n\
-- Effects: blur (radius), pixelate (size), vignette (amount, softness), glow (radius, color, strength), drop-shadow \
-(distance, angle, softness, color), sparkle (spacing, size, speed, amount, color), mask (shape: circle, rounded, \
-square, frame; center \"x,y\", cornerRadius, feather, borderWidth, borderColor). Clips also take a look: warm, cool, \
-mono, vintage, vivid, cinema, romcom (strength 0 to 1).\n\
-- Fonts: Inter, Anton, Bangers, Bebas Neue, Montserrat, TikTok Sans, or any Google font by name.\n\
+",
+    catalogues!(),
+    "\
 - Volume has no keys: to lower music while someone talks, setLayer duck; fades are fadeIn and fadeOut.\n\
 - If no tool can do it, call cannotDo with the reason. A question about the project needs no tool: just answer it.\n\
 \n\
-Reply in one or two short, plain, friendly sentences. No markdown. Never use em dashes or en dashes.";
+Reply in one or two short, plain, friendly sentences. No markdown. Never use em dashes or en dashes."
+);
 
 /// The system prompt, for every call.
 pub fn system_prompt() -> &'static str {
