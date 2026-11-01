@@ -43,18 +43,50 @@ fn check_shift(by: Us) -> Result<()> {
     }
 }
 
-/// `clip` with its in point (`start`) and out point (`end`) moved `by` of timeline, in its source time at its speed.
-fn moved(clip: &Clip, by: Us, start: bool, end: bool) -> Clip {
+/// `clip` with its in and out points moved `by` of timeline, in its source time at its speed: its length stays.
+fn slipped(clip: &Clip, by: Us) -> Clip {
     let mut c = clip.clone();
     let source = unscaled(by, c.speed);
-    if start {
-        c.source_in_us = c.source_in_us.saturating_add(source);
-    }
-    if end {
-        c.source_out_us = c.source_out_us.saturating_add(source);
-    }
-    clamp_fades(&mut c);
+    c.source_in_us = c.source_in_us.saturating_add(source);
+    c.source_out_us = c.source_out_us.saturating_add(source);
     c
+}
+
+/// Points tried either side of where a cut's two clips would put it (µs of source), to keep their lengths' changes equal.
+const NEAR: [Us; 7] = [0, -1, 1, -2, 2, -3, 3];
+
+/// The clip before a cut ends `by` of timeline later and the clip after starts as much later (earlier when negative): at
+/// speeds other than 1 a source µs is not a timeline µs, so the points are chosen within a few µs of source so that one
+/// clip gains exactly what the other loses, and nothing after the cut moves.
+fn across(before: &Clip, after: &Clip, by: Us) -> (Clip, Clip) {
+    let (was_before, was_after) = (before.duration_us(), after.duration_us());
+    let out = before
+        .source_out_us
+        .saturating_add(unscaled(by, before.speed));
+    let mut best: Option<(Clip, Clip, Us)> = None;
+    'search: for j in NEAR {
+        let mut b = before.clone();
+        b.source_out_us = out.saturating_add(j);
+        let target = was_after.saturating_sub(b.duration_us().saturating_sub(was_before));
+        let start = after
+            .source_out_us
+            .saturating_sub(unscaled(target, after.speed));
+        for k in NEAR {
+            let mut a = after.clone();
+            a.source_in_us = start.saturating_add(k);
+            let off = a.duration_us().saturating_sub(target).abs();
+            if best.as_ref().is_none_or(|(_, _, o)| off < *o) {
+                best = Some((b.clone(), a, off));
+            }
+            if off == 0 {
+                break 'search;
+            }
+        }
+    }
+    let (mut b, mut a) = best.map_or_else(|| (before.clone(), after.clone()), |(b, a, _)| (b, a));
+    clamp_fades(&mut b);
+    clamp_fades(&mut a);
+    (b, a)
 }
 
 pub(super) fn roll(p: &mut Project, clip_id: &str, by: Us, places: &mut Places) -> Result<()> {
@@ -67,11 +99,8 @@ pub(super) fn roll(p: &mut Project, clip_id: &str, by: Us, places: &mut Places) 
     if by == 0 {
         return Ok(());
     }
-    let clips = vec![
-        (i, moved(&main[i], by, false, true)),
-        (i + 1, moved(&main[i + 1], by, true, false)),
-    ];
-    retime(p, clips, None)
+    let (before, after) = across(&main[i], &main[i + 1], by);
+    retime(p, vec![(i, before), (i + 1, after)], None)
 }
 
 pub(super) fn slip(p: &mut Project, clip_id: &str, by: Us, places: &mut Places) -> Result<()> {
@@ -85,7 +114,7 @@ pub(super) fn slip(p: &mut Project, clip_id: &str, by: Us, places: &mut Places) 
         return Err(invalid(code!("model.slip.freeze")));
     }
     let source = unscaled(by, clip.speed);
-    let clips = vec![(i, moved(clip, by, true, true))];
+    let clips = vec![(i, slipped(clip, by))];
     retime(p, clips, Some((i, source)))
 }
 
@@ -99,11 +128,8 @@ pub(super) fn slide(p: &mut Project, clip_id: &str, by: Us, places: &mut Places)
     if by == 0 {
         return Ok(());
     }
-    let clips = vec![
-        (i - 1, moved(&main[i - 1], by, false, true)),
-        (i + 1, moved(&main[i + 1], by, true, false)),
-    ];
-    retime(p, clips, None)
+    let (before, after) = across(&main[i - 1], &main[i + 1], by);
+    retime(p, vec![(i - 1, before), (i + 1, after)], None)
 }
 
 /// What the edit does to one attached layer.

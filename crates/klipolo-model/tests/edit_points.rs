@@ -133,6 +133,43 @@ fn a_roll_moves_the_cut_and_nothing_else() {
 }
 
 #[test]
+fn a_roll_or_slide_keeps_the_videos_length_exactly_at_any_speed() {
+    let mut p = abc();
+    p.timeline.main[0].speed = 0.75;
+    p.timeline.main[1].speed = 1.5;
+    p.timeline.main[2].speed = 0.6;
+    let length = main_track_duration(&p.timeline.main);
+    for by in [1_000_003, -333_337, 7, -1] {
+        let rolled = apply_ops(
+            &p,
+            &[Op::Roll {
+                clip_id: "a".into(),
+                by_us: by,
+            }],
+        )
+        .unwrap();
+        assert_eq!(
+            main_track_duration(&rolled.timeline.main),
+            length,
+            "roll {by}"
+        );
+        let slid = apply_ops(
+            &p,
+            &[Op::Slide {
+                clip_id: "b".into(),
+                by_us: by,
+            }],
+        )
+        .unwrap();
+        assert_eq!(
+            main_track_duration(&slid.timeline.main),
+            length,
+            "slide {by}"
+        );
+    }
+}
+
+#[test]
 fn a_roll_is_held_to_the_footage_each_side_and_needs_a_cut() {
     let p = abc();
     // b has 2 s before its in point; a can't get shorter than 10 ms, nor b.
@@ -224,6 +261,25 @@ fn a_separated_sound_follows_its_clips_start() {
     assert_eq!(played(item(&later, "a-mic")), (7.0, 17.0, 3.0));
     let earlier = apply_ops(&p, &[roll("b", -1.0)]).unwrap();
     assert_eq!(played(item(&earlier, "a-mic")), (5.0, 19.0, 1.0));
+}
+
+#[test]
+fn a_separated_sound_inside_the_next_clip_holds_a_roll_at_its_moment() {
+    // The mic's sound tied to b 2 s into it (b's footage at 4 s): a roll may show b from 4 s, not past it.
+    let mut p = separated(&abc(), "mic");
+    let mut voice = item(&p, "a-mic").clone();
+    voice.id = "voice".into();
+    voice.start_us = secs(20.0);
+    voice.duration_us = secs(1.0);
+    voice.attach = anchor_at(&p.timeline.main, secs(20.0));
+    p.timeline.tracks[0].items.push(voice);
+    assert!(apply_ops(&p, &[roll("a", 2.0)]).is_ok());
+    assert_eq!(
+        apply_ops(&p, &[roll("a", 2.5)]).unwrap_err(),
+        refused(
+            "A separated sound or camera starts in the footage this edit hides. Trim it first."
+        )
+    );
 }
 
 #[test]
