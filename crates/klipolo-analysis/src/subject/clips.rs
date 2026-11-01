@@ -290,8 +290,11 @@ pub fn clip_people(
                 0
             };
             Person {
+                // A label the project can't keep (none, or too long) isn't named.
                 voices: (mine.into_iter())
-                    .filter(|v| turns.iter().any(|t| &t.voice == *v && within(t) > 0))
+                    .filter(|v| {
+                        v.is_valid() && turns.iter().any(|t| &t.voice == *v && within(t) > 0)
+                    })
                     .cloned()
                     .collect(),
                 share,

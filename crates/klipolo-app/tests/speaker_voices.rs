@@ -610,3 +610,19 @@ async fn an_access_code_too_low_for_a_media_call_skips_matching_and_says_so() {
     assert_eq!(followed.note.as_deref(), Some(LOW_CREDIT_VOICES));
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn a_voice_label_the_project_cant_keep_is_left_off_the_people() {
+    let setup = setup(usize::MAX);
+    let long = "a voice label far too long to keep";
+    let speaker = speaker_with(&setup, true, None, ("", long));
+    let p = &setup.project;
+    let followed = speaker
+        .follow(p, &ids(), &[Portrait], "person")
+        .await
+        .unwrap();
+    // The follow lands: its people just don't name those voices.
+    let next = apply_ops(p, &followed.ops(p)).unwrap();
+    let (_, _, people) = focus(&next);
+    assert_eq!(people.len(), 2);
+    assert!(people.iter().all(|p| p.voices.is_empty()), "{people:?}");
+}

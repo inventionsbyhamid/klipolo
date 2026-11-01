@@ -40,7 +40,7 @@ pub const MAX_PEOPLE: u8 = 4;
 /// The most ranges a [`Keep::Ranges`] holds.
 pub const MAX_KEEP_RANGES: usize = 200;
 /// A voice label's most characters.
-const MAX_LABEL_CHARS: usize = 16;
+pub const MAX_LABEL_CHARS: usize = 16;
 
 /// Who a following crop keeps in frame where two or more people are in a shot. People count from 1 at the left.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
@@ -139,6 +139,13 @@ impl Who {
             Self::Person { person } => (1..=MAX_PEOPLE).contains(person),
             Self::Speaker | Self::Both => true,
         }
+    }
+}
+
+impl Voice {
+    /// Whether its label may be saved: 1 to [`MAX_LABEL_CHARS`] characters.
+    pub fn is_valid(&self) -> bool {
+        (1..=MAX_LABEL_CHARS).contains(&self.label.chars().count())
     }
 }
 
