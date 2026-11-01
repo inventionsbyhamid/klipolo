@@ -1,9 +1,10 @@
 //! What the context says of a recording's clip, in the recording tools' words: the recording's name ("Recording 2", by
 //! its place among the project's recordings, as Klipolo names it everywhere), how its camera shows and what its sounds
 //! play there.
-//! - The camera: `camera bubble bottomRight circle` (its mode, and for a bubble its place and shape), then each format
-//!   of the video that shows it another way (`portrait splitBottom`); `camera on its own layer` once it is separated,
-//!   and `camera only` when it is the clip's footage.
+//! - The camera: `camera bubble bottomRight circle` (its mode, and for a bubble its place and shape), its border
+//!   (`border on`) while a format of the video shows the bubble, its mirror (`mirrored`, `not mirrored`) while one shows
+//!   the camera, then each format of the video that shows it another way (`portrait splitBottom`); `camera on its own
+//!   layer` once it is separated, and `camera only, mirrored` when it is the clip's footage.
 //! - The sounds the tools name, in the recording's order, a second one of a kind numbered (`mic 2`, as `which` takes
 //!   it): each `at 50%` when it isn't as recorded and `muted` when it is, both as the clip plays it (its own mix, else
 //!   the source's), or `on its own track` once separated there.
@@ -112,9 +113,14 @@ impl<'p> Recordings<'p> {
     /// `camera bubble bottomRight circle, portrait splitBottom`, `camera on its own layer` or `camera only`.
     fn camera(&self, clip: &Clip) -> Option<String> {
         let layout = clip.camera.as_ref()?;
+        let mirror = if layout.mirror {
+            "mirrored"
+        } else {
+            "not mirrored"
+        };
         match self.cameras.get(&clip.id)? {
             Camera::Separate => return Some("camera on its own layer".to_owned()),
-            Camera::Footage => return Some("camera only".to_owned()),
+            Camera::Footage => return Some(format!("camera only, {mirror}")),
             Camera::OnClip => {}
         }
         let shown = |mode: CameraMode| match mode {
@@ -125,14 +131,31 @@ impl<'p> Recordings<'p> {
             ),
             other => mode_word(other).to_owned(),
         };
-        let mut said = format!("camera {}", shown(layout.mode));
-        for f in &self.p.settings.formats {
+        let formats = &self.p.settings.formats;
+        let shows = |mode: CameraMode| {
+            layout.mode == mode || formats.iter().any(|f| layout.mode_for(*f) == mode)
+        };
+        let mut parts = vec![shown(layout.mode)];
+        if shows(CameraMode::Bubble) {
+            parts.push(
+                if layout.border {
+                    "border on"
+                } else {
+                    "border off"
+                }
+                .to_owned(),
+            );
+        }
+        if shows(CameraMode::Bubble) || shows(CameraMode::SplitBottom) {
+            parts.push(mirror.to_owned());
+        }
+        for f in formats {
             let mode = layout.mode_for(*f);
             if mode != layout.mode {
-                said.push_str(&format!(", {} {}", format_word(*f), shown(mode)));
+                parts.push(format!("{} {}", format_word(*f), shown(mode)));
             }
         }
-        Some(said)
+        Some(format!("camera {}", parts.join(", ")))
     }
 }
 

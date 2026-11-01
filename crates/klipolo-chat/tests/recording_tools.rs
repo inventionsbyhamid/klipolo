@@ -1038,15 +1038,16 @@ fn the_context_names_each_recording_with_its_camera_and_sounds() {
     assert_eq!(
         clip_lines(&two_takes()),
         [
-            "c1 0.0-30.0 Recording 1 (camera bubble bottomRight circle; sounds mic, computer sound)",
+            "c1 0.0-30.0 Recording 1 (camera bubble bottomRight circle, border on, mirrored; sounds mic, computer sound)",
             "c2 30.0-40.0 broll.mov",
-            "c3 40.0-60.0 Recording 2 (camera bubble bottomRight circle; sounds mic)",
+            "c3 40.0-60.0 Recording 2 (camera bubble bottomRight circle, border on, mirrored; sounds mic)",
         ]
     );
     // A mode for a format the video has is said; one for a format it doesn't is not.
     assert_eq!(
         clip_lines(&with_portrait())[0],
-        "c1 0.0-30.0 Recording 1 (camera bubble bottomRight circle, portrait splitBottom; sounds mic, computer sound)"
+        "c1 0.0-30.0 Recording 1 (camera bubble bottomRight circle, border on, mirrored, portrait splitBottom; sounds mic, \
+         computer sound)"
     );
 }
 
@@ -1061,13 +1062,16 @@ fn the_context_says_what_the_person_changed() {
                 "setSourceVolume",
                 json!({"source": "computerSound", "volume": 50, "which": null, "clips": null}),
             ),
-            adjust(json!({"clips": ["c1"], "position": "topLeft", "shape": "rounded"})),
+            adjust(
+                json!({"clips": ["c1"], "position": "topLeft", "shape": "rounded", "border": false, "mirror": false}),
+            ),
         ],
     );
     assert_eq!(
         clip_lines(&p),
         [
-            "c1 0.0-30.0 Recording 1 (camera bubble topLeft rounded; sounds mic, computer sound at 50%)",
+            "c1 0.0-30.0 Recording 1 (camera bubble topLeft rounded, border off, not mirrored; sounds mic, computer sound \
+             at 50%)",
             "c2 30.0-40.0 broll.mov",
             "c3 40.0-60.0 Recording 2 (camera hidden; sounds mic muted)",
         ]
@@ -1097,9 +1101,10 @@ fn the_context_numbers_several_mics_and_names_a_camera_only_take() {
     assert_eq!(
         clip_lines(&p),
         [
-            "c1 0.0-15.0 Recording 1 (speed 2x; camera bubble bottomRight circle; sounds mic, computer sound, mic 2)",
+            "c1 0.0-15.0 Recording 1 (speed 2x; camera bubble bottomRight circle, border on, mirrored; sounds mic, \
+             computer sound, mic 2)",
             "c2 15.0-25.0 broll.mov",
-            "c3 25.0-45.0 Recording 2 (camera only; sounds mic)",
+            "c3 25.0-45.0 Recording 2 (camera only, mirrored; sounds mic)",
         ]
     );
 }
