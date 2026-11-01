@@ -23,8 +23,8 @@ afterAll(() => width && Object.defineProperty(HTMLElement.prototype, 'clientWidt
 beforeEach(() => {
   useProject.setState({ snapshot: fixtureSnapshot(), pending: 0 });
   useSelection.setState({ selectedId: null });
-  usePlayback.setState({ playheadUs: 0, playing: false });
-  useUi.setState({ pxPerSecond: 40 });
+  usePlayback.setState({ playheadUs: 0, playing: false, rate: 1 });
+  useUi.setState({ pxPerSecond: 40, snapping: true });
 });
 
 function Editor() {
@@ -62,6 +62,20 @@ describe('the player bar', () => {
     for (const slider of bar.querySelectorAll('.slider')) expect(slider).toHaveAttribute('role', 'slider');
     expect(bar.querySelector('.vol')).toBeNull();
     expect(within(bar as HTMLElement).queryByRole('button', { name: 'Loop the selection' })).toBeNull();
+  });
+
+  it('the snapping switch shows whether snapping is on and turns it off and on, as N does', async () => {
+    renderWithProviders(<Editor />);
+    const snap = screen.getByRole('button', { name: 'Snapping' });
+    expect(snap).toHaveAttribute('aria-pressed', 'true');
+    act(() => snap.focus());
+    const tip = await screen.findByRole('tooltip');
+    expect(within(tip).getByText('N').tagName).toBe('KBD');
+    await userEvent.click(snap);
+    expect(useUi.getState().snapping).toBe(false);
+    expect(snap).toHaveAttribute('aria-pressed', 'false');
+    act(() => useUi.getState().setSnapping(true));
+    expect(snap).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('the zoom slider says its value and steps 1 or 10 with the arrows', async () => {

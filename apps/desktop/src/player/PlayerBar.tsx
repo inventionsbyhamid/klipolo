@@ -1,3 +1,5 @@
+import { t } from '@lingui/core/macro';
+import { Magnet } from 'lucide-react';
 import type { CSSProperties, KeyboardEvent, PointerEvent, ReactNode } from 'react';
 import { IconButton } from '../design/IconButton';
 import { Tooltip } from '../design/Tooltip';
@@ -110,14 +112,15 @@ function BarButton({
 }
 
 /**
- * The player bar: Split and Delete on the left, the transport centred on the window, the timeline's zoom and Fit on the
- * right. Split, Delete, the zoom and Fit run the same commands as their keys; every control says what it
- * does and its key in a tooltip. Loop and the volume come when they work: none of its controls looks live
- * and does nothing.
+ * The player bar: Split and Delete on the left, the transport centred on the window, the timeline's snapping switch, zoom
+ * and Fit on the right. Split, Delete, snapping, the zoom and Fit run the same commands as their keys;
+ * every control says what it does and its key in a tooltip. Loop and the volume come when they work: none
+ * of its controls looks live and does nothing.
  */
 export function PlayerBar() {
   const duration = useDurationUs();
   const playing = usePlayback((s) => s.playing);
+  const snapping = useUi((s) => s.snapping);
   const ready = useEngine((s) => !!s.info && s.status !== 'unavailable') && duration > 0;
   const commands = useCommands();
   const command = (id: string) => commands.find((c) => c.id === id);
@@ -188,6 +191,14 @@ export function PlayerBar() {
         <span className="time time-total">{formatTime(duration)}</span>
       </div>
       <div className="pb-right">
+        <IconButton
+          icon={<Magnet size={16} strokeWidth={1.8} aria-hidden />}
+          label={t({ id: 'timeline.snapping', message: 'Snapping' })}
+          shortcut="N"
+          className="icon-btn-sm"
+          active={snapping}
+          onClick={() => run('snapping')}
+        />
         <div className="zoom">
           <IconButton
             icon={<Icon name="zoom-out" />}
