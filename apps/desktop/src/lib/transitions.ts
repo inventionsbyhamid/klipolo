@@ -95,7 +95,10 @@ function frameRange(maxUs: number, fps: number): [number, number] {
   return [first, last];
 }
 
-/** Half a second on the frame grid, or the longest whole number of frames that fits; 0 when none does. */
+/**
+ * Half a second on the frame grid, or the longest whole number of frames that fits; 0 when none does. Rust's
+ * `default_transition_us` (chat's `setTransition`), pinned by transition-parity.json.
+ */
 export function defaultTransitionUs(project: Footage, index: number, fps: number): number {
   const [first, last] = frameRange(maxTransitionUs(project, index), fps);
   const frames = Math.min(last, Math.floor((DEFAULT_TRANSITION_US * fps) / US_PER_SEC));
@@ -104,7 +107,8 @@ export function defaultTransitionUs(project: Footage, index: number, fps: number
 
 /**
  * `us` on the frame grid, within what a transition can last where it may be up to `maxUs` (a duration slider's value
- * as the model takes it: never under 0.1 s, never past the footage). 0 when no length fits.
+ * as the model takes it: never under 0.1 s, never past the footage). 0 when no length fits. Rust's
+ * `transition_length_us` (chat's `setTransition`), pinned by transition-parity.json.
  */
 export function transitionLengthUs(us: number, maxUs: number, fps: number): number {
   const [first, last] = frameRange(maxUs, fps);

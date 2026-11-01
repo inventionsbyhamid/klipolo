@@ -1,5 +1,5 @@
-/* The toggle: a 36 x 20 track. Off: raised, a line-strong edge and an ink-soft knob. On: paper with a
-   navy knob. The knob slides in 140 ms, and not at all with reduced motion. Values from tokens.css only. */
+/* The toggle: a 36 x 20 track. Off: raised, a line-strong edge and an ink-soft knob. On: paper with an
+   on-paper knob. The knob slides in 140 ms, and not at all with reduced motion. Values from tokens.css only. */
 
 .toggle {
   position: relative;
@@ -45,7 +45,7 @@
 
 .toggle[aria-checked="true"]::after {
   transform: translateX(16px);
-  background: var(--color-navy);
+  background: var(--color-on-paper);
 }
 
 .toggle:disabled {

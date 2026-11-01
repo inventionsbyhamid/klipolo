@@ -11,8 +11,8 @@ export interface ToggleProps
 
 /**
  * A toggle for a setting that applies at once: a 36 x 20 track, raised with an edge and a soft knob when
- * off, paper with a navy knob when on. A switch: Space or a click flips it, and a `<label htmlFor>` beside it names it
- * (a click on the label flips it too).
+ * off, paper with an on-paper knob when on. A switch: Space or a click flips it, and a `<label htmlFor>` beside it
+ * names it (a click on the label flips it too).
  */
 export function Toggle({ checked, onChange, className, onClick, ...rest }: ToggleProps) {
   return (
