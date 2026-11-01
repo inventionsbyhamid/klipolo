@@ -201,6 +201,41 @@ mod tests {
     }
 
     #[test]
+    fn the_record_dialog_s_box_gets_its_own_pixels_on_both_computers() {
+        // The dialog's 16:9 box is 672 × 378 points: 1344 × 756 device pixels on a 2x display.
+        let dialog = view(1344, 756);
+        let intel = big_pixel_rate("macos", "x86_64");
+        let apple = big_pixel_rate("macos", "aarch64");
+        // A 16:10 display fills the box's height, a pixel for each of the box's: about twice the small picture's
+        // width. An Intel Mac sends fewer frames a second, within its pixels a second.
+        for (rate, fps) in [(apple, 30), (intel, 15)] {
+            assert_eq!(
+                live_frame(dialog, RETINA, rate),
+                LiveFrame {
+                    size: (1208, 756),
+                    fps
+                }
+            );
+        }
+        // A 16:9 display fills the whole box on Apple silicon; on an Intel Mac it is 720p, a little smaller, so as not
+        // to go below 15 frames a second.
+        assert_eq!(
+            live_frame(dialog, (3840, 2160), apple),
+            LiveFrame {
+                size: (1344, 756),
+                fps: 30
+            }
+        );
+        assert_eq!(
+            live_frame(dialog, (3840, 2160), intel),
+            LiveFrame {
+                size: (1280, 720),
+                fps: 15
+            }
+        );
+    }
+
+    #[test]
     fn an_intel_mac_s_big_view_is_about_720p_at_15() {
         let intel = big_pixel_rate("macos", "x86_64");
         assert_eq!(intel, INTEL_MAC_PIXEL_RATE);
