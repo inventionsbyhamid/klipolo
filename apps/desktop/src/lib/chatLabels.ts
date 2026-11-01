@@ -119,6 +119,17 @@ export const CHAT_LABELS: Record<string, MessageDescriptor> = {
       'Separate the {source, select, computerSound {computer sound} gameSound {game sound} videoSound {camera sound} other {mic}}',
     comment: 'Undo history entry: a recorded sound put on a track of its own, e.g. "Separate the mic"',
   }),
+  'chat.animate': msg({
+    id: 'chat.animate',
+    message:
+      '{layer, select, words {Animate the words} title {Animate the title} video {Animate the video layer} other {Animate the picture}}',
+    comment: 'Undo history entry: chat set how a layer comes in, goes out or moves while it shows',
+  }),
+  'chat.autoZoom': msg({
+    id: 'chat.autoZoom',
+    message: '{on, select, off {Remove the auto zooms} other {Zoom in on the clicks}}',
+    comment: 'Undo history entry: chat zoomed in on a screen recording’s clicks, or took those zooms away',
+  }),
   'chat.andMore': msg({
     id: 'chat.andMore',
     message: '{first}, and {more} more',
