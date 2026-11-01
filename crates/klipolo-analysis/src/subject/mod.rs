@@ -2,15 +2,16 @@
 //! adapter) finds every person on a small, low frame rate copy of only the footage that plays, and `path` turns its
 //! boxes into the crop's path for one format.
 //!
-//! - **What is sent:** the stretches of a file the clips play (`requests`: stretches less than `JOIN_GAP_US` apart go
-//!   as one, so a cut doesn't cost a second request's minimum; none longer than the tracker takes), each as an MP4 of
-//!   `FPS` frames a second at most `COPY_FIT` (`SubjectCopy`; the engine's small copy, with the cut finder watching
-//!   every source frame on the way, so the shots come with it).
-//! - **The price** comes first (`estimate_usd`): each request's frames at the tracker's price. A stretch the cache
-//!   covers costs nothing.
+//! - **What is sent:** only the stretches of a file the clips play (`requests`: stretches at most `JOIN_GAP_US` apart go
+//!   as one, so footage that was cut out never goes up; none longer than the tracker takes), each as an MP4 of `FPS`
+//!   frames a second at most `COPY_FIT` (`SubjectCopy`; the engine's small copy, with the cut finder watching every
+//!   source frame on the way, so the shots come with it).
+//! - **The price** comes first (`estimate_usd`): each request's frames at the tracker's price. What the cache covers
+//!   costs nothing: only the parts it doesn't (`cover`, `missing`) are sent.
 //! - **The cache:** each file's tracked stretches (`SubjectTrack`) are kept in its analysis cache folder
-//!   (`subjects.json`), by phrase, frame rate and stretch: any part of a stretch tracked before is read from there and
-//!   never paid for again. A failed or stopped request stores nothing.
+//!   (`subjects.json`), by model, phrase, frame rate and stretch: any part tracked before is read from there, from as
+//!   many stretches as cover it, and never paid for again. A failed or stopped request stores nothing; an answer cut off
+//!   part-way stores only the frames it holds, so asking again pays only for the rest.
 //! - **Times:** frame n of a stretch is at its start plus n / `fps` on the file's clock; the cuts are on that clock too.
 
 pub mod clips;
@@ -37,8 +38,8 @@ pub const PERSON: &str = "person";
 pub const COPY_FIT: (u32, u32) = (854, 480);
 /// The copy's picture bitrate: a few frames a second at 480 lines.
 const COPY_BPS: u32 = 300_000;
-/// Stretches of one file closer than this go as one request.
-pub const JOIN_GAP_US: Us = 10_000_000;
+/// Stretches of one file at most this far apart go as one request (at most two copy frames that don't play).
+pub const JOIN_GAP_US: Us = 1_000_000;
 /// The cache file of a file's tracked stretches.
 const CACHE_NAME: &str = "subjects";
 
@@ -60,20 +61,32 @@ pub struct SubjectTrack {
 }
 
 impl SubjectTrack {
-    /// Whether it holds every frame of `range` for `phrase` at `fps`.
-    pub fn covers(&self, phrase: &str, fps: f64, range: RangeUs) -> bool {
-        self.phrase == phrase
-            && (self.fps - fps).abs() < 1e-9
+    /// Whether it is `model`'s answer for `phrase` at `fps`.
+    pub fn serves(&self, model: &str, phrase: &str, fps: f64) -> bool {
+        self.model == model && self.phrase == phrase && (self.fps - fps).abs() < 1e-9
+    }
+
+    /// Whether it is that answer and holds every frame of `range`.
+    pub fn covers(&self, model: &str, phrase: &str, fps: f64, range: RangeUs) -> bool {
+        self.serves(model, phrase, fps)
             && self.range.start <= range.start
             && range.end <= self.range.end
     }
 }
 
-/// A tracked stretch, and what tracking it cost now (0 when it came from the cache).
+/// The tracked stretches that cover a stretch asked for, and what tracking the missing parts cost now (0 when the
+/// cache held all of it).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tracked {
-    pub track: SubjectTrack,
+    pub tracks: Vec<SubjectTrack>,
     pub paid_usd: f64,
+}
+
+/// What the cache holds of a stretch: the tracked stretches that overlap it, and its parts none of them covers.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Cover {
+    pub tracks: Vec<SubjectTrack>,
+    pub missing: Vec<RangeUs>,
 }
 
 /// The local work: a stretch of a file as the small video the tracker takes, with its cuts. Behind a trait so tests
@@ -162,16 +175,54 @@ pub fn estimate_usd(tracker: &dyn SubjectTracker, ranges: &[RangeUs]) -> f64 {
         .sum()
 }
 
-/// A stretch the cache keeps that covers `range` for `phrase` at `fps`. Blocking (a small read).
-pub fn cached(dir: &Dir, phrase: &str, fps: f64, range: RangeUs) -> Option<SubjectTrack> {
-    let tracks: Vec<SubjectTrack> = dir.load(CACHE_NAME)?;
-    tracks.into_iter().find(|t| t.covers(phrase, fps, range))
+/// What the cache holds of `range` for `model`'s answer to `phrase` at `fps`. Blocking (a small read).
+pub fn cover(dir: &Dir, model: &str, phrase: &str, fps: f64, range: RangeUs) -> Cover {
+    let kept: Vec<SubjectTrack> = dir.load(CACHE_NAME).unwrap_or_default();
+    let tracks: Vec<SubjectTrack> = (kept.into_iter())
+        .filter(|t| {
+            t.serves(model, phrase, fps) && t.range.start < range.end && range.start < t.range.end
+        })
+        .collect();
+    let covered: Vec<RangeUs> = tracks.iter().map(|t| t.range).collect();
+    Cover {
+        missing: missing(range, &covered, fps),
+        tracks,
+    }
+}
+
+/// The parts of `range` none of `covered` holds, in order; a part shorter than one frame at `fps` counts as held.
+pub fn missing(range: RangeUs, covered: &[RangeUs], fps: f64) -> Vec<RangeUs> {
+    let frame = (1e6 / fps.max(0.001)) as Us;
+    let mut held: Vec<RangeUs> = covered.to_vec();
+    held.sort_by_key(|r| r.start);
+    let mut out = Vec::new();
+    let mut at = range.start;
+    for r in held {
+        if r.end <= at || r.start >= range.end {
+            continue;
+        }
+        if r.start > at {
+            out.push(RangeUs {
+                start: at,
+                end: r.start.min(range.end),
+            });
+        }
+        at = at.max(r.end);
+    }
+    if at < range.end {
+        out.push(RangeUs {
+            start: at,
+            end: range.end,
+        });
+    }
+    out.retain(|r| r.end - r.start >= frame);
+    out
 }
 
 /// Adds `track` to the file's cached stretches, dropping those it covers.
 fn store(dir: &Dir, track: &SubjectTrack) -> std::io::Result<()> {
     let mut tracks: Vec<SubjectTrack> = dir.load(CACHE_NAME).unwrap_or_default();
-    tracks.retain(|t| !(track.covers(&t.phrase, t.fps, t.range)));
+    tracks.retain(|t| !track.covers(&t.model, &t.phrase, t.fps, t.range));
     tracks.push(track.clone());
     dir.store(CACHE_NAME, &tracks)
 }
@@ -191,58 +242,97 @@ pub struct Ask<'a> {
     pub cancel: Arc<AtomicBool>,
 }
 
-/// `ask`'s stretch tracked: from the cache when a stretch kept there covers it, else copied small, sent to `tracker`
-/// and cached (a cache that can't be written only costs a second request later).
+/// `ask`'s stretch tracked: what the cache holds of it, and its missing parts each copied small, sent to `tracker` and
+/// cached (a cache that can't be written only costs a second request later). An answer cut off part-way keeps, and
+/// caches, only the frames it holds.
 pub async fn track(
     tracker: &dyn SubjectTracker,
     copier: Arc<dyn SubjectCopy>,
     ask: &Ask<'_>,
 ) -> Result<Tracked, AnalysisError> {
-    if let Some(dir) = ask.cache
-        && let Some(track) = cached(dir, ask.phrase, ask.fps, ask.range)
-    {
-        return Ok(Tracked {
-            track,
-            paid_usd: 0.0,
-        });
+    let held = match ask.cache {
+        Some(dir) => {
+            let (dir, model, phrase, fps, range) = (
+                dir.clone(),
+                tracker.model().to_owned(),
+                ask.phrase.to_owned(),
+                ask.fps,
+                ask.range,
+            );
+            tokio::task::spawn_blocking(move || cover(&dir, &model, &phrase, fps, range))
+                .await
+                .unwrap_or_default()
+        }
+        None => Cover::default(),
+    };
+    let missing = match ask.cache {
+        Some(_) => held.missing,
+        None => vec![ask.range],
+    };
+    let mut tracked = Tracked {
+        tracks: held.tracks,
+        paid_usd: 0.0,
+    };
+    for part in missing {
+        let track = track_part(tracker, copier.clone(), ask, part).await?;
+        tracked.paid_usd += track.cost_usd;
+        // A whole answer with nobody in it is kept too: that stretch is never paid for again.
+        if track.range.end > track.range.start {
+            if let Some(dir) = ask.cache {
+                let (dir, kept) = (dir.clone(), track.clone());
+                let _ = tokio::task::spawn_blocking(move || store(&dir, &kept)).await;
+            }
+            tracked.tracks.push(track);
+        }
     }
+    Ok(tracked)
+}
+
+/// `part` of `ask`'s file copied small and tracked, its range cut back to what an answer cut off part-way holds.
+async fn track_part(
+    tracker: &dyn SubjectTracker,
+    copier: Arc<dyn SubjectCopy>,
+    ask: &Ask<'_>,
+    part: RangeUs,
+) -> Result<SubjectTrack, AnalysisError> {
     std::fs::create_dir_all(ask.work)
         .map_err(|e| VideoError::Failed(format!("working folder: {e}")))?;
     let copy = Copy(ask.work.join(format!("subject-{}.mp4", unique_name())));
     let cuts = {
-        let (copier, src, out, range, fps, cancel) = (
+        let (copier, src, out, fps, cancel) = (
             copier,
             ask.src.to_path_buf(),
             copy.0.clone(),
-            ask.range,
             ask.fps,
             ask.cancel.clone(),
         );
-        tokio::task::spawn_blocking(move || copier.copy(&src, range, fps, &out, &cancel))
+        tokio::task::spawn_blocking(move || copier.copy(&src, part, fps, &out, &cancel))
             .await
             .map_err(|e| VideoError::Failed(format!("copy: {e}")))??
     };
     let tracking = tracker.track(&copy.0, ask.phrase).await?;
     drop(copy);
-    let track = SubjectTrack {
+    let mut range = part;
+    if tracking.cut_off {
+        let last = tracking
+            .frames
+            .iter()
+            .map(|f| f.frame)
+            .max()
+            .map_or(0, |f| f + 1);
+        range.end = (part.start + (f64::from(last) / ask.fps * 1e6).round() as Us).min(part.end);
+    }
+    Ok(SubjectTrack {
         model: tracker.model().to_owned(),
         phrase: ask.phrase.to_owned(),
         fps: ask.fps,
-        range: ask.range,
+        range,
         frames: tracking.frames,
         cuts: (cuts.into_iter())
-            .filter(|c| (ask.range.start..ask.range.end).contains(c))
+            .filter(|c| (range.start..range.end).contains(c))
             .collect(),
         frames_billed: tracking.frames_billed,
         cost_usd: tracking.cost_usd,
-    };
-    if let Some(dir) = ask.cache {
-        let (dir, kept) = (dir.clone(), track.clone());
-        let _ = tokio::task::spawn_blocking(move || store(&dir, &kept)).await;
-    }
-    Ok(Tracked {
-        paid_usd: track.cost_usd,
-        track,
     })
 }
 

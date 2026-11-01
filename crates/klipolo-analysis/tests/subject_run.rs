@@ -14,17 +14,20 @@ use klipolo_analysis::providers::{
 use klipolo_analysis::subject::{self, Ask, SubjectCopy};
 use klipolo_model::time::{RangeUs, Us};
 
-/// Answers every video with one person on each of its frames, counting the calls and the phrases.
+/// Answers every video with one person on each of its frames, counting the calls and the phrases. `cut_off`: answers
+/// only the first half of each video's frames, as an answer Meta stopped part-way does.
 #[derive(Default)]
 struct FakeSam {
     calls: AtomicUsize,
     phrases: Mutex<Vec<String>>,
     fail: bool,
+    cut_off: bool,
+    model: Option<&'static str>,
 }
 
 impl SubjectTracker for FakeSam {
     fn model(&self) -> &str {
-        "fake-sam"
+        self.model.unwrap_or("fake-sam")
     }
 
     fn max_frames(&self) -> u64 {
@@ -50,7 +53,8 @@ impl SubjectTracker for FakeSam {
                 ));
             }
             // The fake copy holds its frame count.
-            let frames: u32 = std::fs::read_to_string(video).unwrap().parse().unwrap();
+            let all: u32 = std::fs::read_to_string(video).unwrap().parse().unwrap();
+            let frames = if self.cut_off { all / 2 } else { all };
             Ok(Tracking {
                 frames: (0..frames)
                     .map(|frame| TrackedFrame {
@@ -65,8 +69,9 @@ impl SubjectTracker for FakeSam {
                         }],
                     })
                     .collect(),
-                frames_billed: u64::from(frames),
-                cost_usd: f64::from(frames.max(50)) * 0.0002,
+                frames_billed: u64::from(all),
+                cost_usd: f64::from(all.max(50)) * 0.0002,
+                cut_off: self.cut_off,
             })
         })
     }
@@ -135,12 +140,13 @@ fn ask<'a>(s: &'a Setup, range: RangeUs, phrase: &'a str) -> Ask<'a> {
 }
 
 #[test]
-fn requests_join_close_stretches_and_split_long_ones() {
-    // Two stretches 3 s apart are one request; one 30 s further on is its own.
-    let asked = [range(0.0, 10.0), range(13.0, 20.0), range(50.0, 55.0)];
+fn requests_join_only_stretches_a_second_apart_and_split_long_ones() {
+    // A second apart or less: one request (at most two copy frames that don't play). Further: never sent together, so
+    // footage that was cut out never goes up.
+    let asked = [range(0.0, 10.0), range(11.0, 20.0), range(23.0, 30.0)];
     assert_eq!(
         subject::requests(&asked, 2.0, 15_000),
-        [range(0.0, 20.0), range(50.0, 55.0)]
+        [range(0.0, 20.0), range(23.0, 30.0)]
     );
     // 100 frames at most a request: 80 s at 2 a second is two.
     assert_eq!(
@@ -156,9 +162,24 @@ fn the_price_is_each_requests_frames_at_the_trackers_price() {
     let sam = FakeSam::default();
     // A 60 s short at 2 frames a second: 120 frames.
     assert!((subject::estimate_usd(&sam, &[range(0.0, 60.0)]) - 0.024).abs() < 1e-12);
-    // Two stretches far apart, 10 s each: two requests, each billed at least 50 frames.
-    let apart = [range(0.0, 10.0), range(100.0, 110.0)];
+    // Two stretches 3 s apart, 10 s each: two requests, each billed at least 50 frames.
+    let apart = [range(0.0, 10.0), range(13.0, 23.0)];
     assert!((subject::estimate_usd(&sam, &apart) - 0.02).abs() < 1e-12);
+}
+
+#[test]
+fn what_is_missing_is_the_stretch_less_what_is_covered() {
+    let covered = [range(10.0, 20.0), range(25.0, 30.0)];
+    assert_eq!(
+        subject::missing(range(0.0, 40.0), &covered, 2.0),
+        [range(0.0, 10.0), range(20.0, 25.0), range(30.0, 40.0)]
+    );
+    // Less than a frame left over is covered.
+    assert_eq!(subject::missing(range(10.0, 20.3), &covered, 2.0), []);
+    assert_eq!(
+        subject::missing(range(12.0, 18.0), &[], 2.0),
+        [range(12.0, 18.0)]
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -171,13 +192,17 @@ async fn a_tracked_stretch_is_cached_and_never_paid_for_twice() {
     assert_eq!(sam.calls.load(Ordering::SeqCst), 1);
     assert!((first.paid_usd - 0.01).abs() < 1e-12);
     // Frame n is at the stretch's start plus n / 2 s, and the cut was found in the file's time.
-    let t = &first.track;
+    let [t] = first.tracks.as_slice() else {
+        panic!("{:?}", first.tracks)
+    };
     assert_eq!(
         (t.range, t.fps, t.frames.len()),
         (range(30.0, 40.0), 2.0, 20)
     );
-    assert_eq!(t.cuts, [31_000_000]);
-    assert_eq!(t.phrase, "person");
+    assert_eq!(
+        (t.cuts.as_slice(), t.phrase.as_str()),
+        (&[31_000_000][..], "person")
+    );
     assert_eq!(*copy.made.lock().unwrap(), [range(30.0, 40.0)]);
     // The copy is gone once used.
     assert!(std::fs::read_dir(&s.work).map_or(true, |mut d| d.next().is_none()));
@@ -188,11 +213,25 @@ async fn a_tracked_stretch_is_cached_and_never_paid_for_twice() {
             .await
             .unwrap();
         assert_eq!(cached.paid_usd, 0.0);
-        assert_eq!(cached.track, first.track);
+        assert_eq!(cached.tracks, first.tracks);
     }
     assert_eq!(sam.calls.load(Ordering::SeqCst), 1);
-    assert!(subject::cached(&s.cache, "person", subject::FPS, range(31.0, 39.0)).is_some());
-    // Another phrase, or footage past the stretch: a call each.
+    let cover = subject::cover(
+        &s.cache,
+        "fake-sam",
+        "person",
+        subject::FPS,
+        range(31.0, 39.0),
+    );
+    assert!(cover.missing.is_empty());
+    // Footage past the stretch: only what is missing is sent and paid for (5 s, billed as 50 frames).
+    let longer = subject::track(&sam, copy.clone(), &ask(&s, range(35.0, 45.0), "person"))
+        .await
+        .unwrap();
+    assert_eq!(copy.made.lock().unwrap().last(), Some(&range(40.0, 45.0)));
+    assert!((longer.paid_usd - 0.01).abs() < 1e-12);
+    assert_eq!(longer.tracks.len(), 2);
+    // Another phrase, or another model: never served another's answers.
     subject::track(
         &sam,
         copy.clone(),
@@ -200,17 +239,50 @@ async fn a_tracked_stretch_is_cached_and_never_paid_for_twice() {
     )
     .await
     .unwrap();
-    subject::track(&sam, copy.clone(), &ask(&s, range(35.0, 45.0), "person"))
+    let newer = FakeSam {
+        model: Some("sam-4"),
+        ..FakeSam::default()
+    };
+    subject::track(&newer, copy.clone(), &ask(&s, range(30.0, 40.0), "person"))
         .await
         .unwrap();
     assert_eq!(sam.calls.load(Ordering::SeqCst), 3);
+    assert_eq!(newer.calls.load(Ordering::SeqCst), 1);
     assert_eq!(
         *sam.phrases.lock().unwrap(),
-        ["person", "man in red", "person"]
+        ["person", "person", "man in red"]
     );
-    // Both stretches of "person" are kept.
-    assert!(subject::cached(&s.cache, "person", subject::FPS, range(36.0, 44.0)).is_some());
-    assert!(subject::cached(&s.cache, "person", subject::FPS, range(30.0, 40.0)).is_some());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_answer_cut_off_part_way_caches_only_what_it_covers_and_a_retry_pays_for_the_rest() {
+    let s = setup();
+    let copy = Arc::new(FakeCopy::default());
+    let cut = FakeSam {
+        cut_off: true,
+        ..FakeSam::default()
+    };
+    let half = subject::track(&cut, copy.clone(), &ask(&s, range(0.0, 60.0), "person"))
+        .await
+        .unwrap();
+    // 120 frames sent and billed, 60 answered: the cache holds the first 30 s.
+    assert!((half.paid_usd - 0.024).abs() < 1e-12);
+    assert_eq!(half.tracks[0].range, range(0.0, 30.0));
+    let cover = subject::cover(
+        &s.cache,
+        "fake-sam",
+        "person",
+        subject::FPS,
+        range(0.0, 60.0),
+    );
+    assert_eq!(cover.missing, [range(30.0, 60.0)]);
+    // Asked again: only the 30 s still missing goes.
+    let whole = FakeSam::default();
+    let rest = subject::track(&whole, copy.clone(), &ask(&s, range(0.0, 60.0), "person"))
+        .await
+        .unwrap();
+    assert_eq!(copy.made.lock().unwrap().last(), Some(&range(30.0, 60.0)));
+    assert!((rest.paid_usd - 0.012).abs() < 1e-12);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -228,5 +300,12 @@ async fn a_refused_call_caches_nothing() {
     .await
     .unwrap_err();
     assert!(err.is_stop(), "{err}");
-    assert!(subject::cached(&s.cache, "person", subject::FPS, range(0.0, 5.0)).is_none());
+    let cover = subject::cover(
+        &s.cache,
+        "fake-sam",
+        "person",
+        subject::FPS,
+        range(0.0, 5.0),
+    );
+    assert!(cover.tracks.is_empty());
 }
