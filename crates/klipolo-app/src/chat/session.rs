@@ -372,7 +372,7 @@ impl Stored {
 struct Words(HashMap<String, Arc<Transcript>>);
 
 impl Words {
-    /// The words in `inputs` of the files under `cuts`, timeline ranges on `base` (the project the proposal applies to).
+    /// The words in `inputs` of the files under `cuts`: timeline ranges on `base`, the project the proposal applies to.
     fn read(inputs: &Inputs, base: &Project, cuts: &[RangeUs]) -> Self {
         let under = (run_spans(base).into_iter())
             .filter(|s| (cuts.iter()).any(|c| c.start < s.end_us() && s.from_us() < c.end));

@@ -1,6 +1,7 @@
 //! The Captions panel's commands: thin layers over `klipolo_app::captions`, on the engine's feed (so the panel shows
 //! the pages the video shows). New speech on the feed goes to the page as a `speech-changed` event naming the files
-//! whose words changed (`words_changed`): it asks its pages again, and drops a chat proposal whose cuts stand on them. In debug builds, `dev_fixture_speech` gives the open project's clips a sample transcript, for checking the
+//! whose words changed (`words_changed`): the page asks its pages again, and drops a chat proposal whose cuts stand on
+//! them. In debug builds, `dev_fixture_speech` gives the open project's clips a sample transcript, for checking the
 //! panel by hand before analysis has run.
 
 use std::sync::Arc;

@@ -75,8 +75,8 @@ pub const ANALYZE_FIRST: &str = "Analyze this clip first";
 /// What the person is told when `removeFillers` finds no filler word.
 pub const NO_FILLERS: &str = "There are no filler words to remove.";
 /// What the person is told when a filler word is only roughly timed (word timing failed, stopped or ran out, so its
-/// turn's words were spread over it by length): a cut at its guessed time would take real words. Said when the preview's
-/// header offers Time words again for its clip (`Inputs::time_again`).
+/// turn's words were spread over it by length): a cut at its guessed time would take real words. Said when the
+/// preview's header offers Time words again for its clip (`Inputs::time_again`).
 pub const ROUGH_FILLERS: &str = "Some words in this clip are only roughly timed, so I can't cut filler words exactly. \
                                  Press Time words again above the video, then ask me.";
 /// `ROUGH_FILLERS` when the preview's header doesn't offer Time words again for the clip (timing again can't help,
