@@ -22,6 +22,7 @@ import { useColorCommit } from '../color/useColorCommit';
 import { FontMenu } from '../fonts/FontMenu';
 import { MissingFontBadge } from '../fonts/MissingFontBadge';
 import { AnimationField, PositionField, TimingField } from './common';
+import { EffectsButton } from './EffectsButton';
 import { Field } from './fields';
 import { TextField } from './TextField';
 import { TextLooks } from './TextLooks';
@@ -46,10 +47,10 @@ function highlightSwatches(t: (d: { id: string; message?: string }) => string): 
 
 /**
  * A text layer's fields: its words, Font, Size, Style (Bold and alignment), the one-click Looks, Color,
- * Highlight, Outline (with its width), Shadow, Position, Animation and Timing. Each change is one undo step, built at
- * its turn from the title as the project has it then (`contentNow`), so a change on its way (words just finished on
- * the canvas) is kept. The colours dry-run on the video while hovered; the text color says when it is hard to read on
- * its own highlight or outline.
+ * Highlight, Outline (with its width), Shadow, Effects, Position, Animation and Timing. Each change is one undo step,
+ * built at its turn from the title as the project has it then (`contentNow`), so a change on its way (words just
+ * finished on the canvas) is kept. The colours dry-run on the video while hovered; the text color says when it is
+ * hard to read on its own highlight or outline.
  */
 export function TextInspector({
   item,
@@ -234,6 +235,7 @@ export function TextInspector({
           }
         />
       </Field>
+      <EffectsButton target={{ type: 'item', id: item.id }} effects={item.effects} />
       <PositionField item={item} format={format} primary={primary} />
       <AnimationField item={item} typewriter />
       <TimingField item={item} />

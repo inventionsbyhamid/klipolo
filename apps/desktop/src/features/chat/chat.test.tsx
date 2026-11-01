@@ -577,6 +577,9 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
             title: 'Apply these changes',
             removals: {
               ...proposal('x', 0).removals,
+              items: ['whoosh'],
+              shortened: ['title', 'card'],
+              moved: ['end-card'],
               tracks: ['t1', 't2'],
               luts: ['l1'],
               recordings: ['r1'],
@@ -590,6 +593,9 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     await userEvent.type(message(), 'tidy up{Enter}');
     const card = await screen.findByRole('group', { name: 'Apply these changes' });
     for (const line of [
+      'Removes 1 layer.',
+      'Shortens 2 layers.',
+      'Moves 1 layer to the video’s new end.',
       'Removes 2 tracks.',
       'Takes 1 color look out of the project.',
       'Removes 1 recording.',

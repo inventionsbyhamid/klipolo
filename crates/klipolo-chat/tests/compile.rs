@@ -16,13 +16,14 @@ use klipolo_chat::{
 };
 use klipolo_model::captions::styles::BuiltinCaptionStyle;
 use klipolo_model::coded::ErrorParam;
+use klipolo_model::layout::{Anchor, BoxN, Layout};
 use klipolo_model::media::music::{MUSIC_FADE_OUT_US, MusicOpts, add_music_ops, is_music};
 use klipolo_model::ops::{Edge, Op, Origin};
 use klipolo_model::project::{Asset, AssetKind, CaptionSettings, FormatKind, Settings};
 use klipolo_model::query::{main_track_duration, video_duration};
 use klipolo_model::speech::{Levels, Speech, Transcript, Word, WordKind, spoken, word_cut};
 use klipolo_model::time::{RangeUs, Us};
-use klipolo_model::timeline::{Clip, ClipSource, ItemContent};
+use klipolo_model::timeline::{Clip, ClipSource, Item, ItemContent, TextStyle, Track, TrackKind};
 use klipolo_model::{Document, Project, apply_ops};
 
 fn secs(s: f64) -> Us {
@@ -452,6 +453,108 @@ fn keep_only_proposes_the_complement() {
         main_track_duration(&proposal.review.after.timeline.main),
         secs(5.5)
     );
+}
+
+#[test]
+fn keep_only_names_what_it_leaves_past_the_new_end() {
+    // On "broll.mov" (30 s), free of the clips: a 40 s sound from 20 s (its last 10 s past the video), a title from 3 to
+    // 8 s and an end card after the video (30 to 32 s); and music from 20 to 28 s. Keeping only the first 5 s leaves the
+    // sound and the music past the new end and the title across it, and moves the card to the new end.
+    let mut p = broll(30.0);
+    for (id, length) in [("whoosh", 40.0), ("song", 60.0)] {
+        let mut sound = file(id, length, true);
+        sound.kind = AssetKind::Audio;
+        (sound.width, sound.height, sound.fps) = (0, 0, 0.0);
+        p.assets.push(sound);
+    }
+    let free = |id: &str, start: f64, length: f64, content: ItemContent| Item {
+        id: id.into(),
+        start_us: secs(start),
+        duration_us: secs(length),
+        attach: None,
+        layout: Layout::new(Anchor::Center, BoxN::FULL),
+        content,
+        effects: Vec::new(),
+    };
+    let mut titles = Track::new(TrackKind::Overlay, "Overlay 1");
+    titles.items.push(free(
+        "title",
+        3.0,
+        5.0,
+        ItemContent::Text {
+            text: "Thanks for watching".into(),
+            style: TextStyle::default(),
+        },
+    ));
+    titles.items.push(free(
+        "card",
+        30.0,
+        2.0,
+        ItemContent::Text {
+            text: "See you next time".into(),
+            style: TextStyle::default(),
+        },
+    ));
+    let mut sounds = Track::new(TrackKind::Audio, "Audio 1");
+    sounds.items.push(free(
+        "whoosh-layer",
+        20.0,
+        40.0,
+        ItemContent::Audio {
+            asset_id: "whoosh".into(),
+            source_in_us: 0,
+            volume: 1.0,
+            muted: false,
+            fade_in_us: 0,
+            fade_out_us: 0,
+            effect: None,
+            drift_ppm: 0.0,
+            centre_from: None,
+            tie: None,
+            duck: None,
+        },
+    ));
+    p.timeline.tracks = vec![titles, sounds];
+    let song = p.asset("song").unwrap().clone();
+    let opts = MusicOpts {
+        start_us: secs(20.0),
+        end_us: Some(secs(28.0)),
+        ..MusicOpts::default()
+    };
+    let p = apply_ops(&p, &add_music_ops(&p, &song, opts).unwrap()).unwrap();
+    let bed: Vec<String> = (p.timeline.tracks.iter().flat_map(|t| &t.items))
+        .filter(|i| is_music(i))
+        .map(|i| i.id.clone())
+        .collect();
+    assert_eq!(bed.len(), 1);
+
+    let i = inputs(&p, Speech::default(), "keep only the first 5 seconds");
+    let out = compile(
+        &p,
+        &i,
+        &[call(
+            "keepOnly",
+            r#"{"ranges": [{"startSec": 0, "endSec": 5}]}"#,
+        )],
+    );
+    assert_eq!(out.refusals, vec![]);
+    let proposal = out.proposal.expect("a proposal");
+    let after = &proposal.review.after;
+    assert_eq!(video_duration(&after.timeline), secs(7.0));
+    let left: Vec<(&str, Us, Us)> = (after.timeline.tracks.iter().flat_map(|t| &t.items))
+        .map(|i| (i.id.as_str(), i.start_us, i.end_us()))
+        .collect();
+    assert_eq!(
+        left,
+        [
+            ("title", secs(3.0), secs(5.0)),
+            ("card", secs(5.0), secs(7.0))
+        ]
+    );
+    let removals = &proposal.review.removals;
+    assert_eq!(removals.items, ["whoosh-layer", bed[0].as_str()]);
+    assert_eq!(removals.shortened, ["title"]);
+    assert_eq!(removals.moved, ["card"]);
 }
 
 #[test]

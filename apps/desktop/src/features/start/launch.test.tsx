@@ -24,6 +24,7 @@ const row = (name: string, openedMs: number): ProjectRow => ({
   durationUs: 61_400_000,
   clips: 1,
   thumb: null,
+  open: false,
 });
 
 /** A project as Rust opens it: the fixture, under its own id and name. */
@@ -52,7 +53,7 @@ function fakeRust() {
           if (!rust.open) throw { code: 'project.none', params: {} };
           return rust.open;
         case 'projects_recent':
-          return rust.rows;
+          return rust.rows.map((r) => ({ ...r, open: r.name === rust.open?.project.name }));
         case 'project_create':
           rust.open = opened(args.name, ++rust.openings);
           return rust.open;
@@ -194,11 +195,46 @@ describe('launch', () => {
     const order = rust.heard.filter((cmd) => cmd === 'project_apply' || cmd === 'project_close');
     expect(order).toEqual(['project_apply', 'project_close']);
     expect(await screen.findByRole('button', { name: 'Older' })).toBeInTheDocument();
-    expect(rust.heard.filter((cmd) => cmd === 'projects_recent')).toHaveLength(1);
+    // Once, by the start screen (the project menu read it too, before the close).
+    const closed = rust.heard.indexOf('project_close');
+    expect(rust.heard.slice(closed).filter((cmd) => cmd === 'projects_recent')).toHaveLength(1);
     expect(editor()).toBeNull();
     expect(useProject.getState().snapshot).toBeNull();
     expect(within(topBar()).queryByRole('button', { name: /Undo/ })).toBeNull();
     burst.unmount();
+  });
+
+  it('open_recent_switches_projects_from_the_editor', async () => {
+    rust.rows = [
+      row('Studio tour', Date.now() - 60_000),
+      row('Kiln vlog', Date.now() - 120_000),
+      row('Banner', Date.now() - 180_000),
+    ];
+    await launch();
+    await userEvent.click(await screen.findByRole('button', { name: 'Studio tour' }));
+    expect(await screen.findByRole('main', { name: 'Preview' })).toBeInTheDocument();
+
+    // The project menu lists the others, not the one open.
+    await userEvent.click(within(topBar()).getByRole('button', { name: 'Studio tour' }));
+    const group = await screen.findByRole('group', { name: 'Open recent' });
+    await waitFor(() =>
+      expect(within(group).getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Kiln vlog', 'Banner']),
+    );
+    await userEvent.click(within(group).getByRole('menuitem', { name: 'Kiln vlog' }));
+    // The editor stays; the project is the other one now. No start screen in between.
+    await waitFor(() => expect(within(topBar()).getByRole('button', { name: 'Kiln vlog' })).toBeInTheDocument());
+    expect(startScreen()).toBeNull();
+    expect(rust.heard.filter((cmd) => cmd === 'project_open')).toHaveLength(2);
+
+    // One that went since says why, and the project open stays.
+    await userEvent.click(within(topBar()).getByRole('button', { name: 'Kiln vlog' }));
+    const again = await screen.findByRole('group', { name: 'Open recent' });
+    const banner = await within(again).findByRole('menuitem', { name: 'Banner' });
+    rust.rows = rust.rows.slice(0, 2);
+    await userEvent.click(banner);
+    expect(await screen.findByText("That project isn't there any more.")).toBeInTheDocument();
+    expect(within(topBar()).getByRole('button', { name: 'Kiln vlog' })).toBeInTheDocument();
+    expect(editor()).not.toBeNull();
   });
 
   it('all_projects_from_the_keyboard_puts_the_focus_on_the_title', async () => {
