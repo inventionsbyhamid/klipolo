@@ -214,4 +214,13 @@ describe('an effect row', () => {
     expect(screen.getByRole('button', { name: 'Remove missing effect (1)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Remove missing effect (2)' })).toBeInTheDocument();
   });
+
+  it('its settings disclosure says which settings it shows', () => {
+    onClipA([fx('x', 'blur')]);
+    renderWithProviders(<StackOf target={{ type: 'clip', id: 'a' }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Show Blur settings' }));
+    const hide = screen.getByRole('button', { name: 'Hide Blur settings' });
+    const shown = document.getElementById(hide.getAttribute('aria-controls')!);
+    expect(shown).toContainElement(screen.getByRole('slider', { name: 'Radius' }));
+  });
 });

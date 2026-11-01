@@ -1,5 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { EffectInstance } from '../../bindings/EffectInstance';
 import { IconButton } from '../../design/IconButton';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '../../design/Menu';
@@ -32,6 +32,7 @@ interface EffectRowProps {
 export function EffectRow({ stack, fx, index, name, sentence, onRemove }: EffectRowProps) {
   const { t } = useLingui();
   const [open, setOpen] = useState(false);
+  const settingsId = useId();
   const def = BUILTINS.find((d) => d.id === fx.effect && d.kind === 'effect');
   const ids = { 'data-effect-row': '', 'data-effect-id': fx.id, 'data-effect-block': stack.target.id };
   if (!def) {
@@ -90,6 +91,7 @@ export function EffectRow({ stack, fx, index, name, sentence, onRemove }: Effect
                 : t({ id: 'effect.settings.show', message: `Show ${name} settings`, comment: '{name}: e.g. Blur' })
             }
             aria-expanded={open}
+            aria-controls={open ? settingsId : undefined}
             onClick={() => setOpen((o) => !o)}
           />
         )}
@@ -116,7 +118,7 @@ export function EffectRow({ stack, fx, index, name, sentence, onRemove }: Effect
         </Menu>
       </div>
       {open && (
-        <div className="fx-settings">
+        <div id={settingsId} className="fx-settings">
           <ParamFields
             def={def}
             values={fx.params}
