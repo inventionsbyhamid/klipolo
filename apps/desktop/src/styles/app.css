@@ -1023,6 +1023,49 @@
   pointer-events: none;
 }
 
+/* A recording's markers along the top of the Video lane: a paper flag (you put it there) with a line down through the
+   clips that takes no presses; red while a proposal removes it. Over the clips, under the playhead and the marks. */
+.tl-markers {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.tl-marker {
+  position: absolute;
+  top: 0;
+  width: 10px;
+  height: 12px;
+  padding: 0;
+  border-radius: var(--radius-xs);
+  pointer-events: auto;
+}
+
+.tl-marker-flag {
+  position: absolute;
+  inset: 0;
+  background: var(--color-paper);
+  clip-path: polygon(0 0, 100% 25%, 0 55%);
+}
+
+.tl-marker-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 400px;
+  background: var(--color-paper);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.tl-marker[data-ghost] .tl-marker-flag,
+.tl-marker[data-ghost] .tl-marker-line {
+  background: var(--color-cut);
+}
+
 /* Clips: clip-deep with a clip-2 edge, filmstrip over 62 %, the clip's own waveform under it, back to back with a
    1 px seam where two meet. */
 .tl-clip {

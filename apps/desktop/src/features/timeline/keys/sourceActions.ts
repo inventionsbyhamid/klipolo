@@ -29,9 +29,10 @@ import {
 import { commit, editable } from './timelineActions';
 
 /*
- * What a recording's sounds do: a source lane's header (a kind of sound in every recording: `sourceMix`), a clip's
- * menu and the clip card's Sounds. Each is built from the project when it runs (after a change still settling has gone
- * in: `keyBurst.after`), and is one undo step through `useProject.apply`, said in the timeline's live region.
+ * What a recording's sounds and markers do: a source lane's header (a kind of sound in every recording: `sourceMix`),
+ * a clip's menu, the clip card's Sounds and the marker flags. Each is built from the project when it runs (after a
+ * change still settling has gone in: `keyBurst.after`), and is one undo step through `useProject.apply`, said in the
+ * timeline's live region.
  */
 
 /** The model's sync range (`model.recording.nudge`): 5 s either way. */
@@ -248,5 +249,19 @@ export function nudgeSource(recordingId: string, sourceId: string, deltaUs: numb
     const nudgeUs = Math.max(-MAX_NUDGE_US, Math.min(MAX_NUDGE_US, s.nudgeUs + deltaUs));
     if (nudgeUs === s.nudgeUs) return;
     step(sourceUndoLabel('undo.source.sync', s), [sourceOp(recordingId, sourceId, { nudgeUs })]);
+  });
+}
+
+/** Removes marker `id` of recording `recordingId`: the person's own edit, so it goes in at once. */
+export function removeMarker(recordingId: string, id: string, then?: () => void) {
+  keyBurst.after(() => {
+    const project = editable();
+    if (!project?.recordings.some((r) => r.id === recordingId && r.markers.some((m) => m.id === id))) return;
+    commit(
+      'undo.marker.remove',
+      [{ type: 'removeMarker', recordingId, id }],
+      labelText('undo.marker.remove'),
+      then,
+    );
   });
 }

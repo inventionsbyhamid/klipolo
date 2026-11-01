@@ -11,6 +11,7 @@ import type { LineView } from './lanes/TrackLane';
 import { CLIP_INNER_PX } from './layout';
 import { createZoomRest } from './media/zoomRest';
 import { ViewportContext, ZoomRestContext } from './media/ViewportContext';
+import { MarkerFlags } from './MarkerFlags';
 import { ProposalOverlay } from './ProposalOverlay';
 import { useLaneSizes } from './useLaneSizes';
 import type { Viewport } from './useViewport';
@@ -30,7 +31,7 @@ interface TimelineLanesProps {
 
 /**
  * The timeline's four lanes under the ruler, always shown: Overlays (text and images, packed in up to
- * three rows), Video (the clips, taking the spare height), Sounds and Music; and between Video and Sounds, one lane per
+ * three rows), Video (the clips, taking the spare height, with a recording's marker flags), Sounds and Music; and between Video and Sounds, one lane per
  * kind of sound the takes recorded (`SourceLanes`), only while a take has it. Empty lanes are a faint strip. It gives
  * the blocks' media the window it draws in and this timeline's zoom gestures to wait out (`media/BlockMedia`).
  */
@@ -84,6 +85,7 @@ export function TimelineLanes({ project, viewport, view, width, clipPx = CLIP_IN
             innerPx={clipPx}
             {...view}
           />
+          <MarkerFlags recordings={recordings} main={main} fps={project.settings.fps} {...ghostWindow} />
         </LaneRow>
         {/* Each kind of recorded sound's own lane, under the video it was recorded with. */}
         <SourceLanes
