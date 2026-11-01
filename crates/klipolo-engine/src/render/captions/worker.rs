@@ -1,9 +1,9 @@
-//! The caption build thread: every page's layout and atlas is built here, never on the
-//! render thread. The thread makes the atlas builder and the draw pipeline (the pipeline goes back first), builds one
-//! tiny page to warm them, and keeps a font system of its own (an exception to the shared font system), refreshed by
-//! the fonts' generation before each build as the compositor's is. It answers build requests in order and fires the
-//! redraw signal after each, so the preview draws a page once its atlas is there; an export waits for the reply on the
-//! same path. A dropped drawer drops the request channel, and the thread ends after its current build.
+//! The caption build thread: every page's layout and atlas is built here, never on the render thread. The thread makes
+//! the atlas builder and the draw pipeline (the pipeline goes back first), builds one tiny page to warm them, and keeps
+//! a font system of its own (an exception to the one shared font system), refreshed by the fonts' generation before
+//! each build as the compositor's is. It answers build requests in order and fires the redraw signal after each, so the
+//! preview draws a page once its atlas is there; an export waits for the reply on the same path. A dropped drawer drops
+//! the request channel, and the thread ends after its current build.
 //!
 //! Queue order: a build's `queue.submit` returns before its reply is sent, so the render thread's later submit, which
 //! draws from the atlas, comes after it on the shared queue.

@@ -1,5 +1,5 @@
 //! A caption page's word atlas: each word drawn once into its own cell (`layout::WordBox::cell`) as four packed masks:
-//! packed masks: R the fill, G the silhouette (the fill with its outline), B the silhouette blurred for the shadow, A the
+//! R the fill, G the silhouette (the fill with its outline), B the silhouette blurred for the shadow, A the fill
 //! blurred for the glow. The drawer draws the page's words from it with instanced quads, colouring each mask per word
 //! and per moment; the atlas itself is built once per page, look or font change, never per frame.
 //!
@@ -33,8 +33,8 @@ thread_local! {
     static NO_BUILDS: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Tests: a page built on this thread from now on panics, so a test proves the render thread never builds (pages
-/// are built on the caption build thread).
+/// Tests: a page built on this thread from now on panics, so a test proves the render thread never builds (pages are
+/// built on the caption build thread).
 #[doc(hidden)]
 pub fn forbid_builds_on_this_thread() {
     NO_BUILDS.set(true);
