@@ -227,3 +227,24 @@ fn resuming_after_a_pause_and_a_seek_plays_nothing_from_before() {
     }
     assert!(heard > 1000, "{heard}");
 }
+
+/// What the mixer reads is the loudness target's gain times the person's listening volume: a new measurement keeps the
+/// volume, and a new volume keeps the measurement.
+#[test]
+fn the_master_gain_is_the_loudness_gain_times_the_listening_volume() {
+    let mut gain = super::MasterGain::default();
+    let shared = gain.shared();
+    let heard = || f32::from_bits(shared.load(Ordering::Relaxed));
+    assert_eq!(heard(), 1.0);
+    gain.set_loudness(0.5);
+    assert_eq!(heard(), 0.5);
+    gain.set_volume(0.5);
+    assert_eq!(heard(), 0.25);
+    gain.set_loudness(2.0);
+    assert_eq!(heard(), 1.0);
+    gain.set_volume(0.0);
+    assert_eq!(heard(), 0.0);
+    // Held to 0 to 1.
+    gain.set_volume(3.0);
+    assert_eq!(heard(), 2.0);
+}

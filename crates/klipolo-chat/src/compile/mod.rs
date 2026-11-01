@@ -1,11 +1,12 @@
 //! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's context was
 //! built from, out as edits.
 //! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, a trim that makes a clip longer, the clip
-//!   tools `setClip` and `setTransition`, and the media: `addMusic`, `addSound`, `addText`, `addImage` and
-//!   `makeTitleCard`'s title) are one `Transaction` the app applies at once: one undo step. An addition is judged by
-//!   what its part does, not by its tool: one that takes something away (the model's own `removals`, as a format
-//!   dropped with what was placed in it) is compiled again with the removals and proposed: a speed that leaves a
-//!   transition no room, or a transition taken away.
+//!   tools `setClip` and `setTransition`, the media: `addMusic`, `addSound`, `addText`, `addImage` and
+//!   `makeTitleCard`'s title, and a recording's camera and sounds: `setCameraMode`, `adjustCamera`, `detachCamera`,
+//!   `muteSource`, `setSourceVolume`, `separateSound`) are one `Transaction` the app applies at once: one undo step. An
+//!   addition is judged by what its part does, not by its tool: one that takes something away (the model's own
+//!   `removals`, as a format dropped with what was placed in it) is compiled again with the removals and proposed: a
+//!   speed that leaves a transition no room, or a transition taken away.
 //! - Removals (`cutRange`, `keepOnly`, `removeSilences`, `removeFillers`, a trim that makes a clip shorter) are one
 //!   `Proposal`: a `Transaction` for the project as the additions leave it, judged by the model's own review (what it
 //!   takes away, on the timeline), applied as one undo step when the person says so.
@@ -33,15 +34,21 @@
 //! edits were compiled against the project before it, so they are refused back to the model.
 //!
 //! Undo labels are message ids with values, worded by the UI: `chat.<tool>` (`chat.cutRange {startUs, endUs}`), and
-//! `chat.andMore {first, more}` for a step of several calls. Splitting by concern: `additions`, `removals`, `trim`
-//! (both), `media` (the library's music, sounds, words and pictures, and the pictures to draw), `clips` (a clip's
-//! speed, volume, mute and framing, and the transitions at its cuts), `map`.
+//! `chat.andMore {first, more}` for a step of several calls. What an addition did beyond what was asked, or what a
+//! recording tool left as it was, is a note for the person (`Compiled::notes`). Splitting by concern: `additions`,
+//! `removals`, `trim` (both), `media` (the library's music, sounds, words and pictures, and the pictures to draw),
+//! `clips` (a clip's speed, volume, mute and framing, and the transitions at its cuts), `recorded` (a recording's
+//! camera, in `cameras` and `bubble`, and its sounds, in `sources`), `map`.
 
 mod additions;
+mod bubble;
+mod cameras;
 mod clips;
 mod map;
 mod media;
+mod recorded;
 mod removals;
+mod sources;
 mod trim;
 
 use std::collections::{HashMap, HashSet};
@@ -62,9 +69,13 @@ use crate::evidence::{Evidence, Unfounded};
 use crate::library::Library;
 use crate::sanitize;
 use crate::tools::{Moment, PictureSize, Position, ToolCall};
+pub(crate) use cameras::every_camera;
 pub use clips::{NO_ROOM, NO_ROOM_ANYWHERE, NO_TRANSITIONS};
 use map::Map;
 pub use media::{sticker_ops, sticker_placement};
+pub(crate) use recorded::recording_name;
+pub(crate) use sources::{OwnTrack, kind_of};
+pub use sources::{centre_ops, fill_gaps_ops};
 use trim::Trim;
 
 /// What the person is told when a tool needs a clip's words and Klipolo is still hearing or timing them.
@@ -149,8 +160,10 @@ pub struct Compiled {
     pub undo: bool,
     /// The additions that went through but changed nothing (a format the video already has), by call index.
     pub unchanged: Vec<usize>,
-    /// Klipolo's own sentences on what the additions did beyond what was asked, for the reply after what is said of
-    /// them: a new speed that shortens a transition ("A transition is shortened.", as the clip card says it).
+    /// Klipolo's own sentences on what the additions did beyond what was asked, or left as they were, for the reply
+    /// after what is said of them: a new speed that shortens a transition ("A transition is shortened.", as the clip
+    /// card says it), cameras that are their own layer ("Cameras that are their own layer were left as they are."). In
+    /// call order, each once.
     pub notes: Vec<String>,
     /// Klipolo's own sentences on why a change the person asked for waits in `proposal`: a new speed that leaves a
     /// transition no room.
@@ -465,6 +478,8 @@ impl Compiler<'_> {
         // Klipolo's notes on what the additions did, by call index (`Compiled::notes`).
         let mut notes: Vec<(usize, String)> = Vec::new();
         for (i, call) in calls.iter().enumerate() {
+            // A recording tool's notes, said once its edit is kept.
+            let mut recorded: Vec<String> = Vec::new();
             if out.undo && is_edit(call) {
                 let reason = format!(
                     "{}: not done, because undo is in the same answer. Call undo on its own, then the other changes.",
@@ -579,6 +594,18 @@ impl Compiler<'_> {
                     });
                     (edit, Removal::Moved(call))
                 }
+                ToolCall::SetCameraMode { .. }
+                | ToolCall::AdjustCamera { .. }
+                | ToolCall::DetachCamera { .. }
+                | ToolCall::MuteSource { .. }
+                | ToolCall::SetSourceVolume { .. }
+                | ToolCall::SeparateSound { .. } => {
+                    let edit = recorded::compile(self, &adding.work, call).map(|noted| {
+                        recorded = noted.notes;
+                        noted.edit
+                    });
+                    (edit, Removal::Moved(call))
+                }
             };
             let (edit, if_it_removes) = addition;
             let tried = edit.and_then(|edit| {
@@ -600,6 +627,8 @@ impl Compiler<'_> {
                     if let Some(said) = skipped.take().filter(|_| tried.after.is_some()) {
                         notes.push((i, said));
                     }
+                    // What a recording tool left as it was.
+                    notes.extend(recorded.drain(..).map(|said| (i, said)));
                     adding.keep(tried, i);
                 }
                 Err(r) => refuse(&mut out, i, r),
@@ -734,7 +763,11 @@ impl Compiler<'_> {
                 waits.clear();
             }
         }
-        out.notes = notes.into_iter().map(|(_, said)| said).collect();
+        for (_, said) in notes {
+            if !out.notes.contains(&said) {
+                out.notes.push(said);
+            }
+        }
         out.waits = waits.into_iter().map(|(_, said)| said).collect();
         out.refusals.sort_by_key(|r| r.call_index);
         out
@@ -793,6 +826,14 @@ impl Compiler<'_> {
                 duration_us,
             } => {
                 clips::set_transition(self, work, after, *kind, *duration_us).map(|(edit, _)| edit)
+            }
+            ToolCall::SetCameraMode { .. }
+            | ToolCall::AdjustCamera { .. }
+            | ToolCall::DetachCamera { .. }
+            | ToolCall::MuteSource { .. }
+            | ToolCall::SetSourceVolume { .. }
+            | ToolCall::SeparateSound { .. } => {
+                recorded::compile(self, work, call).map(|noted| noted.edit)
             }
             other => Err(to_model(format!("{}: not an addition.", other.name()))),
         }
