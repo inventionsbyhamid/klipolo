@@ -214,6 +214,7 @@ fn main() {
             view::editor_view,
             media_cache::media_peaks_info,
             media_cache::media_peaks,
+            media_cache::media_channel_peaks,
             media_cache::media_thumbs,
             commands::media::media_add_music,
             commands::media::media_add_sound,
