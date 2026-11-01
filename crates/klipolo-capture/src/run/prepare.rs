@@ -11,6 +11,7 @@ use klipolo_model::coded::CodedError;
 use klipolo_platform::clock::host_ns;
 use klipolo_platform::durable::Durability;
 
+use super::command_source::CommandFence;
 use super::core::SessionCore;
 use super::resume;
 use super::threads::{Input, failed_with};
@@ -49,6 +50,7 @@ pub(super) fn prepare(
     resume: bool,
     commands: &Receiver<Input>,
     stop_seen: &AtomicBool,
+    fence: &CommandFence,
 ) -> Prepared {
     let cfg = match session::read_config(dir) {
         Ok(cfg) => cfg,
@@ -80,15 +82,19 @@ pub(super) fn prepare(
             }
         }
         Ok((lock, from)) => {
-            let early: Vec<Input> = commands.try_iter().collect();
-            // The flag too: a Stop read between the drain and here is seen.
-            let stopped = stop_seen.load(Ordering::Acquire)
-                || early.iter().any(|i| {
-                    matches!(
-                        i,
-                        Input::Command(Command::Stop | Command::Cancel | Command::Disarm)
-                    )
-                });
+            // Only once every command the app already sent is read (`CommandFence`): a Stop waiting in the input is seen
+            // however late its reader runs. The flag too: a Stop read but not yet passed on is seen.
+            let (early, stopped) = fence.settled(|| {
+                let early: Vec<Input> = commands.try_iter().collect();
+                let stopped = stop_seen.load(Ordering::Acquire)
+                    || early.iter().any(|i| {
+                        matches!(
+                            i,
+                            Input::Command(Command::Stop | Command::Cancel | Command::Disarm)
+                        )
+                    });
+                (early, stopped)
+            });
             if !stopped {
                 let core =
                     SessionCore::resumed(cfg, backend.mics(), from, now).with_cursor_clicks(clicks);
