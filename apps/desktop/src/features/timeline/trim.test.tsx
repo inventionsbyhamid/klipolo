@@ -68,7 +68,7 @@ describe('trimming and splitting', () => {
 
   it("a clip's end trim ripples the clips after it live; Escape puts everything back", async () => {
     renderWithProviders(<Timeline />);
-    const a = block(/^screen\.mp4/);
+    const a = block(/^Recording 1/);
     const b = block(/^broll\.mp4/);
     // −40 px at 40 px/s: a ends at 19 s, and b follows it 1 s earlier.
     fireEvent.pointerDown(edge(a, 'end'), { pointerId: 1, button: 0, clientX: 799, clientY: 10 });
@@ -190,7 +190,7 @@ describe('trimming and splitting', () => {
     ];
     useProject.setState({ snapshot });
     renderWithProviders(<Timeline />);
-    const clip = block(/^screen\.mp4/);
+    const clip = block(/^Recording 1/);
     fireEvent.pointerDown(edge(clip, 'end'), { pointerId: 1, button: 0, clientX: 799, clientY: 10 });
     fireEvent.pointerMove(clip, { pointerId: 1, clientX: 2399, clientY: 10 });
     await frames();

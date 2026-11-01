@@ -135,6 +135,11 @@ export const TABLE = {
     message: 'Add recording',
     comment: 'Undo history entry: a finished recording added to the project',
   }),
+  'undo.autoZoom': msg({
+    id: 'undo.autoZoom',
+    message: 'Add auto zoom',
+    comment: "Undo history entry: zooms that follow a new recording's clicks, added right after it",
+  }),
   'undo.marker.add': msg({ id: 'undo.marker.add', message: 'Add marker', comment: 'Undo history entry' }),
   'undo.marker.remove': msg({
     id: 'undo.marker.remove',

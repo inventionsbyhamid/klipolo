@@ -74,6 +74,52 @@ naming_files() {
   return 1
 }
 
+# The checkout <repo>'s source files vendored from Cap's MIT crates, as paths from <repo>, one a line, sorted: each .rs
+# file under crates/<crate>/src whose first line is `// SPDX-License-Identifier: MIT` and whose first four lines name
+# Cap Software, Inc. (crates/klipolo-capture/NOTICE lists them). Returns 1 when a folder or a file couldn't be read
+# (the files found are printed all the same).
+# It finds them by that header alone, the convention every file from Cap's MIT crates keeps: line 1 exactly that SPDX
+# line (not `MIT OR Apache-2.0`, no attribute or comment before it, LF line endings), in a .rs file under a crate's src.
+# A file from Cap's MIT crates without that header, or kept in tests/, examples/ or build.rs, isn't found.
+cap_mit_files() {
+  local repo=$1 list f found="" rc=0
+  [ -d "$repo/crates" ] || return 0
+  list=$(mktemp)
+  (cd "$repo" && find crates -path 'crates/*/src/*' -name '*.rs' -type f -print0) > "$list" || rc=1
+  while IFS= read -r -d '' f; do
+    if [ ! -r "$repo/$f" ]; then rc=1; continue; fi
+    [ "$(head -n 1 "$repo/$f")" = '// SPDX-License-Identifier: MIT' ] || continue
+    case "$(head -n 4 "$repo/$f")" in *'Cap Software, Inc.'*) found+="$f"$'\n' ;; esac
+  done < "$list"
+  rm -f "$list"
+  printf '%s' "$found" | LC_ALL=C sort
+  return "$rc"
+}
+
+# Whether the first line of <notice>, a Cap-MIT.txt, names exactly the checkout <repo>'s files from Cap's MIT crates
+# (cap_mit_files): each of them, and no other crates/...rs path. Names are whole words of the line (spaces, commas,
+# semicolons and brackets part them, and a word's last . or : is dropped), so `mod.rs.bak` doesn't name `mod.rs`.
+# Prints one line per problem, calling the file <label>, and returns 1 when there is any:
+#   cap_mit_check <repo> <notice> <label>
+cap_mit_check() {
+  local repo=$1 notice=$2 label=$3 named files f rc=0
+  named=$(head -n 1 "$notice" | tr -s ' ,;()' '\n' | sed 's/[.:]*$//' | grep -E '^crates/.+\.rs$' || true)
+  if ! files=$(cap_mit_files "$repo"); then
+    echo "couldn't read every source file under crates/ to look for files from Cap's MIT crates"
+    rc=1
+  fi
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    grep -qxF -- "$f" <<< "$named" || { echo "$label's first line doesn't name $f (from Cap's MIT crates)"; rc=1; }
+  done <<< "$files"
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    grep -qxF -- "$f" <<< "$files" \
+      || { echo "$label's first line names $f, which isn't a file from Cap's MIT crates in the checkout"; rc=1; }
+  done <<< "$named"
+  return "$rc"
+}
+
 # The public address of Klipolo's source code, as NOTICE.txt gives it: https://, a host, and a path of plain URL
 # characters (no spaces, quotes, & or \).
 is_source_url() {

@@ -3,15 +3,9 @@ import { flushBursts } from '../../state/bursts';
 import { useRange } from '../../state/range';
 import { useSelection } from '../../state/selection';
 import type { RunOptions } from './command';
-import { inPopup, keyOf, otherAlone, OWNS_KEYS, PAGE_LIST, primaryHeld, within } from './shortcutKeys';
+import { inPopup, keyOf, otherAlone, OWNS_KEYS, PAGE_LIST, primaryHeld, typing, within } from './shortcutKeys';
 import { markRange } from '../timeline/commands';
 import { useCommands } from './useCommands';
-
-/** Keys typed into a field belong to the field. */
-function typing(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
-}
 
 /** Undo, redo and export reach the editor from a panel's own list (`PAGE_LIST`). */
 const FROM_PAGE_LIST = new Set(['z', 'e']);

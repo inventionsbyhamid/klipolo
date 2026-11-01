@@ -122,6 +122,43 @@ describe('the Library', () => {
     expect(useUi.getState().libraryTab).toBe('clips');
   });
 
+  it('a_recording_s_files_are_named_by_their_recording', () => {
+    // The fixture's recording: its screen is the main footage, with a camera and a mic beside it. Each row adds that
+    // file alone, so each is named by its source: the screen's row isn't the recording itself.
+    renderWithProviders(<Library />);
+    const clips = within(screen.getByRole('list', { name: 'Your clips' }));
+    expect(clips.getByText('Screen of Recording 1')).toBeInTheDocument();
+    expect(clips.getByText('Camera of Recording 1')).toBeInTheDocument();
+    expect(clips.queryByText('Recording 1')).toBeNull();
+    expect(clips.queryByText('screen.mp4')).toBeNull();
+    expect(clips.queryByText('camera.mp4')).toBeNull();
+    expect(clips.getByRole('button', { name: 'Add Screen of Recording 1 to the end' })).toBeInTheDocument();
+    // Its mic, a minute long, is with the songs.
+    act(() => useUi.setState({ libraryTab: 'music' }));
+    expect(within(screen.getByRole('tabpanel')).getByText('Mic of Recording 1')).toBeInTheDocument();
+  });
+
+  it('the search finds a recording’s files by the names the Library shows them by', async () => {
+    renderWithProviders(<Library />);
+    const search = screen.getByRole('searchbox', { name: 'Search clips' });
+    await userEvent.type(search, 'camera');
+    expect(listed(screen.getByRole('list', { name: 'Your clips' }))).toEqual(['Camera of Recording 1']);
+    await userEvent.clear(search);
+    await userEvent.type(search, 'recording 1');
+    expect(listed(screen.getByRole('list', { name: 'Your clips' })).sort()).toEqual([
+      'Camera of Recording 1',
+      'Screen of Recording 1',
+    ]);
+    // The mic, with the songs: its source's name finds it too.
+    act(() => useUi.setState({ libraryTab: 'music' }));
+    const music = screen.getByRole('searchbox', { name: 'Search music' });
+    await userEvent.clear(music);
+    await userEvent.type(music, 'mic');
+    expect(within(screen.getByRole('tabpanel')).getByText('Mic of Recording 1')).toBeInTheDocument();
+    expect(within(screen.getByRole('tabpanel')).queryByText('music.mp3')).toBeNull();
+    expect(within(screen.getByRole('tabpanel')).queryByText('lofi.wav')).toBeNull();
+  });
+
   it('with no clips, the Clips tab says what shows there and where the best moments come from', () => {
     const snapshot = useProject.getState().snapshot!;
     snapshot.project.assets = snapshot.project.assets.filter((a) => a.kind !== 'video');

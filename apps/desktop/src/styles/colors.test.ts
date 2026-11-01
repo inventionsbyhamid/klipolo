@@ -57,8 +57,15 @@ describe('colours', () => {
 
   it('the video and what is drawn over it stay dark in both themes', () => {
     // The layers' outlines, handles, snap guides and safe area over the preview; a caption style's sample and the
-    // backdrop it is shown on (the frame's own ring, when the style is chosen, follows the panel).
-    for (const selector of ['.frame-handles', '.style-frame::before', '.style-frame > *']) {
+    // backdrop it is shown on (the frame's own ring, when the style is chosen, follows the panel); the Record dialog's
+    // live preview, black behind what it shows and what is said over it, and the camera bubble.
+    for (const selector of [
+      '.frame-handles',
+      '.style-frame::before',
+      '.style-frame > *',
+      '.record-preview',
+      '.record-bubble',
+    ]) {
       const found = ALL.filter((r) => r.selector.split(',').some((s) => s.trim() === selector));
       expect(found.length, selector).toBeGreaterThan(0);
       expect(

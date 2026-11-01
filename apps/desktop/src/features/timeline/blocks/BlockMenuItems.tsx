@@ -2,6 +2,7 @@ import { t } from '@lingui/core/macro';
 import { useLingui } from '@lingui/react/macro';
 import { Fragment } from 'react';
 import { ContextMenuItem, ContextMenuSeparator } from '../../../design/ContextMenu';
+import { recordingCameras } from '../../../lib/camera';
 import { findClip, findItem, hasOwnSound, itemLabel, sourceLabel } from '../../../lib/timeline';
 import { useProject } from '../../../state/project';
 import { useSelection } from '../../../state/selection';
@@ -9,7 +10,7 @@ import type { Command } from '../../command-palette/command';
 import { useCommands } from '../../command-palette/useCommands';
 import { transitionLabels } from '../keys/transitionActions';
 
-/** The menu's name for screen readers: "Actions for screen.mp4". */
+/** The menu's name for screen readers: "Actions for Recording 1". */
 export function blockMenuLabel(id: string): string | undefined {
   const project = useProject.getState().snapshot?.project;
   if (!project) return undefined;
@@ -41,6 +42,8 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
   const at = found ? -1 : main.findIndex((clip) => clip.id === blockId);
   const transitionAfter = at >= 0 && at + 1 < main.length && !main[at].transitionOut;
   const onlyClip = at === 0 && main.length === 1;
+  // A recording clip with a camera beside its footage: Separate camera (off, saying why, once it is a layer).
+  const hasCamera = at >= 0 && !!project && !!main[at].camera && recordingCameras(project, main[at]).length > 0;
 
   // A sound layer, or a video layer whose file has sound, has Mute.
   const mutes = !!project && !!found && hasOwnSound(project, found.item);
@@ -62,12 +65,17 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
     }),
     off: onlyClip ? transitionLabels.needsTwo() : undefined,
   };
+  // A recording clip's sounds (`useSourceCommands`): their mutes in this clip, then Separate beside the camera's.
+  const sounds = commands.filter((c) => c.id.startsWith('source-mute:')).map((c) => ({ id: c.id }));
+  const separates = commands.filter((c) => c.id.startsWith('source-separate:')).map((c) => ({ id: c.id }));
   // `off`: listed, but off here, with why. No Paste effects: nothing shows a block's effects or takes them off.
   const groups: { id: string; label?: string; off?: string }[][] =
     kind === 'clip'
       ? [
           [split, ...(transitionAfter || onlyClip ? [addTransition] : [])],
           [{ id: 'copy' }, { id: 'cut' }, { id: 'duplicate' }],
+          sounds,
+          [...(hasCamera ? [{ id: 'separate-camera' }] : []), ...separates],
           [{ id: 'delete' }],
         ]
       : [

@@ -1294,6 +1294,48 @@
   background: color-mix(in srgb, var(--color-lane-music) 40%, transparent);
 }
 
+.tl-band.is-source {
+  top: 2px;
+  bottom: 3px;
+  background: color-mix(in srgb, var(--color-clip-deep) 70%, transparent);
+}
+
+/* A recorded sound's lane under Video: each clip's part of the sound in the clip's blue, its waveform in clip-2,
+   dimmed where the sound is muted. Nothing on it is picked: a press there seeks, as on empty lane. */
+.tl-source-part {
+  position: absolute;
+  top: 2px;
+  bottom: 3px;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--color-clip-deep) 70%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-clip-2) 40%, transparent);
+  pointer-events: none;
+}
+
+.tl-source-part[data-muted="true"] {
+  opacity: 0.6;
+}
+
+/* Its header in the 40 px gutter: the kind's icon, which opens its volume, and Mute. */
+.tl-source-head {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.icon-btn.tl-source-btn {
+  width: 19px;
+  height: 19px;
+  border-radius: var(--radius-xs);
+}
+
+.source-volume {
+  display: grid;
+  gap: var(--space-3);
+  width: 240px;
+}
+
 /* Layers: overlays (paper at 16 % with a 2 px paper edge; solid paper when selected), sound effects (teal, named to
    the right in teal) and music (violet body and edge, its waveform at 40 %, its name in a violet tag). */
 .tl-item {
@@ -1389,6 +1431,31 @@
 
 .tl-item.is-sound.is-selected {
   box-shadow: 0 0 0 2px var(--color-paper);
+}
+
+/* A take's own sound separated from its clip: the clip's blue, its waveform in clip-2, named in a tag inside it as a
+   clip is, so it reads as part of the footage rather than an effect. */
+.tl-item.is-sound.is-recorded {
+  align-items: flex-start;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-clip-deep) 70%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-clip-2) 55%, transparent);
+}
+
+.tl-item.is-sound.is-recorded .tl-item-name {
+  position: relative;
+  left: auto;
+  margin: 1px 0 0 3px;
+  padding: 0 5px;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--color-night) 78%, transparent);
+  color: var(--color-ink);
+  font-weight: var(--weight-medium);
+  overflow: hidden;
+}
+
+.tl-item.is-sound.is-recorded.is-selected {
+  box-shadow: inset 0 0 0 2px var(--color-paper);
 }
 
 .tl-item.is-music {
@@ -1737,6 +1804,9 @@
 
 /* ---------- Toggle ---------- */
 
+/* A 36 x 20 track. Off: raised, a line-strong edge (ink-soft under the pointer) and an ink-soft knob. On: paper with
+   an on-paper knob. Disabled: an empty track with a faint edge. Styled from aria-checked, not data-state: a tooltip
+   trigger sets its own data-state on the same element. */
 .toggle {
   display: inline-flex;
   align-items: center;
@@ -1747,7 +1817,13 @@
   border-radius: var(--radius-pill);
   background: var(--color-bay-raised);
   box-shadow: inset 0 0 0 1px var(--color-line-strong);
-  transition: background-color var(--dur-fast) var(--ease-out);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.toggle:not(:disabled):hover {
+  box-shadow: inset 0 0 0 1px var(--color-ink-soft);
 }
 
 .toggle-knob {
@@ -1761,17 +1837,18 @@
     background-color var(--dur-fast) var(--ease-out);
 }
 
-.toggle[data-state="checked"] {
+.toggle[aria-checked="true"] {
   background: var(--color-paper);
   box-shadow: none;
 }
 
-.toggle[data-state="checked"] .toggle-knob {
+.toggle[aria-checked="true"] .toggle-knob {
   background: var(--color-on-paper);
   transform: translateX(16px);
 }
 
 .toggle:disabled {
+  background: transparent;
   box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
@@ -2579,6 +2656,13 @@
   gap: var(--space-4);
 }
 
+/* A note with its action under it (a camera that is its own layer now): the button at its own width. */
+.insp-note {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+}
+
 /* The transition card's Remove: a small secondary button at its own width, after the fields. */
 .insp-remove {
   justify-self: start;
@@ -2709,6 +2793,66 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-3);
+}
+
+/* A recording clip's Sounds: a row per recorded sound, its name and mute, its volume, then its sync. */
+.sound-rows {
+  display: grid;
+  gap: var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sound-row {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.sound-row-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.sound-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sound-sync {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+}
+
+.sound-sync-text {
+  flex: 1;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.sound-switch {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.sound-switch-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.sound-switch-label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-xs);
 }
 
 /* A typed time or length: its label inside the field, faint, before the value. */

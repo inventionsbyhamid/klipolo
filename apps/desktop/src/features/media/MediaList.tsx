@@ -5,6 +5,7 @@ import type { PackItem } from '../../bindings/PackItem';
 import type { Project } from '../../bindings/Project';
 import type { LibraryMarks } from '../../bridge/library';
 import { Icon } from '../../layout/Icon';
+import { assetName } from '../../lib/timeline';
 import { useProject } from '../../state/project';
 import type { LibraryTab } from '../../state/ui';
 import { beginMediaDrag } from '../timeline/drag/mediaDrag';
@@ -201,7 +202,16 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
       {content}
     </div>
   );
-  const own = shelves(project);
+  // A recording's files are named by their source and recording ("Screen of Recording 1"), as the timeline names them,
+  // and a search finds them by that name.
+  const named = (asset: Asset): Asset => ({ ...asset, name: assetName(project, asset) });
+  const shelved = shelves(project);
+  const own = {
+    ...shelved,
+    clips: shelved.clips.map(named),
+    music: shelved.music.map(named),
+    sounds: shelved.sounds.map(named),
+  };
   const used = uses(project).any;
   const builtIn = t({ id: 'library.builtIn', message: 'Built in' });
   const free = t({ id: 'library.builtIn.free', message: 'Free to use' });

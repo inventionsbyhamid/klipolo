@@ -68,7 +68,7 @@ describe("a block's menu", () => {
       label: 'undo.attach.free',
       ops: [{ type: 'setAttach', id: 'title', attached: false }],
     });
-    expect(screen.getByRole('status')).toHaveTextContent('Set up billing no longer moves with screen.mp4');
+    expect(screen.getByRole('status')).toHaveTextContent('Set up billing no longer moves with Recording 1');
   });
 
   it('Delete from a menu the keyboard opened moves focus and the selection on, as ⌫ does', async () => {
@@ -82,7 +82,7 @@ describe("a block's menu", () => {
       };
     });
     renderTimeline();
-    const a = screen.getByRole('button', { name: /^screen\.mp4/ });
+    const a = screen.getByRole('button', { name: /^Recording 1/ });
     act(() => a.focus());
     fireEvent.keyDown(a, { key: 'F10', shiftKey: true });
     await userEvent.click(await screen.findByRole('menuitem', { name: /Delete clip/ }));
@@ -96,7 +96,7 @@ describe("a block's menu", () => {
   });
 
   it("Split at playhead splits the menu's own clip, or says why it can't", async () => {
-    // The playhead is in screen.mp4 (0 to 20 s); the menu is broll.mp4's (20 to 30 s).
+    // The playhead is in Recording 1 (0 to 20 s); the menu is broll.mp4's (20 to 30 s).
     usePlayback.setState({ playheadUs: 5_000_000 });
     renderTimeline();
     const broll = screen.getByRole('button', { name: /^broll\.mp4/ });

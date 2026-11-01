@@ -1,0 +1,105 @@
+[package]
+name = "klipolo-capture"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+publish = false
+description = "Klipolo's recorder: crash-safe per-source capture files, the session state machine and the OS capture backends"
+
+[features]
+# Synthetic sources, the fake backend and shell, and the logged file IO (tests, the kill-sweep example).
+synthetic = []
+# The ship gate for the separate cursor (`preflight::cursor::SEPARATE_ENABLED`) is on for macOS;
+# this feature turns it on elsewhere, for a preview build only. Tests never do.
+separate-cursor = []
+# The macOS, Windows and Linux backends. Only the app turns this on; tests never do. Every OS dependency the
+# backend tasks add (cpal for the mic on macOS and Windows, cidre, objc2*, tray-icon, global-hotkey, windows, ashpd,
+# pipewire, x11rb, v4l, and ffmpeg on Windows and Linux) is `optional = true` and enabled here, so a
+# `synthetic` build compiles none of them and a dev-dependency on this crate pulls in only the core.
+real-capture = ["dep:cpal", "dep:cidre", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-core-graphics", "dep:objc2-foundation", "dep:objc2-core-foundation", "dep:block2", "dep:libc", "dep:tray-icon", "dep:global-hotkey"]
+
+[dependencies]
+# Check camera's preview frames to the app, as text in JSON lines.
+base64 = "0.22"
+# The cursor file's lines (format 2), shared with the engine and chat.
+klipolo-cursor = { path = "../klipolo-cursor" }
+klipolo-model = { path = "../klipolo-model" }
+klipolo-platform = { path = "../klipolo-platform" }
+# The worker shell's global shortcuts while armed: Carbon's RegisterEventHotKey, RegisterHotKey,
+# X11. Never a media key (macOS would need an event tap).
+global-hotkey = { version = "0.7", optional = true }
+# Codec configs (`avcC`/`hvcC`) as hex in the journal.
+hex = "0.4"
+# The cursor's shapes as `cursors/<id>.png`, the version already in Cargo.lock.
+png = "0.18"
+# The real-time hand-off from a sound device's callback (`mic::ring`): lock-free SPSC rings, as the engine's mixer uses.
+ringbuf = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ts-rs = "12"
+tracing = "0.1"
+# The worker's own log (a take's diagnostics.log, else stderr), as the app's.
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+# The worker shell's menu-bar, notification-area or tray item and its menu (muda, re-exported) on every OS,
+# the version tauri already builds.
+tray-icon = { version = "0.25", optional = true }
+
+# The microphone on macOS and Windows: Cap's cpal fork at the engine's pin (macOS streams stop and release the
+# device on drop). Linux records the mic through PipeWire, so it never builds cpal.
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
+cpal = { git = "https://github.com/CapSoftware/cpal", rev = "6013cb5f8bd3", optional = true }
+
+# The macOS backend: cidre at the engine's rev, with the engine's features plus ScreenCaptureKit (`sc`),
+# `cm`, `ns` and `macos_15_0` (the app's minimum, `minimumSystemVersion` 15.0): AVFoundation's camera discovery and
+# permission states and Core Audio's device properties, and the capture pipes later. objc2's AppKit for the
+# running apps and the screens' names, Core Graphics for the displays and the screen-recording check, Foundation for
+# the apps' `Info.plist`. The worker shell: AppKit's application, HUD panel, status item image and workspace
+# notices; Foundation's notification blocks (block2); Core Foundation's distributed notices; libc's kqueue. The camera:
+# Core Image (`ci`) for Check camera's JPEG, and Core Graphics' sRGB colour space for it. The cursor:
+# the global mouse monitor's handler (AppKit's `block2` methods) and a mouse event's place (`NSEvent.CGEvent`, Core
+# Graphics' `CGEvent`).
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = { version = "0.6", optional = true }
+libc = { version = "0.2", optional = true }
+cidre = { git = "https://github.com/CapSoftware/cidre", rev = "bf84b67079a8", default-features = false, features = ["macos_12_7", "cv", "cf", "cg", "av", "blocks", "async", "dispatch", "io_surface", "mtl", "vt", "core_audio", "sc", "cm", "ns", "ci", "macos_15_0"], optional = true }
+objc2 = { version = "0.6", optional = true }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "libc", "block2", "objc2-core-graphics", "NSApplication", "NSBitmapImageRep", "NSBox", "NSButton", "NSCell", "NSColor", "NSControl", "NSEvent", "NSFont", "NSFontDescriptor", "NSGraphics", "NSGraphicsContext", "NSImage", "NSImageRep", "NSLevelIndicator", "NSLevelIndicatorCell", "NSPanel", "NSResponder", "NSRunningApplication", "NSScreen", "NSStatusBarButton", "NSStatusItem", "NSText", "NSTextField", "NSView", "NSWindow", "NSWorkspace"], optional = true }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFDictionary", "CFNotificationCenter", "CFString"], optional = true }
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "libc", "objc2", "CGColorSpace", "CGDirectDisplay", "CGDisplayConfiguration", "CGError", "CGEvent", "CGEventTypes", "CGWindow"], optional = true }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "NSArray", "NSBundle", "NSData", "NSDictionary", "NSEnumerator", "NSGeometry", "NSNotification", "NSObjCRuntime", "NSOperation", "NSString", "NSURL", "NSValue"], optional = true }
+
+[dev-dependencies]
+# Decodes the remuxed fixtures in tests (tests/common/decode.rs): Klipolo's LGPL FFmpeg, as the engine links it.
+ffmpeg = { package = "ffmpeg-next", version = "=9.0.0", default-features = false, features = ["codec", "format"] }
+tempfile = "3"
+
+# A synthetic take in its own process, for the kill sweep (tests/kill.rs): records until killed, or resumes.
+[[bin]]
+name = "synthetic-take"
+required-features = ["synthetic"]
+
+# The preflight on a real Mac, by hand: counts and timings only (never in tests or CI runs).
+[[example]]
+name = "preflight_smoke"
+required-features = ["real-capture"]
+
+# The worker shell on a real Mac, by hand: the menu-bar item and the HUD, with no capture (never in tests or CI).
+[[example]]
+name = "shell_smoke"
+required-features = ["real-capture"]
+
+# A first real take on a Mac, by hand: a short screen (and sound, mic) take through the whole recorder, then
+# technical numbers only, the take deleted (never in tests or CI; the consent guard refuses under KLIPOLO_TEST).
+[[example]]
+name = "screen_smoke"
+required-features = ["real-capture", "synthetic"]
+
+# A window of Klipolo's own with changing content, the screen smoke run's app target (never another app's window).
+[[example]]
+name = "test_window"
+required-features = ["real-capture"]
+
+# Spawns synthetic-take.
+[[test]]
+name = "kill"
+required-features = ["synthetic"]

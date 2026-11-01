@@ -70,6 +70,8 @@
     },
     "macOS": {
       "minimumSystemVersion": "15.0",
+      "infoPlist": "Info.plist",
+      "entitlements": "entitlements.plist",
       "frameworks": [
         "../../.build/ffmpeg-9.0/x86_64/prefix/lib/libavcodec.63.dylib",
         "../../.build/ffmpeg-9.0/x86_64/prefix/lib/libavformat.63.dylib",

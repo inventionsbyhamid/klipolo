@@ -93,14 +93,14 @@ describe('transitions at cuts', () => {
   it('a cut offers Add transition and adds a half-second dissolve', async () => {
     useProject.setState({ snapshot: withHandles() });
     renderWithProviders(<Timeline />);
-    await userEvent.click(screen.getByRole('button', { name: 'Add transition between screen.mp4 and broll.mp4' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add transition between Recording 1 and broll.mp4' }));
     expect(bridge.apply).toHaveBeenCalledWith({
       label: 'transition.add',
       ops: [{ type: 'setTransition', clipId: 'a', transition: { effect: DISSOLVE, durationUs: 500_000, params: {} } }],
     });
     // The new transition is selected, and the live region says what went in.
     expect(useSelection.getState().selectedId).toBe('transition:a');
-    expect(screen.getByRole('status')).toHaveTextContent('Added a dissolve between screen.mp4 and broll.mp4');
+    expect(screen.getByRole('status')).toHaveTextContent('Added a dissolve between Recording 1 and broll.mp4');
   });
 
   it('a cut without spare footage explains instead of offering', () => {
@@ -117,7 +117,7 @@ describe('transitions at cuts', () => {
         <Inspector format="landscape" />
       </>,
     );
-    const chip = screen.getByRole('button', { name: /Dissolve transition, 1.0 s, between screen\.mp4 and broll\.mp4/ });
+    const chip = screen.getByRole('button', { name: /Dissolve transition, 1.0 s, between Recording 1 and broll\.mp4/ });
     // 1 s at 40 px/s, centred on the cut at 20 s.
     expect(chip).toHaveStyle({ width: '40px', left: '780px' });
     await userEvent.click(chip);
@@ -157,7 +157,7 @@ describe('transitions at cuts', () => {
         <ShortcutsHarness />
       </>,
     );
-    const a = screen.getByRole('button', { name: /^screen\.mp4/ });
+    const a = screen.getByRole('button', { name: /^Recording 1/ });
     act(() => a.focus());
     fireEvent.keyDown(a, { key: 'ArrowRight' });
     await frames();
@@ -186,7 +186,7 @@ describe('transitions at cuts', () => {
   it('Enter on a bare cut adds a transition; a cut without footage says why', async () => {
     useProject.setState({ snapshot: withHandles() });
     const { unmount } = renderWithProviders(<Timeline />);
-    const add = screen.getByRole('button', { name: 'Add transition between screen.mp4 and broll.mp4' });
+    const add = screen.getByRole('button', { name: 'Add transition between Recording 1 and broll.mp4' });
     act(() => add.focus());
     fireEvent.keyDown(add, { key: 'Enter' });
     await frames();
@@ -225,7 +225,7 @@ describe('transitions at cuts', () => {
   it('a clip’s menu offers Add transition after when the cut after it can take one', async () => {
     useProject.setState({ snapshot: withHandles() });
     renderWithProviders(<Timeline />);
-    const a = screen.getByRole('button', { name: /^screen\.mp4/ });
+    const a = screen.getByRole('button', { name: /^Recording 1/ });
     act(() => a.focus());
     fireEvent.keyDown(a, { key: 'F10', shiftKey: true });
     await userEvent.click(await screen.findByRole('menuitem', { name: /^Add transition after/ }));
@@ -239,7 +239,7 @@ describe('transitions at cuts', () => {
   it('a clip with a transition after it, or none after it, has no Add transition after', async () => {
     useProject.setState({ snapshot: withDissolve() });
     renderWithProviders(<Timeline />);
-    for (const name of [/^screen\.mp4/, /^broll\.mp4/]) {
+    for (const name of [/^Recording 1/, /^broll\.mp4/]) {
       const clip = screen.getByRole('button', { name });
       act(() => clip.focus());
       fireEvent.keyDown(clip, { key: 'F10', shiftKey: true });
@@ -289,7 +289,7 @@ describe('a press on a cut marker: a drag trims the clip on that side, a still c
     const b = screen.getByRole('button', { name: /^broll\.mp4/ });
     act(() => b.focus());
     useSelection.setState({ selectedId: 'b' });
-    const add = screen.getByRole('button', { name: 'Add transition between screen.mp4 and broll.mp4' });
+    const add = screen.getByRole('button', { name: 'Add transition between Recording 1 and broll.mp4' });
     // The cut is at the middle of the 20 px spot: 2 px left of it, and 2 px is no move yet.
     fireEvent.pointerDown(add, { pointerId: 1, button: 0, buttons: 1, clientX: 8, clientY: 60 });
     fireEvent.pointerMove(add, { pointerId: 1, buttons: 1, clientX: 6, clientY: 60 });
@@ -299,7 +299,7 @@ describe('a press on a cut marker: a drag trims the clip on that side, a still c
     // 5 px: the press is the trim's, which takes the pointer, focus and selection to a.
     fireEvent.pointerMove(add, { pointerId: 1, buttons: 1, clientX: 3, clientY: 60 });
     await frames();
-    const a = screen.getByRole('button', { name: /^screen\.mp4/ });
+    const a = screen.getByRole('button', { name: /^Recording 1/ });
     expect(captor).toBe(a);
     expect(a).toHaveFocus();
     fireEvent.pointerMove(a, { pointerId: 1, buttons: 1, clientX: -32, clientY: 60 });
@@ -446,7 +446,7 @@ describe('the cut markers and the clips around them', () => {
   it('the + shows only while its own spot is pointed at or focused, never for a hover elsewhere on the lane', () => {
     useProject.setState({ snapshot: withHandles() });
     renderWithProviders(<Timeline />);
-    const add = screen.getByRole('button', { name: 'Add transition between screen.mp4 and broll.mp4' });
+    const add = screen.getByRole('button', { name: 'Add transition between Recording 1 and broll.mp4' });
     expect(add).toHaveClass('tl-cut-spot');
     expect(rule('.tl-cut-spot')).toMatch(/opacity: 0;/);
     expect(rule('.tl-cut-spot:hover,\n.tl-cut-spot:focus-visible')).toMatch(/opacity: 1;/);
@@ -457,12 +457,12 @@ describe('the cut markers and the clips around them', () => {
     s.project.timeline.main[0] = { ...s.project.timeline.main[0], fadeOutUs: 500_000 };
     useProject.setState({ snapshot: s });
     renderWithProviders(<Timeline />);
-    const add = screen.getByRole('button', { name: 'Add transition between screen.mp4 and broll.mp4' });
+    const add = screen.getByRole('button', { name: 'Add transition between Recording 1 and broll.mp4' });
     expect(add.dataset.tip).toBe('Add transition (replaces the fade out)');
     await userEvent.click(add);
     await frames();
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Added a dissolve between screen.mp4 and broll.mp4. It replaces the fade out.',
+      'Added a dissolve between Recording 1 and broll.mp4. It replaces the fade out.',
     );
   });
 
@@ -497,7 +497,7 @@ describe('the cut markers and the clips around them', () => {
     expect(bridge.apply).not.toHaveBeenCalled();
     expect(useToasts.getState().toasts.at(-1)?.text).toMatch(/^Not enough extra footage here for a transition/);
     useToasts.setState({ toasts: [] });
-    const a = screen.getByRole('button', { name: /^screen\.mp4/ });
+    const a = screen.getByRole('button', { name: /^Recording 1/ });
     act(() => a.focus());
     fireEvent.keyDown(a, { key: 'F10', shiftKey: true });
     const item = await screen.findByRole('menuitem', { name: /^Add transition after/ });
@@ -530,7 +530,7 @@ describe('the cut markers and the clips around them', () => {
     expect(bridge.apply).not.toHaveBeenCalled();
     expect(useToasts.getState().toasts.at(-1)?.text).toBe(needsTwo);
     // Its menu lists Add transition after, off, with the same note as its tooltip and description.
-    const a = screen.getByRole('button', { name: /^screen\.mp4/ });
+    const a = screen.getByRole('button', { name: /^Recording 1/ });
     act(() => a.focus());
     fireEvent.keyDown(a, { key: 'F10', shiftKey: true });
     const item = await screen.findByRole('menuitem', { name: /^Add transition after/ });
@@ -623,7 +623,7 @@ describe('the cut markers and the clips around them', () => {
     useProject.setState({ snapshot: s });
     renderWithProviders(<Timeline />);
     expect(
-      screen.getByRole('button', { name: 'Missing transition, 1.0 s, between screen.mp4 and broll.mp4' }),
+      screen.getByRole('button', { name: 'Missing transition, 1.0 s, between Recording 1 and broll.mp4' }),
     ).toHaveAttribute('title', 'com.acme/fancy');
   });
 

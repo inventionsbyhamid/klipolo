@@ -14,6 +14,10 @@ Parts of Klipolo's video engine are derived from Cap (https://github.com/CapSoft
 d327051c175aa092c06ad9fc6684298b1b5fed6b, Copyright (c) 2023-present Cap Software, Inc. They are used under the
 GNU Affero General Public License, version 3.
 
+Parts of Klipolo's recorder are derived from Cap too, at the same commit. The files from Cap's MIT-licensed crates are
+used under the MIT licence (Cap-MIT.txt names them and gives its text); the others are used under the GNU Affero
+General Public License, version 3.
+
 Klipolo uses FFmpeg under the GNU Lesser General Public License, version 2.1 or later. See FFmpeg-LGPL.txt.
 
 Archivo, which the caption style samples fall back to, is under the SIL Open Font License 1.1 (Archivo-OFL.txt).

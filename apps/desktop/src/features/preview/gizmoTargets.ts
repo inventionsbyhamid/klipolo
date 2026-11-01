@@ -1,21 +1,24 @@
+import { t } from '@lingui/core/macro';
 import type { BoxN } from '../../bindings/BoxN';
 import type { FormatKind } from '../../bindings/FormatKind';
 import type { ItemContent } from '../../bindings/ItemContent';
 import type { Layout } from '../../bindings/Layout';
 import type { Op } from '../../bindings/Op';
 import type { Project } from '../../bindings/Project';
-import { containRect, FORMAT_SIZE, pictureRect, resolveRect } from '../../lib/layout';
+import { hasCameraOverlay } from '../../lib/camera';
+import { cameraModeFor, cameraRect, containRect, FORMAT_SIZE, pictureRect, resolveRect } from '../../lib/layout';
 import { showsPictures, soloOf } from '../../lib/solo';
 import { scaledStyle } from '../../lib/textLook';
-import { assetById, itemEndUs, itemLabel } from '../../lib/timeline';
-import { contentNow, layoutNow } from '../../state/latest';
+import { assetById, clipAt, itemEndUs, itemLabel } from '../../lib/timeline';
+import { cameraNow, contentNow, layoutNow } from '../../state/latest';
+import { cameraSelection } from '../../state/selection';
 import { textBox } from './textBox';
 
 export interface GizmoTarget {
   /** Selection id. */
   id: string;
-  /** A title template (a motion graphic that fills the frame) is a `scene`. */
-  label: 'text' | 'image' | 'video' | 'scene';
+  /** A title template (a motion graphic that fills the frame) is a `scene`; a recording's camera is a `camera`. */
+  label: 'text' | 'image' | 'video' | 'scene' | 'camera';
   /** Spoken and shown name, e.g. the title's words. */
   name: string;
   layout: Layout;
@@ -29,7 +32,10 @@ export interface GizmoTarget {
    */
   boxFor: (rect: BoxN, fontSize?: number) => BoxN;
   locked: boolean;
-  /** False for a title template: it fills the frame, and its parts are placed inside it. */
+  /**
+   * False for a title template (it fills the frame, and its parts are placed inside it) and for the split camera (its
+   * place comes from the layout, not from a box).
+   */
   movable: boolean;
   rotatable: boolean;
   /**
@@ -63,12 +69,39 @@ const SCENE_PICK: Record<string, (format: FormatKind) => BoxN> = {
 };
 
 /**
- * Everything that can be picked on the canvas at `playheadUs`, bottom to top (overlays in their tracks' order). It
- * lists exactly what the frame plan draws, at the same rects (pinned by the layout parity test).
+ * Everything that can be picked on the canvas at `playheadUs`, bottom to top (the camera sits above the footage, the
+ * overlays above both, in their tracks' order). It lists exactly what the frame plan draws, at the same rects (pinned
+ * by the layout parity test).
  */
 export function gizmoTargets(project: Project, playheadUs: number, format: FormatKind): GizmoTarget[] {
   const primary = project.settings.primaryFormat;
   const targets: GizmoTarget[] = [];
+  const clip = clipAt(project.timeline.main, playheadUs)?.clip;
+  const camera = clip?.camera;
+  // A take of the camera alone is the main footage itself: the engine draws a camera only beside a screen.
+  if (clip && camera && hasCameraOverlay(project, clip)) {
+    const rect = cameraRect(camera, project.background.padding, primary, format);
+    if (rect) {
+      targets.push({
+        id: cameraSelection(clip.id),
+        label: 'camera',
+        name: t({ id: 'layer.camera', message: 'Camera', comment: 'A recording’s camera picture' }),
+        layout: camera.bubble,
+        rect,
+        box: rect,
+        boxFor: same,
+        locked: false,
+        movable: cameraModeFor(camera, format) === 'bubble',
+        rotatable: false,
+        fontSize: null,
+        // The bubble's place, on the camera as the project has it then: a shape or mirror change on its way is kept.
+        ops: (place) => {
+          const now = cameraNow(clip.id, camera);
+          return [{ type: 'updateClip', id: clip.id, patch: { camera: { ...now, bubble: place(now.bubble) } } }];
+        },
+      });
+    }
+  }
   // A track solo leaves out isn't drawn, so nothing on it can be picked.
   const solo = soloOf(project.timeline.tracks);
   for (const track of project.timeline.tracks) {

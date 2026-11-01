@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Merged into the app bundle's Info.plist (tauri.conf.json's bundle.macOS.infoPlist), and built into the binary for dev
+  runs. macOS shows these words when it asks for each permission, and ends an app that opens the camera or the
+  microphone without its string; scripts/release/check-bundle.sh fails a bundle without the three. The Record dialog
+  asks only when the person presses Record or a permission's own button there, and then shows its live previews.
+  NSCameraUseContinuityCameraDeviceType lets the recorder list an iPhone as a camera (Continuity Camera).
+-->
+<plist version="1.0">
+<dict>
+  <key>NSScreenCaptureUsageDescription</key>
+  <string>Klipolo shows your screens and apps in the Record dialog, and records the one you choose only after you press Record.</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Klipolo shows your mic level in the Record dialog, and records your voice as its own track only after you press Record.</string>
+  <key>NSCameraUsageDescription</key>
+  <string>Klipolo shows your camera in the Record dialog, and records it as a bubble in your video only after you press Record.</string>
+  <key>NSCameraUseContinuityCameraDeviceType</key>
+  <true/>
+</dict>
+</plist>

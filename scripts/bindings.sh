@@ -3,7 +3,8 @@
 # tests. They are committed, so `pnpm build` works from a clean checkout (the release build); the Linux gate runs this
 # and fails when the result differs from the commit (scripts/check-bindings.sh).
 #   apps/desktop/src/bindings: the TypeScript types (ts-rs, TS_RS_EXPORT_DIR in .cargo/config.toml) and the code lists
-#     (modelCodes.json, fontsCodes.json) the page words Rust's codes from. Emptied first, so a type that went goes too.
+#     (modelCodes.json, fontsCodes.json, captureCodes.json) the page words Rust's codes from. Emptied first, so a type
+#     that went goes too.
 #   apps/desktop/src/lib: caption-styles.json and font-fallbacks.json. The parity files there are checked by their own
 #     tests and rewritten only with KLIPOLO_UPDATE_PARITY=1 or UPDATE_GOLDEN=1.
 # The engine and the app link FFmpeg: on a Mac, scripts/link-ffmpeg.sh first; the app's types compile the whole app, so
@@ -16,4 +17,5 @@ cargo test -p klipolo-platform --locked export_bindings
 cargo test -p klipolo-fonts --locked export_bindings
 cargo test -p klipolo-engine --locked --lib export_bindings
 cargo test -p klipolo-app --locked export_bindings
+KLIPOLO_TEST=1 cargo test -p klipolo-capture --features synthetic --locked export_bindings
 echo "bindings: $(ls apps/desktop/src/bindings | wc -l | tr -d ' ') files in apps/desktop/src/bindings"

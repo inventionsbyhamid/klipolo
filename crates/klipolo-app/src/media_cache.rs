@@ -1,15 +1,17 @@
 //! What the timeline draws on its blocks: a file's waveform peaks (binary, by range and level) and its thumbnail
-//! strip, from the engine's caches in the app's cache folder (`state::CacheDirs`, the folders the engine writes). Only
-//! files of the open project are served. These are read-only queries for the page, never edits.
+//! strip, from the engine's caches in the app's cache folder (`state::CacheDirs`, the folders the engine writes); and
+//! how loud a sound file is on each side, for the clip card's Centre switch. Only files of the open project are served.
+//! These are read-only queries for the page, never edits.
 
 use std::path::PathBuf;
 
+use klipolo_app::channels;
 use klipolo_engine::audio::pcm::peaks::{self, PeaksInfo};
 use klipolo_engine::audio::pcm::peaks_file;
 use klipolo_engine::media::thumbs::{self, ThumbStrip};
 use tauri::State;
 
-use crate::project::{ProjectSessionState, uses_path};
+use crate::project::{ProjectSessionState, open_project, uses_path};
 use crate::state::{CacheDirs, EngineState};
 
 const NOT_IN_PROJECT: &str = "That file isn't part of this project.";
@@ -40,6 +42,23 @@ pub fn media_peaks(
     let file = peaks_path(engine.caches().as_ref(), &path).ok_or(NOT_READY)?;
     let bytes = peaks::read(&file, level, from, count).map_err(|e| e.to_string())?;
     Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// How loud a sound file of the open project is on each channel, its loudest sample 0 to 1, so the Centre switch plays
+/// the side that carries a one-sided recording (`klipolo_app::channels`: the sound cache's peaks, else the take's
+/// manifest, else a bounded read of the file, on a blocking thread); None when nothing knows, so no side is guessed.
+#[tauri::command]
+pub async fn media_channel_peaks(
+    engine: State<'_, EngineState>,
+    project: State<'_, ProjectSessionState>,
+    path: String,
+) -> Result<Option<Vec<f32>>, String> {
+    known(&project, &path)?;
+    let open = open_project(&project).ok_or(NOT_IN_PROJECT)?;
+    let cache = engine.caches().map(|caches| caches.audio);
+    tauri::async_runtime::spawn_blocking(move || channels::of_file(&open, cache.as_deref(), &path))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// A file's thumbnail strip: its finished sprite chunks (JPEGs the page reads through the asset protocol).
