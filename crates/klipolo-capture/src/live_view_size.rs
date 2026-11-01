@@ -7,8 +7,9 @@
 //!   it, the picture gets smaller instead.
 //!   - Apple silicon (and anything not an Intel Mac): 1080p at 15 (`BIG_PIXEL_RATE`), 15 to 30 frames a second:
 //!     1080p gets 15, a 16:10 display's 1728 × 1080 16, 1280 × 800 or less 30.
-//!   - An Intel Mac, whose JPEGs are made on its CPU: about 720p at 15 (`INTEL_MAC_PIXEL_RATE`), 15 to 30 frames a
-//!     second: a 16:10 display's picture is 1212 × 758 at 15, 1024 × 640 at 21.
+//!   - An Intel Mac, whose JPEGs are made on its CPU: always 10 frames a second (`INTEL_MAC_FPS`), within about 720p
+//!     at 15's pixels a second (`INTEL_MAC_PIXEL_RATE`), so a view keeps its own size up to about 1.4 Mpx: the Record
+//!     dialog's box on a 16:10 Retina display is 1208 × 756 at 10, about 9.1 Mpx/s.
 //! - A view no bigger than the small picture gets the small one, at its rate: a big view's cost only when it shows more.
 
 use serde::{Deserialize, Serialize};
@@ -29,6 +30,9 @@ pub const BIG_MIN_FPS: u32 = 15;
 pub const BIG_PIXEL_RATE: u64 = 1920 * 1080 * 15;
 /// An Intel Mac's: 720p at 15 frames a second (about 14 Mpx/s).
 pub const INTEL_MAC_PIXEL_RATE: u64 = 1280 * 720 * 15;
+/// An Intel Mac's frames a second, fewest and most: its JPEGs are made on its CPU, which the window server shares, so
+/// its big view keeps the view's size and sends fewer frames rather than a smaller picture.
+pub const INTEL_MAC_FPS: u32 = 10;
 
 /// What a big view may send on a computer: its most pixels a second, and its fewest and most frames a second. A picture
 /// whose pixels at its fewest frames would pass the rate gets smaller instead.
@@ -46,11 +50,11 @@ pub const BIG_VIEW: BigViewBudget = BigViewBudget {
     max_fps: BIG_MAX_FPS,
 };
 
-/// An Intel Mac's, whose JPEGs are made on its CPU: about 720p at 15, up to 30 frames a second.
+/// An Intel Mac's: 10 frames a second, within about 720p at 15's pixels a second.
 pub const INTEL_MAC_VIEW: BigViewBudget = BigViewBudget {
     pixel_rate: INTEL_MAC_PIXEL_RATE,
-    min_fps: BIG_MIN_FPS,
-    max_fps: BIG_MAX_FPS,
+    min_fps: INTEL_MAC_FPS,
+    max_fps: INTEL_MAC_FPS,
 };
 
 /// A big view's budget on a computer of `os` and `arch` (`std::env::consts`'s words).
@@ -236,8 +240,8 @@ mod tests {
         let intel = big_view_budget("macos", "x86_64");
         let apple = big_view_budget("macos", "aarch64");
         // A 16:10 display fills the box's height, a pixel for each of the box's: about twice the small picture's
-        // width. An Intel Mac sends fewer frames a second, within its pixels a second.
-        for (budget, fps) in [(apple, 30), (intel, 15)] {
+        // width. An Intel Mac keeps that size at 10 frames a second, about 9.1 Mpx/s.
+        for (budget, fps) in [(apple, 30), (intel, 10)] {
             assert_eq!(
                 live_frame(dialog, RETINA, budget),
                 LiveFrame {
@@ -246,43 +250,39 @@ mod tests {
                 }
             );
         }
-        // A 16:9 display fills the whole box on Apple silicon; on an Intel Mac it is 720p, a little smaller, so as not
-        // to go below 15 frames a second.
-        assert_eq!(
-            live_frame(dialog, (3840, 2160), apple),
-            LiveFrame {
-                size: (1344, 756),
-                fps: 30
-            }
-        );
-        assert_eq!(
-            live_frame(dialog, (3840, 2160), intel),
-            LiveFrame {
-                size: (1280, 720),
-                fps: 15
-            }
-        );
+        let frame = live_frame(dialog, RETINA, intel);
+        assert_eq!(pixels(frame.size) * u64::from(frame.fps), 9_132_480);
+        // A 16:9 display fills the whole box on both, an Intel Mac's at 10 frames a second too.
+        for (budget, fps) in [(apple, 30), (intel, 10)] {
+            assert_eq!(
+                live_frame(dialog, (3840, 2160), budget),
+                LiveFrame {
+                    size: (1344, 756),
+                    fps
+                }
+            );
+        }
     }
 
     #[test]
-    fn an_intel_mac_s_big_view_is_about_720p_at_15() {
+    fn an_intel_mac_s_big_view_runs_at_10_frames_a_second() {
         let intel = big_view_budget("macos", "x86_64");
         assert_eq!(intel, INTEL_MAC_VIEW);
         assert_eq!(big_view_budget("macos", "aarch64"), BIG_VIEW);
-        // Full screen on a 16:10 Retina display: smaller rather than below 15 frames a second.
-        assert_eq!(
-            live_frame(view(2880, 1800), RETINA, intel),
-            LiveFrame {
-                size: (1212, 758),
-                fps: 15
-            }
-        );
-        // A smaller view keeps its size, at more frames.
+        // A smaller view keeps its size at 10 frames a second too, never more.
         assert_eq!(
             live_frame(view(1024, 640), RETINA, intel),
             LiveFrame {
                 size: (1024, 640),
-                fps: 21
+                fps: 10
+            }
+        );
+        // A view as big as a 16:10 Retina display: smaller rather than past its pixels a second.
+        assert_eq!(
+            live_frame(view(2880, 1800), RETINA, intel),
+            LiveFrame {
+                size: (1486, 928),
+                fps: 10
             }
         );
     }
