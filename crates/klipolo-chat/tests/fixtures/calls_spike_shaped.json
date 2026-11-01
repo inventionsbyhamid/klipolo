@@ -1,5 +1,5 @@
 {
-  "source": "Function calls shaped as muse-spark-1.3 wrote them in the planner spike (t6_planner_default.json): arguments as JSON text, keys in any order, {} for a tool without arguments, several calls in one answer. The first 12 are the spike's requests and answers in this tool set's names and words (keepOthers true unless only one format is asked for); the rest cover the tools the spike did not have, the media tools last, with times from the clip A context fixture.",
+  "source": "Function calls shaped as muse-spark-1.3 wrote them in a first trial of the planner: arguments as JSON text, keys in any order, {} for a tool without arguments, several calls in one answer. The first 12 are that trial's requests and answers in this tool set's names and words (keepOthers true unless only one format is asked for); the rest cover the tools that trial did not have, the media tools last, with times from the clip A context fixture.",
   "answers": [
     {
       "request": "Make this vertical for TikTok",

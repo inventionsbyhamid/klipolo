@@ -2,6 +2,7 @@ import { t } from '@lingui/core/macro';
 import { useLingui } from '@lingui/react/macro';
 import { Fragment } from 'react';
 import { ContextMenuItem, ContextMenuSeparator } from '../../../design/ContextMenu';
+import { recordingCameras } from '../../../lib/camera';
 import { findClip, findItem, hasOwnSound, itemLabel, sourceLabel } from '../../../lib/timeline';
 import { useProject } from '../../../state/project';
 import { useSelection } from '../../../state/selection';
@@ -41,6 +42,8 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
   const at = found ? -1 : main.findIndex((clip) => clip.id === blockId);
   const transitionAfter = at >= 0 && at + 1 < main.length && !main[at].transitionOut;
   const onlyClip = at === 0 && main.length === 1;
+  // A recording clip with a camera beside its footage: Separate camera (off, saying why, once it is a layer).
+  const hasCamera = at >= 0 && !!project && !!main[at].camera && recordingCameras(project, main[at]).length > 0;
 
   // A sound layer, or a video layer whose file has sound, has Mute.
   const mutes = !!project && !!found && hasOwnSound(project, found.item);
@@ -68,6 +71,7 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
       ? [
           [split, ...(transitionAfter || onlyClip ? [addTransition] : [])],
           [{ id: 'copy' }, { id: 'cut' }, { id: 'duplicate' }],
+          hasCamera ? [{ id: 'separate-camera' }] : [],
           [{ id: 'delete' }],
         ]
       : [

@@ -1,8 +1,8 @@
 /**
  * jsdom has no ResizeObserver; the setup's shim never calls back. `captureResizeObservers` swaps in one that records
  * each observer's callback and targets, so a test can say when a size changed (with `stubSize`, `./layoutBox`). Call
- * it before rendering: observers made earlier aren't seen. Shared by the UI tests; a fix to it
- * reaches them all.
+ * it before rendering: observers made earlier aren't seen. Shared by the page's tests, so a change to it must keep
+ * every one of them green.
  *
  * Unlike a real ResizeObserver:
  * - `observe()` sends no first callback: call `fire()` after rendering;

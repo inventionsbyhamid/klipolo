@@ -543,7 +543,7 @@ fn cached_scenes() -> SceneLog {
     }
 }
 
-/// Spark's estimate for a clip of `seconds` (one chunk, 2 frames a second): the plan's formula, from the price table.
+/// Spark's estimate for a clip of `seconds` (one chunk, 2 frames a second): the estimate's formula, from the price table.
 fn scene_usd(seconds: f64) -> f64 {
     let input = (seconds * 2.0).ceil() * pricing::VIDEO_TOKENS_PER_FRAME as f64
         + (seconds * pricing::AUDIO_TOKENS_PER_SECOND as f64).ceil()
@@ -588,7 +588,7 @@ fn done_timed(id: &str) -> AnalysisEvent {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// The core tests
+// The cache, the estimate, credit running out and cancel
 
 /// A file analysed before (re-imported, or its project opened again) loads from the cache: no request of any kind,
 /// nothing decoded for it, $0 in the estimate, and its words and scenes are there as before.
