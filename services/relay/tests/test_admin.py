@@ -304,6 +304,8 @@ def test_spend_shows_the_caps_from_the_environment(cli, monkeypatch):
 def test_enable_sam_turns_video_tracking_back_on_for_a_code(cli, conn):
     cli("add-code", "testcode")
     conn.execute("UPDATE codes SET sam_off = 1 WHERE code = 'testcode'")
+    # list-codes shows which code the relay turned video tracking off for.
+    assert table(cli("list-codes")[1])[1][:4] == ["testcode", "active,", "video", "off"]
 
     status, out, err = cli("enable-sam", "testcode")
 

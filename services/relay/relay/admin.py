@@ -81,7 +81,7 @@ def deactivate_code(
 def list_codes(conn: sqlite3.Connection, args: argparse.Namespace, settings: Settings) -> None:
     rows = conn.execute(
         """
-        SELECT codes.code, codes.active, codes.note, count(devices.device_id) AS devices
+        SELECT codes.code, codes.active, codes.sam_off, codes.note, count(devices.device_id) AS devices
         FROM codes LEFT JOIN devices ON devices.code = codes.code
         GROUP BY codes.code
         ORDER BY codes.code
@@ -95,7 +95,7 @@ def list_codes(conn: sqlite3.Connection, args: argparse.Namespace, settings: Set
         [
             [
                 row["code"],
-                "active" if row["active"] else "inactive",
+                ("active" if row["active"] else "inactive") + (", video off" if row["sam_off"] else ""),
                 str(row["devices"]),
                 row["note"],
             ]
