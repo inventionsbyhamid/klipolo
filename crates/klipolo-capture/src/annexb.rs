@@ -107,7 +107,8 @@ pub fn config_record(codec: Codec, annex_b_extradata: &[u8]) -> Option<Vec<u8>> 
     }
 }
 
-/// ISO 14496-15 section 5.3.3, with the chroma and bit-depth fields the High profiles add.
+/// The AVCDecoderConfigurationRecord of ISO 14496-15 section 5.3.3, with the chroma and bit-depth fields the High
+/// profiles add.
 fn avcc(sps: &[&[u8]], pps: &[&[u8]]) -> Option<Vec<u8>> {
     let first = sps.first()?;
     if pps.is_empty() || sps.len() > 31 || pps.len() > 255 {
@@ -152,8 +153,9 @@ fn avcc(sps: &[&[u8]], pps: &[&[u8]]) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// ISO 14496-15 section 8.3.3, for `hvc1`: every parameter set is in the record (array_completeness 1). The fields that need
-/// the VUI or PPS (min_spatial_segmentation_idc, parallelismType) and the frame rates are 0, "unknown", as allowed.
+/// The HEVCDecoderConfigurationRecord of ISO 14496-15 section 8.3.3, for `hvc1`: every parameter set is in the record
+/// (array_completeness 1). The fields that need the VUI or PPS (min_spatial_segmentation_idc, parallelismType) and the
+/// frame rates are 0, "unknown", as allowed.
 fn hvcc(vps: &[&[u8]], sps: &[&[u8]], pps: &[&[u8]]) -> Option<Vec<u8>> {
     let first = sps.first()?;
     if vps.is_empty() || pps.is_empty() {
