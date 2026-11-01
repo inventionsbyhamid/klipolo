@@ -18,7 +18,9 @@ use super::{BoxFuture, Heard, ProviderError, ScreenBox, VoiceAnswer, VoiceMatche
 pub const VOICE_FPS: f64 = 2.0;
 /// About what the question and its schema add to a call's input tokens.
 pub const VOICE_PROMPT_TOKENS: u64 = 300;
-/// Output tokens an answer is expected to use, its low reasoning included.
+/// Output tokens an answer is expected to use, its low reasoning included. An answer may use up to
+/// `VOICE_MAX_OUTPUT_TOKENS`: one that long costs about three times the window's estimate (the scene log is priced the
+/// same way, by what an answer usually takes).
 pub const VOICE_OUTPUT_TOKENS: f64 = 300.0;
 /// An answer's output tokens at most.
 pub const VOICE_MAX_OUTPUT_TOKENS: u64 = 2_048;
