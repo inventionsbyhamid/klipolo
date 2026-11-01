@@ -23,7 +23,7 @@ use klipolo_model::project::{Asset, AssetKind, CaptionSettings, FormatKind, Sett
 use klipolo_model::query::{main_track_duration, video_duration};
 use klipolo_model::speech::{Levels, Speech, Transcript, Word, WordKind, spoken, word_cut};
 use klipolo_model::time::{RangeUs, Us};
-use klipolo_model::timeline::{Clip, ClipSource, Item, ItemContent, Track, TrackKind};
+use klipolo_model::timeline::{Clip, ClipSource, Item, ItemContent, TextStyle, Track, TrackKind};
 use klipolo_model::{Document, Project, apply_ops};
 
 fn secs(s: f64) -> Us {
@@ -455,21 +455,42 @@ fn keep_only_proposes_the_complement() {
 }
 
 #[test]
-fn keep_only_takes_a_free_sound_with_the_footage_it_played_over() {
-    // A 40 s sound dropped at 20 s, free of the clips, on "broll.mov" (30 s): its last 10 s run past the video.
+fn keep_only_names_what_it_leaves_past_the_new_end() {
+    // On "broll.mov" (30 s), free of the clips: a 40 s sound from 20 s (its last 10 s past the video) and a title from
+    // 3 to 8 s; and music from 20 to 28 s. Keeping only the first 5 s leaves the sound and the music past the new end,
+    // and the title across it.
     let mut p = broll(30.0);
-    let mut whoosh = file("whoosh", 40.0, true);
-    whoosh.kind = AssetKind::Audio;
-    (whoosh.width, whoosh.height, whoosh.fps) = (0, 0, 0.0);
-    p.assets.push(whoosh);
-    let mut track = Track::new(TrackKind::Audio, "Audio 1");
-    track.items.push(Item {
-        id: "whoosh-layer".into(),
-        start_us: secs(20.0),
-        duration_us: secs(40.0),
+    for (id, length) in [("whoosh", 40.0), ("song", 60.0)] {
+        let mut sound = file(id, length, true);
+        sound.kind = AssetKind::Audio;
+        (sound.width, sound.height, sound.fps) = (0, 0, 0.0);
+        p.assets.push(sound);
+    }
+    let free = |id: &str, start: f64, length: f64, content: ItemContent| Item {
+        id: id.into(),
+        start_us: secs(start),
+        duration_us: secs(length),
         attach: None,
         layout: Layout::new(Anchor::Center, BoxN::FULL),
-        content: ItemContent::Audio {
+        content,
+        effects: Vec::new(),
+    };
+    let mut titles = Track::new(TrackKind::Overlay, "Overlay 1");
+    titles.items.push(free(
+        "title",
+        3.0,
+        5.0,
+        ItemContent::Text {
+            text: "Thanks for watching".into(),
+            style: TextStyle::default(),
+        },
+    ));
+    let mut sounds = Track::new(TrackKind::Audio, "Audio 1");
+    sounds.items.push(free(
+        "whoosh-layer",
+        20.0,
+        40.0,
+        ItemContent::Audio {
             asset_id: "whoosh".into(),
             source_in_us: 0,
             volume: 1.0,
@@ -482,9 +503,21 @@ fn keep_only_takes_a_free_sound_with_the_footage_it_played_over() {
             tie: None,
             duck: None,
         },
-        effects: Vec::new(),
-    });
-    p.timeline.tracks.push(track);
+    ));
+    p.timeline.tracks = vec![titles, sounds];
+    let song = p.asset("song").unwrap().clone();
+    let opts = MusicOpts {
+        start_us: secs(20.0),
+        end_us: Some(secs(28.0)),
+        ..MusicOpts::default()
+    };
+    let p = apply_ops(&p, &add_music_ops(&p, &song, opts).unwrap()).unwrap();
+    let bed: Vec<String> = (p.timeline.tracks.iter().flat_map(|t| &t.items))
+        .filter(|i| is_music(i))
+        .map(|i| i.id.clone())
+        .collect();
+    assert_eq!(bed.len(), 1);
+
     let i = inputs(&p, Speech::default(), "keep only the first 5 seconds");
     let out = compile(
         &p,
@@ -497,13 +530,14 @@ fn keep_only_takes_a_free_sound_with_the_footage_it_played_over() {
     assert_eq!(out.refusals, vec![]);
     let proposal = out.proposal.expect("a proposal");
     let after = &proposal.review.after;
-    assert_eq!(main_track_duration(&after.timeline.main), secs(5.0));
-    assert!(
-        after.timeline.tracks.iter().all(|t| t.items.is_empty()),
-        "nothing is left past the new end: {:?}",
-        after.timeline.tracks
-    );
-    assert_eq!(proposal.review.removals.items, ["whoosh-layer"]);
+    assert_eq!(video_duration(&after.timeline), secs(5.0));
+    let left: Vec<(&str, Us, Us)> = (after.timeline.tracks.iter().flat_map(|t| &t.items))
+        .map(|i| (i.id.as_str(), i.start_us, i.end_us()))
+        .collect();
+    assert_eq!(left, [("title", secs(3.0), secs(5.0))]);
+    let removals = &proposal.review.removals;
+    assert_eq!(removals.items, ["whoosh-layer", bed[0].as_str()]);
+    assert_eq!(removals.shortened, ["title"]);
 }
 
 #[test]
