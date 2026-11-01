@@ -362,8 +362,9 @@ export const useExport = create<ExportStore>((set, get) => {
     loadJobs: async () => {
       const id = ++listing;
       try {
-        const jobs = await exporter.jobs();
-        if (id === listing) set({ jobs });
+        const jobs: unknown = await exporter.jobs();
+        // Only a list counts: anything else lists none.
+        if (id === listing) set({ jobs: Array.isArray(jobs) ? (jobs as ExportJobInfo[]) : [] });
       } catch {
         // The list stays as it was.
       }

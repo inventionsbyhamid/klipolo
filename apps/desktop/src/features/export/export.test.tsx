@@ -700,6 +700,14 @@ describe('unfinished exports', () => {
     expect(screen.getByRole('button', { name: 'Export 1 video' })).toBeInTheDocument();
   });
 
+  it('an answer that isn’t a list of jobs lists none, and Export stays as it is', async () => {
+    vi.mocked(exporter.jobs).mockResolvedValue(null as unknown as ExportJobInfo[]);
+    renderExport();
+    await act(() => useExport.getState().loadJobs());
+    expect(useExport.getState().jobs).toEqual([]);
+    expect(screen.getByRole('button', { name: 'Export' })).toBeInTheDocument();
+  });
+
   it('a crash’s job resumes from its row, from the keyboard', async () => {
     vi.mocked(exporter.jobs).mockResolvedValue([job({ state: 'interrupted' })]);
     await openWithJobs(1);
