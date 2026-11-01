@@ -2,15 +2,18 @@ import { useLingui } from '@lingui/react/macro';
 import { useMemo } from 'react';
 import { stepFrames } from '../../lib/time';
 import { videoDurationUs } from '../../lib/timeline';
+import { useLoop } from '../../state/loop';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
+import { useRange } from '../../state/range';
 import { searchWords, type Command } from './command';
 
 /**
- * The transport: play and pause, the J/L shuttle (backward and forward, again for double speed) and frame steps. The
- * palette, the keys (Space, J/K/L, K held with J/L, ← and →) and the transport's buttons all run these. Frame steps go
- * by frame index on the engine's grid, so each shows the next frame exactly once. It re-renders on play, pause, a speed
- * change or a new frame rate or length, never per frame: the playhead is read when a command runs.
+ * The transport: play and pause, the J/L shuttle (backward and forward, again for double speed), Loop and frame steps.
+ * The palette, the keys (Space, J/K/L, K held with J/L, ⌘L, ← and →) and the transport's buttons all run these. Frame
+ * steps go by frame index on the engine's grid, so each shows the next frame exactly once. It re-renders on play, pause,
+ * a speed change, Loop, a time range coming or going, or a new frame rate or length, never per frame: the playhead is
+ * read when a command runs.
  */
 export function useTransportCommands(): Command[] {
   const { t } = useLingui();
@@ -18,6 +21,8 @@ export function useTransportCommands(): Command[] {
   const durationUs = useProject((s) => (s.snapshot ? videoDurationUs(s.snapshot.project.timeline) : 0));
   const playing = usePlayback((s) => s.playing);
   const rate = usePlayback((s) => s.rate);
+  const looping = useLoop((s) => s.on);
+  const ranged = useRange((s) => s.range !== null);
   return useMemo((): Command[] => {
     const hasVideo = durationUs > 0;
     /** One frame (⇧ one second) back or on, within the video's frames. */
@@ -104,6 +109,28 @@ export function useTransportCommands(): Command[] {
         run: () => usePlayback.getState().shuttle(1),
       },
       {
+        id: 'loop',
+        action: 'loop',
+        group: 'playback',
+        label: looping
+          ? ranged
+            ? t({ id: 'command.loop.stopSelection', message: 'Stop looping the selection' })
+            : t({ id: 'command.loop.stopVideo', message: 'Stop looping the video' })
+          : ranged
+            ? t({ id: 'command.loop.selection', message: 'Loop the selection' })
+            : t({ id: 'command.loop.video', message: 'Loop the video' }),
+        shortcut: '⌘L',
+        keywords: searchWords(
+          t({
+            id: 'command.loop.keywords',
+            message: 'repeat, again, cycle',
+            comment: 'Comma-separated search words for Loop',
+          }),
+        ),
+        enabled: hasVideo,
+        run: () => useLoop.getState().toggle(),
+      },
+      {
         id: 'frame-back',
         action: 'goTo',
         group: 'playback',
@@ -124,5 +151,5 @@ export function useTransportCommands(): Command[] {
         run: (options) => stepFrame(1, options?.large),
       },
     ];
-  }, [t, fps, durationUs, playing, rate]);
+  }, [t, fps, durationUs, playing, rate, looping, ranged]);
 }

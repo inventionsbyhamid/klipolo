@@ -27,7 +27,8 @@ const OPTIONAL = new Set(['copy', 'cut', 'paste', 'duplicate', 'paste-effects'])
  * one frame (⇧ one second); ↑ / ↓ the previous or next edit; Home / End the start or end; ⌘= / ⌘− timeline zoom; ⇧Z
  * fit the timeline; 1 / 2 / 3 the format the preview shows; N snapping on or off; Escape clears the selection. With a
  * clip or layer selected: Q / W trim its start or end to the playhead; , and . move it a frame (⇧ ten) or a clip a
- * place; ⌘C ⌘X ⌘V ⌘D copy, cut, paste, duplicate; ⌥⌘V paste effects; ⌥↑ / ⌥↓ the track above or below.
+ * place; ⌘C ⌘X ⌘V ⌘D copy, cut, paste, duplicate; ⌥⌘V paste effects; ⌥↑ / ⌥↓ the track above or below. ⌘L
+ * turns Loop on or off.
  * (On a focused timeline block the arrows, Home, End, Enter and Space move between blocks: `useRovingFocus`.)
  * Everything but ⌘K and ⌘↩ is ignored while typing in a field; everything while a menu, list or dialog is open, and when a
  * focused control already handled the key.
@@ -90,6 +91,7 @@ export function useEditorShortcuts() {
       v: 'paste',
       d: 'duplicate',
       t: 'add-transition',
+      l: 'loop',
     };
     if (mod) {
       const id = withMod[key];

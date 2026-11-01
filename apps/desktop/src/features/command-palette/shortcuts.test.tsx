@@ -15,6 +15,7 @@ const { bridge } = await import('../../bridge/commands');
 const { useProject } = await import('../../state/project');
 const { usePlayback } = await import('../../state/playback');
 const { useRange } = await import('../../state/range');
+const { useLoop } = await import('../../state/loop');
 const { useSelection } = await import('../../state/selection');
 const { Timeline } = await import('../timeline/Timeline');
 const { useEditorShortcuts } = await import('./useEditorShortcuts');
@@ -89,5 +90,19 @@ describe("the editor's keys leave fields, dialogs and menus alone", () => {
     fireEvent.keyDown(document.body, { key: 's' });
     await frames();
     expect(bridge.apply).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('playback keys', () => {
+  it('⌘L turns Loop on and off without playing; typed in a field it does nothing', () => {
+    useLoop.setState({ on: false });
+    renderWithProviders(<Editor />);
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Name' }), { key: 'l', metaKey: true });
+    expect(useLoop.getState().on).toBe(false);
+    fireEvent.keyDown(document.body, { key: 'l', metaKey: true });
+    expect(useLoop.getState().on).toBe(true);
+    expect(usePlayback.getState().playing).toBe(false);
+    fireEvent.keyDown(document.body, { key: 'l', metaKey: true });
+    expect(useLoop.getState().on).toBe(false);
   });
 });
