@@ -265,3 +265,31 @@ fn chats_ranges_keep_who_it_chose_there_and_the_speaker_elsewhere() {
     assert!(on(&path, 5.0, 0.75) && on(&path, 9.9, 0.75), "{path:?}");
     assert_eq!(cuts(&path), [s(5.0), s(10.0)]);
 }
+
+#[test]
+fn a_mm_hm_over_short_turns_never_frames_the_pair_it_makes() {
+    // P1 and P2 fit together; P3 stands apart.
+    let f = frames(
+        16.0,
+        &[
+            person(1, 0.25, 0.12),
+            person(2, 0.40, 0.12),
+            person(3, 0.80, 0.2),
+        ],
+    );
+    let said = [
+        talk(0.0, 6.0, 3),
+        // P1 in short turns, P2's "mm-hm"s over them.
+        talk(6.0, 7.2, 1),
+        talk(6.4, 6.6, 2),
+        talk(7.5, 8.7, 1),
+        talk(7.9, 8.1, 2),
+        talk(9.0, 16.0, 1),
+    ];
+    let path = path_of(&f, PORTRAIT, &said, &Keep::Speaker);
+    assert!(on(&path, 3.0, 0.80), "{path:?}");
+    // On P1 alone, never the pair's middle.
+    for t in [6.5, 7.0, 8.0, 12.0] {
+        assert!((x_at(&path, t) - 0.25).abs() < 0.03, "at {t}: {path:?}");
+    }
+}

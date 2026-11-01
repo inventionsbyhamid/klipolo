@@ -63,6 +63,8 @@ pub const CUT_AWAY: f64 = 0.5;
 const RUN_GAP_US: Us = 300_000;
 /// Short turns and talk over each other this close together are one busy stretch.
 const BUSY_GAP_US: Us = 1_000_000;
+/// Someone takes part in a busy stretch with at least this much talk in it.
+const MIN_SHARE_US: Us = 500_000;
 /// A switch that would leave less of the speech than this isn't made.
 const MIN_LEFT_US: Us = 1_000_000;
 /// People fit together in the crop when they take at most this part of its width.
@@ -557,7 +559,8 @@ fn most(said: &[(u8, Us)], now: Option<&Target>, main: u8) -> u8 {
 }
 
 /// The stretches of `talk` that may take the frame, in order: one person's run of at least `MIN_TALK_US` alone, and
-/// busy stretches (short turns back and forth, or talk over each other) of two or more people at least that long.
+/// busy stretches (short turns back and forth, or talk over each other) at least that long, of two or more people who
+/// each say `MIN_SHARE_US` in it, or of one who says `MIN_TALK_US` in short turns.
 fn claims(talk: &[Talk]) -> Vec<Claim> {
     // Each person's talk joined across short gaps.
     let mut runs: Vec<Talk> = talk.to_vec();
@@ -597,14 +600,20 @@ fn claims(talk: &[Talk]) -> Vec<Claim> {
     let flush = |busy: &mut Vec<(Us, Us, Vec<u8>)>, claims: &mut Vec<Claim>| {
         if let (Some(first), Some(last)) = (busy.first(), busy.last()) {
             let (from, to) = (first.0, last.1);
-            let mut who: Vec<u8> = busy.iter().flat_map(|p| p.2.iter().copied()).collect();
-            who.sort_unstable();
-            who.dedup();
-            if who.len() >= 2 && to - from >= MIN_TALK_US {
+            let said = said(talk, (from, to));
+            // Who takes part: an "mm-hm" over someone's short turns doesn't make the stretch theirs too.
+            let who: Vec<u8> = (said.iter())
+                .filter(|(_, len)| *len >= MIN_SHARE_US)
+                .map(|(p, _)| *p)
+                .collect();
+            let alone_enough = who.len() == 1 && said.iter().any(|(_, len)| *len >= MIN_TALK_US);
+            if to - from >= MIN_TALK_US && (who.len() >= 2 || alone_enough) {
+                let mut who = who;
+                who.sort_unstable();
                 claims.push(Claim {
                     from,
                     to,
-                    said: said(talk, (from, to)),
+                    said,
                     who,
                 });
             }
