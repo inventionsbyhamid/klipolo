@@ -169,6 +169,7 @@ fn main() {
             engine::engine_view,
             engine::engine_set_view,
             engine::engine_set_visible,
+            engine::engine_set_volume,
             engine::engine_seek,
             engine::engine_preview,
             engine::engine_preview_clear,
