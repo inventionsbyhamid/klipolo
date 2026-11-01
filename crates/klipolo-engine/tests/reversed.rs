@@ -522,16 +522,23 @@ fn a_full_range_bt601_clip_keeps_its_values_and_its_tags() {
     )
     .unwrap();
     let copy = decode(&out);
+    // H.264 states full range; ProRes is limited range by definition, so there the picture is squeezed to it.
+    let full = test_codec().0 == VtCodec::H264High;
+    let range_tag = if full { Range::JPEG } else { Range::MPEG };
     assert_eq!(
         copy.tags,
         (
-            Range::JPEG,
+            range_tag,
             Space::BT470BG,
             Primaries::BT470BG,
             TransferCharacteristic::SMPTE170M
         )
     );
-    let want: Vec<u8> = src.levels.iter().rev().copied().collect();
+    let squeeze = |v: u8| match full {
+        true => v,
+        false => (16 + (u32::from(v) * 219 + 127) / 255) as u8,
+    };
+    let want: Vec<u8> = src.levels.iter().rev().map(|&v| squeeze(v)).collect();
     assert!(
         exactly(&copy.levels, &want),
         "got {:?}, want {want:?}",

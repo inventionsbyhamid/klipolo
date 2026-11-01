@@ -12,6 +12,10 @@
 //!   of upright NV12 pictures held at once, and written newest first. The source's size and quarter turn are kept, the
 //!   picture turned upright (`small_copy::turn_nv12`), so the copy needs no turn of its own. Encoded by the platform's
 //!   H.264 encoder (VideoToolbox) at `Reverse::video_bps`; where there is none (Linux, for now) as ProRes 422 HQ.
+//! - **Colour:** the source's tags (range, matrix, primaries, transfer) go on the copy and its values stay as they were
+//!   (the scaler keeps the range). ProRes is limited range by definition, so there a full-range source is squeezed to
+//!   it and tagged so. An HDR source (HLG or PQ) is written as 10-bit HEVC (P010), where the platform has that encoder,
+//!   and refused where it doesn't (`NoHdrEncoder`): it is never cut to 8-bit SDR.
 //! - **Sound:** the range's sound (the engine's decode, 48 kHz, its first two channels) held whole and written last
 //!   sample first as AAC, placed by the source's `audio_lead_us` as the preview plays it. Past `MAX_SOUND_SECONDS`, or
 //!   for a source without sound, the copy has none.
@@ -31,8 +35,9 @@ use ffmpeg::software::scaling;
 use ffmpeg::{ChannelLayout, Rational};
 use klipolo_model::time::{RangeUs, Us};
 
+use super::scan::tile::plain_layout;
 use super::scan::{next_packet, set_discards};
-use super::small_copy::{open_decoder, take_software, turn_nv12, write_packet};
+use super::small_copy::{open_decoder, take_software, turn_nv12, turn_p010, write_packet};
 use crate::audio::decode;
 use crate::audio::mix::RATE;
 use crate::export::codecs::{builder, encoder_name};
@@ -40,7 +45,7 @@ use crate::export::quality::VideoCodec;
 use crate::platform::encode::{Backend, CodecRole, candidates};
 use crate::render::probe::{MediaKind, probe_media, stream_start};
 use crate::vendor::cap::enc_ffmpeg::aac::AACEncoder;
-use crate::vendor::cap::enc_ffmpeg::h264::H264Encoder;
+use crate::vendor::cap::enc_ffmpeg::h264::{ColorTags, H264Encoder};
 use crate::vendor::cap::media_info::{AudioInfo, VideoInfo};
 
 /// The longest range whose sound is reversed too: its 48 kHz stereo samples are held whole (about 230 MB for this).
@@ -318,7 +323,14 @@ fn write_to(
     if probe.kind != MediaKind::Video {
         return Err(ReverseError::NoVideo);
     }
-    let codec = codec().ok_or(ReverseError::NoEncoder)?;
+    let (tags, hdr) = source_color(src)?;
+    // HDR stays HDR: a 10-bit HEVC copy with the source's tags, or none at all (never flattened to SDR).
+    let (codec, format) = if hdr {
+        encoder_name(VideoCodec::HevcMain10).ok_or(ReverseError::NoHdrEncoder)?;
+        (VideoCodec::HevcMain10, Pixel::P010LE)
+    } else {
+        (codec().ok_or(ReverseError::NoEncoder)?, Pixel::NV12)
+    };
     let even = |x: u32| (x / 2 * 2).max(2);
     let (width, height) = (even(probe.width), even(probe.height));
     let rotation = probe.rotation % 360;
@@ -326,6 +338,22 @@ fn write_to(
         (height, width)
     } else {
         (width, height)
+    };
+    let full = tags.range == ffmpeg::color::Range::JPEG;
+    // ProRes is limited range by definition: a full-range source is squeezed to it there, and tagged so.
+    let tags = match codec {
+        VideoCodec::ProRes422Hq => ColorTags {
+            range: ffmpeg::color::Range::MPEG,
+            ..tags
+        },
+        _ => tags,
+    };
+    let shape = Shape {
+        stored,
+        rotation,
+        format,
+        full,
+        squeeze: full && tags.range != ffmpeg::color::Range::JPEG,
     };
     let fps = if probe.fps > 0.0 { probe.fps } else { 30.0 };
     // The pill moves at once, then through the first pass and the sound, then frame by frame.
@@ -337,21 +365,27 @@ fn write_to(
 
     let mut output = ffmpeg::format::output_as(tmp, "mov").map_err(|e| failed("create", e))?;
     let info = VideoInfo {
-        pixel_format: Pixel::NV12,
+        pixel_format: format,
         width,
         height,
         time_base: Rational(1, 1_000_000),
         frame_rate: Rational::from(fps),
     };
-    let hardware = candidates(CodecRole::H264)
-        .first()
-        .is_some_and(|c| c.backend == Backend::VideoToolbox && codec == VideoCodec::H264High);
+    let role = match codec {
+        VideoCodec::HevcMain10 => CodecRole::Hevc10,
+        _ => CodecRole::H264,
+    };
+    let hardware = codec != VideoCodec::ProRes422Hq
+        && candidates(role)
+            .first()
+            .is_some_and(|c| c.backend == Backend::VideoToolbox);
     let build = |software: bool, output: &mut Output| {
         let mut b = builder(info, codec)
             .ok_or(ReverseError::NoEncoder)?
             .with_gop(((fps * GOP_SECONDS).round() as u32).max(1))
-            .with_software_only(software);
-        if codec == VideoCodec::H264High {
+            .with_software_only(software)
+            .with_color(tags);
+        if codec != VideoCodec::ProRes422Hq {
             b = b.with_bitrate(spec.video_bps);
         }
         b.build(output).map_err(|e| failed("encoder", e))
@@ -389,7 +423,7 @@ fn write_to(
         sound,
         frames: 0,
     };
-    writer.pictures(src, &frames, stored, rotation, spec, cancel, progress)?;
+    writer.pictures(src, &frames, shape, spec, cancel, progress)?;
     writer.finish(end - from)?;
     let bytes = std::fs::metadata(tmp).map_err(|e| failed("size", e))?.len();
     Ok(ReversedInfo {
@@ -480,8 +514,7 @@ impl Writer {
         &mut self,
         src: &Path,
         frames: &Frames,
-        stored: (u32, u32),
-        rotation: u16,
+        shape: Shape,
         spec: &Reverse,
         cancel: &AtomicBool,
         progress: &mut dyn FnMut(f64),
@@ -491,8 +524,7 @@ impl Writer {
         set_discards(&mut input, Some(stream.index), None);
         let (mut decoder, _) = open_decoder(&stream.params, stream.tb, false, spec.threads)
             .map_err(|e| failed("decoder", e))?;
-        let (w, h) = stored;
-        let frame_bytes = (w as usize * h as usize * 3 / 2).max(1);
+        let frame_bytes = shape.bytes();
         let per_window = (spec.buffer_bytes / frame_bytes).max(1);
         let count = frames.starts.len();
         let mut scaler: Option<(scaling::Context, (Pixel, u32, u32))> = None;
@@ -505,7 +537,7 @@ impl Writer {
                 &mut decoder,
                 &stream,
                 wanted,
-                (stored, rotation),
+                shape,
                 &mut scaler,
                 cancel,
             )?;
@@ -596,7 +628,7 @@ fn decode_window(
     decoder: &mut ffmpeg::decoder::Video,
     stream: &Stream,
     wanted: &[Us],
-    ((w, h), rotation): ((u32, u32), u16),
+    shape: Shape,
     scaler: &mut Option<(scaling::Context, (Pixel, u32, u32))>,
     cancel: &AtomicBool,
 ) -> Result<Vec<ffmpeg::frame::Video>, ReverseError> {
@@ -649,8 +681,8 @@ fn decode_window(
                 break 'read;
             }
             if let Ok(k) = wanted.binary_search(&at) {
-                let software = take_software(&mut frame);
-                got[k] = Some(upright(&software, (w, h), rotation, scaler)?);
+                let mut software = take_software(&mut frame);
+                got[k] = Some(upright(&mut software, shape, scaler)?);
             }
         }
     }
@@ -674,35 +706,153 @@ fn decode_window(
 
 /// `frame` as NV12 of its stored size `(w, h)` (the shown size turned back), then turned `rotation` degrees upright.
 fn upright(
-    frame: &ffmpeg::frame::Video,
-    (w, h): (u32, u32),
-    rotation: u16,
+    frame: &mut ffmpeg::frame::Video,
+    shape: Shape,
     scaler: &mut Option<(scaling::Context, (Pixel, u32, u32))>,
 ) -> Result<ffmpeg::frame::Video, ReverseError> {
+    // A JPEG-style frame (yuvj420p) is its plain layout at full range: read as such, swscale would squeeze it.
+    plain_layout(frame);
+    let (w, h) = shape.stored;
     let key = (frame.format(), frame.width(), frame.height());
     if scaler.as_ref().is_none_or(|(_, made)| *made != key) {
-        let context = scaling::Context::get(
+        let mut context = scaling::Context::get(
             key.0,
             key.1,
             key.2,
-            Pixel::NV12,
+            shape.format,
             w,
             h,
             scaling::Flags::BILINEAR,
         )
         .map_err(|e| failed("scaler", e))?;
+        keep_range(&mut context, shape.full);
         *scaler = Some((context, key));
     }
     let (context, _) = scaler.as_mut().expect("made above");
-    let mut stored = ffmpeg::frame::Video::new(Pixel::NV12, w, h);
+    let mut stored = ffmpeg::frame::Video::new(shape.format, w, h);
     context
         .run(frame, &mut stored)
         .map_err(|e| failed("scale", e))?;
-    if rotation == 0 {
+    if shape.squeeze {
+        squeeze_nv12(&mut stored);
+    }
+    if shape.rotation == 0 {
         return Ok(stored);
     }
-    let (tw, th) = if rotation % 180 == 90 { (h, w) } else { (w, h) };
-    let mut turned = ffmpeg::frame::Video::new(Pixel::NV12, tw, th);
-    turn_nv12(&stored, &mut turned, rotation);
+    let (tw, th) = if shape.rotation % 180 == 90 {
+        (h, w)
+    } else {
+        (w, h)
+    };
+    let mut turned = ffmpeg::frame::Video::new(shape.format, tw, th);
+    match shape.format {
+        Pixel::P010LE => turn_p010(&stored, &mut turned, shape.rotation),
+        _ => turn_nv12(&stored, &mut turned, shape.rotation),
+    }
     Ok(turned)
+}
+
+/// Squeezes an NV12 picture from full range to limited (luma 16 to 235, chroma 16 to 240) in place, for a copy whose
+/// codec is limited range by definition (ProRes). Done by hand: swscale's plain copy from one 4:2:0 layout to another,
+/// picked when the scaler is made, skips a range change asked for after.
+fn squeeze_nv12(picture: &mut ffmpeg::frame::Video) {
+    let luma: [u8; 256] = std::array::from_fn(|v| (16.0 + v as f32 * 219.0 / 255.0).round() as u8);
+    let chroma: [u8; 256] =
+        std::array::from_fn(|v| (128.0 + (v as f32 - 128.0) * 224.0 / 255.0).round() as u8);
+    let (w, h) = (picture.width() as usize, picture.height() as usize);
+    for (plane, table, rows) in [(0, &luma, h), (1, &chroma, h / 2)] {
+        let stride = picture.stride(plane);
+        let data = picture.data_mut(plane);
+        for row in data.chunks_mut(stride).take(rows) {
+            for v in &mut row[..w] {
+                *v = table[usize::from(*v)];
+            }
+        }
+    }
+}
+
+/// Makes `scaler` keep the source's range (`full` or limited, in and out): the copy carries the source's tags, so its
+/// values must stay the source's.
+fn keep_range(scaler: &mut scaling::Context, full: bool) {
+    use ffmpeg::ffi::{sws_getColorspaceDetails, sws_setColorspaceDetails};
+    let (mut inv_table, mut table) = (std::ptr::null_mut(), std::ptr::null_mut());
+    let (mut src_range, mut dst_range) = (0, 0);
+    let (mut brightness, mut contrast, mut saturation) = (0, 0, 0);
+    // SAFETY: the context is valid for `scaler`'s life; FFmpeg fills the out-parameters with pointers into its own
+    // tables, which `sws_setColorspaceDetails` takes back unchanged.
+    unsafe {
+        let ctx = scaler.as_mut_ptr();
+        if sws_getColorspaceDetails(
+            ctx,
+            &mut inv_table,
+            &mut src_range,
+            &mut table,
+            &mut dst_range,
+            &mut brightness,
+            &mut contrast,
+            &mut saturation,
+        ) >= 0
+        {
+            sws_setColorspaceDetails(
+                ctx,
+                inv_table,
+                i32::from(full),
+                table,
+                i32::from(full),
+                brightness,
+                contrast,
+                saturation,
+            );
+        }
+    }
+}
+
+/// How the copy's pictures are made from the decoded frames: at the stored size, turned `rotation` degrees upright, in
+/// `format` (NV12, or P010 for HDR), keeping the source's range (`full`), or squeezed to limited range (`squeeze`).
+#[derive(Clone, Copy, Debug)]
+struct Shape {
+    stored: (u32, u32),
+    rotation: u16,
+    format: Pixel,
+    full: bool,
+    squeeze: bool,
+}
+
+impl Shape {
+    /// One picture's bytes, held while its window is written.
+    fn bytes(self) -> usize {
+        let pixels = self.stored.0 as usize * self.stored.1 as usize;
+        // 4:2:0: a luma sample a pixel and half as much chroma, of one byte (NV12) or two (P010).
+        let sample = if self.format == Pixel::P010LE { 2 } else { 1 };
+        (pixels * 3 / 2 * sample).max(1)
+    }
+}
+
+/// The source's colour: its tags as its stream states them, whether it is full range, and whether it is HDR (HLG or
+/// PQ, which only a 10-bit HEVC copy keeps).
+fn source_color(src: &Path) -> Result<(ColorTags, bool), ReverseError> {
+    use ffmpeg::color::{Range, TransferCharacteristic as Trc};
+    let input = super::open::input(src).map_err(|e| failed("open", e))?;
+    let stream = video_stream(&input)?;
+    let decoder = ffmpeg::codec::Context::from_parameters(stream.params)
+        .and_then(|c| c.decoder().video())
+        .map_err(|e| failed("decoder", e))?;
+    // A JPEG-style format is full range whatever it says.
+    let jpeg = matches!(
+        decoder.format(),
+        Pixel::YUVJ420P | Pixel::YUVJ422P | Pixel::YUVJ444P
+    );
+    let range = if jpeg {
+        Range::JPEG
+    } else {
+        decoder.color_range()
+    };
+    let tags = ColorTags {
+        range,
+        space: decoder.color_space(),
+        primaries: decoder.color_primaries(),
+        transfer: decoder.color_transfer_characteristic(),
+    };
+    let hdr = matches!(tags.transfer, Trc::SMPTE2084 | Trc::ARIB_STD_B67);
+    Ok((tags, hdr))
 }

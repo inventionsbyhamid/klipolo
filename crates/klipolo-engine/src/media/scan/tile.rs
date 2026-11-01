@@ -191,7 +191,7 @@ impl Video {
 }
 
 /// Relabels a JPEG-style frame (`yuvj4xxp`) as its plain layout, the same bytes; true when it was one.
-fn plain_layout(frame: &mut ffmpeg::frame::Video) -> bool {
+pub(crate) fn plain_layout(frame: &mut ffmpeg::frame::Video) -> bool {
     let plain = match frame.format() {
         Pixel::YUVJ420P => Pixel::YUV420P,
         Pixel::YUVJ422P => Pixel::YUV422P,
