@@ -11,7 +11,7 @@ use std::sync::Arc;
 use klipolo_analysis::subject::PERSON;
 use klipolo_app::chat::Projects;
 use klipolo_app::speaker::{
-    NO_ONE, PROGRESS_EVENT, Speaker, SpeakerEstimate, SpeakerProgress, Voices,
+    NO_ONE, PROGRESS_EVENT, Speaker, SpeakerEstimate, SpeakerFollowed, SpeakerProgress, Voices,
 };
 use klipolo_model::coded::Said;
 use klipolo_model::fill_focus::Keep;
@@ -75,15 +75,15 @@ pub(crate) async fn speaker_estimate(
         .await)
 }
 
-/// Follows the speaker in clip `clip_id` in `format`: what changed, as `project_apply` gives it, or why it couldn't
-/// (one sentence).
+/// Follows the speaker in clip `clip_id` in `format`: what changed, as `project_apply` gives it, with why the crop
+/// follows the main person when who speaks couldn't be told; or why it couldn't run (one sentence).
 #[tauri::command]
 pub(crate) async fn speaker_follow(
     speaker: State<'_, SpeakerHandle>,
     projects: State<'_, ProjectSessionState>,
     clip_id: String,
     format: FormatKind,
-) -> Result<SnapshotPatch, Said> {
+) -> Result<SpeakerFollowed, Said> {
     let now = Projects::now(&*projects).ok_or_else(|| Said::code("project.none"))?;
     let followed = speaker
         .follow(
@@ -104,6 +104,10 @@ pub(crate) async fn speaker_follow(
             });
         }
         Ok(ops)
+    })
+    .map(|change| SpeakerFollowed {
+        change,
+        note: followed.note.clone(),
     })
     .map_err(|e| e.said())
 }

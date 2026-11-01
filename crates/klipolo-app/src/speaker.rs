@@ -29,6 +29,7 @@ use klipolo_analysis::subject::clips::{
 use klipolo_analysis::subject::voices::{self, Asking, MAX_WINDOWS, VoiceTurn, Window};
 use klipolo_analysis::subject::{self, Ask, FPS, PERSON, SubjectCopy, SubjectTrack};
 use klipolo_model::fill_focus::{FocusPath, Keep, Person, Voice};
+use klipolo_model::history::SnapshotPatch;
 use klipolo_model::ids::Id;
 use klipolo_model::ops::Op;
 use klipolo_model::project::{FormatKind, Project};
@@ -70,6 +71,18 @@ pub struct SpeakerEstimate {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub refusal: Option<String>,
+}
+
+/// What a follow from the clip card changed (as `project_apply` gives it), and why the crop follows the main person
+/// when who speaks couldn't be told (`Followed::note`), to say.
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SpeakerFollowed {
+    pub change: SnapshotPatch,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub note: Option<String>,
 }
 
 /// `speaker://progress`: how far a follow is.

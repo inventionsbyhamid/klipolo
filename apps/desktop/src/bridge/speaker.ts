@@ -3,6 +3,7 @@ import type { FormatKind } from '../bindings/FormatKind';
 import type { Keep } from '../bindings/Keep';
 import type { SnapshotPatch } from '../bindings/SnapshotPatch';
 import type { SpeakerEstimate } from '../bindings/SpeakerEstimate';
+import type { SpeakerFollowed } from '../bindings/SpeakerFollowed';
 import type { SpeakerProgress } from '../bindings/SpeakerProgress';
 import { call } from './call';
 
@@ -16,8 +17,11 @@ export const speakerBridge = {
   /** The price, free for footage tracked before, and why it can't run now. */
   estimate: (clipId: string, format: FormatKind) =>
     call<SpeakerEstimate>('speaker_estimate', { clipId, format }),
-  /** Tracks the speaker and makes the clip follow them in `format`, as one undo step. */
-  follow: (clipId: string, format: FormatKind) => call<SnapshotPatch>('speaker_follow', { clipId, format }),
+  /**
+   * Tracks the speaker and makes the clip follow them in `format`, as one undo step; with a note when who speaks
+   * couldn't be told.
+   */
+  follow: (clipId: string, format: FormatKind) => call<SpeakerFollowed>('speaker_follow', { clipId, format }),
   /** Keeps whoever speaks, one person or both in frame in `format`, from what the follow tracked: one undo step. */
   keep: (clipId: string, format: FormatKind, keep: Keep) =>
     call<SnapshotPatch>('speaker_keep', { clipId, format, keep }),

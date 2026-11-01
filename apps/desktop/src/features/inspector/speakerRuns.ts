@@ -46,8 +46,10 @@ export async function followSpeaker(clipId: string, format: FormatKind): Promise
     })
     .catch(() => () => undefined);
   try {
-    const change = await speakerBridge.follow(clipId, format);
-    await useProject.getState().adopt(change);
+    const followed = await speakerBridge.follow(clipId, format);
+    await useProject.getState().adopt(followed.change);
+    // Who speaks couldn't be told: say why the crop follows the main person.
+    if (followed.note) toast.info(followed.note);
     return true;
   } catch (error) {
     toast.error(error instanceof Error ? error.message : String(error));
