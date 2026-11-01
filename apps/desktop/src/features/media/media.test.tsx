@@ -218,6 +218,30 @@ describe('where a drop lands on the timeline', () => {
     expect(at(20.5, 125)).toMatchObject({ atUs: 20_000_000 });
   });
 
+  it('while every track shows, media goes onto the track whose row it is over', () => {
+    useUi.setState({ pxPerSecond: 10, snapping: false, timelineExpanded: true });
+    const scroller = row({}, 0, 300);
+    scroller.append(
+      row({ 'data-lane': 't1', 'data-track-id': 't1', 'data-track-kind': 'overlay' }, 20, 28),
+      row({ 'data-lane': 'main' }, 53, 68),
+      row({ 'data-lane': 't2', 'data-track-id': 't2', 'data-track-kind': 'audio' }, 126, 34),
+    );
+    // The tracks' headers take 128 px.
+    const at = (s: number, y: number, kind: Asset['kind']) => timelineTargetAt(scroller, 20, 128 + s * 10, y, kind);
+    expect(at(3, 30, 'image')).toEqual({ lane: 'picture', trackId: 't1', atUs: 3_000_000 });
+    expect(at(3, 140, 'audio')).toEqual({ lane: 'sound', trackId: 't2', atUs: 3_000_000, row: 'sounds' });
+    expect(at(3, 30, 'audio')).toBeNull();
+    expect(at(3, 140, 'video')).toBeNull();
+    expect(at(24, 80, 'video')).toEqual({ lane: 'main', index: 1 });
+    // A locked or hidden track takes nothing: the indicator shows only where media really lands.
+    const snapshot = fixtureSnapshot();
+    snapshot.project.timeline.tracks[0].locked = true;
+    snapshot.project.timeline.tracks[1].hidden = true;
+    useProject.setState({ snapshot });
+    expect(at(3, 30, 'image')).toBeNull();
+    useUi.setState({ timelineExpanded: false });
+  });
+
   it('only a lane that takes what is dragged is a target, so the indicator shows where it really lands', () => {
     useUi.setState({ pxPerSecond: 10, snapping: false });
     const at = (s: number, y: number, kind: Asset['kind'] | null) =>

@@ -8,6 +8,7 @@ import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { useUi } from '../../state/ui';
 import { startAutoscroll } from './drag/autoscroll';
+import { isMusic } from './lanes/audioRole';
 import { SNAP_PX } from './drag/session';
 import { gutterPx } from './layout';
 import { nearestCut, type DropTarget } from './model/dropOps';
@@ -139,9 +140,9 @@ function edgesOf(project: Project): Float64Array {
 
 /**
  * Over `scroller`'s lanes (below its ruler, `headBottom`): the main lane gives the cut nearest the pointer's time; the
- * Overlays lane a picture layer there; the Sounds lane a sound effect and the Music lane music. A layer's start keeps
- * to the frame grid, and holds to a cut, a layer's edge or the playhead within 8 px while snapping is on: O(log edges)
- * a frame.
+ * Overlays lane a picture layer there; the Sounds lane a sound effect and the Music lane music; while every track
+ * shows, a track's row a layer on that track. A layer's start keeps to the frame grid, and holds to a cut, a layer's
+ * edge or the playhead within 8 px while snapping is on: O(log edges) a frame.
  *
  * Null elsewhere: the ruler, outside the lanes, a read-only project, a zoom, hidden or locked track, and a row that
  * won't take what is dragged (`kind`: a sound over a picture row, a picture over a sound row, a sound or a picture over
@@ -190,6 +191,17 @@ export function timelineTargetAt(
   for (const row of scroller.querySelectorAll<HTMLElement>('[data-lane]')) {
     if (!within(row)) continue;
     const lane = row.dataset.lane;
+    // While every track shows, a track's own row: media goes onto that track, never a hidden or locked one or a zoom
+    // track; a sound on a track of music is added as music.
+    const trackId = row.dataset.trackId;
+    if (trackId) {
+      const track = project.timeline.tracks.find((tr) => tr.id === trackId);
+      if (!track || track.hidden || track.locked || track.kind === 'zoom') return null;
+      if (track.kind === 'overlay') return kind === 'audio' ? null : { lane: 'picture', trackId, atUs: atUs() };
+      if (kind === 'video' || kind === 'image') return null;
+      const music = track.items.some(isMusic);
+      return { lane: 'sound', trackId, atUs: atUs(), row: music ? 'music' : 'sounds' };
+    }
     // The main track takes videos (and files from Finder of mixed kinds); a sound or a picture goes on its own lane.
     if (lane === 'main')
       return kind === 'audio' || kind === 'image'

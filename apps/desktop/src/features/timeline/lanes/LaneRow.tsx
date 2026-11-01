@@ -55,13 +55,13 @@ export function LaneRow({
   children,
 }: LaneRowProps) {
   const gutter = useGutterPx();
-  // The lane the file is held over, only: both audio lanes take a sound, so a sound's target names its lane (`row`).
-  const dropOver = useDropIndicator(
-    (s) =>
-      s.target !== null &&
-      s.target.lane === DROPS[lane] &&
-      (s.target.lane !== 'sound' || (s.target.row ?? 'sounds') === lane),
-  );
+  // The lane the file is held over, only: both audio lanes take a sound, so a sound's target names its lane (`row`);
+  // a track's row, by its track.
+  const dropOver = useDropIndicator((s) => {
+    if (s.target === null || s.target.lane === 'main') return lane === 'main' && s.target?.lane === 'main';
+    if (track) return s.target.trackId === track.id;
+    return s.target.lane === DROPS[lane] && (s.target.lane !== 'sound' || (s.target.row ?? 'sounds') === lane);
+  });
   return (
     <div
       role="group"
