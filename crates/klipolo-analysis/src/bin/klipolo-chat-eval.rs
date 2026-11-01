@@ -7,16 +7,17 @@
 //! ```
 //!
 //! It calls Meta for real with `MODEL_API_KEY` (a Meta key) from the environment, never from a file, and never prints
-//! it. `KLIPOLO_SPEND_LEDGER` (a CSV file), when set, gets one row per model call; `KLIPOLO_META_BASE` points the
-//! calls elsewhere. It exits 0 when at least `--min-pass` cases pass (`MIN_PASS` by default, or every case run with `--only`),
-//! 1 when fewer do, 2 when it could not run.
+//! it. `KLIPOLO_SPEND_LEDGER` (a CSV file), when set, gets one row per model call; `KLIPOLO_META_BASE` points the calls
+//! elsewhere. It exits 0 when at least `--min-pass` cases pass (`MIN_PASS` by default, or every case run with
+//! `--only`), 1 when fewer do, 2 when it could not run.
 //!
 //! The eval set names a project, its one asset and that asset's transcript, speaker turns and scene log (paths beside
-//! `cases.json`); a case may name a project of its own that plays the same asset (clip A in clips, beside a song). Every file counts as analyzed, and its loudness is made from the transcript: speech where a word is
-//! said, quiet elsewhere, so pause removal finds the transcript's pauses. Each case is one message on that project, on
-//! the conversation it gives, with the playhead at 0 and no selection unless it says otherwise. The library the media
-//! tools name is the set's own `library` files (as if just imported: not in the project yet) and Klipolo's pack as its
-//! `pack` manifest lists it, each pack file where the manifest says.
+//! `cases.json`); a case may name a project of its own that plays the same asset (clip A in clips, beside a song, under
+//! music and a b-roll layer). Every file counts as analyzed, and its loudness is made from the transcript: speech where
+//! a word is said, quiet elsewhere, so pause removal finds the transcript's pauses. Each case is one message on that
+//! project, on the conversation it gives, with the playhead at 0 and no selection unless it says otherwise. The library
+//! the media tools name is the set's own `library` files (as if just imported: not in the project yet) and Klipolo's
+//! pack as its `pack` manifest lists it, each pack file where the manifest says.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
