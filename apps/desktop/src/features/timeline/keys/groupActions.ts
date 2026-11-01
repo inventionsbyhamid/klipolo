@@ -176,7 +176,12 @@ export function setGroupVolume(volume: number) {
 export function nudgeGroup(direction: 1 | -1, large: boolean) {
   withGroup((project, m) => {
     if (m.layers.length === 0)
-      return toast.info(t({ id: 'timeline.group.clipsStay', message: 'Clips on the Video track move one at a time.' }));
+      return toast.info(
+        t({
+          id: 'timeline.group.clipsStay',
+          message: 'Clips keep their places on the Video track. Drag them to move them.',
+        }),
+      );
     const step = large ? 1_000_000 : frameUs(project.settings.fps);
     const ops = groupMoveOps(project, m, direction * step);
     if (typeof ops === 'string') return toast.info(moveRefusal(ops));

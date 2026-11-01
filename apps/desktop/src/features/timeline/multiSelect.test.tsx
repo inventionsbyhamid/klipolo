@@ -165,6 +165,29 @@ describe("a group's edits", () => {
     expect(selected()).toEqual(['second']);
   });
 
+  it('dragging a group with a clip moves the clip along the Video track and its layers as far', async () => {
+    useSelection.getState().selectMany(['a', 'second']);
+    renderWithProviders(<Editor />);
+    const a = block(/^Recording 1/);
+    // a (0 to 20 s) dragged 12 s later: it goes after b, 10 s later, and the free title with it.
+    fireEvent.pointerDown(a, { pointerId: 1, button: 0, clientX: 400, clientY: 5 });
+    fireEvent.pointerMove(a, { pointerId: 1, clientX: 880, clientY: 5 });
+    await frames();
+    expect(a.style.transform).toContain('400px');
+    expect(block(/^broll\.mp4/).style.transform).toContain('-800px');
+    expect(block(/Second step/).style.transform).toContain('400px');
+    fireEvent.pointerUp(a, { pointerId: 1, clientX: 880, clientY: 5 });
+    await frames();
+    expect(bridge.apply).toHaveBeenCalledWith({
+      label: 'timeline.group.move',
+      params: { count: 2 },
+      ops: [
+        { type: 'moveClip', id: 'b', index: 0 },
+        { type: 'moveItem', id: 'second', trackId: null, startUs: 16 * S },
+      ],
+    });
+  });
+
   it('the arrows nudge the group a frame, ⇧ a second, and the playhead stays', async () => {
     useSelection.getState().selectMany(['title', 'second']);
     renderWithProviders(<Editor />);

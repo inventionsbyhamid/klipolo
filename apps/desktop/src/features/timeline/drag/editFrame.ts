@@ -5,7 +5,7 @@ import { formatSeconds } from '../../../lib/format';
 import { snapToFrame } from '../../../lib/time';
 import { findItem, sourceLabel } from '../../../lib/timeline';
 import { moveRefusal } from '../keys/groupActions';
-import { countOf, groupMoveOps, membersOf } from '../keys/groupOps';
+import { countOf, groupMoveOps, groupReorderOps, membersOf } from '../keys/groupOps';
 import { mainIndex } from '../model/index';
 import { attachedTo } from '../model/moveOps';
 import { editOps, editRoom, heldTo, type EditKind, type EditLimit } from '../model/editRoom';
@@ -122,8 +122,9 @@ export function frameEdit(s: Session, g: Edit, project: Project, dtUs: number): 
 
 /**
  * One frame of a selected group's move: its layers go `dtUs` later on the frame grid, each the same number of track
- * rows as the pressed one (while every track shows), offsets kept. Refused with a sentence when one can't go there
- * (a locked track, a row of another kind, before 0:00) or when the group holds clips; then nothing moves.
+ * rows as the pressed one (while every track shows), offsets kept. With clips in it, its clips go together to the
+ * nearest place on the main track and its other layers as far as they did (`groupReorderOps`). Refused with a
+ * sentence when one can't go there (a locked track, a row of another kind, before 0:00); then nothing moves.
  */
 export function frameGroup(s: Session, g: Group, project: Project, dtUs: number, now: Set<string>): boolean {
   const m = membersOf(project, g.ids);
@@ -143,30 +144,37 @@ export function frameGroup(s: Session, g: Group, project: Project, dtUs: number,
     }
   }
   const dt = snapToFrame(dtUs, s.fps);
-  const ops = m.clips.length > 0 ? null : groupMoveOps(project, m, dt, rows);
+  // With clips in it, the clips go together to a place on the main track, and its other layers as far as they did.
+  const reorder = m.clips.length > 0 ? groupReorderOps(project, m, dt) : null;
+  const ops = reorder === null ? groupMoveOps(project, m, dt, rows) : typeof reorder === 'string' ? reorder : reorder.ops;
   s.dryOps = null;
   s.edgeUs = null;
   s.label = 'timeline.group.move';
-  if (ops === null || typeof ops === 'string') {
+  if (typeof ops === 'string') {
     s.ops = [];
     s.labelParams = undefined;
-    s.view.showTip(
-      ops === null
-        ? t({ id: 'timeline.group.clipsStay', message: 'Clips on the Video track move one at a time.' })
-        : moveRefusal(ops),
-      s.last.x,
-    );
+    s.view.showTip(moveRefusal(ops), s.last.x);
     return true;
   }
-  const px = usToPx(dt, s.pps);
-  for (const { item } of m.layers) {
-    shiftBlock(item.id, px, dy);
-    now.add(item.id);
+  const moved = reorder !== null && typeof reorder !== 'string' ? reorder.deltaUs : dt;
+  const shift = (id: string, us: number, y = 0) => {
+    shiftBlock(id, usToPx(us, s.pps), y);
+    now.add(id);
+  };
+  if (reorder !== null && typeof reorder !== 'string') {
+    // Every clip that moves, and the layers that follow it.
+    const attached = attachedTo(project.timeline.tracks);
+    for (const [id, us] of reorder.shifts) {
+      shift(id, us);
+      for (const layer of attached.get(id) ?? NONE) shift(layer, us);
+    }
   }
+  for (const { item } of m.layers)
+    if (!now.has(item.id)) shift(item.id, moved, reorder === null ? dy : 0);
   s.ops = ops;
-  s.labelParams = { count: m.layers.length };
-  const count = m.layers.length;
+  const count = countOf(m);
+  s.labelParams = { count };
   s.said = t({ id: 'timeline.group.moved', message: `Moved ${count} items` });
-  s.view.showTip(change(dt), s.last.x);
+  s.view.showTip(change(moved), s.last.x);
   return true;
 }

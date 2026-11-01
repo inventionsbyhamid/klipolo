@@ -10,6 +10,7 @@ import {
   groupMoveOps,
   groupMuteOps,
   groupPasteOps,
+  groupReorderOps,
   groupVolumeOps,
   membersOf,
   rangeOnTrack,
@@ -46,6 +47,21 @@ describe("a group's edits", () => {
     expect(groupMoveOps(p, m, 0, 1)).toBe('kind');
     p.timeline.tracks[0].locked = true;
     expect(groupMoveOps(p, membersOf(p, ['title', 'second']), S)).toBe('locked');
+  });
+
+  it('carries its clips together to the nearest place on the main track, and the others close up', () => {
+    const p = fixtureProject();
+    const [a] = p.timeline.main;
+    p.timeline.main.push({ ...a, id: 'c', sourceInUs: 30 * S, sourceOutUs: 40 * S });
+    const moved = groupReorderOps(p, membersOf(p, ['a', 'c']), 5 * S);
+    expect(moved).toEqual({
+      ops: [{ type: 'moveClip', id: 'c', index: 1 }],
+      shifts: new Map([
+        ['c', -10 * S],
+        ['b', 10 * S],
+      ]),
+      deltaUs: 0,
+    });
   });
 
   it('pastes a copied group at the playhead with its offsets, and duplicates it right after itself', () => {

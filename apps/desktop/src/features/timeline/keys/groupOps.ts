@@ -6,7 +6,7 @@ import type { Project } from '../../../bindings/Project';
 import type { Track } from '../../../bindings/Track';
 import { newId } from '../../../lib/defaults';
 import { snapToFrame } from '../../../lib/time';
-import { clipHasSound, findItem, hasOwnSound, itemEndUs } from '../../../lib/timeline';
+import { clipDurationUs, clipHasSound, findItem, hasOwnSound, itemEndUs } from '../../../lib/timeline';
 import type { GroupEntry } from '../../../state/clipboard';
 import { clipIndexAt, mainIndex } from '../model/index';
 import { pasteEffectsOps } from './clipboardOps';
@@ -83,6 +83,64 @@ export function groupMoveOps(project: Project, m: Members, dtUs: number, rows = 
     trackId: rows === 0 ? null : to.id,
     startUs: item.startUs + dtUs,
   }));
+}
+
+/** A group's move with clips in it: its ops, how far each clip of the main track moves (µs), and the clips' shift. */
+export interface GroupReorder {
+  ops: Op[];
+  /** Each main-track clip that moves, by id: how far its start moves. */
+  shifts: Map<string, number>;
+  /** How far the group's clips move as a block: its layers that don't follow a clip of it move as far. */
+  deltaUs: number;
+}
+
+/**
+ * A group with clips in it, dragged `dtUs`: its clips go together, in their order, to the place on the main track
+ * nearest where their first one would start (the main track is magnetic, so the others close up around them), and its
+ * layers that don't follow one of its clips move as far as the clips did, so they keep their places beside them.
+ * Refused as a layers-only move is (`groupMoveOps`).
+ */
+export function groupReorderOps(project: Project, m: Members, dtUs: number): GroupReorder | MoveRefusal {
+  const main = project.timeline.main;
+  const index = mainIndex(main);
+  const picked = new Set(m.clips.map(({ clip }) => clip.id));
+  const rest = main.filter((clip) => !picked.has(clip.id));
+  const from = index.starts[m.clips[0].index];
+  const want = from + dtUs;
+  // The places the block can go: before each clip left, or at the end. The nearest to where it was dragged.
+  let best = { k: 0, startUs: 0 };
+  let start = 0;
+  for (let k = 0; k <= rest.length; k++) {
+    if (Math.abs(start - want) < Math.abs(best.startUs - want)) best = { k, startUs: start };
+    if (k < rest.length) start += clipDurationUs(rest[k]);
+  }
+  const block = m.clips.map(({ clip }) => clip);
+  const order = [...rest.slice(0, best.k), ...block, ...rest.slice(best.k)];
+  const deltaUs = best.startUs - from;
+  const free: Members = {
+    clips: [],
+    layers: m.layers.filter(({ item }) => !item.attach || !picked.has(item.attach.clipId)),
+  };
+  const moves = groupMoveOps(project, free, deltaUs);
+  if (typeof moves === 'string') return moves;
+  // The new order as moves: each place in turn takes the clip that goes there (a clip already there stays).
+  const ops: Op[] = [];
+  const now = main.map((clip) => clip.id);
+  order.forEach((clip, j) => {
+    const k = now.indexOf(clip.id);
+    if (k === j) return;
+    now.splice(k, 1);
+    now.splice(j, 0, clip.id);
+    ops.push({ type: 'moveClip', id: clip.id, index: j });
+  });
+  const shifts = new Map<string, number>();
+  let t = 0;
+  for (const clip of order) {
+    const was = index.starts[main.indexOf(clip)];
+    if (t !== was) shifts.set(clip.id, t - was);
+    t += clipDurationUs(clip);
+  }
+  return { ops: [...ops, ...moves], shifts, deltaUs };
 }
 
 /** Its blocks for the clipboard, deep copies, each at its distance from the earliest one (clips in their order). */
