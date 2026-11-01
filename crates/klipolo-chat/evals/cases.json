@@ -61,6 +61,19 @@
       ]
     },
     {
+      "id": "short-speaker",
+      "message": "Make a vertical short of this and keep whoever is talking in frame",
+      "expect": [
+        {
+          "calls": [
+            {"name": "setFormat", "args": {"format": "portrait", "keepOthers": true}},
+            {"name": "followSubject", "args": {"description": {"contains": "person"}}}
+          ],
+          "outcome": {"applied": true, "jobs": true}
+        }
+      ]
+    },
+    {
       "id": "vertical-follow",
       "message": "When we go vertical keep the camera on the woman astronaut",
       "expect": [
