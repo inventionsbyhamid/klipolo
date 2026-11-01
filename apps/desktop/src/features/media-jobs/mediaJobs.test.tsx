@@ -30,6 +30,7 @@ vi.mock('../../bridge/engine', () => ({
       }),
     ),
     setVisible: vi.fn(() => Promise.resolve()),
+    setVolume: vi.fn(() => Promise.resolve()),
     seek: vi.fn(() => Promise.resolve()),
     pause: vi.fn(() => Promise.resolve(0)),
   },

@@ -632,6 +632,32 @@
   background: transparent;
 }
 
+/* Full screen preview (F): the preview panel fills the window, which fills the screen. The rest keeps its place under
+   it but isn't drawn, so nothing covers the native layer's hole; the frame paints the night colour around itself. Dark
+   in both themes, as the video is. */
+.app.is-full > .topbar,
+.app.is-full > .playerbar,
+.app.is-full .workspace > :not(.stage) {
+  visibility: hidden;
+}
+
+.app.is-full .stage {
+  color-scheme: dark;
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  border-radius: 0;
+  background: var(--color-night);
+}
+
+.app.is-full .stage.has-hole {
+  background: transparent;
+}
+
+.app.is-full .frame {
+  box-shadow: 0 0 0 100vmax var(--color-night);
+}
+
 .stage-head {
   position: relative;
   z-index: 1;

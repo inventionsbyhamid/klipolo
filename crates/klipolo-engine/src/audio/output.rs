@@ -79,6 +79,48 @@ impl Status {
     }
 }
 
+/// The gain on the whole preview mix, which the output's mixer reads every block (`shared`, f32 bits): the loudness
+/// target's gain times the person's listening volume (the player bar's). Export never reads it.
+pub struct MasterGain {
+    loudness: f32,
+    volume: f32,
+    shared: Arc<AtomicU32>,
+}
+
+impl Default for MasterGain {
+    fn default() -> Self {
+        Self {
+            loudness: 1.0,
+            volume: 1.0,
+            shared: Arc::new(AtomicU32::new(1f32.to_bits())),
+        }
+    }
+}
+
+impl MasterGain {
+    /// What the mixer reads.
+    pub fn shared(&self) -> Arc<AtomicU32> {
+        self.shared.clone()
+    }
+
+    /// The loudness target's gain (1.0: none); the volume stays.
+    pub fn set_loudness(&mut self, gain: f32) {
+        self.loudness = gain;
+        self.publish();
+    }
+
+    /// The listening volume, held to 0 (silent) to 1 (as measured); the loudness gain stays.
+    pub fn set_volume(&mut self, volume: f32) {
+        self.volume = volume.clamp(0.0, 1.0);
+        self.publish();
+    }
+
+    fn publish(&self) {
+        self.shared
+            .store((self.loudness * self.volume).to_bits(), Ordering::Relaxed);
+    }
+}
+
 /// The Send handle the GPU backend holds.
 pub struct AudioOutput {
     control: Sender<Control>,
