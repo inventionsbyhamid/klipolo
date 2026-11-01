@@ -80,7 +80,8 @@ function useViewSync(
  * window's own colour (what shows around the layer for a frame or two while the window resizes) to the theme: Rust
  * paints it with the theme's canvas (`setAppearance`).
  */
-function useNativeHole(frame: RefObject<HTMLDivElement | null>, on: boolean) {
+function useNativeHole(frame: RefObject<HTMLDivElement | null>, on: boolean, dpr: number) {
+  const rescale = useRef<(() => void) | null>(null);
   useEffect(() => {
     const el = frame.current;
     if (!el || !on) return;
@@ -106,28 +107,20 @@ function useNativeHole(frame: RefObject<HTMLDivElement | null>, on: boolean) {
     // A window resize may end with the hole where it was while AppKit moved the view: send it again.
     const resized = () => request(true);
     window.addEventListener('resize', resized);
-    // Another screen's pixel ratio: the same box at a new scale. Each change is heard on the query for the ratio then.
-    const scaleQuery = () =>
-      typeof window.matchMedia === 'function'
-        ? window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`)
-        : null;
-    let scale = scaleQuery();
-    const rescaled = () => {
-      scale?.removeEventListener?.('change', rescaled);
-      scale = scaleQuery();
-      scale?.addEventListener?.('change', rescaled);
-      request(true);
-    };
-    scale?.addEventListener?.('change', rescaled);
+    rescale.current = () => request(true);
     request();
     return () => {
       cancelAnimationFrame(raf);
       observer.disconnect();
       window.removeEventListener('resize', resized);
-      scale?.removeEventListener?.('change', rescaled);
+      rescale.current = null;
       void engine.setRect(null).catch(() => undefined);
     };
   }, [frame, on]);
+  // Another screen's pixel ratio: the same box sent again at the new scale, never hidden on the way.
+  useEffect(() => {
+    rescale.current?.();
+  }, [dpr]);
 }
 
 type Pressed = 'video' | 'stage' | null;
@@ -187,7 +180,7 @@ export function Stage() {
   );
   const dpr = useDevicePixelRatio();
   useViewSync(videoRef, info, format, dpr);
-  useNativeHole(videoRef, native);
+  useNativeHole(videoRef, native, dpr);
   const note = status === 'unavailable' ? (message ?? "The preview isn't available right now.") : null;
   return (
     <div
