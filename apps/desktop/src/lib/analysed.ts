@@ -150,7 +150,16 @@ export function analysable(project: AnalysedScope): Asset[] {
   return offerOf(project).out;
 }
 
-/** The recording whose voice `assetId` is (`analysable`), or null: its analysis is the take's, so it reads as one. */
+/**
+ * Each voice file of the project's takes, by the recording it is the voice of (`analysable`). A take's files count as
+ * one clip: offers, rows and notes count its recording once. The same map while the main track, assets and
+ * recordings stay the same.
+ */
+export function voices(project: AnalysedScope): ReadonlyMap<string, string> {
+  return offerOf(project).voices;
+}
+
+/** The recording whose voice `assetId` is (`voices`), or null: its analysis is the take's, so it reads as one. */
 export function voiceOf(project: AnalysedScope, assetId: string): string | null {
   return offerOf(project).voices.get(assetId) ?? null;
 }

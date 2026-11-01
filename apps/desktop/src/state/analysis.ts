@@ -4,7 +4,7 @@ import type { AssetState } from '../bindings/AssetState';
 import type { Estimate } from '../bindings/Estimate';
 import { refreshAiStatus, useAi } from '../ai/aiStatus';
 import { analysisBridge, type AnalysisEvent, type UnlistenFn } from '../bridge/analysis';
-import { analysable } from '../lib/analysed';
+import { analysable, voices } from '../lib/analysed';
 import { useProject } from './project';
 
 interface AnalysisStore {
@@ -224,19 +224,32 @@ export function offerAgainOnAiModeChange(): () => void {
   });
 }
 
+/** No take: each clip counts as itself. */
+const NO_TAKES: ReadonlyMap<string, string> = new Map();
+
+/**
+ * The open project's take voice files, each by the recording it is the voice of (`voices`): a take's files count as
+ * one clip. The same map until they change.
+ */
+export function useTakes(): ReadonlyMap<string, string> {
+  return useProject((s) => (s.snapshot ? voices(s.snapshot.project) : NO_TAKES));
+}
+
 /**
  * Why the open project has no caption words, for the Captions panel: clips not analysed yet (the panel offers
  * Analyze), or clips heard with no speech in them (one, or more); null while clips are being analysed, or with no
- * clips.
+ * clips. A take's files (`takes`, from `useTakes`) count as one clip.
  */
 export function whyNoWords(
   states: Record<string, AssetState>,
   clipIds: string[],
+  takes: ReadonlyMap<string, string> = NO_TAKES,
 ): 'notAnalysed' | 'noSpeechOne' | 'noSpeechMany' | null {
   const all = clipIds.map((id) => stateOf(states, id));
   if (all.some((s) => s.state === 'running')) return null;
   if (all.some((s) => s.state === 'none')) return 'notAnalysed';
-  const silent = all.filter((s) => s.state === 'done' && !!s.emptyReason).length;
+  const heardNone = (s: AssetState) => s.state === 'done' && !!s.emptyReason;
+  const silent = new Set(clipIds.filter((_, k) => heardNone(all[k])).map((id) => takes.get(id) ?? id)).size;
   if (silent === 0) return null;
   return silent === 1 ? 'noSpeechOne' : 'noSpeechMany';
 }
