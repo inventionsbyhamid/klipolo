@@ -16,8 +16,9 @@
 //! call refused in the first answer that the second answer lets go (no new call of its tool for it, counted call by
 //! call, and no question or `cannotDo` instead).
 //!
-//! The reply is the model's text, then the sentences of refusals meant for the person, then what couldn't be done; all
-//! of it without em or en dashes (`sanitize::reply`). When a call was refused for the person beside others that went
+//! The reply is the model's text, then Klipolo's own notes on what the edits did (`Compiled::notes`: a speed that
+//! shortens a transition), then the sentences of refusals meant for the person, then what couldn't be done; all of it
+//! without em or en dashes (`sanitize::reply`). When a call was refused for the person beside others that went
 //! through, the model's text, written before that refusal, may claim it: it is left out, and what went through is said
 //! plainly instead ("The music is in."). When nothing came of the answer and a call of it was refused after
 //! the model wrote its text (still refused back, or refused for the person, `cannotDo` aside), that text, which may
@@ -447,6 +448,8 @@ fn finish(
     if told_undone && came_of_it {
         parts.extend(done_sentences(&calls, &compiled));
     }
+    // What was said of the edits, then Klipolo's own notes on them (a speed that shortens a transition).
+    let said_of_edits = parts.len();
     for r in &compiled.refusals {
         if r.audience == Audience::Person {
             let said = full_stop(r.reason.trim());
@@ -475,6 +478,17 @@ fn finish(
             .to_owned(),
         );
     }
+    // After what was said of the edits: the model's text, the sentences of what was done, or the short sentence alone.
+    let at = if parts.len() == 1 && said_of_edits == 0 {
+        1
+    } else {
+        said_of_edits
+    };
+    let notes: Vec<String> = (compiled.notes.iter())
+        .filter(|n| !parts.contains(n))
+        .cloned()
+        .collect();
+    parts.splice(at..at, notes);
     let reply = sanitize::reply(&parts.join(" "));
     PlanOut {
         note: note(&calls, &compiled, dropped),
@@ -500,6 +514,8 @@ fn done(call: &ToolCall) -> Option<&'static str> {
         ToolCall::SetCaptions { .. } => "The captions are changed.",
         ToolCall::FixCaptionWords { .. } => "The words are fixed.",
         ToolCall::SplitAt { .. } => "The clip is split.",
+        ToolCall::SetClip { .. } => "The clip is changed.",
+        ToolCall::SetTransition { .. } => "The transitions are changed.",
         ToolCall::TrimClip { .. } => "The clip is longer.",
         ToolCall::Undo => "Undone.",
         // Shown on their own (moments, questions), or proposed.
@@ -544,6 +560,8 @@ fn task(tool: &str) -> &'static str {
         "removeFillers" => "remove the filler words",
         "trimClip" => "trim the clip",
         "splitAt" => "split the clip",
+        "setClip" => "change the clip",
+        "setTransition" => "change the transition",
         "setFormat" => "change the format",
         "setCaptions" => "change the captions",
         "fixCaptionWords" => "fix the words",
