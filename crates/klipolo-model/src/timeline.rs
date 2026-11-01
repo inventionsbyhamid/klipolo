@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::contrib::ContribId;
+use crate::crop::Crop;
 use crate::cursor_style::{CursorStyle, FocusKind, Follow};
 use crate::font::FontRef;
 use crate::ids::{new_id, Id};
@@ -254,6 +255,12 @@ pub struct Clip {
     /// Per-format framing. A format without an entry uses `framing::default_framing`.
     #[serde(default)]
     pub framing: BTreeMap<FormatKind, Framing>,
+    /// The edges cut off its main footage before it is framed, in every format (a camera bubble keeps its whole
+    /// picture); None keeps the whole picture. Never a crop of nothing (`Crop::is_none`), and left out of the JSON
+    /// while None.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub crop: Option<Crop>,
     /// The main footage's effects, in order. The camera bubble isn't affected.
     #[serde(default)]
     pub effects: Vec<EffectInstance>,
@@ -286,6 +293,7 @@ impl Clip {
             look: Look::default(),
             camera: None,
             framing: BTreeMap::new(),
+            crop: None,
             effects: Vec::new(),
             transition_out: None,
             source_mix: BTreeMap::new(),

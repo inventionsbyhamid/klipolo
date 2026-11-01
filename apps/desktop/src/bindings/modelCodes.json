@@ -672,6 +672,11 @@
     "params": []
   },
   {
+    "code": "model.clip.crop",
+    "message": "A crop must leave at least a tenth of the picture each way.",
+    "params": []
+  },
+  {
     "code": "model.camera.noCamera",
     "message": "Only recordings with a camera can have camera settings.",
     "params": []

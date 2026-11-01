@@ -515,6 +515,10 @@ fn validate_clip(p: &Project, c: &Clip) -> Result<()> {
             .all(|f| in_range(f.focus_x, 0.0, 1.0) && in_range(f.focus_y, 0.0, 1.0)),
         code!("model.clip.focus"),
     )?;
+    check(
+        c.crop.is_none_or(|crop| crop.is_valid()),
+        code!("model.clip.crop"),
+    )?;
     validate_look(p, &c.look)?;
     validate_effects(p, &c.effects)?;
     crate::cursor_style::check_clip(c)?;
