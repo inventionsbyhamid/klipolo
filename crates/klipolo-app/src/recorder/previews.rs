@@ -3,7 +3,7 @@
 //! writes nothing and holds nothing once told to stop:
 //! - **the stills** (`--record-worker --thumbs`): each display and app of the dialog's last setup, about once a second
 //!   each, for the cards;
-//! - **the live picture** of the chosen display or app, small (`live_view`);
+//! - **the live picture** of the chosen display or app, made for the dialog's box (`live_view`);
 //! - **the camera** for the bubble (`check`);
 //! - **the mic's meter** (`--record-worker --meter`): ten peaks a second, as `recorder-event`s of `PreviewId::Mic`.
 //!
@@ -48,7 +48,8 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use klipolo_capture::backend::{Devices, Permission, Permissions, Target};
-use klipolo_capture::protocol::Event;
+use klipolo_capture::live_view_size::ViewPixels;
+use klipolo_capture::protocol::{Command, Event};
 use klipolo_capture::run::thumbs::{MAX_THUMBS, THUMB_EVERY};
 use klipolo_model::coded::CodedError;
 use klipolo_platform::clock::Clock;
@@ -59,6 +60,7 @@ use super::config::take_target;
 use super::frames::{PreviewOut, frame_message, now_ms};
 use super::launch::Launch;
 use super::live_view::{card_key, live_wanted};
+use super::send::write_line;
 use super::setup::is_os_id;
 use super::state::RecorderState;
 use super::take::{Recorder, Worker};
@@ -124,6 +126,9 @@ pub(super) struct Wanted {
     pub(super) args: Option<Vec<String>>,
     /// It starts on the person's Allow press, and macOS asks.
     pub(super) asking: bool,
+    /// The box it is made for (the live picture's; None: the small picture, and every other preview): a new one goes to
+    /// its running worker (`ViewSize`), which it keeps.
+    pub(super) view: Option<ViewPixels>,
 }
 
 /// A running preview.
@@ -137,6 +142,8 @@ struct Open {
     said_failed: bool,
     /// It started on the person's Allow press, and macOS asks: kept through Klipolo going behind until the answer.
     asking: bool,
+    /// The box it was launched for or last told (`Wanted::view`).
+    view: Option<ViewPixels>,
 }
 
 /// A launch waiting its turn (`Kind::pace_ms`).
@@ -145,6 +152,7 @@ struct Turn {
     key: String,
     args: Vec<String>,
     asking: bool,
+    view: Option<ViewPixels>,
 }
 
 /// One preview: its running worker, when its last one was launched, a launch waiting its turn, and what it showed when
@@ -308,7 +316,7 @@ impl PreviewWorkers {
         let screen = allowed.screen == Permission::Granted && !run.screen_refused;
         let thumbs = thumbs_wanted(&run.targets, want.thumbs && screen);
         self.show(&mut run, Kind::Thumbs, thumbs, now);
-        let live = live_wanted(want.live.as_ref().filter(|_| screen));
+        let live = live_wanted(want.live.as_ref().filter(|_| screen), want.live_pixels);
         self.show(&mut run, Kind::Live, live, now);
         let asked = |page| want.ask == Some(page);
         // The press for a device refused already: nothing opens, and the page is told, so the row can offer the
@@ -444,14 +452,20 @@ impl PreviewWorkers {
     }
 
     /// `kind` shows `wanted`: an open preview showing it already is kept (whatever its permission now: the person's
-    /// press may have started it while macOS asks), and a launch waiting its turn gives way to it; any other is closed,
-    /// and `wanted`'s is launched when it may and its turn has come (`launch_in_turn`).
+    /// press may have started it while macOS asks), told its new box if that changed, and a launch waiting its turn
+    /// gives way to it; any other is closed, and `wanted`'s is launched when it may and its turn has come
+    /// (`launch_in_turn`).
     fn show(self: &Arc<Self>, run: &mut Running, kind: Kind, wanted: Option<Wanted>, now: u64) {
         let slot = run.slot(kind);
         slot.waiting = None;
-        if let (Some(open), Some(wanted)) = (&slot.open, &wanted)
+        if let (Some(open), Some(wanted)) = (&mut slot.open, &wanted)
             && open.what == wanted.what
         {
+            if open.view != wanted.view {
+                tracing::info!(?kind, view = ?wanted.view, "recorder: a preview's box changed size");
+                open.view = wanted.view;
+                write_line(&mut open.worker, &Command::ViewSize { view: open.view });
+            }
             return;
         }
         close(run, kind, now);
@@ -460,6 +474,7 @@ impl PreviewWorkers {
             key,
             args: Some(args),
             asking,
+            view,
         }) = wanted
         else {
             return;
@@ -476,6 +491,7 @@ impl PreviewWorkers {
             key,
             args,
             asking,
+            view,
         };
         self.launch_in_turn(run, kind, turn, now);
     }
@@ -500,6 +516,7 @@ impl PreviewWorkers {
             key,
             args,
             asking,
+            view,
         } = turn;
         let io = match self.launch.spawn(&args) {
             Ok(io) => io,
@@ -531,6 +548,7 @@ impl PreviewWorkers {
             key,
             said_failed: false,
             asking,
+            view,
         });
         self.read_in_background(generation, io.stdout, io.wait);
     }
@@ -814,6 +832,7 @@ fn meter_wanted(mic: Option<&String>, permission: Permission, asked: bool) -> Op
         key: mic.clone(),
         args,
         asking: may == Some(true),
+        view: None,
     })
 }
 
@@ -829,6 +848,7 @@ fn thumbs_wanted(targets: &[(String, Target)], wanted: bool) -> Option<Wanted> {
         key: String::new(),
         args: Some(args.to_vec()),
         asking: false,
+        view: None,
     })
 }
 
