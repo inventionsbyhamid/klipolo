@@ -250,7 +250,7 @@ impl Refit {
             1 => "a transition no longer fits".to_owned(),
             n => format!("{n} transitions no longer fit"),
         };
-        format!("At that speed {fits}, so the change waits for you to apply it.")
+        format!("At that speed {fits}, so the change waits for you.")
     }
 }
 

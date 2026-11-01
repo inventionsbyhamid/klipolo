@@ -485,7 +485,7 @@ fn a_speed_that_leaves_a_transition_no_room_waits_for_the_person_and_says_why() 
     assert_eq!(out.notes, Vec::<String>::new());
     assert_eq!(
         out.waits,
-        ["At that speed a transition no longer fits, so the change waits for you to apply it."]
+        ["At that speed a transition no longer fits, so the change waits for you."]
     );
 }
 
