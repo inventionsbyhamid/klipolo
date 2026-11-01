@@ -25,7 +25,7 @@ use crate::media::key::{CacheKind, stem};
 use crate::media::keyframes::{self, KeyRecorder, StoredKeys};
 use crate::media::sprite::{Sprite, chunk_of, chunk_start_us, chunks_for, slot_of};
 use crate::media::store::Shared;
-use crate::media::thumbs::{Fill, has_chunk, write_chunk};
+use crate::media::thumbs::{Fill, has_chunk, poster_in, write_chunk, write_poster};
 
 /// Thumbnail events for one file at most this often while a scan runs (the store sends a trailing one at its end).
 const EVENT_EVERY: Duration = Duration::from_millis(500);
@@ -53,6 +53,8 @@ pub(super) struct Cutter {
     need: BTreeSet<u32>,
     /// The keyframe index isn't stored yet.
     want_keys: bool,
+    /// The poster isn't on disk yet: it is cut from the first picture chunk 0 gets.
+    want_poster: bool,
     keys: KeyRecorder,
     meta: Option<StoredKeys>,
     sprite: Option<Sprite>,
@@ -76,6 +78,7 @@ impl Cutter {
             chunks: 0,
             need: BTreeSet::new(),
             want_keys: false,
+            want_poster: false,
             keys: KeyRecorder::default(),
             meta: None,
             sprite: None,
@@ -133,6 +136,8 @@ impl Cutter {
             .filter(|&c| !has_chunk(root, &self.stem, c))
             .collect();
         self.want_keys = !keyframes::has(root, &self.stem);
+        // Only with chunk 0: a file whose first chunk is cut already keeps its tile as its picture.
+        self.want_poster = self.need.contains(&0) && poster_in(root, &self.stem).is_none();
         if self.need.is_empty() && !self.want_keys {
             self.stopped = true;
             return None;
@@ -208,6 +213,23 @@ impl Cutter {
                 self.notify();
             }
             Err(e) => self.failed(&e),
+        }
+    }
+
+    /// Writes the decoder's current frame as the poster (once, whether it was written or not).
+    fn poster(&mut self) {
+        self.want_poster = false;
+        let Some((size, (planes, strides))) = self.video.as_mut().and_then(|v| v.poster_planes())
+        else {
+            return;
+        };
+        let steps = &*self.shared.steps;
+        let written = write_poster(steps, &self.shared.root, &self.stem, size, planes, strides);
+        // A full disk stops the scan as a chunk's would; anything else costs the poster only, never the tiles.
+        match written {
+            Err(e) if classify(&e) == DiskReason::Full => self.failed(&e),
+            Err(e) => self.warn(&format!("poster not written: {e}")),
+            Ok(()) => {}
         }
     }
 
