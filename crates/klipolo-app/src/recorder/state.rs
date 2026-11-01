@@ -14,6 +14,7 @@ use klipolo_capture::protocol::Command;
 use klipolo_capture::session::ImportTarget;
 use klipolo_model::coded::{CodedError, Said};
 use klipolo_platform::clock::{Clock, HostClock};
+use klipolo_platform::dock::DockItem;
 use tauri::{AppHandle, Manager};
 
 use super::env::{Env, Sink};
@@ -198,6 +199,20 @@ impl RecorderState {
 
     fn on(&self) -> Result<&On, CodedError> {
         self.on.as_ref().ok_or_else(words::test_run)
+    }
+
+    /// The Dock icon's menu now (`dock`): the recorder's items while a take records; none in a test run.
+    pub(super) fn dock_items(&self) -> Vec<DockItem> {
+        (self.on.as_ref())
+            .map(|on| on.recorder.dock_items())
+            .unwrap_or_default()
+    }
+
+    /// A click on the Dock icon's menu item `id` (`dock`); nothing in a test run.
+    pub(super) fn dock_click(&self, id: &str) {
+        if let Some(on) = &self.on {
+            on.recorder.dock_click(id);
+        }
     }
 
     #[cfg(test)]
