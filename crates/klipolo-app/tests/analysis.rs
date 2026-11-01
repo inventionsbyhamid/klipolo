@@ -2724,7 +2724,8 @@ async fn every_file_of_a_recording_is_analysed_for_words_only() {
 
 /// A take's captions are its voice's words where the take plays them: a transcript on its mic's file (cached, as an
 /// earlier analysis left it) lands on the timeline through the clip's run (`speech::run_spans`), counting the mic's
-/// late start and the clip before the take. The screen and the camera, never asked for, have no words.
+/// late start and the clip before the take. Its screen and camera files have no sound, as a take Klipolo records has
+/// them, so the mic's run is the clip's only one, and no words are found for them.
 #[tokio::test(flavor = "multi_thread")]
 async fn captions_follow_a_recording_clip() {
     // A clip imported on its own plays before the take.
@@ -2743,6 +2744,16 @@ async fn captions_follow_a_recording_clip() {
         AssetKind::Video,
         &h.clip("camera.mov", 2),
         SECONDS,
+    );
+    let (screen, camera) = (
+        Asset {
+            has_audio: false,
+            ..screen
+        },
+        Asset {
+            has_audio: false,
+            ..camera
+        },
     );
     let mic_file = h.clip("mic.m4a", 3);
     let mic = asset("mic", AssetKind::Audio, &mic_file, SECONDS);
@@ -2769,12 +2780,11 @@ async fn captions_follow_a_recording_clip() {
     assert_eq!(speech.transcripts.keys().collect::<Vec<_>>(), ["mic"]);
     let take_clip = &project.timeline.main[1].id;
     let spans = run_spans(&project);
-    assert!(
-        spans
-            .iter()
-            .any(|s| &s.clip == take_clip && s.asset == "mic"),
-        "{spans:?}"
-    );
+    let heard_in_take: Vec<&str> = (spans.iter())
+        .filter(|s| &s.clip == take_clip)
+        .map(|s| s.asset.as_str())
+        .collect();
+    assert_eq!(heard_in_take, ["mic"], "{spans:?}");
     let words = spoken(&project, &speech);
     let said: Vec<(&str, Us, Us)> = words
         .shown(&project, &speech)
