@@ -5,7 +5,7 @@
 # is 48 kHz 16-bit mono and under 3 s; every music bed is 16 to 30 s and loops at a zero crossing without a click (two
 # copies back to back are as smooth at the join as anywhere else); every sticker is a 1024 x 1024 RGBA PNG with
 # transparent corners; every background an RGB PNG sized for a 16:9 or 9:16 frame, each in both; the pack holds the
-# items listed below, CC0-1.0, and is under 10.5 MB. Then scripts/check-library-sounds.py measures each sound and fails
+# items listed below, CC0-1.0, and is under 10.5 MiB. Then scripts/check-library-sounds.py measures each sound and fails
 # on any out of bounds.
 #   scripts/gen-library.test.sh
 set -euo pipefail
