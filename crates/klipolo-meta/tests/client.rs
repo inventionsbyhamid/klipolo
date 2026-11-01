@@ -1923,3 +1923,31 @@ async fn a_stream_that_fails_or_ends_early_is_an_error() {
         .unwrap_err();
     assert!(matches!(cut, MetaError::Decode(_)), "{cut:?}");
 }
+
+#[tokio::test]
+async fn an_event_spread_over_several_data_lines_is_read_whole() {
+    let server = MockServer::start().await;
+    // Server-sent events may split one event's data over several `data:` lines, joined by newlines.
+    let completed = json!({"type": "response.completed", "response": {
+        "model": "sam-3.1", "status": "completed", "output": [],
+        "usage": {"video_frames_processed": 60}
+    }})
+    .to_string();
+    // Split where JSON allows a line break: after its first field.
+    let (head, tail) = completed.split_at(completed.find(',').unwrap() + 1);
+    let body = format!(
+        "event: response.output_text.delta\ndata: {{\"type\": \"response.output_text.delta\",\ndata: \"delta\": \"<0f>\"}}\n\n\
+         event: response.completed\ndata: {head}\ndata: {tail}\n\n"
+    );
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(body, "text/event-stream"))
+        .mount(&server)
+        .await;
+    let out = direct(&server)
+        .respond_stream(json!({"model": "sam-3.1"}))
+        .await
+        .unwrap();
+    assert_eq!(out.output_text.as_deref(), Some("<0f>"));
+    assert_eq!(out.usage.video_frames_processed, 60);
+}

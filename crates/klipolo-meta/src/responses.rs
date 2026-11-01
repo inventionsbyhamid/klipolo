@@ -182,12 +182,14 @@ impl ResponseOut {
 struct Events {
     /// Bytes of a line not ended yet.
     partial: Vec<u8>,
+    /// The `data:` lines of the event not ended yet (a blank line ends one): an event may spread over several.
+    data: Vec<String>,
     text: String,
     done: Option<Value>,
 }
 
 impl Events {
-    /// The next bytes of the stream: every whole `data:` line in them read.
+    /// The next bytes of the stream: every whole event in them read.
     fn read(&mut self, bytes: &[u8]) -> Result<(), MetaError> {
         self.partial.extend_from_slice(bytes);
         while let Some(end) = self.partial.iter().position(|b| *b == b'\n') {
@@ -197,11 +199,24 @@ impl Events {
         Ok(())
     }
 
+    /// One line: a `data:` line is kept for its event, and a blank line ends the event. Other fields (`event:`, `id:`)
+    /// and comments are passed over.
     fn line(&mut self, line: &[u8]) -> Result<(), MetaError> {
         let line = String::from_utf8_lossy(line);
-        let Some(data) = line.trim_end().strip_prefix("data:") else {
-            return Ok(());
-        };
+        let line = line.trim_end_matches(['\r', '\n']);
+        if line.is_empty() {
+            return self.event();
+        }
+        if let Some(data) = line.strip_prefix("data:") {
+            self.data
+                .push(data.strip_prefix(' ').unwrap_or(data).to_owned());
+        }
+        Ok(())
+    }
+
+    /// The event its `data:` lines make, joined by newlines.
+    fn event(&mut self) -> Result<(), MetaError> {
+        let data = std::mem::take(&mut self.data).join("\n");
         let data = data.trim();
         if data.is_empty() || data == "[DONE]" {
             return Ok(());
@@ -234,6 +249,8 @@ impl Events {
     fn finish(mut self) -> Result<ResponseOut, MetaError> {
         let rest = std::mem::take(&mut self.partial);
         self.line(&rest)?;
+        // A stream that ends without a blank line still ends its last event.
+        self.event()?;
         let raw = self
             .done
             .take()
