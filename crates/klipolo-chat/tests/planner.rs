@@ -1115,7 +1115,11 @@ fn with_dissolve() -> Project {
     broll.has_audio = false;
     p.assets.push(broll);
     p.timeline.main[0].source_out_us = secs(29.0);
-    let mut b = Clip::new(ClipSource::Asset { id: "broll".into() }, secs(2.0), secs(12.0));
+    let mut b = Clip::new(
+        ClipSource::Asset { id: "broll".into() },
+        secs(2.0),
+        secs(12.0),
+    );
     b.id = "b".into();
     p.timeline.main.push(b);
     let dissolve = klipolo_model::timeline::Transition {
