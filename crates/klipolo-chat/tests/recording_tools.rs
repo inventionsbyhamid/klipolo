@@ -1012,3 +1012,94 @@ fn the_reply_says_what_was_left_as_it_was() {
     let out = now(plan(&model, &[], &ctx, "separate my camera", &i, &p)).unwrap();
     assert_eq!(out.reply, "That camera is already its own layer.");
 }
+
+// ---- The context.
+
+/// The context's clip lines for `p`, playhead at 0, nothing analyzed.
+fn clip_lines(p: &Project) -> Vec<String> {
+    let ctx = build_context(
+        p,
+        &Default::default(),
+        &HashMap::new(),
+        &HashMap::new(),
+        &View::default(),
+        &Default::default(),
+    );
+    (ctx.text.lines())
+        .skip_while(|l| *l != "Clips on the main track:")
+        .skip(1)
+        .take_while(|l| !l.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn the_context_names_each_recording_with_its_camera_and_sounds() {
+    assert_eq!(
+        clip_lines(&two_takes()),
+        [
+            "c1 0.0-30.0 Recording 1 (camera bubble bottomRight circle; sounds mic, computer sound)",
+            "c2 30.0-40.0 broll.mov",
+            "c3 40.0-60.0 Recording 2 (camera bubble bottomRight circle; sounds mic)",
+        ]
+    );
+    // A mode for a format the video has is said; one for a format it doesn't is not.
+    assert_eq!(
+        clip_lines(&with_portrait())[0],
+        "c1 0.0-30.0 Recording 1 (camera bubble bottomRight circle, portrait splitBottom; sounds mic, computer sound)"
+    );
+}
+
+#[test]
+fn the_context_says_what_the_person_changed() {
+    let p = after(
+        &two_takes(),
+        &[
+            mode(json!(["c3"]), "hidden", json!(null)),
+            mute(json!(["c3"]), true),
+            call(
+                "setSourceVolume",
+                json!({"source": "computerSound", "volume": 50, "which": null, "clips": null}),
+            ),
+            adjust(json!({"clips": ["c1"], "position": "topLeft", "shape": "rounded"})),
+        ],
+    );
+    assert_eq!(
+        clip_lines(&p),
+        [
+            "c1 0.0-30.0 Recording 1 (camera bubble topLeft rounded; sounds mic, computer sound at 50%)",
+            "c2 30.0-40.0 broll.mov",
+            "c3 40.0-60.0 Recording 2 (camera hidden; sounds mic muted)",
+        ]
+    );
+    let p = after(
+        &two_takes(),
+        &[
+            call("detachCamera", json!({"clips": ["c1"]})),
+            separate("mic", json!(["c1"])),
+        ],
+    );
+    assert_eq!(
+        clip_lines(&p)[0],
+        "c1 0.0-30.0 Recording 1 (camera on its own layer; sounds mic on its own track, computer sound)"
+    );
+}
+
+#[test]
+fn the_context_numbers_several_mics_and_names_a_camera_only_take() {
+    let mut p = two_takes();
+    p.assets.push(asset("mic1b", AssetKind::Audio, 60.0, true));
+    p.recordings[0]
+        .sources
+        .push(source("mic-2", SourceRole::Mic, "mic1b", 60.0));
+    p.recordings[1].primary = "camera".into();
+    p.timeline.main[0].speed = 2.0;
+    assert_eq!(
+        clip_lines(&p),
+        [
+            "c1 0.0-15.0 Recording 1 (speed 2x; camera bubble bottomRight circle; sounds mic, computer sound, mic 2)",
+            "c2 15.0-25.0 broll.mov",
+            "c3 25.0-45.0 Recording 2 (camera only; sounds mic)",
+        ]
+    );
+}

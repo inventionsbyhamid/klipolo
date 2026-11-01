@@ -40,14 +40,14 @@ pub const NO_CAMERA: &str = "No clip in your video has a camera.";
 
 /// The cameras a camera tool acts on, in timeline order.
 #[derive(Debug, Default)]
-pub(super) struct Cameras {
+pub(crate) struct Cameras {
     /// Clips that draw their own camera (a bubble or a split, maybe hidden).
-    pub(super) on_clips: Vec<Id>,
+    pub(crate) on_clips: Vec<Id>,
     /// Clips whose camera is a layer of its own now, with that layer (the one reaching furthest, if several play over
     /// the clip).
-    pub(super) separate: Vec<(Id, Id)>,
+    pub(crate) separate: Vec<(Id, Id)>,
     /// Clips whose camera is their footage (a camera only take): they have no bubble, so only the mirror reaches them.
-    pub(super) footage: Vec<Id>,
+    pub(crate) footage: Vec<Id>,
 }
 
 impl Cameras {
@@ -61,16 +61,28 @@ impl Cameras {
     }
 }
 
-/// Every camera of the clips `named` (None: every clip) in `work`, in timeline order: on its clip, separate, or the
-/// clip's footage. A clip's camera is separate once a video layer of its recording's camera files plays over the clip
-/// (the model's own test before `DetachSource`): that layer is the camera now, and the clip's own stays hidden. Refused
-/// when none of the clips has a camera: back to the model when it named them, else to the person. O(clips + layers),
-/// plus a binary search per clip into the camera layers sorted by start.
+/// `every_camera` of the clips `named` (None: every clip), refused when none of them has a camera: back to the model
+/// when it named them, else to the person.
 pub(super) fn find(
     work: &Project,
     tool: &str,
     named: Option<&HashSet<Id>>,
 ) -> Result<Cameras, Refused> {
+    let cams = every_camera(work, named);
+    if cams.on_clips.is_empty() && cams.separate.is_empty() && cams.footage.is_empty() {
+        return Err(match named {
+            Some(_) => to_model(format!("{tool}: none of those clips has a camera.")),
+            None => to_person(NO_CAMERA.to_owned()),
+        });
+    }
+    Ok(cams)
+}
+
+/// Every camera of the clips `named` (None: every clip) in `work`, in timeline order: on its clip, separate, or the
+/// clip's footage. A clip's camera is separate once a video layer of its recording's camera files plays over the clip
+/// (the model's own test before `DetachSource`): that layer is the camera now, and the clip's own stays hidden.
+/// O(clips + layers), plus a binary search per clip into the camera layers sorted by start.
+pub(crate) fn every_camera(work: &Project, named: Option<&HashSet<Id>>) -> Cameras {
     // Each recording's camera files (one per run of its camera; usually one).
     let camera_of: HashMap<&str, Vec<&str>> = (work.recordings.iter())
         .filter_map(|r| {
@@ -131,13 +143,7 @@ pub(super) fn find(
         }
         start = end;
     }
-    if cams.on_clips.is_empty() && cams.separate.is_empty() && cams.footage.is_empty() {
-        return Err(match named {
-            Some(_) => to_model(format!("{tool}: none of those clips has a camera.")),
-            None => to_person(NO_CAMERA.to_owned()),
-        });
-    }
-    Ok(cams)
+    cams
 }
 
 /// `cams`, when one of them is drawn by its clip or is a layer of its own; else the person is told the camera is the

@@ -67,8 +67,10 @@ use crate::evidence::{Evidence, Unfounded};
 use crate::library::Library;
 use crate::sanitize;
 use crate::tools::{Moment, PictureSize, Position, ToolCall};
+pub(crate) use cameras::every_camera;
 use map::Map;
 pub use media::{sticker_ops, sticker_placement};
+pub(crate) use sources::{OwnTrack, kind_of};
 use trim::Trim;
 
 /// What the person is told when a tool needs a clip's words and Klipolo is still hearing or timing them.

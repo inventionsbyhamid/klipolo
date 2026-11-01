@@ -23,7 +23,7 @@ use super::{FORMATS, Tool, ToolCall};
 pub const SOURCE_VOLUMES: RangeInclusive<f64> = 0.0..=200.0;
 
 /// A recorded sound, by what it is.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Sound {
     Mic,
     /// The computer's own sound (a system audio source).

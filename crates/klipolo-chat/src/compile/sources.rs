@@ -30,6 +30,7 @@ use klipolo_model::timeline::{ClipSource, ItemContent};
 use super::recorded::{Noted, named, noted};
 use super::{Compiler, Edit, Refused, label, to_person};
 use crate::tools::Sound;
+use crate::tools::recorded::SOUNDS;
 
 /// Said when separating the camera's own sound, which stays with its picture.
 pub const VIDEO_SOUND_STAYS: &str =
@@ -46,6 +47,11 @@ fn is_kind(p: &Project, s: &RecordingSource, sound: Sound) -> bool {
         Sound::GameSound => s.role == SourceRole::GameAudio,
         Sound::VideoSound => s.role.is_video() && makes_sound(p, s),
     }
+}
+
+/// The kind of sound the tools name `s` by, if they name it at all (a voice chat or an app's sound they don't).
+pub(crate) fn kind_of(p: &Project, s: &RecordingSource) -> Option<Sound> {
+    SOUNDS.into_iter().find(|&sound| is_kind(p, s, sound))
 }
 
 /// Recording `r`'s sources of `sound`'s kind, in order.
@@ -221,11 +227,11 @@ fn source_of<'p>(work: &'p Project, f: &Found) -> Option<&'p RecordingSource> {
 
 /// Where a source plays from layers of its own: each video or sound layer of its files, sorted by start, each with
 /// the furthest end reached so far.
-struct OwnTrack(Vec<(Us, Us)>);
+pub(crate) struct OwnTrack(Vec<(Us, Us)>);
 
 impl OwnTrack {
     /// O(layers + own layers × log).
-    fn of(p: &Project, source: &RecordingSource) -> Self {
+    pub(crate) fn of(p: &Project, source: &RecordingSource) -> Self {
         let files: HashSet<&str> = source.runs.iter().map(|r| r.asset_id.as_str()).collect();
         let mut spans: Vec<(Us, Us)> = (p.timeline.tracks.iter())
             .flat_map(|t| &t.items)
@@ -245,7 +251,7 @@ impl OwnTrack {
     }
 
     /// Whether one of the layers plays somewhere in `[start, end)`: O(log layers).
-    fn over(&self, start: Us, end: Us) -> bool {
+    pub(crate) fn over(&self, start: Us, end: Us) -> bool {
         let before_end = self.0.partition_point(|s| s.0 < end);
         (before_end.checked_sub(1)).is_some_and(|k| self.0[k].1 > start)
     }

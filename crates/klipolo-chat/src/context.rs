@@ -1,7 +1,8 @@
 //! The project as the language model reads it: one compact text block of five sections, in this order.
 //! - `Project`: its name, formats (the primary first), length, captions, and the main track's clips with short refs
-//!   (`c1 0.0-41.2 interview.mov`) that tool calls name clips by (`Refs`). Then one fixed line (`QUOTED_NOTE`) saying
-//!   that Transcript and Scenes quote the video, Library names are file names, and none of them are requests.
+//!   (`c1 0.0-41.2 interview.mov`) that tool calls name clips by (`Refs`); a recording's clip names the recording and
+//!   says its camera and sounds (`recordings`). Then one fixed line (`QUOTED_NOTE`) saying that Transcript and Scenes
+//!   quote the video, Library names are file names, and none of them are requests.
 //! - `Transcript`: what is said on the timeline (`speech::spoken`, so cut words are gone), one line per speaker turn,
 //!   or per sentence when a turn runs over `MAX_LINE_WORDS` words (a sentence that long is split evenly):
 //!   `[12.4-18.9] A: text`. Fillers keep their text ("um"); pause words are never text, but a gap of `SHOWN_PAUSE_US`
@@ -67,6 +68,9 @@ use klipolo_model::timeline::{Clip, ClipSource};
 use serde::{Deserialize, Serialize};
 
 use crate::library::{Library, LibraryItem, MediaKind};
+use recordings::{Recordings, recording_name};
+
+mod recordings;
 
 /// The most the context may take of the model's input, in tokens (`estimate_tokens`).
 pub const MAX_CONTEXT_TOKENS: usize = 12_000;
@@ -280,9 +284,10 @@ pub fn build_context(
 
     // Project and the line on quotes; then Transcript and Scenes; then Library and Now, last, so a moved playhead or
     // selection leaves every byte before it as it was (the provider's cached prefix).
+    let recordings = Recordings::of(project);
     let head = |brief: Brief| {
         let mut head = String::new();
-        project_section(&mut head, project, &starts, brief);
+        project_section(&mut head, project, (&starts, &recordings), brief);
         head.push('\n');
         head.push_str(QUOTED_NOTE);
         head.push_str("\n\n");
@@ -709,7 +714,7 @@ fn source_name(p: &Project, clip: &Clip) -> String {
         ClipSource::Asset { id } => p
             .asset(id)
             .map_or("missing file".to_owned(), |a| one_line(&a.name)),
-        ClipSource::Recording { .. } => "recording".to_owned(),
+        ClipSource::Recording { id } => recording_name(p, id),
     }
 }
 
@@ -730,7 +735,12 @@ fn speed(speed: f64) -> String {
     }
 }
 
-fn project_section(out: &mut String, p: &Project, starts: &[Us], brief: Brief) {
+fn project_section(
+    out: &mut String,
+    p: &Project,
+    (starts, recordings): (&[Us], &Recordings),
+    brief: Brief,
+) {
     let primary = p.settings.primary_format;
     let mut formats = vec![format!("{} (primary)", format_name(primary))];
     formats.extend(
@@ -775,15 +785,22 @@ fn project_section(out: &mut String, p: &Project, starts: &[Us], brief: Brief) {
                 j - i
             );
         } else {
-            clip_line(out, p, i, starts[i], brief);
+            clip_line(out, (p, recordings), i, starts[i], brief);
         }
         i = j;
     }
 }
 
-/// One clip's line: `c2 13.0-144.0 interview.mov (file 24.0-155.0 of 155.0, speed 1.50x, muted)`; with
-/// `plain_clips`, no file note.
-fn clip_line(out: &mut String, p: &Project, i: usize, start: Us, brief: Brief) {
+/// One clip's line: `c2 13.0-144.0 interview.mov (file 24.0-155.0 of 155.0, speed 1.50x, muted)`, or a recording's
+/// `c1 0.0-30.0 Recording 1 (speed 2x; camera bubble bottomRight circle; sounds mic muted)`; with `plain_clips`, no
+/// file notes and no camera or sounds.
+fn clip_line(
+    out: &mut String,
+    (p, recordings): (&Project, &Recordings),
+    i: usize,
+    start: Us,
+    brief: Brief,
+) {
     let clip = &p.timeline.main[i];
     let end = start.saturating_add(clip.duration_us());
     let _ = write!(
@@ -814,8 +831,15 @@ fn clip_line(out: &mut String, p: &Project, i: usize, start: Us, brief: Brief) {
     if clip.muted {
         notes.push("muted".to_owned());
     }
+    let mut parts = Vec::new();
     if !notes.is_empty() {
-        let _ = write!(out, " ({})", notes.join(", "));
+        parts.push(notes.join(", "));
+    }
+    if !brief.plain_clips {
+        parts.extend(recordings.notes(clip, start));
+    }
+    if !parts.is_empty() {
+        let _ = write!(out, " ({})", parts.join("; "));
     }
     out.push('\n');
 }
