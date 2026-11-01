@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
+use klipolo_app::export::jobs::Owner;
 use klipolo_app::export::{
     ExportState, StartSteps, Started, create_job, freeze, make_folder, run, start_on_slot,
 };
@@ -91,8 +92,17 @@ impl StartSteps for Steps {
         async move { Ok(batch) }
     }
 
+    /// No Start over here: no kept job is ever replaced.
+    fn owner(&self, _job: &str) -> Owner {
+        Owner::Gone
+    }
+
     fn create(&self, batch: Batch) -> impl Future<Output = Result<ExportJob, Said>> + Send {
         create_job(batch)
+    }
+
+    fn discard(&self, _job: &str) -> Result<(), Said> {
+        Ok(())
     }
 
     fn drop_new(&self, job: &ExportJob) {
