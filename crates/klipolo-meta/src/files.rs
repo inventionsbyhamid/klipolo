@@ -2,6 +2,7 @@
 
 use std::path::Path;
 
+use reqwest::header::{CONTENT_LENGTH, CONTENT_TYPE};
 use reqwest::multipart::{Form, Part};
 use reqwest::{Body, StatusCode};
 use serde::Deserialize;
@@ -42,6 +43,29 @@ impl MetaClient {
             .text("expires_after[seconds]", UPLOAD_EXPIRY_SECONDS.to_string())
             .part("file", file);
         let request = self.http.post(self.meta_url("files")).multipart(form);
+        let response = self.send_meta(request).await?;
+        let uploaded: Uploaded = self.read_json(response).await?;
+        Ok(uploaded.id)
+    }
+
+    /// Uploads a video for SAM and returns its id. With the person's key it
+    /// goes to Meta as it is (`upload_file`). Through Klipolo's relay it goes
+    /// to the relay's `sam/videos` as the raw video, streamed: the relay writes
+    /// its own copy for SAM, so it knows the frames Meta will bill, and uploads
+    /// that.
+    pub async fn upload_sam_video(&self, path: &Path) -> Result<String, MetaError> {
+        if !self.is_relay() {
+            return self.upload_file(path, "video/mp4").await;
+        }
+        let unreadable = |_| self.unreadable(path);
+        let file = tokio::fs::File::open(path).await.map_err(unreadable)?;
+        let len = file.metadata().await.map_err(unreadable)?.len();
+        let request = self
+            .http
+            .post(self.meta_url("sam/videos"))
+            .header(CONTENT_TYPE, "video/mp4")
+            .header(CONTENT_LENGTH, len)
+            .body(Body::from(file));
         let response = self.send_meta(request).await?;
         let uploaded: Uploaded = self.read_json(response).await?;
         Ok(uploaded.id)
