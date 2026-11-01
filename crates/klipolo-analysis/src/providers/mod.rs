@@ -1,5 +1,6 @@
 //! The services the analysis needs, behind interfaces it owns: a `Transcriber` hears speaker turns in a WAV, an
-//! `Aligner` times each turn's words, a `SceneLogger` watches a video and logs what happens in it. Their types and
+//! `Aligner` times each turn's words, a `SceneLogger` watches a video and logs what happens in it, a `SubjectTracker`
+//! finds and follows every person (or other named thing) frame by frame. Their types and
 //! errors are Klipolo's own, so no vendor's type reaches the pipeline: each vendor lives in an adapter that implements
 //! the traits and maps its types and errors (`meta` today). Tests use small fakes of the traits.
 //!
@@ -209,6 +210,76 @@ pub trait SceneLogger: Send + Sync {
         video: &'a Path,
         fps: f64,
     ) -> BoxFuture<'a, Result<SceneAnswer, ProviderError>>;
+}
+
+/// One thing a tracker found on one frame: its box as parts of the picture's width and height (left, top, right,
+/// bottom, the picture as the file shows it).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackedBox {
+    /// The same thing keeps its id from frame to frame (mostly: one that leaves and comes back may get a new one).
+    pub id: u32,
+    pub left: f64,
+    pub top: f64,
+    pub right: f64,
+    pub bottom: f64,
+    /// 0 to 1, when the tracker says how sure it is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f32>,
+}
+
+impl TrackedBox {
+    pub fn width(&self) -> f64 {
+        (self.right - self.left).max(0.0)
+    }
+
+    pub fn height(&self) -> f64 {
+        (self.bottom - self.top).max(0.0)
+    }
+
+    pub fn centre_x(&self) -> f64 {
+        (self.left + self.right) / 2.0
+    }
+}
+
+/// Everything a tracker found on one frame of the video it was sent (frame 0 is its first).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackedFrame {
+    pub frame: u32,
+    pub boxes: Vec<TrackedBox>,
+}
+
+/// A tracker's answer for one video.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Tracking {
+    /// In frame order; a frame with nothing found may be missing.
+    pub frames: Vec<TrackedFrame>,
+    /// The frames the call was billed for.
+    pub frames_billed: u64,
+    /// What the call cost, in US dollars.
+    pub cost_usd: f64,
+}
+
+/// A video to every match of a short noun phrase ("person", "man in red"), frame by frame.
+pub trait SubjectTracker: Send + Sync {
+    /// The model's id, kept with what it found.
+    fn model(&self) -> &str;
+
+    /// The most frames one video may have.
+    fn max_frames(&self) -> u64;
+
+    /// What tracking a video of `frames` frames is expected to cost, in US dollars, before any call (the price shown
+    /// before it runs).
+    fn estimate_usd(&self, frames: u64) -> f64;
+
+    /// Every `phrase` in `video` (an MP4 of at most `max_frames` frames), on each of its frames.
+    fn track<'a>(
+        &'a self,
+        video: &'a Path,
+        phrase: &'a str,
+    ) -> BoxFuture<'a, Result<Tracking, ProviderError>>;
 }
 
 /// What kind of failure a service reported, which decides what the pipeline does next.
