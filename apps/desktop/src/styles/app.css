@@ -1828,7 +1828,7 @@
 }
 
 .play:disabled {
-  background: var(--color-off);
+  background: var(--color-off-canvas);
   color: var(--color-ink-disabled);
 }
 

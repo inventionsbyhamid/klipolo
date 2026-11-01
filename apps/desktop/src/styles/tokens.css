@@ -21,13 +21,14 @@
   --color-scrim: light-dark(rgb(18 26 51 / 0.32), rgb(3 5 12 / 0.72));
   --color-line: light-dark(#C6CFDB, #252E4C);        /* hairlines and dividers (decorative only) */
   --color-line-strong: light-dark(#717C99, #6772A0); /* borders of controls: 3:1 or more on the window, panels, cards and dialogs */
-  --color-off: light-dark(#E6EAF0, #1E2642);         /* the fill of a disabled button */
+  --color-off: light-dark(#D5DCE6, #1E2642);         /* the fill of a disabled button */
+  --color-off-canvas: light-dark(#CBD3DE, #2B3352);  /* a disabled round button on the window canvas (Play) */
 
   /* ---------- Color: text ---------- */
   --color-ink: light-dark(#121A33, #E9EDF7);         /* primary text, 12:1 or more on every surface */
   --color-ink-soft: light-dark(#4A5470, #A3ADC6);    /* secondary text, 5.2:1 or more */
   --color-ink-faint: light-dark(#56617F, #8E99B8);   /* meta text (times, counts), 4.5:1 or more; not on --color-bay-press */
-  --color-ink-disabled: light-dark(#A1A9BD, #5A6690); /* disabled labels only (exempt from contrast rules) */
+  --color-ink-disabled: light-dark(#8E97AD, #5A6690); /* disabled labels only (exempt from contrast rules) */
   --color-navy: #121A33;         /* text on yellow, in both themes */
 
   /* ---------- Color: roles ---------- */
