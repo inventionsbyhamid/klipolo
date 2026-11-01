@@ -41,6 +41,8 @@ pub enum ReverseFailure {
     Missing { name: String },
     /// This computer has no encoder for the copy.
     NoEncoder,
+    /// An HDR clip where this computer can't write HDR video: never flattened to SDR.
+    NoHdrEncoder,
     /// Stopped on request.
     Stopped,
     /// Reading, writing or the disk failed (logged; the message names no folder).
@@ -202,6 +204,7 @@ pub fn make(
         },
         Err(ReverseError::Stopped) => Err(ReverseFailure::Stopped),
         Err(ReverseError::NoEncoder) => Err(ReverseFailure::NoEncoder),
+        Err(ReverseError::NoHdrEncoder) => Err(ReverseFailure::NoHdrEncoder),
         Err(ReverseError::NoVideo) => Err(ReverseFailure::NotImported),
         Err(ReverseError::Failed(error)) => {
             tracing::warn!(%error, file = %name, "a clip couldn't be reversed");

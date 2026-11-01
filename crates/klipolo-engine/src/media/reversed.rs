@@ -6,7 +6,8 @@
 //!   Source frame `j`, on screen over `[p_j, p_j+1)`, is on screen in the copy over `[end - p_j+1, end - p_j)`, so a
 //!   variable frame rate keeps every frame's length. The frame on screen at `range.start` (it may start before it) is
 //!   the copy's last.
-//! - **Picture:** read twice. A pass over the packets alone (nothing decoded) finds every frame's time; then the range
+//! - **Picture:** read twice. A pass over the packets alone (nothing decoded) finds the frames' times around the range,
+//!   from the keyframe a second before it to a second past it (never the whole file); then the range
 //!   is decoded window by window from its end, each window from the keyframe before it, at most `Reverse::buffer_bytes`
 //!   of upright NV12 pictures held at once, and written newest first. The source's size and quarter turn are kept, the
 //!   picture turned upright (`small_copy::turn_nv12`), so the copy needs no turn of its own. Encoded by the platform's
@@ -15,7 +16,8 @@
 //!   sample first as AAC, placed by the source's `audio_lead_us` as the preview plays it. Past `MAX_SOUND_SECONDS`, or
 //!   for a source without sound, the copy has none.
 //! - **Writing:** a hidden temporary file of its own beside `out`, renamed into place once whole and removed on failure
-//!   or stop. `cancel` is checked between packets and frames; `progress` hears 0 to 1 as frames are written.
+//!   or stop. `cancel` is checked between packets and frames; `progress` hears 0 at once, then 0 to 1 through the first
+//!   pass, the sound and the frames written (`SCAN_SHARE`, `SOUND_SHARE`).
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -47,6 +49,13 @@ pub const MAX_SOUND_SECONDS: i64 = 600;
 const GOP_SECONDS: f64 = 1.0;
 /// Sound handed to the encoder at a time.
 const BLOCK: usize = 4_096;
+/// How far ahead of the range the passes start reading: a frame shown at its start may begin before it.
+const SEEK_MARGIN_US: Us = 1_000_000;
+/// How far past the range's end the first pass reads: B-frames shown in the range are decoded after frames past it.
+const REORDER_US: Us = 1_000_000;
+/// The shares of the progress the first pass and the sound take; the frames written take the rest.
+const SCAN_SHARE: f64 = 0.05;
+const SOUND_SHARE: f64 = 0.05;
 
 /// What to reverse and how.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -79,6 +88,8 @@ pub struct ReversedInfo {
     pub held: RangeUs,
     pub has_audio: bool,
     pub bytes: u64,
+    /// How many of the source's picture packets the first pass read: the stretch around the range, never the whole file.
+    pub scanned_packets: u64,
 }
 
 /// Why no copy was made. The messages name no file.
@@ -86,6 +97,9 @@ pub struct ReversedInfo {
 pub enum ReverseError {
     #[error("the file has no video")]
     NoVideo,
+    /// An HDR (HLG or PQ) source where this computer has no 10-bit HEVC encoder: never flattened to SDR.
+    #[error("this computer can't write HDR video")]
+    NoHdrEncoder,
     #[error("this computer has no video encoder for it")]
     NoEncoder,
     #[error("stopped")]
@@ -145,6 +159,8 @@ fn codec() -> Option<VideoCodec> {
 /// first the frame on screen at the range's start; `end` is where the last stops showing (the range's end, or the
 /// file's last frame's end before it).
 struct Frames {
+    /// The picture packets read to find them.
+    scanned: u64,
     starts: Vec<Us>,
     end: Us,
 }
@@ -183,17 +199,37 @@ fn us_of(stream: &Stream, ts: i64) -> Us {
     ((ts - stream.start) as f64 * f64::from(stream.tb) * 1e6).round() as Us
 }
 
-/// The first pass: every picture packet's time, nothing decoded, kept for the range (`Frames`).
+/// `t` on the file clock as a seek's timestamp (AV_TIME_BASE, µs, on the container's clock): a keyframe at or before it.
+fn seek_ts(stream: &Stream, t: Us) -> i64 {
+    t + (stream.start as f64 * f64::from(stream.tb) * 1e6).round() as i64
+}
+
+/// The first pass: the picture packets' times around the range, nothing decoded, kept for the range (`Frames`). It
+/// starts at the keyframe before `SEEK_MARGIN_US` ahead of the range and stops once packets decode past its end by
+/// `REORDER_US` (a frame shown in the range is decoded before that), so a short stretch of a long file reads only
+/// around it. `progress` hears 0 to 1 as it goes.
 fn frame_times(
     src: &Path,
     range: RangeUs,
     fps: f64,
     cancel: &AtomicBool,
+    progress: &mut dyn FnMut(f64),
 ) -> Result<Frames, ReverseError> {
     let mut input = super::open::input(src).map_err(|e| failed("open", e))?;
     let stream = video_stream(&input)?;
     set_discards(&mut input, Some(stream.index), None);
-    let mut times = Vec::new();
+    let from = range.start - SEEK_MARGIN_US;
+    if from > 0 {
+        let ts = seek_ts(&stream, from);
+        if input.seek(ts, ..ts).is_err() {
+            // It can't seek there: read from the start.
+            input = super::open::input(src).map_err(|e| failed("open", e))?;
+            set_discards(&mut input, Some(stream.index), None);
+        }
+    }
+    let until = range.end + REORDER_US;
+    let span = (until - from.max(0)).max(1) as f64;
+    let (mut times, mut scanned) = (Vec::new(), 0u64);
     while let Some((index, packet)) = next_packet(&mut input).map_err(|e| failed("read", e))? {
         if cancel.load(Ordering::Relaxed) {
             return Err(ReverseError::Stopped);
@@ -201,8 +237,15 @@ fn frame_times(
         if index != stream.index {
             continue;
         }
+        scanned += 1;
         if let Some(pts) = packet.pts() {
             times.push(us_of(&stream, pts));
+        }
+        if let Some(decoded) = packet.dts().or(packet.pts()).map(|t| us_of(&stream, t)) {
+            progress(((decoded - from.max(0)) as f64 / span).clamp(0.0, 1.0));
+            if decoded > until {
+                break;
+            }
         }
     }
     times.sort_unstable();
@@ -229,7 +272,11 @@ fn frame_times(
         Some(_) => range.end,
         None => range.end.min(last + frame_us),
     };
-    Ok(Frames { starts, end })
+    Ok(Frames {
+        scanned,
+        starts,
+        end,
+    })
 }
 
 /// Everything a run holds while it writes.
@@ -281,7 +328,11 @@ fn write_to(
         (width, height)
     };
     let fps = if probe.fps > 0.0 { probe.fps } else { 30.0 };
-    let frames = frame_times(src, spec.range, fps, cancel)?;
+    // The pill moves at once, then through the first pass and the sound, then frame by frame.
+    progress(0.0);
+    let frames = frame_times(src, spec.range, fps, cancel, &mut |done| {
+        progress(SCAN_SHARE * done)
+    })?;
     let (from, end) = (frames.starts[0].max(spec.range.start), frames.end);
 
     let mut output = ffmpeg::format::output_as(tmp, "mov").map_err(|e| failed("create", e))?;
@@ -311,7 +362,9 @@ fn write_to(
         Err(_) if hardware => build(true, &mut output)?,
         Err(e) => return Err(e),
     };
-    let sound = reversed_sound(src, &probe, spec, (from, end), cancel)?;
+    let sound = reversed_sound(src, &probe, spec, (from, end), cancel, &mut |done| {
+        progress(SCAN_SHARE + SOUND_SHARE * done)
+    })?;
     let sound = match sound {
         Some(samples) => {
             let info = AudioInfo::new_raw(Sample::F32(SampleType::Packed), RATE, 2);
@@ -348,6 +401,7 @@ fn write_to(
         held: RangeUs { start: from, end },
         has_audio: writer.sound.is_some(),
         bytes,
+        scanned_packets: frames.scanned,
     })
 }
 
@@ -359,6 +413,7 @@ fn reversed_sound(
     spec: &Reverse,
     (from, end): (Us, Us),
     cancel: &AtomicBool,
+    progress: &mut dyn FnMut(f64),
 ) -> Result<Option<Vec<f32>>, ReverseError> {
     if !probe.has_audio || spec.audio_bps == 0 || end - from > MAX_SOUND_SECONDS * 1_000_000 {
         return Ok(None);
@@ -387,12 +442,15 @@ fn reversed_sound(
                     continue;
                 }
                 if i as usize >= total {
+                    progress(1.0);
                     return Ok(false);
                 }
                 let (l, r) = (frame[0], frame[channels.min(2) - 1]);
                 out[i as usize * 2] = l;
                 out[i as usize * 2 + 1] = r;
             }
+            let read = (at as i64 + (samples.len() / channels) as i64 - first).max(0);
+            progress((read as f64 / total.max(1) as f64).min(1.0));
             Ok(true)
         };
         let decoded = match decode::decode(src, start, Some(until as u64), &mut emit) {
@@ -458,7 +516,12 @@ impl Writer {
                 let j = lo + k;
                 let at = frames.end - frames.end_of(j);
                 self.frame(picture, at)?;
-                progress(self.frames as f64 / count as f64);
+                let done = self.frames as f64 / count as f64;
+                // Exactly 1 at the last frame, whatever the sum rounds to.
+                progress(match self.frames as usize == count {
+                    true => 1.0,
+                    false => SCAN_SHARE + SOUND_SHARE + (1.0 - SCAN_SHARE - SOUND_SHARE) * done,
+                });
             }
             hi = lo;
         }

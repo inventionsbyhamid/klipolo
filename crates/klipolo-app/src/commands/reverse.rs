@@ -88,6 +88,7 @@ fn said(failure: ReverseFailure) -> Said {
             CodedError::new("reverse.missing").with("name", name).into()
         }
         ReverseFailure::NoEncoder => Said::code("reverse.noEncoder"),
+        ReverseFailure::NoHdrEncoder => Said::code("reverse.hdr"),
         ReverseFailure::Stopped => Said::code("reverse.stopped"),
         ReverseFailure::Failed { name } => failed(name),
     }
