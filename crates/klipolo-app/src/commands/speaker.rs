@@ -29,9 +29,6 @@ pub(crate) type SpeakerHandle = Arc<Speaker>;
 const UNDO: &str = "clip.focus.speaker.undo";
 /// The undo step a change of who is kept lands as.
 const KEEP_UNDO: &str = "clip.focus.keep.undo";
-/// Said when who is kept would have to be paid for: the footage isn't tracked (or its voices matched) any more.
-pub(crate) const KEEP_NEEDS_FOLLOW: &str =
-    "Follow the speaker again first. This footage isn't tracked any more.";
 
 /// The app's speaker following: SAM through the saved credentials, tracked footage kept in the analysis cache under
 /// `cache_root`, the small copies made in the app's cache folder, and whoever speaks kept in frame from `voices` (the
@@ -113,8 +110,8 @@ pub(crate) async fn speaker_follow(
 }
 
 /// Keeps `keep` in frame in clip `clip_id` in `format`, made from what its follow tracked and matched: what changed,
-/// as `project_apply` gives it, or why it couldn't (one sentence). Never pays: footage that isn't in the cache any more
-/// is refused.
+/// as `project_apply` gives it, or why it couldn't (one sentence). Never pays: one person or both need only the
+/// tracking, and footage that isn't tracked in the cache any more is refused (`speaker::NOT_TRACKED`).
 #[tauri::command]
 pub(crate) async fn speaker_keep(
     speaker: State<'_, SpeakerHandle>,
@@ -127,17 +124,10 @@ pub(crate) async fn speaker_keep(
         return Err(Said::code("model.clip.fillFocus"));
     }
     let now = Projects::now(&*projects).ok_or_else(|| Said::code("project.none"))?;
-    let ids = std::slice::from_ref(&clip_id);
-    let estimate = speaker.estimate(&now.project, ids, &[format], PERSON).await;
-    if let Some(refusal) = estimate.refusal {
-        return Err(Said::Text(refusal));
-    }
-    if !estimate.cached {
-        return Err(Said::from(KEEP_NEEDS_FOLLOW));
-    }
     let keeps = BTreeMap::from([(clip_id.clone(), keep)]);
+    // From what the follow tracked and matched only: it never pays.
     let followed = speaker
-        .follow_keeping(&now.project, ids, &[format], PERSON, &keeps)
+        .keep(&now.project, std::slice::from_ref(&clip_id), &[format], &keeps)
         .await
         .map_err(Said::Text)?;
     build_and_apply(&projects, Some(&now.project.id), None, KEEP_UNDO, |p| {
