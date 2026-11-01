@@ -18,7 +18,10 @@ use klipolo_model::timeline::{Clip, ClipSource};
 use klipolo_platform::durable::{Durability, Os};
 
 use super::*;
-use crate::project::{ProjectSessionState, create_in, lock, new_project, open_in, save};
+use crate::project::{
+    ProjectSessionState, create_in, lock, new_project, open_in, save, snapshot_now,
+};
+use klipolo_model::history::ListedAs;
 
 /// The library, the stamps file and the thumbnails' folder in `dir`, as the app has them: the library made, the
 /// others not yet.
@@ -751,4 +754,43 @@ fn stamping_leaves_a_recent_json_it_cant_read() {
     assert!(stamp(&stamps, &library.join("New.klipolo"), 6_000).is_err());
     fs::set_permissions(&stamps, fs::Permissions::from_mode(0o644)).unwrap();
     assert_eq!(on_disk(&stamps), BTreeMap::from([(key(&kept), 5_000)]));
+}
+
+/// A project made before new projects took their file's number keeps the name inside its file ("Untitled project") while
+/// the list names it by its file ("Untitled project 3"), as another project shares that name. Opened, it says the name
+/// it is listed by, so the page shows that one everywhere, and its file isn't rewritten for it. A project listed by its
+/// own name says nothing more, and neither does one renamed since (its own name is the one listed).
+#[test]
+fn an_older_project_opens_with_the_name_it_is_listed_by() {
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, _) = folders(dir.path());
+    let state = ProjectSessionState::default();
+    state.remember_last_in(stamps.with_file_name("last-project"));
+    let untitled = Project::new("Untitled project");
+    let first = library.join("Untitled project.klipolo");
+    let third = library.join("Untitled project 3.klipolo");
+    save(&first, &untitled, Durability::Ordered).unwrap();
+    save(&third, &untitled, Durability::Ordered).unwrap();
+    let demo = saved(&library, &Project::new("Demo"), 1_000);
+    let bytes = fs::read(&third).unwrap();
+
+    let opened = open_in(&state, &third).unwrap();
+    assert_eq!(opened.project.name, "Untitled project");
+    let listed = Some(ListedAs {
+        name: "Untitled project".into(),
+        file_name: "Untitled project 3".into(),
+    });
+    assert_eq!(opened.listed_as, listed);
+    assert_eq!(snapshot_now(&state).unwrap().listed_as, listed, "a reload says so too");
+    assert_eq!(fs::read(&third).unwrap(), bytes, "its file isn't rewritten");
+    let rows = recent_in(&library, &stamps, None, RECENT_LIMIT).unwrap();
+    let row = rows.iter().find(|row| Path::new(&row.path) == third).unwrap();
+    assert_eq!(row.name, "Untitled project 3", "the name the list shows");
+
+    assert_eq!(open_in(&state, &first).unwrap().listed_as, None, "its file's name is its own");
+    assert_eq!(open_in(&state, &demo).unwrap().listed_as, None);
+    let mut renamed = untitled.clone();
+    renamed.name = "Kiln vlog".into();
+    save(&third, &renamed, Durability::Ordered).unwrap();
+    assert_eq!(open_in(&state, &third).unwrap().listed_as, None, "renamed");
 }

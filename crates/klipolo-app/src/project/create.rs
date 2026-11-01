@@ -63,6 +63,7 @@ pub(crate) fn create_file_in(
         let _ = std::fs::remove_file(&file);
     })?;
     snapshot.opening = Some(opening);
+    listed(state, &file, &mut snapshot);
     Ok((snapshot, file))
 }
 
@@ -71,14 +72,24 @@ pub(crate) fn open_in(state: &ProjectSessionState, file: &Path) -> Result<Snapsh
     let open = open_file(file, &state.pack())?;
     let mut snapshot = open.document.snapshot();
     snapshot.opening = Some(set_open(state, Some(open))?);
+    listed(state, file, &mut snapshot);
     Ok(snapshot)
 }
 
 /// The open project's whole snapshot, as `project_snapshot` gives it.
 pub(crate) fn snapshot_now(state: &ProjectSessionState) -> Result<Snapshot, Said> {
-    with_open(state, |open| {
+    let (mut snapshot, file) = with_open(state, |open| {
         let mut snapshot = open.document.snapshot();
         snapshot.opening = Some(state.opens.load(std::sync::atomic::Ordering::SeqCst));
-        Ok(snapshot)
-    })
+        Ok((snapshot, open.file.clone()))
+    })?;
+    listed(state, &file, &mut snapshot);
+    Ok(snapshot)
+}
+
+/// Sets the name the start screen and Open recent list `snapshot`'s project by, in `file`'s folder, when it isn't the
+/// project's own (`recent::listed_as`), so the page names it alike everywhere.
+fn listed(state: &ProjectSessionState, file: &Path, snapshot: &mut Snapshot) {
+    let stamps = state.stamps().unwrap_or_default();
+    snapshot.listed_as = super::recent::listed_as(file, &stamps, &snapshot.project.name);
 }

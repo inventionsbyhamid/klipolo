@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use klipolo_model::crop::Crop;
+use klipolo_model::history::ListedAs;
 use klipolo_model::project::Project;
 use klipolo_model::query::main_track_duration;
 use klipolo_model::time::Us;
@@ -244,6 +245,20 @@ fn name_shared_names_by_file(rows: &mut [ProjectRow]) {
             row.name = stem.to_string_lossy().into_owned();
         }
     }
+}
+
+/// The name the project in `file`, named `name`, is listed by in its folder when that isn't its own (`recent_in`'s rule:
+/// a name another listed project shares shows as the file's name), with `stamps` ordering the list as the start screen
+/// does; None while it is listed by its own name. Reads the folder's project files.
+pub(crate) fn listed_as(file: &Path, stamps: &Path, name: &str) -> Option<ListedAs> {
+    let rows = recent_in(file.parent()?, stamps, None, RECENT_LIMIT).ok()?;
+    let row = rows
+        .iter()
+        .find(|row| Path::new(&row.path).file_name() == file.file_name())?;
+    (row.name != name).then(|| ListedAs {
+        name: name.to_owned(),
+        file_name: row.name.clone(),
+    })
 }
 
 /// Marks the row of `open`, the project open now (None: no project is open). A path names it as written, or by another

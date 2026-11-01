@@ -161,6 +161,13 @@ impl ProjectSessionState {
         *self.last.lock().unwrap_or_else(PoisonError::into_inner) = Some(memo);
     }
 
+    /// `recent.json`, beside the memo; None before launch names the memo.
+    pub(super) fn stamps(&self) -> Option<PathBuf> {
+        let memo = self.last.lock().unwrap_or_else(PoisonError::into_inner);
+        memo.as_ref()
+            .map(|memo| memo.with_file_name(recent::RECENT_FILE))
+    }
+
     /// `file` is the project open now: named in the memo and stamped as opened now in `recent.json` beside it, best
     /// effort.
     pub(super) fn remember_last(&self, file: &Path) {
