@@ -3,6 +3,7 @@ import { memo } from 'react';
 import { openSettings } from '../../ai/aiStatus';
 import { SpriteIcon } from '../../design/SpriteIcon';
 import { useChat, type Message } from '../../state/chat';
+import { wordLabel } from '../../lib/labels';
 import { appLine } from '../../state/chatApps';
 import { Moments } from './Moments';
 import { PictureCard } from './PictureCard';
@@ -14,7 +15,8 @@ const SETTINGS = new Set(['budget', 'refused', 'needsKey']);
 
 /**
  * One message: the person's in a paper bubble on the right; Klipolo's as plain text (already without em
- * or en dashes: Rust cleaned it), then what couldn't be done, its questions, the Undo chip under additions it applied,
+ * or en dashes: Rust cleaned it), then what couldn't be done, its questions, each change of a step of several (a
+ * short's plan), the Undo chip under additions it applied,
  * its proposal card, the pictures it asked for and its moments. A failure says what happened, with Retry (busy,
  * network, a server error, this Mac not registered) or Open Settings (credit, a refused key or code); a message too
  * long for chat, one the AI declined (its words are back in the box to reword), or one whose times the project left (it
@@ -62,6 +64,13 @@ export const ChatMessage = memo(function ChatMessage({ message: m }: { message: 
       {m.questions.map((q, i) => (
         <p key={`q${i}`}>{q}</p>
       ))}
+      {m.applied?.changes && m.applied.changes.length > 1 && (
+        <ul className="msg-changes" aria-label={t({ id: 'chatPanel.changes', message: 'Changes' })}>
+          {m.applied.changes.map((c, i) => (
+            <li key={i}>{wordLabel(c.code, c.params)}</li>
+          ))}
+        </ul>
+      )}
       {m.applied && <UndoChip undo={m.applied.undo} revision={m.applied.revision} byApp={client !== undefined} />}
       {m.proposal && <ProposalCard message={m} />}
       {m.pictures.map((part) => (
