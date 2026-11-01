@@ -149,10 +149,12 @@ pub struct Compiled {
     pub undo: bool,
     /// The additions that went through but changed nothing (a format the video already has), by call index.
     pub unchanged: Vec<usize>,
-    /// Klipolo's own sentences on what the edits did beyond what was asked, for the reply after what is said of them:
-    /// a new speed that shortens a transition ("A transition is shortened.", as the clip card says it), or one that
-    /// leaves a transition no room and so waits in the proposal.
+    /// Klipolo's own sentences on what the additions did beyond what was asked, for the reply after what is said of
+    /// them: a new speed that shortens a transition ("A transition is shortened.", as the clip card says it).
     pub notes: Vec<String>,
+    /// Klipolo's own sentences on why a change the person asked for waits in `proposal`: a new speed that leaves a
+    /// transition no room.
+    pub waits: Vec<String>,
 }
 
 /// Removals for the person to approve.
@@ -703,9 +705,8 @@ impl Compiler<'_> {
                 waits.clear();
             }
         }
-        out.notes = (notes.into_iter().chain(waits))
-            .map(|(_, said)| said)
-            .collect();
+        out.notes = notes.into_iter().map(|(_, said)| said).collect();
+        out.waits = waits.into_iter().map(|(_, said)| said).collect();
         out.refusals.sort_by_key(|r| r.call_index);
         out
     }
