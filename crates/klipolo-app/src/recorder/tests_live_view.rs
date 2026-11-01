@@ -1,7 +1,8 @@
 //! The live picture's tests: it opens with Screen Recording allowed and never launches without it; it closes when a take
 //! arms and never opens during one; a new choice restarts it and the same one keeps it; it closes when the window goes
 //! behind and its frames stop; one that doesn't stop is killed, and none outlives Klipolo; one whose worker ends by
-//! itself says so; and it opens for its box's pixels, while the cards stay small. Fake workers only: nothing captures.
+//! itself says so; and it opens for its box's pixels and follows a new size without another worker, while the cards
+//! stay small. Fake workers only: nothing captures.
 
 use klipolo_capture::backend::{Permission, Permissions, Target};
 use klipolo_capture::live_view_size::ViewPixels;
@@ -49,6 +50,28 @@ fn it_opens_for_its_box_s_own_pixels() {
     assert_eq!(args.len(), 4, "the target, then the box's size");
     assert_eq!(launched_for(&args), Some(pixels(1344, 756)));
     assert!(p.told(p.worker(LIVE)).is_empty());
+}
+
+#[test]
+fn a_new_size_goes_to_the_running_picture_and_never_opens_another() {
+    let p = previewing(all_allowed());
+    p.set(live_in(screen(), 1344, 756)).unwrap();
+    let view = p.worker(LIVE);
+    // The window got narrower: its worker is told once, and the same size again says nothing.
+    p.set(live_in(screen(), 1200, 676)).unwrap();
+    p.set(live_in(screen(), 1200, 676)).unwrap();
+    let narrower = Command::ViewSize {
+        view: Some(pixels(1200, 676)),
+    };
+    assert_eq!(p.told(view), [narrower.clone()]);
+    // No size any more: the small picture.
+    p.set(live(screen())).unwrap();
+    assert_eq!(p.told(view), [narrower, Command::ViewSize { view: None }]);
+    p.advance_ms(500);
+    assert_eq!(p.launch.spawned(), 1, "never another worker");
+    // Its frames still reach the page.
+    p.says(view, frame());
+    assert_eq!(p.frames().len(), 1);
 }
 
 #[test]

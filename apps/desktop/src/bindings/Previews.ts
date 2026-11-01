@@ -21,7 +21,7 @@ live: WhatToRecord | null,
 /**
  * The size of the box that shows the live picture, in device pixels (its CSS size times the display's scale): the
  * picture is made for it, so it is as sharp as the box (`live_view_size`: within 1080p and this computer's pixels
- * a second). None: the small picture.
+ * a second). A new size is applied to the running picture, never by opening another. None: the small picture.
  */
 livePixels: ViewPixels | null, 
 /**

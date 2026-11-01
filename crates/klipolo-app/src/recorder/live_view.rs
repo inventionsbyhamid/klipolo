@@ -3,7 +3,8 @@
 //! (`--record-worker --live-view <target> [<box>]`): no sound, nothing written. Its picture is made for the dialog's
 //! box, in device pixels (`Previews.live_pixels`), so it is as sharp as the box shows it, within 1080p and this
 //! computer's pixels a second (`live_view_size`); without a box, the small picture (about 10 frames a second, at most
-//! 640 px on the long side). Whatever the page asks, it runs only while Screen Recording is allowed (read without a
+//! 640 px on the long side). A new size goes to the running worker (`ViewSize`), never by launching another, so a size
+//! never opens a picture. Whatever the page asks, it runs only while Screen Recording is allowed (read without a
 //! prompt; no worker is launched otherwise) and never during a take; a new choice restarts it and the same one keeps
 //! it; and a live picture whose worker ends by itself says so (`capture.liveView.unavailable`), so the page never
 //! keeps its last frame as live. Its frames carry the choice's card key (`card_key`), so a frame of an earlier choice
@@ -49,5 +50,6 @@ pub(super) fn live_wanted(
         key: card_key(what),
         args: Some(args),
         asking: false,
+        view: pixels,
     })
 }
