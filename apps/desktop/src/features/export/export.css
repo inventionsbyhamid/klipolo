@@ -489,3 +489,68 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---------- Unfinished exports ---------- */
+
+/* Quiet rows above the formats: what each export came to, then Resume and Discard. */
+.ex-unfinished {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.ex-unfinished .ex-label {
+  margin: 0;
+}
+
+.ex-jobs {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ex-job {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--color-bay-raised);
+}
+
+.ex-job-text {
+  display: grid;
+  gap: var(--space-2);
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+}
+
+.ex-job-name {
+  color: var(--color-ink);
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.ex-job-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+/* Finish in compatibility mode, with what it costs under it. */
+.ex-compat {
+  display: inline-grid;
+  justify-items: start;
+  gap: var(--space-2);
+}
+
+/* The top bar's Export: a dot when exports can be resumed. */
+.export-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}

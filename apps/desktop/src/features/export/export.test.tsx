@@ -2,6 +2,8 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExportEvent } from '../../bindings/ExportEvent';
+import type { ExportJobInfo } from '../../bindings/ExportJobInfo';
+import type { ExportPlan } from '../../bindings/ExportPlan';
 import type { Op } from '../../bindings/Op';
 import type { LabelParams } from '../../lib/labels';
 import { fixtureSnapshot } from '../../test/fixtures';
@@ -39,6 +41,10 @@ vi.mock('../../bridge/exporter', () => ({
     open: vi.fn(() => Promise.resolve()),
     files: vi.fn(() => Promise.resolve([{ name: 'Billing tutorial 16x9 2.mp4', bytes: 148_000_000 }])),
     pickFolder: vi.fn(() => Promise.resolve('Desktop / Clips')),
+    jobs: vi.fn(() => Promise.resolve([])),
+    pause: vi.fn(() => Promise.resolve()),
+    resume: vi.fn(() => Promise.resolve()),
+    discard: vi.fn(() => Promise.resolve()),
   },
 }));
 const { exporter } = await import('../../bridge/exporter');
@@ -83,7 +89,39 @@ const progress = (frame: number, etaS: number | null, totalFrames = 100): Export
   segmentsTotal: 1,
 });
 const status = () => screen.getByRole('status');
-const alert = () => screen.getByRole('alert');
+const coded = (code: string) => ({ code, params: {} });
+const DISK_FULL = 'The disk is full. Free up space, then resume.';
+
+/** An unfinished export as `export_jobs` lists it: this project's, paused, 3 of its 10 parts done. */
+function job(patch: Partial<ExportJobInfo> = {}): ExportJobInfo {
+  return {
+    jobId: 'old',
+    projectId: 'project',
+    projectName: 'Billing tutorial',
+    quality: 'maximum',
+    files: [landscape],
+    state: 'paused',
+    message: null,
+    frame: 30,
+    totalFrames: 100,
+    segmentsDone: 3,
+    segmentsTotal: 10,
+    stale: false,
+    createdMs: 0,
+    compatibility: null,
+    ...patch,
+  };
+}
+
+/** Opens the dialog from the top bar's Export, named for the unfinished exports it lists. */
+async function openWithJobs(count: number) {
+  renderExport();
+  const name = count === 1 ? 'Export, 1 unfinished export' : `Export, ${count} unfinished exports`;
+  await userEvent.click(await screen.findByRole('button', { name }));
+}
+
+/** The unfinished row that says `text`. */
+const rowOf = (text: string) => screen.getByText(text).closest('li')!;
 const dialog = () => screen.getByRole('dialog');
 
 function renderExport() {
@@ -113,9 +151,17 @@ const heard = { state: 'done', approximate: false } as const;
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(exporter.plan).mockImplementation(planned as typeof exporter.plan);
+  vi.mocked(exporter.jobs).mockResolvedValue([]);
   useProject.setState({ snapshot: fixtureSnapshot(), pending: 0, apply });
   useExport.getState().reset();
-  useExport.setState({ open: false, quality: 'high', folder: null, captionFile: { save: false, kind: 'srt' } });
+  useExport.setState({
+    open: false,
+    quality: 'high',
+    folder: null,
+    captionFile: { save: false, kind: 'srt' },
+    jobs: [],
+    startingOver: false,
+  });
   useAnalysis.setState({ states: {} });
   localStorage.clear();
 });
@@ -285,24 +331,26 @@ describe('export dialog', () => {
     expect(exporter.reveal).toHaveBeenCalledWith(1);
   });
 
-  it('Try again asks for the captions file again only when the 16:9 video is made again', async () => {
+  it('Try again on a start Rust refused asks for the captions file again; with a kept job it resumes it', async () => {
     vi.mocked(exporter.plan).mockImplementation(withWords as typeof exporter.plan);
     useExport.setState({ captionFile: { save: true, kind: 'vtt' } });
+    vi.mocked(exporter.start).mockRejectedValueOnce(new Error('An export is already running.'));
     renderExport();
     await userEvent.click(screen.getByRole('button', { name: 'Export' }));
     await screen.findByRole('switch', { name: 'Also save captions as a file', checked: true });
     await userEvent.click(screen.getByRole('checkbox', { name: /^9:16/ }));
     await userEvent.click(await screen.findByRole('button', { name: 'Export 2 videos' }));
-    const both = { ...started, files: [landscape, portrait] } as ExportEvent;
-    emit(both, { type: 'failed', message: 'The export stopped.' });
-    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    // Refused before it had a job: Try again asks for the same files, the captions file with them.
+    await userEvent.click(await screen.findByRole('button', { name: 'Try again' }));
     expect(exporter.start).toHaveBeenLastCalledWith(['landscape', 'portrait'], 'high', expect.any(Function), {
       captionFile: 'vtt',
     });
-    // The 16:9 video and its captions file are in place; only 9:16 is made again, with no captions file.
+    // Now it has a job: it fails with the 16:9 video in place, and Try again goes on from the kept job.
+    const both = { ...started, files: [landscape, portrait] } as ExportEvent;
     emit(both, { type: 'fileReady', index: 0, path: landscape.path }, { type: 'failed', message: 'The export stopped.' });
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(exporter.start).toHaveBeenLastCalledWith(['portrait'], 'high', expect.any(Function));
+    expect(exporter.resume).toHaveBeenCalledWith('job', expect.any(Function));
+    expect(exporter.start).toHaveBeenCalledTimes(2);
   });
 
   it('a captions file that couldn’t be saved is said plainly, and the video is ready', async () => {
@@ -502,26 +550,47 @@ describe('export dialog', () => {
     expect(screen.getByRole('button', { name: 'Cancel export' })).not.toHaveAttribute('aria-disabled', 'true');
   });
 
-  it('a full disk says what wasn’t saved, keeps the files in place, and Try again exports the rest', async () => {
+  it('a full disk pauses calmly: the button reads Paused, the dialog says why, and Resume goes on from the kept job', async () => {
     renderExport();
     await userEvent.click(screen.getByRole('button', { name: 'Export' }));
     await userEvent.click(screen.getByRole('checkbox', { name: /^9:16/ }));
     await userEvent.click(await screen.findByRole('button', { name: 'Export 2 videos' }));
     emit(
       { ...started, files: [landscape, portrait] } as ExportEvent,
-      progress(100, 0),
+      progress(60, 10),
       { type: 'fileReady', index: 0, path: landscape.path },
-      { type: 'failed', message: { code: 'exports.diskFull', params: {} } },
     );
-    expect(await screen.findByText('9:16 was not saved. The disk is full. Free up space, then try again.', { selector: 'span' })).toBeInTheDocument();
-    expect(alert()).toHaveTextContent('9:16 was not saved. The disk is full. Free up space, then try again.');
-    expect(status()).toBeEmptyDOMElement();
+    act(() => useExport.getState().setOpen(false));
+    emit({ type: 'paused', message: coded('exports.diskFull'), compatibility: null });
+    expect(useToasts.getState().toasts.at(-1)!.text).toBe(`Export paused. ${DISK_FULL}`);
+    const pill = screen.getByRole('button', { name: 'Export paused' });
+    expect(pill).toHaveTextContent('Paused');
+    await userEvent.click(pill);
+    expect(screen.getByText(DISK_FULL)).toBeInTheDocument();
+    expect(screen.getByText('Export paused')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Export progress' })).toHaveAttribute('aria-valuenow', '60');
+    // The file already in place stays listed.
     expect(screen.getByText('Billing tutorial 16x9.mp4')).toBeInTheDocument();
-    const again = screen.getByRole('button', { name: 'Try again' });
-    expect(again).toHaveFocus();
-    await userEvent.click(again);
-    await waitFor(() => expect(exporter.start).toHaveBeenCalledTimes(2));
-    expect(exporter.start).toHaveBeenLastCalledWith(['portrait'], 'high', expect.any(Function));
+    const resume = screen.getByRole('button', { name: 'Resume' });
+    await waitFor(() => expect(resume).toHaveFocus());
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeInTheDocument();
+    await userEvent.keyboard('{Enter}');
+    expect(exporter.resume).toHaveBeenCalledWith('job', expect.any(Function));
+    expect(exporter.start).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('progressbar', { name: 'Export progress' })).toHaveAttribute('aria-valuenow', '60');
+    expect(status()).toHaveTextContent('Export resumed.');
+  });
+
+  it('a pause with no reason says everything finished so far is kept, and Discard deletes the kept job', async () => {
+    await openAndExport();
+    emit(progress(30, 10), { type: 'paused', message: null, compatibility: null });
+    expect(status()).toHaveTextContent('Export paused.');
+    expect(screen.getByText('Everything finished so far is kept.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Discard' }));
+    expect(exporter.discard).toHaveBeenCalledWith('job');
+    // Back to choosing formats, with nothing kept.
+    expect(await screen.findByRole('button', { name: 'Export 1 video' })).toHaveFocus();
+    expect(useExport.getState().jobId).toBeNull();
   });
 
   it('retries say so, and the time left comes back beside the compatibility note', async () => {
@@ -612,5 +681,215 @@ describe('export dialog', () => {
     rerender(<ExportButton />);
     expect(screen.getByRole('button', { name: 'Export' })).not.toHaveAttribute('aria-disabled');
     expect(screen.getByRole('button', { name: 'Export' }).title).toBe('Export (Command E)');
+  });
+});
+
+describe('unfinished exports', () => {
+  it('get a dot on Export, and each row says how far it came, this project’s first', async () => {
+    vi.mocked(exporter.jobs).mockResolvedValue([
+      job({ jobId: 'other', projectId: 'p2', projectName: 'Vlog', segmentsDone: 1, segmentsTotal: 4 }),
+      job(),
+    ]);
+    await openWithJobs(2);
+    const rows = within(screen.getByRole('region', { name: 'Unfinished exports' })).getAllByRole('listitem');
+    expect(rows.map((r) => within(r).getAllByText(/parts done/)[0].textContent)).toEqual([
+      'Resume export of Billing tutorial: 3 of 10 parts done',
+      'Resume export of Vlog: 1 of 4 parts done',
+    ]);
+    // The formats are still there to export anew below them.
+    expect(screen.getByRole('button', { name: 'Export 1 video' })).toBeInTheDocument();
+  });
+
+  it('a crash’s job resumes from its row, from the keyboard', async () => {
+    vi.mocked(exporter.jobs).mockResolvedValue([job({ state: 'interrupted' })]);
+    await openWithJobs(1);
+    const row = rowOf('Resume export of Billing tutorial: 3 of 10 parts done');
+    const resume = within(row).getByRole('button', { name: 'Resume' });
+    expect(resume).toHaveAccessibleDescription(/Resume export of Billing tutorial: 3 of 10 parts done/);
+    resume.focus();
+    vi.mocked(exporter.jobs).mockResolvedValue([]);
+    await userEvent.keyboard('{Enter}');
+    expect(exporter.resume).toHaveBeenCalledWith('old', expect.any(Function));
+    // It shows its progress as it was at once, and goes on from there.
+    expect(screen.getByRole('progressbar', { name: 'Export progress' })).toHaveAttribute('aria-valuenow', '30');
+    expect(useExport.getState()).toMatchObject({ phase: 'running', jobId: 'old', runQuality: 'maximum' });
+    expect(screen.getByRole('button', { name: 'Cancel export' })).toHaveFocus();
+  });
+
+  it('a changed project still resumes the version it exported, or starts over, or is discarded', async () => {
+    vi.mocked(exporter.jobs).mockResolvedValue([
+      job({ stale: true, message: coded('exports.encoderBusy') }),
+      job({ jobId: 'vlog', projectId: 'p2', projectName: 'Vlog', stale: true }),
+    ]);
+    await openWithJobs(2);
+    const stale = rowOf('Resume export of Billing tutorial: 3 of 10 parts done');
+    // Why it paused comes first, changed project or not.
+    expect(
+      within(stale).getByText(
+        'The video encoder is busy. Another app may be using it, like a screen recorder or a video call. Close it, then resume.',
+      ),
+    ).toBeInTheDocument();
+    expect(within(stale).getByText('This project changed since the export started.')).toBeInTheDocument();
+    expect(within(stale).getByText('Resume finishes the version from when you started.')).toBeInTheDocument();
+    expect(within(stale).getByRole('button', { name: 'Resume' })).toBeInTheDocument();
+    expect(within(stale).getByRole('button', { name: 'Discard' })).toBeInTheDocument();
+    // Another project's job can't be started over from here: its project isn't open.
+    const other = rowOf('Resume export of Vlog: 3 of 10 parts done');
+    expect(within(other).queryByRole('button', { name: 'Start over with your latest changes' })).toBeNull();
+    // Start over asks the plan first: held, so a second press while it's under way does nothing.
+    let planned = () => undefined as void;
+    const plan = vi.mocked(exporter.plan).getMockImplementation()!;
+    vi.mocked(exporter.plan).mockImplementationOnce(
+      (formats, quality) => new Promise<ExportPlan>((r) => (planned = () => void plan(formats, quality).then(r))),
+    );
+    const startOver = within(stale).getByRole('button', { name: 'Start over with your latest changes' });
+    await userEvent.click(startOver);
+    await userEvent.click(startOver);
+    await act(async () => planned());
+    // Rust swaps them: the kept job goes only once the new export holds the slot and is ready to run.
+    await waitFor(() =>
+      expect(exporter.start).toHaveBeenCalledWith(['landscape'], 'maximum', expect.any(Function), {
+        replaces: 'old',
+      }),
+    );
+    expect(exporter.start).toHaveBeenCalledTimes(1);
+    expect(exporter.discard).not.toHaveBeenCalled();
+  });
+
+  it('a Start over Rust refuses keeps the kept job, and Try again asks for the same swap', async () => {
+    vi.mocked(exporter.jobs).mockResolvedValue([job({ stale: true })]);
+    vi.mocked(exporter.start).mockRejectedValueOnce(
+      new Error('An export is already running.', { cause: coded('exports.refused.busy') }),
+    );
+    await openWithJobs(1);
+    const row = rowOf('Resume export of Billing tutorial: 3 of 10 parts done');
+    await userEvent.click(within(row).getByRole('button', { name: 'Start over with your latest changes' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('An export is already running.'));
+    expect(exporter.discard).not.toHaveBeenCalled();
+    expect(useExport.getState().jobs.map((j) => j.jobId)).toEqual(['old']);
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(exporter.start).toHaveBeenCalledTimes(2));
+    expect(exporter.start).toHaveBeenLastCalledWith(['landscape'], 'maximum', expect.any(Function), {
+      replaces: 'old',
+    });
+  });
+
+  it('a resume Rust refuses as busy says so, and the job stays listed as it was', async () => {
+    vi.mocked(exporter.jobs).mockResolvedValue([job({ state: 'failed', message: coded('exports.diskFull') })]);
+    vi.mocked(exporter.resume).mockRejectedValueOnce(
+      new Error('An export is already running.', { cause: coded('exports.refused.busy') }),
+    );
+    await openWithJobs(1);
+    const row = rowOf('Resume export of Billing tutorial: 3 of 10 parts done');
+    expect(within(row).getByText(DISK_FULL)).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole('button', { name: 'Resume' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('An export is already running.'));
+    // Try again asks for the same job again; Close puts it back in the list, its reason unchanged.
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(exporter.resume).toHaveBeenLastCalledWith('old', expect.any(Function));
+    emit({ type: 'failed', message: coded('exports.diskFull') });
+    await userEvent.click(within(dialog()).getByText('Close'));
+    expect(useExport.getState().phase).toBe('idle');
+    act(() => useExport.getState().setOpen(true));
+    expect(within(await screen.findByRole('region', { name: 'Unfinished exports' })).getByText(DISK_FULL)).toBeInTheDocument();
+  });
+
+  it('after a row is discarded, focus goes to the next row, then to Export', async () => {
+    vi.mocked(exporter.jobs).mockResolvedValue([
+      job({ jobId: 'one' }),
+      job({ jobId: 'two', projectId: 'p2', projectName: 'Vlog' }),
+    ]);
+    await openWithJobs(2);
+    vi.mocked(exporter.jobs).mockResolvedValue([job({ jobId: 'two', projectId: 'p2', projectName: 'Vlog' })]);
+    await userEvent.click(screen.getAllByRole('button', { name: 'Discard' })[0]);
+    expect(exporter.discard).toHaveBeenCalledWith('one');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Resume' })).toHaveFocus());
+    vi.mocked(exporter.jobs).mockResolvedValue([]);
+    await userEvent.keyboard('{Tab}');
+    expect(screen.getByRole('button', { name: 'Discard' })).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    expect(exporter.discard).toHaveBeenLastCalledWith('two');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Export 1 video' })).toHaveFocus());
+    expect(screen.queryByRole('region', { name: 'Unfinished exports' })).toBeNull();
+  });
+
+  it('a Discard Rust refuses is said, and the row stays', async () => {
+    vi.mocked(exporter.jobs).mockResolvedValue([job()]);
+    vi.mocked(exporter.discard).mockRejectedValueOnce(new Error('The export couldn’t be discarded. Try again.'));
+    await openWithJobs(1);
+    await userEvent.click(screen.getByRole('button', { name: 'Discard' }));
+    await waitFor(() =>
+      expect(useToasts.getState().toasts.map((t) => t.text)).toContain('The export couldn’t be discarded. Try again.'),
+    );
+    expect(screen.getByText('Resume export of Billing tutorial: 3 of 10 parts done')).toBeInTheDocument();
+  });
+
+  it('pausing an export running in the background shows its row paused', async () => {
+    vi.mocked(exporter.jobs).mockResolvedValue([job({ state: 'running' })]);
+    await openWithJobs(1);
+    expect(screen.getByText('Exporting Billing tutorial: 3 of 10 parts done')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    expect(exporter.pause).toHaveBeenCalledWith('old');
+    expect(await screen.findByText('Resume export of Billing tutorial: 3 of 10 parts done')).toBeInTheDocument();
+  });
+
+  it('a job paused by a hardware failure can finish in compatibility mode', async () => {
+    vi.mocked(exporter.jobs).mockResolvedValue([
+      job({ message: coded('exports.decodeFailed'), compatibility: { partsToRedo: 3, chosen: false } }),
+    ]);
+    await openWithJobs(1);
+    const row = rowOf('Resume export of Billing tutorial: 3 of 10 parts done');
+    expect(
+      within(row).getByText(
+        "A clip couldn't be decoded with hardware. Resume to try again, or finish in compatibility mode.",
+      ),
+    ).toBeInTheDocument();
+    const finish = within(row).getByRole('button', { name: 'Finish in compatibility mode' });
+    expect(finish).toHaveAccessibleDescription('Slower. Redoes 3 finished parts.');
+    finish.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(exporter.resume).toHaveBeenCalledWith('old', expect.any(Function), 'compatible');
+  });
+
+  it('a paused job whose person chose compatibility mode offers one resume, which continues in it', async () => {
+    vi.mocked(exporter.jobs).mockResolvedValue([job({ compatibility: { partsToRedo: 0, chosen: true } })]);
+    await openWithJobs(1);
+    const resume = screen.getByRole('button', { name: 'Resume in compatibility mode' });
+    const row = resume.closest('li')!;
+    expect(within(row).queryByRole('button', { name: 'Finish in compatibility mode' })).toBeNull();
+    expect(within(row).queryByRole('button', { name: 'Resume' })).toBeNull();
+    await userEvent.click(resume);
+    // The job keeps the person's choice: a plain resume continues in compatibility mode.
+    expect(exporter.resume).toHaveBeenCalledWith('old', expect.any(Function));
+  });
+
+  it('an earlier project’s job that can’t be read can only be discarded', async () => {
+    vi.mocked(exporter.jobs).mockResolvedValue([
+      job({
+        projectId: '',
+        projectName: '',
+        files: [],
+        state: 'failed',
+        message: coded('exports.unreadable'),
+        segmentsDone: 0,
+        segmentsTotal: 0,
+        stale: true,
+      }),
+    ]);
+    await openWithJobs(1);
+    const row = rowOf('Resume export of an earlier project: 0 of 0 parts done');
+    expect(within(row).getByText('This export can’t be read, so it can only be discarded.')).toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: 'Resume' })).toBeNull();
+    expect(within(row).getByRole('button', { name: 'Discard' })).toBeInTheDocument();
+  });
+
+  it('a kept job whose project changed says so in the paused view, with Start over beside Resume', async () => {
+    await openAndExport();
+    vi.mocked(exporter.jobs).mockResolvedValue([job({ jobId: 'job', stale: true })]);
+    emit({ type: 'paused', message: coded('exports.encoderBusy'), compatibility: null });
+    expect(await screen.findByText('This project changed since the export started.')).toBeInTheDocument();
+    expect(screen.getByText('Resume finishes the version from when you started.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start over with your latest changes' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Resume' })).toHaveFocus();
   });
 });

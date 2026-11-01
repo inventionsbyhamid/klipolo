@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { ExportPlan } from '../../bindings/ExportPlan';
 import type { FormatKind } from '../../bindings/FormatKind';
@@ -6,16 +6,17 @@ import { exporter } from '../../bridge/exporter';
 import { Button } from '../../design/Button';
 import { useIntlLocale } from '../../i18n/react';
 import { Icon } from '../../layout/Icon';
-import { formatFileSize } from '../../lib/format';
+import { formatFileSize, formatPercent } from '../../lib/format';
 import { FORMAT_SHORT } from '../../lib/layout';
 import { videoDurationUs } from '../../lib/timeline';
 import { formatTime } from '../../player/time';
 import { stateOf, useAnalysis } from '../../state/analysis';
-import { chosenCaptionFile, useExport } from '../../state/export';
+import { canStartOver, chosenCaptionFile, exportPercent, shownJob, useExport } from '../../state/export';
 import { failedText } from '../../state/exportRun';
 import { useProject } from '../../state/project';
 import { toast } from '../../state/toasts';
 import { CaptionFileChoice } from './CaptionFileChoice';
+import { CompatibilityButton } from './CompatibilityButton';
 import { ExportFiles } from './ExportFiles';
 import { ExportOutcome } from './ExportOutcome';
 import { ExportProgress } from './ExportProgress';
@@ -23,18 +24,21 @@ import { FormatCards } from './FormatCards';
 import { ExportIcon } from './icons';
 import { FORMATS, roughly, videos } from './presets';
 import { QualityPicker } from './QualityPicker';
+import { STALE, STALE_RESUME } from './UnfinishedJobRow';
+import { UnfinishedJobs } from './UnfinishedJobs';
 import './export.css';
 
 const FOCUSABLE = 'button:not(:disabled), [tabindex="0"]';
 
-type View = 'choose' | 'running' | 'failed' | 'done';
+type View = 'choose' | 'running' | 'paused' | 'failed' | 'done';
 
 /**
- * The export dialog: pick the formats and the quality and where the files go, then
- * export; while it runs, one bar and Cancel export; when it is done, the files with Open and Show in Finder; when it
- * fails, what happened and Try again. Mounted once; opens from the top bar's Export or Command E. Esc and the close
- * button close it, and focus goes back where it was; an export still running carries on behind it (the top bar shows
- * its progress), as only Cancel export stops one.
+ * The export dialog: the unfinished exports to resume or discard, then pick the
+ * formats and the quality and where the files go, then export; while it runs, one bar and Cancel export; when it is
+ * done, the files with Open and Show in Finder; when it pauses (a full disk, a busy encoder) or fails, why and Resume or
+ * Try again, which go on from its finished parts, or Discard. Mounted once; opens from the top bar's Export or Command
+ * E. Esc and the close button close it, and focus goes back where it was; an export still running carries on behind it
+ * (the top bar shows its progress), as only Cancel export stops one.
  */
 export function ExportDialog() {
   const open = useExport((s) => s.open);
@@ -44,6 +48,7 @@ export function ExportDialog() {
 
 function viewOf(phase: string): View {
   if (phase === 'running') return 'running';
+  if (phase === 'paused') return 'paused';
   if (phase === 'done') return 'done';
   if (phase === 'failed') return 'failed';
   return 'choose';
@@ -180,6 +185,20 @@ function Working({ view, onClose }: { view: Exclude<View, 'done'>; onClose: () =
     };
   }, [view, key, quality, folder, heard]);
 
+  // A clip's words came in: whether an unfinished export's project changed is asked again.
+  const firstHeard = useRef(heard);
+  useEffect(() => {
+    if (view !== 'choose' || heard === firstHeard.current) return;
+    firstHeard.current = heard;
+    void useExport.getState().loadJobs();
+  }, [view, heard]);
+
+  // The last unfinished row went: focus goes to the view's primary control.
+  const onEmptied = useCallback(
+    () => document.querySelector<HTMLElement>('.export-dialog [data-primary]')?.focus(),
+    [],
+  );
+
   const toggle = (format: FormatKind) =>
     useExport.getState().setPicked(checked.includes(format) ? checked.filter((f) => f !== format) : [...checked, format]);
 
@@ -198,6 +217,7 @@ function Working({ view, onClose }: { view: Exclude<View, 'done'>; onClose: () =
           <ExportIcon name="x" />
         </button>
       </div>
+      {view === 'choose' && <UnfinishedJobs onEmptied={onEmptied} />}
       <FormatCards
         checked={checked}
         files={view === 'choose' ? (plan?.files ?? []) : run.files}
@@ -214,7 +234,9 @@ function Working({ view, onClose }: { view: Exclude<View, 'done'>; onClose: () =
       )}
       {view === 'choose' && making > 0 && <CaptionsNote count={making} />}
       {view === 'running' && <ExportProgress />}
+      {view === 'paused' && <Paused />}
       {view === 'failed' && <Failed />}
+      {(view === 'paused' || view === 'failed') && <KeptJobActions />}
       {view === 'choose' && (
         <ChooseFoot
           count={checked.length}
@@ -229,6 +251,7 @@ function Working({ view, onClose }: { view: Exclude<View, 'done'>; onClose: () =
         />
       )}
       {view === 'running' && <RunningFoot />}
+      {view === 'paused' && <PausedFoot onClose={onClose} />}
       {view === 'failed' && <FailedFoot onClose={onClose} />}
     </>
   );
@@ -406,6 +429,47 @@ function RunningFoot() {
   );
 }
 
+/**
+ * A paused export (Pause, Quit, a full disk, a busy encoder): how far it came, why it paused, and that what it finished
+ * is kept; the files in place stay listed. Calm, not a failure: Resume goes on from there.
+ */
+function Paused() {
+  const locale = useIntlLocale();
+  const message = useExport((s) => s.message);
+  const percent = useExport(exportPercent);
+  return (
+    <>
+      <div className="ex-progress">
+        <div className="ex-row">
+          <span className="ex-title">Export paused</span>
+          <span className="ex-pct">{formatPercent(locale, percent / 100)}</span>
+        </div>
+        <div
+          className="ex-bar"
+          role="progressbar"
+          aria-label="Export progress"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percent}
+        >
+          <i style={{ width: `${percent}%` }} />
+        </div>
+        {/* Why it paused comes first, changed project or not: Resume may meet the same cause. */}
+        {message ? (
+          <p className="ex-failed">
+            <Icon name="info" />
+            <span>{message}</span>
+          </p>
+        ) : (
+          <p className="ex-meta">Everything finished so far is kept.</p>
+        )}
+        <StaleNote />
+      </div>
+      <ExportFiles />
+    </>
+  );
+}
+
 /** What went wrong, and which formats weren't saved (failed); the files in place stay listed. */
 function Failed() {
   const message = useExport((s) => s.message);
@@ -420,15 +484,83 @@ function Failed() {
           <Icon name="info" />
           <span>{said}</span>
         </p>
+        <StaleNote />
       </div>
       <ExportFiles />
     </>
   );
 }
 
+/** The kept job's project changed since it started: Resume still finishes the version that was exported. */
+function StaleNote() {
+  const stale = useExport((s) => shownJob(s)?.stale ?? false);
+  if (!stale) return null;
+  return (
+    <>
+      <p className="ex-meta">{STALE}</p>
+      <p className="ex-meta">{STALE_RESUME}</p>
+    </>
+  );
+}
+
+/**
+ * The kept job's other ways on: finishing in compatibility mode after repeated hardware failures, and, when its project
+ * changed since, Start over with the latest changes (this project's job, with one of its formats still in it).
+ */
+function KeptJobActions() {
+  const job = useExport(shownJob);
+  const startingOver = useExport((s) => s.startingOver);
+  const here = useProject((p) => p.snapshot?.project.id) === job?.projectId;
+  const restartable = useProject((p) => !!job && canStartOver(job, p.snapshot?.project.settings.formats ?? []));
+  if (!job) return null;
+  const compatible = job.compatibility !== null && !job.compatibility.chosen;
+  const startOver = job.stale && here && restartable;
+  if (!compatible && !startOver) return null;
+  return (
+    <div className="ex-job-actions">
+      {job.compatibility && compatible && (
+        <CompatibilityButton jobId={job.jobId} partsToRedo={job.compatibility.partsToRedo} />
+      )}
+      {startOver && (
+        <Button
+          size="sm"
+          aria-disabled={startingOver || undefined}
+          onClick={() => !startingOver && void useExport.getState().startOver(job)}
+        >
+          Start over with your latest changes
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** Discard (its kept job and parts), when it has one. */
+function DiscardKept() {
+  const jobId = useExport((s) => s.jobId);
+  if (!jobId) return null;
+  return <Button onClick={() => void useExport.getState().discard(jobId)}>Discard</Button>;
+}
+
+/** Discard, Close, and Resume (in compatibility mode, when the person chose it). */
+function PausedFoot({ onClose }: { onClose: () => void }) {
+  const chosen = useExport((s) => shownJob(s)?.compatibility?.chosen ?? false);
+  return (
+    <div className="dialog-foot">
+      <DiscardKept />
+      <Button onClick={onClose}>Close</Button>
+      <Button variant="primary" data-primary onClick={() => void useExport.getState().retry()}>
+        <Icon name="export" />
+        {chosen ? 'Resume in compatibility mode' : 'Resume'}
+      </Button>
+    </div>
+  );
+}
+
+/** Discard, Close, and Try again: it goes on from the kept job's finished parts. */
 function FailedFoot({ onClose }: { onClose: () => void }) {
   return (
     <div className="dialog-foot">
+      <DiscardKept />
       <Button onClick={onClose}>Close</Button>
       <Button variant="primary" data-primary onClick={() => void useExport.getState().retry()}>
         <Icon name="export" />
