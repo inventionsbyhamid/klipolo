@@ -1,5 +1,4 @@
 import { useLingui } from '@lingui/react/macro';
-import { cn } from '../../design/cn';
 import { IconButton } from '../../design/IconButton';
 import { SpriteIcon } from '../../design/SpriteIcon';
 
@@ -29,7 +28,7 @@ export function FavoriteButton({ title, favorite }: { title: string; favorite: F
           : t({ id: 'library.favorite.add', message: 'Add to favorites' })
       }
       active={favorite.on}
-      className={cn('row-action', 'favorite')}
+      className="row-action favorite"
       onClick={favorite.toggle}
     />
   );
