@@ -127,7 +127,7 @@ fn a_stop_sent_while_a_resumed_worker_prepares_opens_nothing() {
 
 #[test]
 fn a_stop_read_while_the_pipes_are_built_opens_nothing() {
-    // The narrowest moment of the N1 window: the person's Stop reaches the resuming worker after its prepare read the
+    // The narrowest moment of a resume: the person's Stop reaches the resuming worker after its prepare read the
     // queue, while the take's pipes are being built. No pipe starts (capture consent).
     let root = tempfile::tempdir().unwrap();
     let crashed = common::take::Take {

@@ -242,8 +242,8 @@ impl Bubble {
 
     /// Where the person last left it, when that is on the recorded screen; else top centre under its menu bar. Only
     /// then does AppKit start keeping its frame (`setFrameAutosaveName` saves the frame it has at once, so set at
-    /// creation it saved the unplaced corner, and the next take restored the bubble there: found by a
-    /// device check).
+    /// creation it saved the unplaced corner, and the next take restored the bubble there: found by a check on a
+    /// device).
     fn place(&mut self) {
         self.placed = true;
         let Some(screen) = self.screen() else {

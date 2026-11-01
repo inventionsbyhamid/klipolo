@@ -26,7 +26,7 @@ export function AutoCopiesSwitch() {
       <Toggle
         id={id}
         checked={on}
-        onChange={(next) => void useMediaJobs.getState().setAuto(next).then(sayRefusal)}
+        onCheckedChange={(next) => void useMediaJobs.getState().setAuto(next).then(sayRefusal)}
       />
     </div>
   );
