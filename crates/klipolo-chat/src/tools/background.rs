@@ -88,9 +88,8 @@ fn colour(a: &mut Args, key: &str) -> Result<Option<String>, ToolError> {
 
 pub(super) const SET_BACKGROUND: Tool = Tool {
     name: "setBackground",
-    description: "What shows behind the video where it doesn't fill the frame (above and below a wide video in a \
-                  vertical one), and an inset round it. blur is the usual look for vertical shorts. Null keeps a \
-                  value.",
+    description: "What shows behind the video where it doesn't fill the frame (round a clip set to fit with \
+                  setClip), and an inset round it. blur is the usual look for vertical shorts. Null keeps a value.",
     parameters: || {
         vec![
             (
