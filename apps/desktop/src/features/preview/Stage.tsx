@@ -15,6 +15,7 @@ import { clipIndexAt, mainIndex } from '../timeline/model/index';
 import { GizmoLayer } from './GizmoLayer';
 import { sceneStartUs } from './sceneStart';
 import { stageLayout } from './stageLayout';
+import { useDevicePixelRatio } from './useDevicePixelRatio';
 import { useSettledSize } from './useSettledSize';
 
 /** `--color-night` as 0xRRGGBB: the window shows it around the native layer for a frame or two while it resizes. */
@@ -38,9 +39,15 @@ function cardSlot(el: Element | null): number {
 
 /**
  * Tells the engine what to render: the format, at the frame box's size in device pixels (within the engine's
- * budget). A drag of the window settles before the size is sent again.
+ * budget). A drag of the window settles before the size is sent again. A move to a screen of another pixel ratio
+ * (`dpr`) sends it at once, resized or not.
  */
-function useViewSync(frame: RefObject<HTMLDivElement | null>, info: EngineInfo | null, format: FormatKind) {
+function useViewSync(
+  frame: RefObject<HTMLDivElement | null>,
+  info: EngineInfo | null,
+  format: FormatKind,
+  dpr: number,
+) {
   useEffect(() => {
     const el = frame.current;
     if (!el || !info || info.port === 0) return;
@@ -49,7 +56,7 @@ function useViewSync(frame: RefObject<HTMLDivElement | null>, info: EngineInfo |
     const send = () => {
       const r = el.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) return;
-      const px = previewPixels(r, window.devicePixelRatio || 1, info.maxPreviewPixels);
+      const px = previewPixels(r, dpr, info.maxPreviewPixels);
       const key = `${format} ${px.width}x${px.height}`;
       if (key === sent) return;
       sent = key;
@@ -65,13 +72,13 @@ function useViewSync(frame: RefObject<HTMLDivElement | null>, info: EngineInfo |
       clearTimeout(timer);
       observer.disconnect();
     };
-  }, [frame, info, format]);
+  }, [frame, info, format, dpr]);
 }
 
 /**
  * The native presenter's hole: the frame box is transparent, the engine's layer sits under the webview exactly there,
  * and everything else still draws above it in HTML. Its rect goes to Rust at most once per animation frame, on layout,
- * resize and display changes.
+ * resize and display changes, and again on a move to a screen of another pixel ratio (its scale).
  */
 function useNativeHole(frame: RefObject<HTMLDivElement | null>, on: boolean) {
   useEffect(() => {
@@ -99,11 +106,25 @@ function useNativeHole(frame: RefObject<HTMLDivElement | null>, on: boolean) {
     // A window resize may end with the hole where it was while AppKit moved the view: send it again.
     const resized = () => request(true);
     window.addEventListener('resize', resized);
+    // Another screen's pixel ratio: the same box at a new scale. Each change is heard on the query for the ratio then.
+    const scaleQuery = () =>
+      typeof window.matchMedia === 'function'
+        ? window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`)
+        : null;
+    let scale = scaleQuery();
+    const rescaled = () => {
+      scale?.removeEventListener?.('change', rescaled);
+      scale = scaleQuery();
+      scale?.addEventListener?.('change', rescaled);
+      request(true);
+    };
+    scale?.addEventListener?.('change', rescaled);
     request();
     return () => {
       cancelAnimationFrame(raf);
       observer.disconnect();
       window.removeEventListener('resize', resized);
+      scale?.removeEventListener?.('change', rescaled);
       void engine.setRect(null).catch(() => undefined);
     };
   }, [frame, on]);
@@ -159,7 +180,8 @@ export function Stage() {
   // The tokens change with the window's width, which changes the area too.
   const slot = useMemo(() => cardSlot(areaRef.current), [area]);
   const { card, pad, canvas } = stageLayout(area, FORMAT_SIZE[format], slot);
-  useViewSync(videoRef, info, format);
+  const dpr = useDevicePixelRatio();
+  useViewSync(videoRef, info, format, dpr);
   useNativeHole(videoRef, native);
   const note = status === 'unavailable' ? (message ?? "The preview isn't available right now.") : null;
   return (
