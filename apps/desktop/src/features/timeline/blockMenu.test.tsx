@@ -116,17 +116,28 @@ describe("a block's menu", () => {
     });
   });
 
-  it('lists no Paste effects, as nothing shows or removes the effects it would add', async () => {
-    // A block with effects was copied in this project, so Paste effects could run.
+  it('lists Paste effects on a clip and a picture layer, the same command as ⌥⌘V; a sound has none', async () => {
+    // A block with effects was copied in this project, so Paste effects can run.
     const blur = { id: 'fx1', effect: 'klipolo.builtin/effect.blur', enabled: true, params: {} };
     useClipboard.setState({ projectId: fixtureSnapshot().project.id, entry: null, effects: [blur] });
     renderTimeline();
     for (const name of [/^broll\.mp4/, /Set up billing/]) {
       fireEvent.contextMenu(screen.getByRole('button', { name }));
-      expect(await screen.findByRole('menuitem', { name: /^Duplicate/ })).toBeInTheDocument();
-      expect(screen.queryByRole('menuitem', { name: /Paste effects/ })).toBeNull();
+      const paste = await screen.findByRole('menuitem', { name: /Paste effects/ });
+      expect(paste).not.toHaveAttribute('aria-disabled');
+      expect(paste).toHaveTextContent('⌥⌘V');
       fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
       await frames();
     }
+    fireEvent.contextMenu(screen.getByRole('button', { name: /Set up billing/ }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: /Paste effects/ }));
+    await frames();
+    expect(bridge.apply).toHaveBeenLastCalledWith({
+      label: 'undo.pasteEffects',
+      ops: [{ type: 'updateItem', id: 'title', patch: { effects: [blur] } }],
+    });
+    fireEvent.contextMenu(screen.getByRole('button', { name: /music\.mp3/ }));
+    expect(await screen.findByRole('menuitem', { name: /^Duplicate/ })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /Paste effects/ })).toBeNull();
   });
 });

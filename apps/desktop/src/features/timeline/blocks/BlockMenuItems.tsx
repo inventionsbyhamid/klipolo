@@ -65,19 +65,25 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
     }),
     off: onlyClip ? transitionLabels.needsTwo() : undefined,
   };
-  // `off`: listed, but off here, with why. No Paste effects: nothing shows a block's effects or takes them off.
+  // `off`: listed, but off here, with why.
   const groups: { id: string; label?: string; off?: string }[][] =
     kind === 'clip'
       ? [
           [split, ...(transitionAfter || onlyClip ? [addTransition] : [])],
-          [{ id: 'copy' }, { id: 'cut' }, { id: 'duplicate' }],
+          [{ id: 'copy' }, { id: 'cut' }, { id: 'duplicate' }, { id: 'paste-effects' }],
           hasCamera ? [{ id: 'separate-camera' }] : [],
           [{ id: 'delete' }],
         ]
       : [
           [split, { id: 'attach' }, ...(mutes ? [{ id: 'sound-mute' }] : [])],
           order,
-          [{ id: 'copy' }, { id: 'cut' }, { id: 'duplicate' }],
+          [
+            { id: 'copy' },
+            { id: 'cut' },
+            { id: 'duplicate' },
+            // Sound and zoom layers have no effects.
+            ...(found?.track.kind === 'overlay' ? [{ id: 'paste-effects' }] : []),
+          ],
           [{ id: 'delete' }],
         ];
 
