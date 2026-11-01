@@ -308,6 +308,27 @@ export const TABLE = {
     message: 'Change fill focus',
     comment: 'Undo history entry: which part of a filled video stays in view',
   }),
+  // The background behind the video where it doesn't fill the frame.
+  'background.kind.undo': msg({
+    id: 'background.kind.undo',
+    message: 'Change background',
+    comment: 'Undo history entry: what shows behind the video changed',
+  }),
+  'background.color.undo': msg({
+    id: 'background.color.undo',
+    message: 'Change background color',
+    comment: 'Undo history entry',
+  }),
+  'background.picture.undo': msg({
+    id: 'background.picture.undo',
+    message: 'Change background picture',
+    comment: 'Undo history entry',
+  }),
+  'background.padding.undo': msg({
+    id: 'background.padding.undo',
+    message: 'Change padding',
+    comment: 'Undo history entry: the space round the video changed',
+  }),
   // The cursor layer: its look, and following it in a vertical or square version.
   'undo.cursorStyle': msg({
     id: 'undo.cursorStyle',
