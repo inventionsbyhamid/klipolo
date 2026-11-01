@@ -139,6 +139,32 @@ describe('a recording in the Library', () => {
     expect(within(broll).getByRole('button', { name: 'Favorite broll.mp4' })).toBeInTheDocument();
   });
 
+  it('a game take’s row names its game where a screen take names its screen', () => {
+    const [take] = useProject.getState().snapshot!.project.recordings;
+    const asGame = (id: string, keep: (role: string) => boolean) => ({
+      ...take,
+      id,
+      kind: 'gameplay' as const,
+      sources: take.sources
+        .filter((s) => keep(s.role))
+        .map((s) => (s.role === 'screen' ? { ...s, role: 'game' as const } : s)),
+    });
+    const rows = recordingRows({
+      recordings: [
+        asGame('g1', () => true),
+        asGame('g2', (role) => role !== 'camera'),
+        asGame('g3', (role) => role === 'screen'),
+        asGame('g4', (role) => role !== 'mic'),
+      ],
+    });
+    expect(rows.map((row) => row.meta)).toEqual([
+      '1:00, game, mic and camera',
+      '1:00, game and mic',
+      '1:00, game',
+      '1:00, game and camera',
+    ]);
+  });
+
   it('a search finds a recording by its name and by its sources', async () => {
     renderWithProviders(<Library />);
     const search = screen.getByRole('searchbox', { name: 'Search clips' });

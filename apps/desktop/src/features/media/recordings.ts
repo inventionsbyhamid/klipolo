@@ -16,12 +16,24 @@ export interface RecordingRow {
   meta: string;
 }
 
+/** A game take's line: the game, then a mic, then a camera bubble. */
+function gameSaid(duration: string, mic: boolean, bubble: boolean): string {
+  const comment = 'A recording’s row; {duration} is its length, e.g. 1:00';
+  if (mic && bubble)
+    return t({ id: 'library.recording.gameMicCamera', message: `${duration}, game, mic and camera`, comment });
+  if (mic) return t({ id: 'library.recording.gameMic', message: `${duration}, game and mic`, comment });
+  if (bubble) return t({ id: 'library.recording.gameCamera', message: `${duration}, game and camera`, comment });
+  return t({ id: 'library.recording.game', message: `${duration}, game`, comment });
+}
+
 /**
- * What a take holds, after its length: its main footage (a screen, or a camera on its own), then a mic, then a camera
- * bubble. In the active language.
+ * What a take holds, after its length: its main footage (a screen, a game, or a camera on its own), then a mic, then a
+ * camera bubble. In the active language.
  */
 function sourcesSaid(recording: Recording, duration: string): string {
   const mic = recording.sources.some((s) => s.role === 'mic');
+  if (primarySource(recording)?.role === 'game')
+    return gameSaid(duration, mic, cameraSource(recording) !== undefined);
   if (primarySource(recording)?.role === 'camera')
     return mic
       ? t({
