@@ -40,7 +40,7 @@ use serde_json::{Value, json};
 use wiremock::matchers::{any, body_string_contains, header, method, path};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
-const KEY: &str = "sk-analysis-test-key-0123456789";
+const KEY: &str = "test-meta-key-not-real";
 const TOKEN: &str = "relay-analysis-token-0123456789";
 const NEW_TOKEN: &str = "relay-analysis-new-token-9876543";
 const CODE: &str = "KLIP-TEST-0003";
