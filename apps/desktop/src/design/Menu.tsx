@@ -203,6 +203,19 @@ export function MenuRadioItem({
   );
 }
 
+/** Items under a heading, e.g. the project menu's Open recent; the heading names the group, and the arrows skip it. */
+export function MenuGroup({ label, children }: { label: string; children: ReactNode }) {
+  const labelId = useId();
+  return (
+    <DropdownMenu.Group aria-labelledby={labelId}>
+      <DropdownMenu.Label id={labelId} className="menu-label">
+        {label}
+      </DropdownMenu.Label>
+      {children}
+    </DropdownMenu.Group>
+  );
+}
+
 export function MenuSeparator() {
   return <DropdownMenu.Separator className="menu-sep" />;
 }
