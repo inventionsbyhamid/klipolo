@@ -24,4 +24,8 @@ clips: number,
 /**
  * Its first clip's picture: its poster, else its first cached thumbnail; None until the clip has been scanned.
  */
-thumb: ThumbTile | null, };
+thumb: ThumbTile | null, 
+/**
+ * It is the project open now (`mark_open`): the project menu's Open recent leaves it out.
+ */
+open: boolean, };

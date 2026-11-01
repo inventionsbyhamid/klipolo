@@ -24,6 +24,7 @@ const row = (name: string, openedMs: number): ProjectRow => ({
   durationUs: 61_400_000,
   clips: 1,
   thumb: null,
+  open: false,
 });
 
 /** A project as Rust opens it: the fixture, under its own id and name. */

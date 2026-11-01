@@ -414,6 +414,47 @@ fn listing_never_opens_a_project() {
     assert!(!root.exists(), "nothing was scanned");
 }
 
+/// The project open now is marked, so the project menu's Open recent can leave it out: by its file as written, or by
+/// another way to the same file (a link to the folder). Listing alone, or with none open, marks none.
+#[test]
+fn the_open_project_is_marked() {
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, _) = folders(dir.path());
+    let open = saved(&library, &Project::new("Open now"), 2_000);
+    saved(&library, &Project::new("Another"), 1_000);
+    let marked = |rows: &[ProjectRow]| {
+        rows.iter()
+            .map(|row| (row.name.clone(), row.open))
+            .collect::<Vec<_>>()
+    };
+    let none = [
+        ("Open now".to_owned(), false),
+        ("Another".to_owned(), false),
+    ];
+    let mut rows = recent_in(&library, &stamps, None, RECENT_LIMIT).unwrap();
+    assert_eq!(marked(&rows), none);
+    mark_open(&mut rows, None);
+    assert_eq!(marked(&rows), none);
+
+    mark_open(&mut rows, Some(&open));
+    assert_eq!(
+        marked(&rows),
+        [("Open now".to_owned(), true), ("Another".to_owned(), false)]
+    );
+
+    #[cfg(unix)]
+    {
+        let link = dir.path().join("Library link");
+        std::os::unix::fs::symlink(&library, &link).unwrap();
+        mark_open(&mut rows, None);
+        mark_open(&mut rows, Some(&link.join("Open now.klipolo")));
+        assert_eq!(
+            marked(&rows),
+            [("Open now".to_owned(), true), ("Another".to_owned(), false)]
+        );
+    }
+}
+
 /// `recent.json` as it is on the disk.
 fn on_disk(stamps: &Path) -> BTreeMap<String, u64> {
     serde_json::from_slice(&fs::read(stamps).unwrap()).unwrap()

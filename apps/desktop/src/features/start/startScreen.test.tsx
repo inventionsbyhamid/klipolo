@@ -30,6 +30,7 @@ const ROWS: ProjectRow[] = [
     durationUs: 252_000_000,
     clips: 3,
     thumb: { sprite: '/cache/media/thumbs/tour/c-00000.k.jpg', tileW: 128, tileH: 72, cols: 8 },
+    open: false,
   },
   {
     path: '/Users/me/Movies/Klipolo/Untitled project.klipolo',
@@ -38,6 +39,7 @@ const ROWS: ProjectRow[] = [
     durationUs: 0,
     clips: 0,
     thumb: null,
+    open: false,
   },
   {
     path: '/Users/me/Movies/Klipolo/Kiln vlog.klipolo',
@@ -47,6 +49,7 @@ const ROWS: ProjectRow[] = [
     clips: 1,
     // A phone video: a tall tile, drawn whole in the middle of the 16:9 picture.
     thumb: { sprite: '/cache/media/thumbs/kiln/c-00000.k.jpg', tileW: 40, tileH: 72, cols: 8 },
+    open: false,
   },
 ];
 
