@@ -163,13 +163,12 @@ fn values_left_null_keep_the_projects_own() {
             r#"{"kind": "blur", "color": null, "colorEnd": null, "padding": null}"#,
         )],
     );
-    // "Add some padding" keeps the blur.
-    let padded = applied(
-        &blurred,
-        &[call(
-            r#"{"kind": null, "color": null, "colorEnd": null, "padding": 8}"#,
-        )],
-    );
+    // "Add some padding" keeps the blur, and its step says the background changed.
+    let inset = call(r#"{"kind": null, "color": null, "colorEnd": null, "padding": 8}"#);
+    let step = compile(&blurred, &inputs(&blurred), std::slice::from_ref(&inset));
+    let params = step.additions.expect("an addition").params.unwrap();
+    assert_eq!(params.get("kind"), Some(&ErrorParam::from("same")));
+    let padded = applied(&blurred, &[inset]);
     assert_eq!(padded.background.kind, BackgroundKind::Blur);
     assert_eq!(padded.background.padding, 0.08);
     // A gradient given one colour fades it into itself until it has a second.

@@ -1,7 +1,8 @@
 //! `setBackground`: one `SetBackground` with the project's background as the working copy has it, changed by what the
 //! call gives; a value left null stays. A gradient given one colour fades it into itself until a second comes. A
-//! background that comes out as it was adds no op. Whether a colour is one the project takes is the model's rule:
-//! a call it refuses goes back to the model with the reason.
+//! background that comes out as it was adds no op. Its label always names a `kind`: the tool's word, or `same` when the
+//! call left it null (only the colours or the inset changed). Whether a colour is one the project takes is the model's
+//! rule: a call it refuses goes back to the model with the reason.
 
 use klipolo_model::Project;
 use klipolo_model::coded::ErrorParam;
@@ -34,10 +35,7 @@ pub(super) fn set_background(
     if let Some(padding) = padding {
         background.padding = padding;
     }
-    let mut params = Vec::new();
-    if let Some(kind) = kind {
-        params.push(("kind", ErrorParam::from(kind.key())));
-    }
+    let mut params = vec![("kind", ErrorParam::from(kind.map_or("same", |k| k.key())))];
     if let Some(padding) = padding {
         params.push(("padding", ErrorParam::Number(padding)));
     }
