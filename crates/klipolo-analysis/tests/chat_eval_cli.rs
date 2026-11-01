@@ -281,8 +281,8 @@ async fn ideal_answers_pass_every_case() {
         sticker.contains("\n     passed on alternative #0 of 2\n"),
         "{stdout}"
     );
-    assert_eq!(stdout.matches("     passed on alternative ").count(), 5);
-    assert_eq!(stdout.matches("     passed on alternative #0").count(), 5);
+    assert_eq!(stdout.matches("     passed on alternative ").count(), 4);
+    assert_eq!(stdout.matches("     passed on alternative #0").count(), 4);
     assert_eq!(out.status.code(), Some(0));
     // One call each: clip A's missing filler words are told to the person, with no refusal round.
     assert!(stdout.contains("34 model calls"), "{stdout}");
