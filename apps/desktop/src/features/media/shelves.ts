@@ -5,10 +5,10 @@ import type { ClipSource } from '../../bindings/ClipSource';
 import type { PackItem } from '../../bindings/PackItem';
 import type { Project } from '../../bindings/Project';
 import type { Recording } from '../../bindings/Recording';
-import { codedMessage } from '../../bridge/call';
 import { library } from '../../bridge/library';
 import { IMAGE_US } from '../../lib/placement';
 import { firstAsset, primarySource } from '../../lib/recording';
+import { sourceName } from '../../lib/sourceNames';
 import { assetById, assetName } from '../../lib/timeline';
 import { useProject } from '../../state/project';
 import { fileKey } from './marks';
@@ -108,7 +108,7 @@ function recordingClip(row: RecordingRow, recording: Recording, footage: Asset |
     name: row.name,
     asset,
     meta: row.meta,
-    tags: recording.sources.map((s) => codedMessage({ code: s.label, params: {} }) || s.label),
+    tags: recording.sources.map(sourceName),
     key: footage ? fileKey(footage.path) : undefined,
   };
 }
