@@ -212,6 +212,124 @@
       "glow": null,
       "scale": null
     },
+    "autofitMin": 0.8,
+    "boxes": {
+      "alpha": 1.0,
+      "color": "accent",
+      "glideMs": 0,
+      "growMs": 0,
+      "on": "line",
+      "padXEm": 0.24,
+      "padYEm": 0.1,
+      "radiusEm": 0.3,
+      "text": null
+    },
+    "case": "upper",
+    "charEm": 0.66,
+    "enter": {
+      "motion": {
+        "dyEm": 0.0,
+        "from": 0.8,
+        "kind": "pop",
+        "ms": 140,
+        "peak": 1.05
+      },
+      "per": "page"
+    },
+    "exit": {
+      "kind": "cut"
+    },
+    "fallbacks": [],
+    "fill": "#FFFFFF",
+    "font": {
+      "family": "Montserrat",
+      "italic": false,
+      "weight": 900
+    },
+    "id": "klipolo.builtin/caption.bold-box",
+    "keyword": null,
+    "leadMs": 50,
+    "letterSpacingEm": 0.0,
+    "lineHeight": 1.22,
+    "name": "Bold box",
+    "outline": null,
+    "pages": {
+      "breakSilenceMs": 350,
+      "lingerMs": 200,
+      "maxChars": null,
+      "maxLineWidth": {
+        "landscape": 0.6,
+        "portrait": 0.72
+      },
+      "maxLines": 2,
+      "maxPageMs": 2200,
+      "maxWords": 3,
+      "minPageMs": 500,
+      "readingCps": null,
+      "reveal": "page"
+    },
+    "position": {
+      "landscape": {
+        "seam": null,
+        "y": 0.8
+      },
+      "portrait": {
+        "seam": null,
+        "y": 0.62
+      }
+    },
+    "punctuation": "questionAndExclamation",
+    "schema": 1,
+    "shadow": {
+      "alpha": 0.35,
+      "blurEm": 0.12,
+      "color": "#000000",
+      "dxEm": 0.0,
+      "dyEm": 0.05
+    },
+    "shake": null,
+    "size": {
+      "landscape": 64.0,
+      "portrait": 80.0
+    },
+    "swatches": [
+      "#FFFFFF",
+      "#000000",
+      "#F7C204",
+      "#FF2E5B",
+      "#39E508",
+      "#2F80FF"
+    ],
+    "tiltDeg": 0.0,
+    "variants": [
+      {
+        "accent": "#000000",
+        "boxes": null,
+        "fill": null,
+        "key": "dark",
+        "name": "Dark",
+        "outline": null,
+        "shadow": null
+      },
+      {
+        "accent": "#F7C204",
+        "boxes": null,
+        "fill": null,
+        "key": "yellow",
+        "name": "Yellow",
+        "outline": null,
+        "shadow": null
+      }
+    ]
+  },
+  {
+    "accent": "#FFFFFF",
+    "active": {
+      "color": null,
+      "dimUpcoming": null,
+      "glow": null,
+      "scale": null
+    },
     "autofitMin": 0.85,
     "boxes": {
       "alpha": 1.0,
@@ -764,6 +882,100 @@
       "#FFFFFF"
     ],
     "tiltDeg": 3.0,
+    "variants": []
+  },
+  {
+    "accent": "#39E508",
+    "active": {
+      "color": {
+        "color": "accent",
+        "fadeMs": 60
+      },
+      "dimUpcoming": null,
+      "glow": null,
+      "scale": 1.06
+    },
+    "autofitMin": 0.75,
+    "boxes": null,
+    "case": "upper",
+    "charEm": 0.65,
+    "enter": {
+      "motion": {
+        "dyEm": 0.12,
+        "from": 0.6,
+        "kind": "pop",
+        "ms": 160,
+        "peak": 1.15
+      },
+      "per": "word"
+    },
+    "exit": {
+      "kind": "cut"
+    },
+    "fallbacks": [],
+    "fill": "#FFFFFF",
+    "font": {
+      "family": "Montserrat",
+      "italic": false,
+      "weight": 900
+    },
+    "id": "klipolo.builtin/caption.word-pop",
+    "keyword": null,
+    "leadMs": 50,
+    "letterSpacingEm": 0.0,
+    "lineHeight": 1.08,
+    "name": "Word pop",
+    "outline": {
+      "color": "#000000",
+      "widthEm": 0.1
+    },
+    "pages": {
+      "breakSilenceMs": 300,
+      "lingerMs": 250,
+      "maxChars": null,
+      "maxLineWidth": {
+        "landscape": 0.62,
+        "portrait": 0.72
+      },
+      "maxLines": 2,
+      "maxPageMs": 2000,
+      "maxWords": 4,
+      "minPageMs": 400,
+      "readingCps": null,
+      "reveal": "word"
+    },
+    "position": {
+      "landscape": {
+        "seam": null,
+        "y": 0.8
+      },
+      "portrait": {
+        "seam": null,
+        "y": 0.62
+      }
+    },
+    "punctuation": "questionAndExclamation",
+    "schema": 1,
+    "shadow": {
+      "alpha": 0.8,
+      "blurEm": 0.08,
+      "color": "#000000",
+      "dxEm": 0.0,
+      "dyEm": 0.05
+    },
+    "shake": null,
+    "size": {
+      "landscape": 76.0,
+      "portrait": 96.0
+    },
+    "swatches": [
+      "#39E508",
+      "#F7C204",
+      "#FF2E5B",
+      "#2F80FF",
+      "#FFFFFF"
+    ],
+    "tiltDeg": 0.0,
     "variants": []
   }
 ]

@@ -42,6 +42,16 @@ const CAPTION_STYLES = {
     message: 'Arcade',
     comment: 'A caption style: condensed glowing capitals, for gameplay',
   }),
+  'word-pop': msg({
+    id: 'contrib.caption.wordPop',
+    message: 'Word pop',
+    comment: 'A caption style for shorts: big words pop in as they are said, the said one in color',
+  }),
+  'bold-box': msg({
+    id: 'contrib.caption.boldBox',
+    message: 'Bold box',
+    comment: 'A caption style for shorts: heavy words on a rounded box',
+  }),
 } satisfies Record<BuiltinCaptionStyle, MessageDescriptor>;
 
 /**

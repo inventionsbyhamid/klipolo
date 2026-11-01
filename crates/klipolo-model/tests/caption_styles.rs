@@ -39,7 +39,7 @@ fn every_style_file_is_listed_and_valid() {
         def.check().unwrap_or_else(|e| panic!("{key}.json: {e}"));
         assert_eq!(def.id.as_str(), format!("klipolo.builtin/caption.{key}"));
     }
-    assert_eq!(CaptionStyles::builtin().defs().count(), 7);
+    assert_eq!(CaptionStyles::builtin().defs().count(), 9);
     // The one list is also the tool's and the UI's word for each style.
     for s in BuiltinCaptionStyle::ALL {
         assert_eq!(serde_json::to_value(s).unwrap(), s.key());
