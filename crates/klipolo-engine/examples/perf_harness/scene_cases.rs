@@ -1,4 +1,4 @@
-//! The scene cases `scenes.rs` measures: three text cases, a long title
+//! The scene cases `scenes.rs` measures: a kinetic title, a blur-in title and three lower thirds, a long title, and an
 //! animated scene without text.
 
 /// The lower third the scene tests draw (`tests/support/scene.rs`), its title and role shadowed when `shadow`, its card
@@ -46,7 +46,7 @@ const KINETIC_WORDS: &str = r##"{"scene":1,"duration":2,"nodes":[
     "ease":"power3.out"}]}"##;
 
 /// Twelve letters, each fading in and sharpening from a 24-pixel blur over 0.4 s, 0.05 s after the one before (the
-/// audit's case 3; a waiting letter isn't drawn, so at most twelve blur at once).
+/// a waiting letter isn't drawn, so at most twelve blur at once).
 const BLUR_LETTERS: &str = r##"{"scene":1,"duration":2,"nodes":[
   {"id":"t","type":"text","text":"BLURRED TITLE","split":"chars","box":[0.05,0.3,0.9,0.4],"size":150,"weight":800,
    "fill":"#FFFFFF","align":"center"}],
@@ -72,7 +72,7 @@ fn many_letters() -> String {
 }
 
 /// A thousand dots in a grid of 40 × 25 whose rows rise and fall (the tests' `DOT_GRID`: an animated scene with no text,
-/// for what its first frame packs).
+/// and what its first frame packs).
 const DOT_GRID: &str = r##"{"scene":1,"duration":4,"nodes":[
   {"type":"repeat","id":"rows","times":25,"gap":[0,0.04],"children":[
     {"type":"repeat","times":40,"gap":[0.025,0],"children":[

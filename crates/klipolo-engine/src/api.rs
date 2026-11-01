@@ -232,8 +232,8 @@ pub const FRAME_SCENE_TOO_DETAILED: &str = "frame.sceneTooDetailed";
 /// A motion graphic's text past its caps (500 characters a text, 2,000 a scene, a cluster of 32), drawn
 /// cut, once per scene; an export reports it, as `FRAME_SCENE_REDUCED`.
 pub const FRAME_SCENE_TEXT_CUT: &str = "frame.sceneTextCut";
-/// A motion graphic's text couldn't be built (its build thread failed to start or stopped), once per scene: the
-/// preview draws the scene without it, or with an earlier text in its place, and says
+/// A motion graphic's text couldn't be built (its build thread failed to start or stopped), once per scene: the preview
+/// draws the scene without it, or with an earlier text in its place, and says
 /// so; an export never draws it without, and stops (`EXPORT_SCENE_TEXT_MISSING`).
 pub const FRAME_SCENE_TEXT_MISSING: &str = "frame.sceneTextMissing";
 /// A motion graphic drew more nodes offscreen at once than Klipolo does (4 groups and 4 other nodes a
@@ -242,7 +242,7 @@ pub const FRAME_SCENE_TEXT_MISSING: &str = "frame.sceneTextMissing";
 pub const FRAME_SCENE_TOO_MANY_GROUPS: &str = "frame.sceneTooManyGroups";
 /// "Checking an effect…": a library or project copy the frame uses that this computer hasn't checked
 /// yet, or whose settings draw clamped while they are measured again. It draws as nothing (or clamped) and never stops
-/// an export (k5: the job leaves out what the preview wouldn't draw). The note carries the id after the code
+/// an export (the job leaves out what the preview wouldn't draw). The note carries the id after the code
 /// (`agent_effect_checking`), so each is said once.
 pub const FRAME_AGENT_EFFECT_CHECKING: &str = "frame.agentEffectChecking";
 /// This computer couldn't check an effect a frame uses (the checker refused or broke on it, or answered for another

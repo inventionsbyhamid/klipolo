@@ -51,7 +51,7 @@ use covered::{Cut, costliest, cut_notes, inside, interior_keys, memory, numeric_
 use point::over;
 use state::{Point, Run};
 
-/// `draft` measured for `costly` (k8: the guard's list plus the padding's setting, or a scene's). An error is the GPU's
+/// `draft` measured for `costly` (the guard's list plus the padding's setting, or a scene's). An error is the GPU's
 /// (a lost device): the worker answers it as a failure.
 pub async fn measure(
     meter: &mut dyn Meter,
@@ -234,7 +234,7 @@ pub async fn measure_noted(
     // What the batches measured, and whether every point counted was resolved at preview size.
     let fenced = run.fenced.then(|| Fenced {
         resolved: counted().all(|p| p.batches.as_ref().is_some_and(|b| b.resolved)),
-        // m-d: only when the held point decided the class.
+        // Only when the held point decided the class.
         held: decider.is_some_and(|p| p.held),
         preview: decider.and_then(|p| p.batches.clone()),
         half: decider.and_then(|p| p.half_batches.clone()),

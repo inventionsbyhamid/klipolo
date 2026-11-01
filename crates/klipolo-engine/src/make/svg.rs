@@ -2,17 +2,17 @@
 //! `CheckScene` replaces each submitted `svg` node by these before the scene is stored, so no stored scene
 //! holds SVG and the main process never reads one.
 //!
-//! The SVG is untrusted. In order, each refusal named for the agent and saying, in plain words, what to do
-//! (it names the first thing it found):
+//! The SVG is untrusted. In order, each refusal named for the agent and saying, in plain words, what to do (it names
+//! the first thing it found):
 //! - at most [`MAX_SVG_BYTES`] (`svg.tooLarge`), as text (no svgz);
 //! - a byte scan before any parser: no text, flowed text included (`svg.text`: without fonts usvg would drop it
 //!   silently), no entity declarations or DTD subset (`svg.entity`: nothing to expand), no `<script>`,
 //!   `<foreignObject>`, patterns, clip paths, masks, filters or markers (`svg.unsupported`), at most [`MAX_DEPTH`]
 //!   elements deep (`svg.tooDeep`);
-//! - parsed with roxmltree's node limit, then usvg's work counted before it is done (`svg/budget.rs`
-//!   2): every `<use>` and gradient link followed as usvg follows it (one naming nothing is ignored, as usvg ignores
-//!   it), counted as what it copies (elements, path data, segments with arcs by their radius, attribute bytes read),
-//!   loops and long chains refused, `<style>` weighed by its selectors and combinators, images refused;
+//! - parsed with roxmltree's node limit, then usvg's work counted before it is done (`svg/budget.rs`): every `<use>`
+//!   and gradient link followed as usvg follows it (one naming nothing is ignored, as usvg ignores it), counted as what
+//!   it copies (elements, path data, segments with arcs by their radius, attribute bytes read), loops and long chains
+//!   refused, `<style>` weighed by its selectors and combinators, images refused;
 //! - usvg with no resources folder and an image resolver that refuses every `href` (defence in depth: nothing is
 //!   opened, nothing fetched);
 //! - only filled or stroked paths (shapes are paths to usvg), with colour or gradient paint; at most

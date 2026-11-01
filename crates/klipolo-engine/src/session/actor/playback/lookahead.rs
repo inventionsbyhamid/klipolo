@@ -1,8 +1,8 @@
 //! What the playback lookahead warms: the starts coming up within `LOOKAHEAD_US`, each planned and handed to `warm`
 //! once, so decoders open (and images and LUTs load) before the frame that shows them. Going backward (shuttle) it
 //! looks back instead: at what is entered from its end. Titles and motion graphics are warmed the same way, each with
-//! a plan of its titles and scenes alone (built ahead on the title build thread
-//! 1's note 2: a scene's instance and text built ahead the same way), so neither ever moves a decoder.
+//! a plan of its titles and scenes alone (built ahead on the title build thread; a scene's instance and text are built
+//! ahead the same way), so neither ever moves a decoder.
 
 use klipolo_model::project::FormatKind;
 use klipolo_model::time::Us;

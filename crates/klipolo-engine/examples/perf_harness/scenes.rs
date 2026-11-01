@@ -1,11 +1,10 @@
-//! `… -- motion [scenes] [1080|4k]`: what motion graphics with text cost per frame, the text-perf
-//! audit's scene cases 1, 3 and 4: a kinetic title (letters rising; words blurring in), a blur-in title (twelve letters
-//! blurring in one after another; a node blur on one unsplit 40-character line) and three lower thirds in full-frame
-//! layers, as authored (plain; with a shadowed title and role; inside a faded group), staggered so all three animate
-//! together and then all three hold. Each through the real GPU backend (`Headless::render_timed`: the frame's GPU time
-//! from its timestamps where the device has trusted ones, else the fenced wall clock), at 1080p and 4K. A timed frame
-//! draws every pass, so "holding" times the three lower thirds drawn while they hold still, not
-//! the held pictures the preview shows then.
+//! `… -- motion [scenes] [1080|4k]`: what motion graphics with text cost per frame: a kinetic title (letters rising;
+//! words blurring in), a blur-in title (twelve letters blurring in one after another; a node blur on one unsplit
+//! 40-character line) and three lower thirds in full-frame layers, as authored (plain; with a shadowed title and role;
+//! inside a faded group), staggered so all three animate together and then all three hold. Each through the real GPU
+//! backend (`Headless::render_timed`: the frame's GPU time from its timestamps where the device has trusted ones, else
+//! the fenced wall clock), at 1080p and 4K. A timed frame draws every pass, so "holding" times the three lower thirds
+//! drawn while they hold still, not the held pictures the preview shows then.
 //!
 //! Printed per case and size: GPU ms p50/p95 (and frames 0–15 alone for a blur-in: its peak), the frame's encoding
 //! CPU and the scene drawer's CPU (its last scene's) p50/p95, the drawer's first frame and its timeline survey alone,

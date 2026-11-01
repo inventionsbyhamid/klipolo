@@ -88,7 +88,7 @@ const HOIST: usize = 3;
 /// Deletes `root` and everything under it, never following a link, within a few descriptors (`HOIST`). On any error it
 /// tries once more; with `unlock` (the worker is gone) it first gives this user back every entry the worker may
 /// have locked (`unlock_for_removal`: BSD flags, ACLs, folder modes). Only a root that is already gone counts as done
-///: a `NotFound` from inside the tree is a failure to retry, not success.
+/// A `NotFound` from inside the tree is a failure to retry, not success.
 ///
 /// The moves (`flatten`'s renames) work by path, so they are safe only while nothing else changes the tree. They
 /// also run with `unlock` false, in a sweep whose worker has no record or whose kill wasn't confirmed, and that is safe

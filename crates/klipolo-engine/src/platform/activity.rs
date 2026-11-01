@@ -1,12 +1,12 @@
 //! The activity pass's decoder seam: a screen file's picture at every 100 ms tick, as 128 × 72
 //! luma for `klipolo_cursor::activity::Differ`. FFmpeg on every platform for now (`ffmpeg`: hardware decode where the
-//! platform has one, the Y plane only, a fast bilinear scale); AVAssetReader on macOS in C18.
+//! platform has one, the Y plane only, a fast bilinear scale).
 //!
 //! **Which picture a tick gets:** the one on screen then, the latest frame at or before the tick (the first frame for a
 //! tick before it). A screen recording may hold a still picture for seconds without a frame (a variable frame rate),
 //! and the next frame after the tick would date a change that much early. Ticks run from `from_us` while they are
 //! before the file's end; the last frame stays on screen until then. Times are on the video stream's own clock: tick 0
-//! is its first frame, as every decoder numbers frames.
+//! is its first frame, as every decoder numbers frames (the takes' activity is mapped on it).
 //!
 //! **Stopping:** a decoder checks `cancel` between packets, so a stop never waits for more than one packet's decode.
 

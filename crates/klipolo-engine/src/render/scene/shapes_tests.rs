@@ -1,6 +1,5 @@
-//! The shapes pipeline's inter-stage budget (a standing lane-B note): its fragment stage reads at most 56
-//! of the 60 varying components a Metal or Vulkan device guarantees, so the fills and backdrops ride in fields it
-//! already had.
+//! The shapes pipeline's inter-stage budget: its fragment stage reads at most 56 of the 60 varying components a Metal
+//! or Vulkan device guarantees, so the fills and backdrops ride in fields it already had.
 
 use super::SOURCE;
 

@@ -11,7 +11,7 @@ use crate::plan::drawn::effective;
 
 /// `params` clamped into `env`: a number past its range at the range's end, a bool or choice outside its
 /// allowed values at its default (or, when that is outside too, the first allowed). Each value is read as the renderer
-/// draws it (`plan::drawn::effective`, N-m5): one left out at its default, one it can't read at its default, a number
+/// draws it (`plan::drawn::effective`): one left out at its default, one it can't read at its default, a number
 /// past the definition's own bounds at the bound. A value the layer holds that draws otherwise is written back as it
 /// draws, so every reader of the settings (a padded filter's margin too) sees what is drawn; a
 /// setting the layer leaves out stays out unless its default lies outside the envelope.

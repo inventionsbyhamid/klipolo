@@ -67,7 +67,7 @@ impl ShaderEffect {
 #[cfg(any(test, feature = "test-support"))]
 impl Cost {
     /// Tests: a Normal cost (2.0 ms) on any computer, `ms` a frame at 1080p and 4 × that at 2160p in export (the
-    /// 12's tiles), nothing bounded. Here rather than in `make::budget`, whose text pins `MEASURE_VERSION`.
+    /// export's tiles), nothing bounded. Here rather than in `make::budget`, whose text pins `MEASURE_VERSION`.
     #[doc(hidden)]
     pub fn with_export_ms(ms: f64) -> Cost {
         use crate::make::budget::{DecidedBy, ExportMs, Pcts};

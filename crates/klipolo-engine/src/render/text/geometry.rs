@@ -275,8 +275,7 @@ impl Geometry {
 
 /// One try at laying a new text out: the share of its full resolution, and whether it is the full-resolution try a
 /// text whose box fits the ceiling gets first. The ladder every new title climbs down, on the
-/// render thread and on the title build thread alike, so a title built ahead is exactly as sharp as one built cold
-///.
+/// render thread and on the title build thread alike, so a title built ahead is exactly as sharp as one built cold.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct Try {
     pub(super) down: f64,
@@ -366,9 +365,9 @@ mod tests {
         }
     }
 
-    /// A softened text's retry climbs the ladder a new text climbs (`Try::first`): full
-    /// resolution while its box fits the ceiling and there is room, its ink then checked against the room, where it
-    /// used to wait for its box's estimate to fit the room, which near the ceiling may never come while it shows.
+    /// A softened text's retry climbs the ladder a new text climbs (`Try::first`): full resolution while its box fits
+    /// the ceiling and there is room, its ink then checked against the room, rather than waiting for its box's
+    /// estimate to fit the room, which near the ceiling may never come while it shows.
     #[test]
     fn a_softened_texts_retry_climbs_the_new_texts_ladder() {
         let g = full_frame();

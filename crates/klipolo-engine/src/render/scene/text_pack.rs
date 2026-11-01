@@ -208,7 +208,7 @@ impl<'a> Shown<'a> {
             .get(usize::from(p.unit))
             .filter(|_| p.unit != NO_UNIT)
             .map_or(0.0, |u| u.blur);
-        // Clamped in 1080p pixels, then in box pixels (m8: a 4K frame blurs as its preview).
+        // Clamped in 1080p pixels, then in box pixels (a 4K frame blurs as its preview).
         let blur = ((f.s.blur + unit_blur).clamp(0.0, MAX_BLUR_PX) * f.k).min(256.0) as f32;
         let rect = shifted(cell.rect, p.dx, p.dy);
         let blurred = (blur > 0.0 && blur.is_finite() && f.blur.allow(f.node, p.unit))

@@ -1,7 +1,7 @@
 //! What the timeline draws on its blocks, derived from each source file: thumbnail sprites cut from keyframes by
 //! a scan that runs after the file's sound is cached (sound first; `store::ThumbStore`, `scan`); the
 //! keyframe index the preview decoders seek with, recorded by that scan (`keyframes`); and the events that tell the UI
-//! when a file's waveform or filmstrip is ready (`events`); and editing copies of sources that scrub slowly (`proxy`,
+//! when a file's waveform or filmstrip is ready (`events`); and editing copies of sources that scrub slowly
 //! (`proxy`), which also refill the filmstrip from a full decode. Every cache is named by `key::stem`. Also a
 //! recording's cursor data, which Auto zooms follow (`cursor`), and where its screen changed (`activity`, after the
 //! thumbnails). For clip analysis: a small H.264 and AAC copy of part of a clip for a model to

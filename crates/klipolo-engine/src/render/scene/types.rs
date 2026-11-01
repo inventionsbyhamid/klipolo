@@ -24,8 +24,8 @@ pub struct SceneStats {
     /// Scene texts kept (one per instance and size), and the bytes their atlases and draws hold.
     pub texts: usize,
     pub text_bytes: u64,
-    /// Text builds asked and not landed yet, and how many of them wait for this computer's fonts (an export's;
-    /// a frame waits for its build apart from that).
+    /// Text builds asked and not landed yet, and how many of them wait for this computer's fonts (an export's; a frame
+    /// waits for its build apart from that).
     pub text_pending: usize,
     pub text_pending_waiting: usize,
     /// The last scene drawn: its nodes drawn offscreen, and its bytes.
@@ -38,7 +38,7 @@ pub struct SceneStats {
     /// blurring fragment once more).
     pub blur_fetches: u64,
     /// How long the last survey of an instance's timeline took (µs), and how many ran (the
-    /// the first frame of a moving scene, or the frame its own text lands).
+    /// first frame of a moving scene, or the frame its own text lands).
     pub survey_us: f64,
     pub surveys: u64,
     /// The text build thread's time for the last survey a frame adopted from it (off the frame).
@@ -58,7 +58,7 @@ pub struct SceneOut {
     pub rect: [u32; 4],
 }
 
-/// What one scene instance holds while drawn, from its last
+/// What one scene instance holds while drawn (its memory for the budget classes), from its last
 /// frame:
 /// - `own`: its own target, only as big as what it draws (the layer's whole target when its effects, its
 ///   corners or a backdrop read it), counted with its layer as a layer's target is, so not in [`SceneBytes::total`];

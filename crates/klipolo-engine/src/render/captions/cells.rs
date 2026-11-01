@@ -1,4 +1,4 @@
-//! Where a laid-out page's words go: on their lines, centred per line around the block's centre, in reading
+//! Where a laid-out page's words go: on their lines, centred per line around the block's centre, and in
 //! their cells of the page's atlas, each with room for the outline, the shadow and the blurs.
 
 use klipolo_model::captions::style::{BoxOn, CaptionStyleDef};

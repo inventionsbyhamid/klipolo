@@ -1,4 +1,5 @@
-//! Draws only the background colour, with no GPU. The actor tests use it, and it stands in where no GPU is.
+//! Draws only the background colour, with no GPU. The actor tests use it, and so does the app in its tests and off
+//! macOS.
 
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};

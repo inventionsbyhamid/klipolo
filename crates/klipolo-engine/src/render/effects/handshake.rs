@@ -1,17 +1,17 @@
-//! The crash guard's handshake in the app's preview
-//! m5). Two kinds of mark keep an agent-made effect's riskiest moments inside the guard, each asked of the app with
-//! `FirstDraw { contrib, seq }`, written and synced to disk there (`make::guard`), and acknowledged with
-//! `MarkWritten { contrib, seq }`; nothing happens before the acknowledgement of that very request (`seq`):
+//! The crash guard's handshake in the app's preview. Two kinds of mark keep an agent-made effect's riskiest moments
+//! inside the guard, each asked of the app with `FirstDraw { contrib, seq }`, written and synced to disk there
+//! (`make::guard`), and acknowledged with `MarkWritten { contrib, seq }`; nothing happens before the acknowledgement of
+//! that very request (`seq`):
 //!
 //! - **A compile mark** before the compile thread parses and compiles its shader (naga's check, wgpu's shader module and
 //!   pipeline). It closes (`DrewSafely`) when the compile returns, whatever it returned.
 //! - **A draw mark** the first time a frame needs the effect (never at placement). It closes after
 //!   [`SAFE_AFTER_FRAMES`] frames that drew it (a static generator's cached picture counts) or [`SAFE_AFTER`], both
-//!   counted from when the GPU finished the first frame that drew it, whichever comes first (and
-//!   Neither starts at the encoding, so a draw that hangs the GPU keeps its mark open however many
-//!   frames follow it), so a paused still or a still picture never keeps it
-//!   open. One acknowledged that never drew (the playhead left first) closes [`SAFE_AFTER`] after its acknowledgement
-//!   and leaves the list: the next frame that needs the effect asks for a fresh one.
+//!   counted from when the GPU finished the first frame that drew it, whichever comes first (neither starts at the
+//!   encoding, so a draw that hangs the GPU keeps its mark open however many frames follow it), so a paused still or a
+//!   still picture never keeps it open. One acknowledged that never drew (the playhead left first) closes
+//!   [`SAFE_AFTER`] after its acknowledgement and leaves the list: the next frame that needs the effect asks for a
+//!   fresh one.
 //!
 //! A mark the preview lets go while it is open (its registry no longer holds the effect) closes too, as nothing draws
 //! it any more; one for a compile in flight stays until that compile returns. At a device loss every open mark is

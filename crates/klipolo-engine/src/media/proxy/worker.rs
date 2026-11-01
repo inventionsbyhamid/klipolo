@@ -376,7 +376,7 @@ fn deliver(job: &ProxyJob) -> Result<PathBuf, Delivery> {
         let _ = std::fs::remove_file(&joined);
         stopped(e)
     })?;
-    // Its keyframe index beside it, from its sample table: a preview decoder of the copy never demuxes it whole
+    // Its keyframe index beside it, from its sample table: a preview decoder of the copy never demuxes it whole.
     // Without one, decoders build theirs as before.
     let indexed = crate::media::keyframes::from_sample_table(&job.out)
         .ok_or_else(|| std::io::Error::other("no complete sample table"))

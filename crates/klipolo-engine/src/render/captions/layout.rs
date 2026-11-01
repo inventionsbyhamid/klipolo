@@ -163,9 +163,9 @@ pub fn lay_out_page(
     }
     let biggest = words.scales.iter().copied().fold(1.0, f32::max);
     layout.autofit = if breaks.widest > 0.0 {
-        // Below `autofitMin` only so the block, its outline (or box padding) included, stays inside the frame,
-        // also while the word being said is drawn at its active scale: a word wider than
-        // the line draws wider than it, but never past the frame's edge, which would cut it.
+        // Below `autofitMin` only so the block, its outline (or box padding) included, stays inside the frame, also
+        // while the word being said is drawn at its active scale: a word wider than the line draws wider than it, but
+        // never past the frame's edge, which would cut it.
         let edge = edge_em(style) as f32;
         let frame = FRAME_SHARE * out.0 as f32;
         let grown =

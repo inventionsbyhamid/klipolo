@@ -27,7 +27,7 @@ impl ActivityStore {
 
     /// `path` is marked as a screen file that can't be analysed (`fail`, by this process or another), for as long as it
     /// is the same file: plans go without its activity for good, so chat counts it as known, with none. A stat of the
-    /// follow-up). A stat of the file, and one of its mark.
+    /// file, and one of its mark.
     pub fn failed_for_good(&self, path: &str) -> bool {
         stem(path, &CacheKind::Activity).is_some_and(|stem| self.marked(&stem))
     }

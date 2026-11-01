@@ -1,12 +1,11 @@
-//! The worker's watchdog (binding): a worker that outlives the app must exit, whatever its loop is
+//! The worker's watchdog: a worker that outlives the app must exit, whatever its loop is
 //! doing (a long GPU request included). A thread of its own checks every `TICK` whether the parent is still the process
 //! that started it (`parent_id`: once the app exits, the worker is adopted by launchd, init or a subreaper; an adopted
 //! worker's parent is 1 on macOS) and whether stdin has closed (the app's end of the pipe is gone). Either way the
-//! process exits within 1 s: at once for a new parent, and `GRACE` after stdin closed while no request runs
-//! 1, m11: a request in flight finishes and the loop then reads the end). Its last words can't stop it: a closed
+//! process exits within 1 s: at once for a new parent, and `GRACE` after stdin closed while no request runs (a request
+//! in flight finishes and the loop then reads the end). Its last words can't stop it: a closed
 //! stderr (the app's pipe, once the app is gone) is ignored, and it leaves with `_exit`, which runs no handler and
-//! can't block on the busy main thread. The app's sweep at its next start stays the backstop
-//!.
+//! can't block on the busy main thread. The app's sweep at its next start stays the backstop.
 
 use std::io::Write;
 use std::sync::Arc;

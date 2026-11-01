@@ -138,7 +138,7 @@ pub async fn run_batch_with(
     }
 }
 
-/// Runs `job`, already written by `ExportJob::create` (the app makes it before Start over discards the job it replaces:
+/// Runs `job`, already written by `ExportJob::create` (the app makes it before Start over discards the job it
 /// replaces), from its first segment.
 pub async fn run_created(
     launcher: &dyn Launcher,

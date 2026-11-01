@@ -100,8 +100,7 @@ impl Builder<'_> {
                 let mut sweep =
                     (oa[0] * ob[1] - oa[1] * ob[0]).atan2(oa[0] * ob[0] + oa[1] * ob[1]);
                 if turn.abs() < 1e-9 {
-                    // Straight back on itself: half a turn through the way it was going, not back over itself
-                    //.
+                    // Straight back on itself: half a turn through the way it was going, not back over itself.
                     let ahead = oa[0] * da[1] - oa[1] * da[0];
                     sweep = std::f64::consts::PI.copysign(ahead);
                 }

@@ -143,9 +143,9 @@ impl DraftLayer {
     }
 
     /// A built-in shader, `id`, as a draft layer at `params`: what the budget's calibration measures beside agent-made
-    /// shaders. Its measured copy never caches or steps, and a filter with a `downsample` is
-    /// also measured on its downsampled path, as a draft's. Only in builds with the `test-support` feature, which the
-    /// engine's own tests turn on.
+    /// shaders (a calibration run by hand on a Mac after a Mac build). Its measured copy never caches or steps, and a
+    /// filter with a `downsample` is also measured on its downsampled path, as a draft's. Only in builds with the
+    /// `test-support` feature, which the engine's own tests turn on.
     #[cfg(feature = "test-support")]
     #[doc(hidden)]
     pub fn builtin(

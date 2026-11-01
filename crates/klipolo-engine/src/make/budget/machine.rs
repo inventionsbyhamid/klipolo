@@ -1,7 +1,7 @@
 //! This computer, as far as a cost is concerned: its GPU backend, adapter and OS
 //! release. A cost is kept under it, so a new GPU or OS release is checked again. On macOS the GPU driver ships with
 //! the OS release, so a driver update is a new key. On Windows and Linux the driver isn't in the key yet (the release
-//! is the OS's, or Linux's kernel): a driver update there keeps every verdict until the W and L milestones add
+//! is the OS's, or Linux's kernel): a driver update there keeps every verdict until Windows and Linux support adds
 //! `AdapterInfo::driver`. Same-name GPU variants (an "Apple M2" with 8 or 10 GPU cores) share a key.
 
 use klipolo_platform::caps::OsInfo;

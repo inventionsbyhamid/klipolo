@@ -3,7 +3,7 @@
 //! paced like playback, 60 frames a second on the host clock, so the caption and title build threads work while
 //! frames wait.
 //!
-//! - Captions: `--seconds` (30) of speech, twelve words a second in six-word sentences, in four
+//! - Captions: `--seconds` (30) of speech, twelve words a second in six-word sentences, in three
 //!   per-word styles: Highlight (the box glides to the word said; outline, shadow), Arcade (the word said glows;
 //!   outline, the keyword "gaming") and Karaoke (the word said in its colour; outline, shadow). Portrait.
 //! - Titles: three 30-character titles, plain and with a 4 px outline, entering in turn at 1, 2.5 and 4 s, a second
@@ -163,7 +163,7 @@ struct CaptionRun {
     build_gpu: Spread,
     atlases: f64,
     atlas_mb: f64,
-    /// The drawer's uploads of its frame buffers per frame (only when they changed), and the frames that made
+    /// The drawer's uploads of its frame buffers per frame (only when they changed), and those made with a
     /// queue write (its quads' fallback while every kept staging buffer is in flight, and its uniform).
     uploads: f64,
     queue_writes: f64,

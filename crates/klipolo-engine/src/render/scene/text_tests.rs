@@ -26,7 +26,7 @@ impl Font for Node {
 }
 
 #[test]
-fn the_font_shorthand_resolves_through_m5b_and_the_fonts_own_weight_wins() {
+fn the_font_shorthand_resolves_through_the_face_resolver_and_the_fonts_own_weight_wins() {
     use klipolo_model::font::{FontRef, FontSource};
     let ix = klipolo_fonts::index::FontIndex::shipped(klipolo_fonts::bundled::bundled_dir());
     let n = text_node(

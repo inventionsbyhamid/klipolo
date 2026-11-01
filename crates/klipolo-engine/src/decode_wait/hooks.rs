@@ -1,7 +1,8 @@
 //! Test hooks (tests and `trial` builds only, like `render::pool::slow_stats`): a file whose AVAssetReaders stall before
 //! a frame, and a file whose FFmpeg decoders are slow, so the stalled-decoder tests and the trial smoke can reproduce
-//! a real export failure without loading the computer. They also record what the decoders did (the first frame each
-//! reader vended, the frames software decoded). Blocked threads wake when the hooks are cleared or set again.
+//! an export that failed under load without loading the computer. They also record what the decoders did (the first
+//! frame each reader vended, the frames software decoded). Blocked threads wake when the hooks are cleared or set
+//! again.
 
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;

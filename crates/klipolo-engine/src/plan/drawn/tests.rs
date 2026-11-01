@@ -22,7 +22,7 @@ fn def() -> ContribDef {
     }
 }
 
-/// N-m5: a value the engine can't draw as it is (past the definition's own bounds, not finite, the wrong type, an option
+/// A value the engine can't draw as it is (past the definition's own bounds, not finite, the wrong type, an option
 /// the definition doesn't have) reads as what it draws, and the renderer packs exactly that.
 #[test]
 fn a_value_reads_as_what_the_renderer_draws() {

@@ -170,9 +170,9 @@ fn backward_warms_both_sides_of_a_window_its_incoming_clip_ends_with() {
     assert_eq!(warmed_assets(&plan), ["screen", "broll"]);
 }
 
-/// A motion graphic coming up is warmed, so its instance is built before its first frame; a shader
-/// generator isn't (it has nothing to build ahead). With the titles' plan, its scenes
-/// and titles alone, so warming it opens no decoder.
+/// A motion graphic coming up is warmed, so its instance is built before its first frame; a shader generator isn't
+/// (it has nothing to build ahead). It is warmed with the titles' plan, its scenes and titles alone, so warming it
+/// opens no decoder.
 #[test]
 fn a_scene_layer_coming_up_is_warmed() {
     use klipolo_model::layout::{Anchor, BoxN, Layout};

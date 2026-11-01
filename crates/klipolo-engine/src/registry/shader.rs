@@ -28,10 +28,10 @@ pub(crate) use untrusted::source as untrusted_source;
 /// The effect ABI's major version. Additive changes keep it; anything that would change how an existing shader
 /// looks bumps it, and the host keeps an adapter for the previous major.
 pub const EFFECT_ABI: u32 = 1;
-/// The effect ABI's minor version: 1 since it added `kl.fps`, `kl.duration`, `kl.resolution` and `kl.step_fps` to
-/// `KlFrame`, generator time that follows a split layer's piece, stepped time, cached static generators and half-size
-/// ones. Shaders written for v1.0 draw the same. A contribution's key includes it (`registry::key`), so a minor change
-/// checks every shader that isn't built in again.
+/// The effect ABI's minor version: 1 since `kl.fps`, `kl.duration`, `kl.resolution` and `kl.step_fps` joined `KlFrame`,
+/// with generator time that follows a split layer's piece, stepped time, cached static generators and half-size ones.
+/// Shaders written for v1.0 draw the same. A contribution's key includes it (`registry::key`), so a minor change checks
+/// every shader that isn't built in again.
 pub const EFFECT_ABI_MINOR: u32 = 1;
 pub const PRELUDE: &str = include_str!("wgsl/prelude.wgsl");
 /// 16 settings of at most 16 bytes fill `plan::MAX_PARAM_BYTES`.
@@ -160,7 +160,7 @@ pub struct ShaderEffect {
     pub kind: ShaderKind,
     /// Prelude + `Params` + body + entry point.
     pub source: Arc<str>,
-    /// `fnv1a64(source)`: the pipeline cache key (an edited file is a new pipeline; P1 hot reload relies on it).
+    /// `fnv1a64(source)`: the pipeline cache key (an edited file is a new pipeline; hot reload relies on it).
     pub key: u64,
     pub params: Arc<[ParamSpec]>,
     pub layout: ParamLayout,

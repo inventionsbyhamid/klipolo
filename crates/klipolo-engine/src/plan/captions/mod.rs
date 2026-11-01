@@ -34,7 +34,7 @@ use super::effects::note_missing;
 use super::layers::MissingContrib;
 
 /// One frame's captions: the page on screen, how each of its words looks now, and where the block goes. The drawer
-/// lays the page out (once per page: its atlas is kept), resolves the face (the font system and the index are its,
+/// lays the page out (once per page: its atlas is kept), resolves the face (the font system and the index are its),
 /// and works out the block's centre from the laid-out page's real size.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CaptionLayer {

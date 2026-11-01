@@ -275,7 +275,7 @@ impl PcmStore {
         self.generation.fetch_add(1, Ordering::AcqRel);
     }
 
-    /// The project closed: cancel its builds and forget every mapping and queued build. Nothing is deleted
+    /// The project closed: cancel its builds and forget every mapping and queued build. Nothing is deleted: only the
     /// tidy evicts, by least recent use.
     pub fn close_project(&self) {
         let mut inner = lock(&self.inner);

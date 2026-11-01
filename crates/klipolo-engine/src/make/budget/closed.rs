@@ -12,7 +12,7 @@ const UNMEASURED_CPU_US: f64 = 4.0 * Budget::DEFAULT.heavy_cpu_us;
 
 impl Cost {
     /// No figure that isn't finite: one is what the measurement couldn't make, so the cost is
-    /// cut and Over, the figure Over's threshold. A cost that is cut is Over whatever class it names
+    /// cut and Over, the figure Over's threshold. A cost that is cut is Over whatever class it names: its figures leave
     /// out what wasn't measured. The worker sends every cost through it, and the app
     /// reads every cost through it, a `null` figure (`figure`) included: Over, never a protocol error.
     pub fn fail_closed(mut self) -> Self {
@@ -45,7 +45,7 @@ impl Cost {
             }
         }
         if cut {
-            // Over runs nowhere: no flags, and no resolution for `auto`. No measured figure decided it (N-m2).
+            // Over runs nowhere: no flags, and no resolution for `auto`. No measured figure decided it.
             self.cut = true;
             self.class = CostClass::Over;
             self.decided_by = DecidedBy::Cut;

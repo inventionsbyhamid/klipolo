@@ -1,4 +1,4 @@
-//! A checked scene's `Cost` on this computer (the classes). The measurement is the worker's
+//! A checked scene's `Cost` on this computer (the budget classes). The measurement is the effects'
 //! (`measure_noted`: stepped corners, the 50 ms prediction and the 24 ms Over stop, 1080p only within class), with the
 //! scene as the draft layer and its costly settings ([`costly`](super::costly)) at their costly end. A table a `repeat`
 //! draws a row of is measured at its most rows throughout and never narrowed: an Over there is

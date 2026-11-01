@@ -1,5 +1,5 @@
 //! Padding: a filter may draw a declared margin outside its layer's box, so the layer's
-//! passes from its first padded filter on run in a target grown by that margin (sized and clipped by the compositor:
+//! passes from its first padded filter on run in a target grown by that margin (sized and clipped by the
 //! compositor). The layer is drawn into the grown target's inner rect first: an image, video or anything already
 //! run through the passes before the padded filter by the PAD pass, transparent around it; a square generator whose
 //! first filter is the padded one straight from its own pass, so it costs no extra pass. A text's texture already

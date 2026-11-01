@@ -1,6 +1,6 @@
 //! A draft's `Cost` on this computer: measured (`measure`), then classed on time, memory and
 //! CPU with its advice (`budget::classify`: the time class is the measurement's own, decided per point, and memory or
-//! CPU can only raise it). A number costly at both ends is measured inside its range
+//! CPU can only raise it). A number costly at both ends is measured inside its range instead of being floored by the
 //! static estimate (export keeps the static tiling).
 //! `auto` is resolved, and the flags half size, cached and stepped are each on their own.
 

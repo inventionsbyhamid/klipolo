@@ -260,7 +260,7 @@ impl TextUnits {
             (_, a) => a,
         };
         place(&mut lines, align, (bw, bh));
-        // Where its lines stand: by `align`, else by its first paragraph's direction (right for right-to-left, m3).
+        // Where its lines stand: by `align`, else by its first paragraph's direction (right for right-to-left).
         let rtl = lines.lines.first().is_some_and(|l| l.rtl);
         out.align_share = match align {
             Some(Align::Center) => 0.5,

@@ -1,4 +1,4 @@
-//! The work tally (closing R3): each setting and argument carries
+//! The work tally: each setting and argument carries
 //! the straight-line operations it decides, times the trips of the loops around them, the static cap's trip model:
 //! - the arms of each `if` and `switch` whose condition or selector it reaches;
 //! - the rest of the function an early exit (`return`, `discard`, `break`, `continue`) on its condition can skip,
@@ -6,11 +6,10 @@
 //!
 //! It is summed over branches and calls: a call maps its callee's tally through its arguments, as `costly` is mapped,
 //! times the trips around the call. A number setting whose tally passes `HEAVY_ARM` is costly at both ends, and a
-//! colour or point is measured at the probe set. Loops and samples under a branch keep the
-//! branch rule (the end that takes it), and an early exit in a function that holds them keeps the rule for
-//! both ends. One entry per source, so a function's tally is as long as its settings and arguments,
-//! whatever the number of branches or calls. Nested branches on the same source count the inner arms twice: an
-//! over-count, which is safe (parked).
+//! colour or point is measured at the probe set. Loops and samples under a branch keep the branch rule (the end that
+//! takes it), and an early exit in a function that holds them stays costly at both ends. One entry per source, so a
+//! function's tally is as long as its settings and arguments, whatever the number of branches or calls. Nested branches
+//! on the same source count the inner arms twice: an over-count, which is safe.
 
 use super::taint::Source;
 use super::work::HUGE;

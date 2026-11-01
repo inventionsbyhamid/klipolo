@@ -2,7 +2,6 @@
 //! the kind and its format version, the path, and the file's size and modification time: an edited or replaced file
 //! gets new caches, never an old one. An editing copy's name also binds the file's number on its
 //! volume (`SourceId`), so a file replaced by another of the same size and time still gets a new copy.
-//! I1).
 
 use std::time::UNIX_EPOCH;
 

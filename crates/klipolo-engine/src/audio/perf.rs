@@ -1,4 +1,4 @@
-//! Real-scale benchmarks of the engine's audio work, before against after, in one
+//! Real-scale benchmarks of the preview's loudness estimate, replanning and mixing, before against after, in one
 //! process and interleaved. The project is a long one: 2 hours of 1,500 clips alternating between two recordings
 //! (mic and system sound each: 3,000 sources), a dissolve at every other cut, 300 titles. Each recording's files are
 //! a minute long and each clip plays a 4.8 s stretch of them (so the mix reads real samples from mapped caches;
@@ -188,7 +188,7 @@ fn noise(seed: u64, n: usize) -> f32 {
     (x >> 40) as f32 / (1u64 << 23) as f32 - 1.0
 }
 
-/// A 2-hour project over `mic` and `system` (a minute each, 4.8 s stretches of them per clip).
+/// The 2-hour project over `mic` and `system` (a minute each, 4.8 s stretches of them per clip).
 fn two_hours(mic: &str, system: &str) -> Project {
     let mut p = Project::new("audio bench");
     let asset = |id: String, kind, path: &str, has_audio| Asset {

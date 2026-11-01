@@ -64,8 +64,8 @@ pub(super) fn measure_words(
     let mut shown = String::new();
     let mut ranges: ArrayVec<Range<usize>, MAX_WORDS> = ArrayVec::new();
     let mut words = Words::default();
-    // The words drawn, as caption files walk them too (one walk: `drawn_words`): hidden ones left out
-    //, a hidden word's "new line here" going to the next word drawn.
+    // The words drawn, as caption files walk them too (one walk: `drawn_words`): hidden ones left out, a hidden word's
+    // "new line here" going to the next word drawn.
     drawn_words(pages, page, |d| {
         if ranges.is_full() {
             return;

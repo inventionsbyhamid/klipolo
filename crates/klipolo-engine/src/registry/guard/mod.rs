@@ -1,16 +1,15 @@
-//! Source rules, static cost and diagnostics for WGSL that isn't built in, and the
-//! hardened module a device compiles ([`harden`]). [`check`] decides everything that can be read from the
-//! text and naga's IR before a GPU sees the shader: the text caps (`scan`, with `names`: no name naga's writer would
-//! rewrite), the registry's assembly with its output check (`place`), naga's parse, the module rules (`rules`;
-//! `words`: no `@diagnostic` filter, which naga's writer drops; and `host`: the host's code calls only the host's
-//! functions), naga's validation, then the static facts (`analyze`, with the prelude's globals in `globals`: loop
-//! bounds in `bounds`, cost in `cost`, `weights` and `work`, settings in `collect`, `flow`, `taint`, `costly`, `tally`
-//! and `settings`) and the static cost cap (`advice`). The settings analysis is conservative: where tracking is
-//! uncertain, a setting is costly at both ends, so it is measured at both,
-//! and so is a setting that decides more than 1,024 operations (the work tally). A colour
-//! or point setting that decides work is never refused for it: it is measured at the probe set (`End::Probe`),
-//! with an Info note in [`Checked::notes`]. Every refusal is a [`Diagnostic`] in the author's
-//! own lines, with a hint (`hints`) an agent can act on, and with the agent's text escaped ([`shown`]).
+//! Source rules, static cost and diagnostics for WGSL that isn't built in, and the hardened module a device compiles
+//! ([`harden`]). [`check`] decides everything that can be read from the text and naga's IR before a GPU sees the
+//! shader: the text caps (`scan`, with `names`: no name naga's writer would rewrite), the registry's assembly with its
+//! output check (`place`), naga's parse, the module rules (`rules`; `words`: no `@diagnostic` filter, which naga's
+//! writer drops; and `host`: the host's code calls only the host's functions), naga's validation, then the static facts
+//! (`analyze`, with the prelude's globals in `globals`: loop bounds in `bounds`, cost in `cost`, `weights` and `work`,
+//! settings in `collect`, `flow`, `taint`, `costly`, `tally` and `settings`) and the static cost cap (`advice`). The
+//! settings analysis is conservative: where tracking is uncertain, a setting is costly at both ends, so it is measured
+//! at both, and so is a setting that decides more than 1,024 operations (the work tally). A colour or point setting
+//! that decides work is never refused for it: it is measured at the probe set (`End::Probe`), with an Info note in
+//! [`Checked::notes`]. Every refusal is a [`Diagnostic`] in the author's own lines, with a hint (`hints`) an agent can
+//! act on, and with the agent's text escaped ([`shown`]).
 //!
 //! [`check`] runs naga, so it runs only in the render worker on text that isn't verified yet: naga's front end
 //! alone can be made to allocate gigabytes (a zero-valued `array<f32, 500000000>` constant expands while parsing),
@@ -73,7 +72,7 @@ pub const MAX_FUNCTIONS: usize = 64;
 /// naga IR expressions over the body's functions.
 pub const MAX_EXPRESSIONS: usize = 20_000;
 /// Scalars in the body's constant arrays together, and in any one array or struct type in the module (a `mat4x4`
-/// a `mat4x4` counts 16), nested arrays multiplied.
+/// counts 16), nested arrays multiplied.
 pub const MAX_CONST_ELEMENTS: u64 = 1024;
 /// The static cost cap: a shader whose bound is over either is refused before any GPU work.
 pub const MAX_OPS_PER_PIXEL: u64 = 250_000;
@@ -205,8 +204,8 @@ pub enum End {
     /// The costly arm can't be read from a simple comparison: both ends are measured (every option of a choice).
     Both,
     /// A colour or point setting that decides work, which has no ends: it is measured at the probe set and the worst
-    /// the worst (points: the frame's 3×3 grid and the default; colours: the default, black, white, red, green, blue,
-    /// and alpha 0 when it has alpha).
+    /// kept (points: the frame's 3×3 grid and the default; colours: the default, black, white, red, green, blue, and
+    /// alpha 0 when it has alpha).
     Probe,
 }
 
@@ -279,7 +278,7 @@ pub struct Checked {
     pub notes: Vec<Diagnostic>,
 }
 
-/// Checks a body of the kind `kind` for the definition `def`, as B1 asks of every shader that isn't built in.
+/// Checks a body of the kind `kind` for the definition `def`, as every shader that isn't built in is checked.
 pub fn check(def: &ContribDef, kind: ShaderKind, body: &str) -> Result<Checked, Vec<Diagnostic>> {
     let scanned = scan::scan(body);
     if !scanned.is_empty() {

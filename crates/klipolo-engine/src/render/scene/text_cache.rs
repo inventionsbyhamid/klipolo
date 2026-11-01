@@ -12,7 +12,7 @@
 //! format shows, the format passes its caps, as the instances' do, until one leaves the screen. Each atlas is within
 //! the budget: text past it at its softest is refused on the build thread, never kept. Entries expire as instances do
 //! (8 frames drawn, 480 prepared); all go on `forget`. At most [`MAX_IN_FLIGHT`] builds are asked at once. Surveys
-//! asked alone (a scene without text, `text_builds.rs`) wait for their instance at most 16 at once and
+//! asked alone (a scene without text: `text_builds.rs`) wait for their instance at most 16 at once and
 //! for as long as a prepared entry does.
 
 use std::sync::Arc;

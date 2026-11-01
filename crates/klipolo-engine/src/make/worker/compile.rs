@@ -2,7 +2,7 @@
 //! measured at its corners, each stepped first (`measure`); a `resolution: auto` generator is resolved by 4 frames at
 //! full and half size (PSNR ≥ 40 dB picks half; skipped for Over); a 256 × 144 thumbnail at the middle of its time goes
 //! on its own line; and the output check's count is said (`audit`). The reply carries the guard's notes, the key it
-//! measured (m11, with the ABI's minor version) and the hardened text's hash. Each step sends `Progress`.
+//! measured (with the ABI's minor version) and the hardened text's hash. Each step sends `Progress`.
 
 use std::io::Write;
 use std::path::Path;

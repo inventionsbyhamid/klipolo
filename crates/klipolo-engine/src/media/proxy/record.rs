@@ -95,9 +95,9 @@ impl CopyRecord {
             })
     }
 
-    /// An older copy (made with the old numbering) of a source whose picture starts at least half a frame into the file:
-    /// it was made with frames numbered from the file's 0, so it shows each frame that many frames late
-    /// m1). A start under half a frame numbered the same frames either way, so most older copies are kept.
+    /// An older copy (made with the old numbering) of a source whose picture starts at least half a frame into the
+    /// file: it was made with frames numbered from the file's 0, so it shows each frame that many frames late. A start
+    /// under half a frame numbered the same frames either way, so most older copies are kept.
     fn numbered_late(&self, facts: &SourceFacts) -> bool {
         !self.from_stream_start && super::numbering::starts_late(facts.start_us, self.rate)
     }

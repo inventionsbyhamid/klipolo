@@ -1,4 +1,4 @@
-//! What a measurement found: the `Cost` data types, the one definition the protocol re-exports
+//! What a measurement found: the `Cost` data types, the one definition the protocol re-exports, the budget classes'
 //! table and the time thresholds the measurement narrows by; the classes on time,
 //! memory and CPU (`classify`), each kind's own memory (`Own`), the advice and the machine key. Read from the
 //! worker's replies, so a field these types don't have is refused.
@@ -35,11 +35,11 @@ pub struct Cost {
     pub gpu_bytes: MemoryUse,
     pub class: CostClass,
     /// The time figure, in ms: the worst point's p95 at half size when `at_half`, else at preview
-    /// size. A card compares it with `budget_ms` (never `preview_ms`) only when `decided_by` is the time (N-m2).
+    /// size. A card compares it with `budget_ms` (never `preview_ms`) only when `decided_by` is the time.
     #[serde(deserialize_with = "figure")]
     pub decided_ms: f64,
     pub at_half: bool,
-    /// What decided the class: with `Cut`, `decided_ms` is Over's threshold, never a measured figure (N-m2).
+    /// What decided the class: with `Cut`, `decided_ms` is Over's threshold, never a measured figure.
     pub decided_by: DecidedBy,
     /// The class's GPU limit, in ms.
     #[serde(deserialize_with = "figure")]
@@ -142,8 +142,8 @@ pub struct RunsAt {
     pub stepped: bool,
 }
 
-/// The classes' limits (one table for every GPU, calibrated on the Intel Mac by hand; it changes only by explicit
-/// choice).
+/// The classes' limits (one table for every GPU, calibrated on an Intel Mac by a measurement run by hand on a Mac after
+/// a Mac build; it changes only when that calibration is run again).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Budget {
     pub light_ms: f64,

@@ -120,8 +120,7 @@ impl SceneDrawer {
         }
         if let Some(h) = entry.held {
             // Covered first: a hold that ends gives its target back before this frame takes one. A part of the layer
-            // held while the layer since took an effect or corners (they read its whole target) isn't this frame
-            //.
+            // held while the layer since took an effect or corners (they read its whole target) isn't this frame.
             let whole = h.rect == [0, 0, at.size.0, at.size.1];
             if (whole || shrinks(layer))
                 && target::covers(&h, t, |from| static_until(&entry.inst, from))
@@ -157,7 +156,7 @@ impl SceneDrawer {
             text: text.map(|t| &t.layouts),
             backdrop: backdrop.map(|b| b.map),
         };
-        // Its own target and its offscreen nodes' only as big as what they draw, the largest across its motion (Tasks
+        // Its own target and its offscreen nodes' only as big as what they draw, the largest across its motion:
         // surveyed once, with its own text (one frame is all of a scene that holds one pose throughout).
         let packing = Packing {
             size: at.size,

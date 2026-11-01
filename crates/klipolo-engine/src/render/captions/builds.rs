@@ -1,6 +1,5 @@
-//! How the caption drawer asks for pages and keeps what comes back (split out of
-//! `drawer` at its next touch): the face a layer draws in, a page's key, the builds asked of the
-//! build thread (`worker`) and the replies kept in the drawer's atlases. Nothing here builds a page.
+//! How the caption drawer asks for pages and keeps what comes back: the face a layer draws in, a page's key, the builds
+//! asked of the build thread (`worker`) and the replies kept in the drawer's atlases. Nothing here builds a page.
 
 use std::sync::Arc;
 

@@ -45,9 +45,9 @@ impl EffectStage {
         self.tiled = on;
     }
 
-    /// Asks for `shader`'s pipeline (`Interactive`), once: the built-ins are queued on the compile thread first,
-    /// then its compile mark is asked for, and the compile thread gets it only once that mark is on disk
-    /// `mark_written`), so it runs after every built-in.
+    /// Asks for `shader`'s pipeline (`Interactive`), once: the built-ins are queued on the compile thread first, then
+    /// its compile mark is asked for, and the compile thread gets it only once that mark is on disk (`mark_written`),
+    /// so it runs after every built-in.
     pub(super) fn ask(&mut self, shader: &ShaderEffect) {
         if self.asked.contains_key(&shader.key)
             || self.awaiting.iter().any(|(_, s)| s.key == shader.key)
@@ -187,7 +187,7 @@ impl EffectStage {
         self.builtins_queued.contains_key(&shader.key)
     }
 
-    /// The app wrote the crash-guard mark `seq` of `id` to disk (`EngineCommand::MarkWritten`, m1): a compile mark sends
+    /// The app wrote the crash-guard mark `seq` of `id` to disk (`EngineCommand::MarkWritten`): a compile mark sends
     /// its shader to the compile thread; a draw mark lets it draw from the next frame on.
     pub fn mark_written(&mut self, id: &ContribId, seq: u64) {
         if self.handshake.ack(id, seq, Instant::now()) == Some(Purpose::Compile)
@@ -228,7 +228,6 @@ impl EffectStage {
     /// closes, except a compile's in flight, kept until it returns. In `Interactive` mode its checked shaders
     /// are asked for now, when they are placed rather than when the playhead reaches them, behind every built-in on the
     /// compile thread (with the half-size step, `RESAMPLE`); no draw mark is asked for until a frame needs one.
-    ///.
     pub fn prepare(&mut self, registry: &Registry) {
         let own = [
             self.grab.clone(),
@@ -284,7 +283,7 @@ impl EffectStage {
     }
 
     /// The device was lost at `lost_at`: the checked effects to strike (open acknowledged marks, every draw whose frame
-    /// the GPU never finished, and those drawn in the last 60 frames and 2 s before the loss); unacknowledged marks close
+    /// the GPU never finished, and those drawn in the last 60 frames and 2 s before the loss); unacknowledged marks
     /// close. The stage's marks go.
     pub fn lost_marks(&mut self, lost_at: Instant) -> Vec<ContribId> {
         let done = self.gpu_done.newest().0;

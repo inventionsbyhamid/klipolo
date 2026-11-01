@@ -4,7 +4,7 @@
 //! padding's setting. Reported in the definition's order.
 //!
 //! A colour or point setting has no ends, so one that is costly in any of these ways is marked `Probe`: it is
-//! measure it at the probe set. It is never refused for it. Each gets an Info
+//! measured at the probe set. It is never refused for it. Each gets an Info
 //! note per reason, at the line where it decides the most work (`Summary::at`), with a hint that fits its kind.
 
 use std::collections::HashMap;
@@ -128,7 +128,7 @@ fn notes(p: &Placed, m: &Module, e: &Summary, probed: &[Probed]) -> Vec<Diagnost
                 ),
             );
             let d = if e.whole_params {
-                // Review m-d: a whole copy of `params` makes every setting it reaches count.
+                // A whole copy of `params` makes every setting it reaches count.
                 d.hint(format!("Read `params.{key}` (and each setting you need) where you use it, instead of copying `params` or passing it to a function: then only the settings that decide work are probed."))
             } else {
                 d.hint(format!("Nothing to change. To keep it out of the probes, choose with `select()`, `mix()` or `step()` instead of an `if` (or an early `return`) on a value this {} reaches.", if what.is_empty() { "setting" } else { what }))

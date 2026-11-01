@@ -70,7 +70,7 @@ pub struct PlanContext {
     pub video_duration_us: Us,
     /// Where each transition runs, in timeline order (built once per revision: `transitions::windows` allocates).
     pub transitions: Arc<[TransitionWindow]>,
-    /// What contributions draw: built-ins now, packs and shader plugins in P1. The export worker builds the same one.
+    /// What contributions draw: the built-ins, packs and shader plugins. The export worker builds the same one.
     pub registry: Arc<Registry>,
     /// Which tracks the solo buttons leave on (resolved once per revision, never per frame).
     pub solo: Solo,

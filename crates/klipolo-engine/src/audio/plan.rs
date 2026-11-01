@@ -121,7 +121,7 @@ fn drift_rate(ppm: f64) -> f64 {
 }
 
 /// Which of a source's fades cross into another clip's sound across a transition. Those are equal power: the
-///: the outgoing sound falls as cos and the incoming one rises as sin over the window, so two unrelated
+/// outgoing sound falls as cos and the incoming one rises as sin over the window, so two unrelated
 /// sounds keep their summed power level instead of dipping about 3 dB in the middle. Every other fade goes to silence
 /// in a straight line.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -139,13 +139,13 @@ fn audible<'a>(p: &'a Project, id: &str) -> Option<&'a Asset> {
 /// whose files carry sound (`query::sound_sources`; each run of them the
 /// clip plays, at the source's mix in that clip: `Clip::mix_for`, centred from one channel where it says so, and at the
 /// run's drift-corrected `rate`; a gap between runs plays nothing, but where no sound source recorded anything a muted
-/// camera sound that fills gaps plays: `fill`), at the clip's volume with its fades (to silence, 
-/// D13). A transition crossfades the two clips' sound over its window
-/// instead: the outgoing clip plays on past its cut and fades out, the incoming one starts before it and fades
-/// in. Muted and silent clips add nothing. Then every audio item (at its volume, fades and effect) and every overlay
-/// video's own sound (at its speed and volume), unless the layer is muted. A muted track adds nothing, and neither does a hidden overlay track
-/// (audio tracks have no hide control). While any track is soloed only soloed tracks add theirs, and mute still wins
-/// (`Solo::sounds`); the main track always plays. Export plans its sound here too, so what plays is what exports.
+/// camera sound that fills gaps plays: `fill`), at the clip's volume with its fades (to silence). A transition
+/// crossfades the two clips' sound over its window instead: the outgoing clip plays on past its cut and fades out,
+/// the incoming one starts before it and fades in. Muted and silent clips add nothing. Then every audio item (at its
+/// volume, fades and effect) and every overlay video's own sound (at its speed and volume), unless the layer is
+/// muted. A muted track adds nothing, and neither does a hidden overlay track (audio tracks have no hide control).
+/// While any track is soloed only soloed tracks add theirs, and mute still wins (`Solo::sounds`); the main track
+/// always plays. Export plans its sound here too, so what plays is what exports.
 ///
 /// A file's time is its picture's (each stream counts from its own start), so a picture file's own sound reads its
 /// file its lead (`Asset::lead_us`) before the time its picture shows: an imported clip's, a
@@ -165,7 +165,6 @@ pub fn audio_plan(p: &Project, registry: &Registry, speech: Arc<[RangeUs]>) -> A
             continue;
         }
         // A transition crossfades the two clips' sound over its window (equal power; it replaces the fades).
-        // fades).
         let incoming = i
             .checked_sub(1)
             .and_then(|k| main[k].transition_out.as_ref())

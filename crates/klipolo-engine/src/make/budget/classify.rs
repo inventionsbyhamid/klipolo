@@ -18,12 +18,12 @@ use crate::registry::guard::StaticFacts;
 /// The measurement's version: what the classes, the measurement and the renderer's cost are. A
 /// verdict from another version is never read (the verified store keys and files carry it): bump it whenever `Budget`,
 /// `classify`, `measure` or what the renderer costs changes. `tests/budget/version.rs` pins it to the table and these
-/// sources. 2: `Cost` says what decided its class (N-m2). 3: where the timing is fenced, the
+/// sources. 2: `Cost` says what decided its class. 3: where the timing is fenced, the
 /// floor it adds is taken off every figure. 4: where it is fenced, frames are timed in batches, whose slope
 /// cancels the wait. 5: Light by the precision reached, short batches once a point can't be Light,
 /// and no kept picture in a timed frame. 6: a batch whose copies drew other passes than its single frame
-/// gives no slope. 7: the merged meter: the batched timing beside the
-/// scene measurement (`Meter::scene_cpu`, a draft's facts through `DraftLayer::facts`).
+/// gives no slope. 7: the merged meter: the batched timing beside the scene measurement (`Meter::scene_cpu`, a
+/// draft's facts through `DraftLayer::facts`).
 pub const MEASURE_VERSION: u32 = 7;
 
 /// What decided a cost's class, so a card compares `decided_ms` with `budget_ms` only when
@@ -100,7 +100,7 @@ fn classes(m: &Measured, may_halve: bool, b: &Budget) -> (CostClass, CostClass, 
     (by_time, by_memory, by_cpu)
 }
 
-/// What decided `m`'s class for `def` (N-m2): a cut first, then the half-size rule, then the time where it is the worst
+/// What decided `m`'s class for `def`: a cut first, then the half-size rule, then the time where it is the worst
 /// (a tie goes to the time), then memory, then CPU.
 pub(super) fn decided_by(m: &Measured, def: &ContribDef, b: &Budget) -> DecidedBy {
     if m.decided == Decided::Unmeasured {
@@ -134,7 +134,7 @@ fn memory_class(bytes: &MemoryUse, may_halve: bool, b: &Budget) -> CostClass {
     }
 }
 
-/// The class a scene's CPU time a frame (µs, p95) allows.
+/// The class a scene's CPU time a frame (µs, p95) allows (the scene measurement measures it).
 fn cpu_class(us: f64, may_halve: bool, b: &Budget) -> CostClass {
     if !us.is_finite() {
         CostClass::Over

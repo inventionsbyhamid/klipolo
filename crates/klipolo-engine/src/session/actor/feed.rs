@@ -304,7 +304,7 @@ impl<B: PreviewBackend> Actor<B> {
 
     /// A cursor take loaded or was built again (or couldn't be read): the Auto zooms over it are planned again and its
     /// follow paths taken; runs and plans that didn't change are kept, and a long rebuild runs off the actor as an
-    /// edit's does. A take the cursor layer draws (or its new smoothing) changes the frame too, so it is drawn again
+    /// edit's does. A take the cursor layer draws (or its new smoothing) changes the frame too, so it is drawn again.
     /// While playing, a new plan or path would jump: it waits for the next pause (`cursor_due`); the cursor
     /// layer draws the take as it is meanwhile.
     pub(super) fn on_cursor(&mut self) {

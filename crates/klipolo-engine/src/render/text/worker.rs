@@ -1,7 +1,7 @@
 //! The title build thread: a title the playback lookahead reaches is shaped, rasterised,
 //! outlined and mipmapped here, about a second before the frame it enters, so the render thread only draws its
 //! texture. Started by the drawer's first `ahead` (only the preview's lookahead asks; an export never starts it). It
-//! keeps a builder and a font system of its own, as the caption build thread does (an exception to the shared
+//! keeps a builder and a font system of its own, as the caption build thread does (an exception to the one shared
 //! font system), refreshed by the fonts' generation before each build. It answers requests in order; a dropped drawer
 //! drops the request channel, and the thread ends after its current build.
 //!
@@ -152,13 +152,13 @@ fn run(dev: &RenderDevice, asked: &Receiver<Request>, answer: &Sender<Built>) {
     }
 }
 
-/// Waits (two seconds at most: a lost device) until the GPU work submitted so far is done
-/// The device's one poll thread waits, as it does for every frame's pixels, and tells this one
-/// (`on_submitted_work_done`). The fence-lock wait moved there, it wasn't removed: that thread's
-/// `poll(Wait)` holds wgpu-core's fence lock until everything submitted is done, so a frame the render thread submits
-/// meanwhile still waits on the CPU behind the build's GPU work (and behind frames submitted after it, as its wait is
-/// for the newest submission), as it did behind this thread's own `poll` before. With wgpu 25 only not waiting
-/// would avoid it; the [Mac] check found no frame over budget from it.
+/// Waits (two seconds at most: a lost device) until the GPU work submitted so far is done: the device's one poll thread
+/// waits, as it does for every frame's pixels, and tells this one (`on_submitted_work_done`). The fence-lock wait moved
+/// there, it wasn't removed: that thread's `poll(Wait)` holds wgpu-core's fence lock until everything submitted is
+/// done, so a frame the render thread submits meanwhile still waits on the CPU behind the build's GPU work (and behind
+/// frames submitted after it, as its wait is for the newest submission), as it would behind a `poll` of this thread's
+/// own. With wgpu 25 only not waiting would avoid it; a check run by hand on a Mac after a Mac build found no frame
+/// over budget from it.
 fn finished(dev: &RenderDevice) {
     let (done, wait) = mpsc::sync_channel(1);
     dev.queue.on_submitted_work_done(move || {

@@ -32,6 +32,6 @@ pub(crate) fn log_name<P: AsRef<std::path::Path> + ?Sized>(path: &P) -> std::bor
         .file_name()
         .map_or(std::borrow::Cow::Borrowed(""), |n| n.to_string_lossy())
 }
-// OS services moved to `klipolo-platform` (PS); their engine paths stay for the callers.
+// OS services moved to `klipolo-platform`; their engine paths stay for the callers.
 pub use klipolo_platform::power as activity;
 pub use klipolo_platform::qos;

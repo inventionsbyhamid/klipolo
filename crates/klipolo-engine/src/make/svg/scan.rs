@@ -1,8 +1,8 @@
 //! The byte scan an SVG passes before any parser sees it: it walks the markup (skipping comments,
 //! CDATA and processing instructions, honouring quotes inside tags) and refuses text elements (flowed text too),
-//! entity declarations or a DTD's internal subset, scripts and foreign content, patterns, clip paths, masks and filters
-//!, markers (usvg converts a marker's children at every vertex, markers within
-//! markers too), and nesting past [`MAX_DEPTH`]. Each refusal names the first such element and says what to do.
+//! entity declarations or a DTD's internal subset, scripts and foreign content, patterns, clip paths, masks, filters,
+//! markers (usvg converts a marker's children at every vertex, markers within markers too), and nesting past
+//! [`MAX_DEPTH`]. Each refusal names the first such element and says what to do.
 
 use klipolo_model::scene::SceneProblem;
 
