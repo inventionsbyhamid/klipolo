@@ -576,4 +576,13 @@ describe('the Library', () => {
     // Impact by its name, Thud by a related word.
     expect(listed(within(panel).getByRole('list', { name: /^Built in/ }))).toEqual(['Impact', 'Thud']);
   });
+
+  it('Escape while composing text leaves the search alone', async () => {
+    useUi.setState({ libraryTab: 'sounds' });
+    renderWithProviders(<Library />);
+    const search = screen.getByRole('searchbox', { name: 'Search sounds' });
+    await userEvent.type(search, 'boom');
+    fireEvent.keyDown(search, { key: 'Escape', isComposing: true });
+    expect(search).toHaveValue('boom');
+  });
 });

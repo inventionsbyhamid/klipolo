@@ -29,7 +29,7 @@ export function SearchField({ value, onChange, label, className, ref }: SearchFi
         autoComplete="off"
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key !== 'Escape' || !value) return;
+          if (e.key !== 'Escape' || !value || e.nativeEvent.isComposing) return;
           // Only the field's own words go: a dialog or the editor around it doesn't take this Escape as well.
           e.preventDefault();
           e.stopPropagation();
