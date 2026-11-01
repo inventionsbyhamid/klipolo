@@ -164,8 +164,24 @@ export function hasOwnSound(project: Pick<Project, 'assets'>, item: Item): boole
   return content.type === 'audio' || (content.type === 'video' && !!assetById(project, content.assetId)?.hasAudio);
 }
 
+/**
+ * Whether main clip `clip` is a freeze frame (`Clip.freezeAtUs`): it holds that one frame of its source for its length,
+ * silent; its source range only gives the length.
+ */
+export function isFreeze(clip: Pick<Clip, 'freezeAtUs'>): boolean {
+  return clip.freezeAtUs !== undefined && clip.freezeAtUs !== null;
+}
+
+/**
+ * How a freeze frame's block reads its footage: from its frame, at a speed so near 0 that every point of the block shows
+ * that frame (a speed of 0 would divide by 0 where a block maps its pixels back to source time).
+ */
+export const STILL_SPEED = 1e-9;
+
 /** Whether main clip `clip` has sound for its Volume and Mute: its file's, or its recording's sound sources. */
 export function clipHasSound(project: Sources, clip: Clip): boolean {
+  // A freeze frame plays none.
+  if (isFreeze(clip)) return false;
   const source = clip.source;
   if (source.type === 'asset') return !!assetById(project, source.id)?.hasAudio;
   const recording = project.recordings.find((r) => r.id === source.id);
@@ -206,6 +222,17 @@ export function sourceLabel(project: Sources, source: ClipSource): string {
   if (source.type === 'recording') return recordingName(project, source.id);
   const asset = primaryAsset(project, source);
   return asset ? assetName(project, asset) : missingMedia();
+}
+
+/** A main clip's name: its source's ("broll.mp4", "Recording 1"), a freeze frame's of it ("Freeze frame of …"). */
+export function clipLabel(project: Sources, clip: Clip): string {
+  const name = sourceLabel(project, clip.source);
+  if (!isFreeze(clip)) return name;
+  return t({
+    id: 'clip.freezeName',
+    message: `Freeze frame of ${name}`,
+    comment: 'A freeze frame on the timeline and its card; {name} is the clip it holds a frame of, e.g. intro.mov',
+  });
 }
 
 /**

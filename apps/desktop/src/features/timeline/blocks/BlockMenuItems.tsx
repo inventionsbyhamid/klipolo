@@ -3,7 +3,7 @@ import { useLingui } from '@lingui/react/macro';
 import { Fragment } from 'react';
 import { ContextMenuItem, ContextMenuSeparator } from '../../../design/ContextMenu';
 import { recordingCameras } from '../../../lib/camera';
-import { findClip, findItem, hasOwnSound, itemLabel, sourceLabel } from '../../../lib/timeline';
+import { clipLabel, findClip, findItem, hasOwnSound, isFreeze, itemLabel } from '../../../lib/timeline';
 import { useProject } from '../../../state/project';
 import { useSelection } from '../../../state/selection';
 import type { Command } from '../../command-palette/command';
@@ -16,7 +16,7 @@ export function blockMenuLabel(id: string): string | undefined {
   if (!project) return undefined;
   const found = findItem(project, id);
   const clip = found ? null : findClip(project, id);
-  const label = found ? itemLabel(project, found.item) : clip ? sourceLabel(project, clip.source) : null;
+  const label = found ? itemLabel(project, found.item) : clip ? clipLabel(project, clip) : null;
   if (label === null) return undefined;
   return t({
     id: 'timeline.menu.name',
@@ -43,7 +43,8 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
   const transitionAfter = at >= 0 && at + 1 < main.length && !main[at].transitionOut;
   const onlyClip = at === 0 && main.length === 1;
   // A recording clip with a camera beside its footage: Separate camera (off, saying why, once it is a layer).
-  const hasCamera = at >= 0 && !!project && !!main[at].camera && recordingCameras(project, main[at]).length > 0;
+  const hasCamera =
+    at >= 0 && !!project && !!main[at].camera && !isFreeze(main[at]) && recordingCameras(project, main[at]).length > 0;
 
   // A sound layer, or a video layer whose file has sound, has Mute.
   const mutes = !!project && !!found && hasOwnSound(project, found.item);
@@ -72,10 +73,13 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
   const groups: { id: string; label?: string; off?: string }[][] =
     kind === 'clip'
       ? [
-          [split, ...(transitionAfter || onlyClip ? [addTransition] : [])],
+          [split, { id: 'freeze-frame' }, ...(transitionAfter || onlyClip ? [addTransition] : [])],
           [{ id: 'copy' }, { id: 'cut' }, { id: 'duplicate' }],
           sounds,
-          [...(hasCamera ? [{ id: 'separate-camera' }] : []), ...separates],
+          [
+            ...(hasCamera ? [{ id: 'separate-camera' }] : []),
+            ...separates,
+          ],
           [{ id: 'delete' }],
         ]
       : [

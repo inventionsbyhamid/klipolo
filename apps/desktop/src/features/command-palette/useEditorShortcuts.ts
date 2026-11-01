@@ -68,13 +68,16 @@ export function useEditorShortcuts() {
     const fromList = mod && FROM_PAGE_LIST.has(key) && within(e.target, PAGE_LIST);
     if (e.defaultPrevented || typing(e.target) || (within(e.target, OWNS_KEYS) && !fromList)) return;
 
-    // ⌥⌘V and ⌥↑ / ⌥↓ (`code` for V: ⌥ turns it into "√" on a Mac).
+    // ⌥⌘V, ⌥↑ / ⌥↓ and ⌥F (`code` for the letters: ⌥ turns V into "√" and F into "ƒ" on a Mac).
     if (e.altKey) {
       if (mod && !e.shiftKey && e.code === 'KeyV') {
         if (run('paste-effects')) e.preventDefault();
       } else if (!mod && !e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault();
         run(e.key === 'ArrowUp' ? 'track-up' : 'track-down');
+      } else if (!mod && !e.shiftKey && e.code === 'KeyF') {
+        e.preventDefault();
+        if (!e.repeat) run('freeze-frame');
       }
       return;
     }

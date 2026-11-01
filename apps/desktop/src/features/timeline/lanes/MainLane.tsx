@@ -4,7 +4,7 @@ import type { Clip } from '../../../bindings/Clip';
 import type { Recording } from '../../../bindings/Recording';
 import { useLocale } from '../../../i18n/react';
 import { isInstalled } from '../../../lib/contrib';
-import { sourceLabel } from '../../../lib/timeline';
+import { clipLabel, isFreeze, STILL_SPEED } from '../../../lib/timeline';
 import { defaultTransitionUs, splitDuration, type Footage } from '../../../lib/transitions';
 import { useProject } from '../../../state/project';
 import { transitionClipId } from '../../../state/selection';
@@ -158,14 +158,14 @@ export const MainLane = memo(function MainLane({
       <ClipBlock
         key={clip.id}
         id={clip.id}
-        label={sourceLabel(sources, clip.source)}
+        label={clipLabel(sources, clip)}
         position={i + 1}
         count={main.length}
         startUs={index.starts[i]}
         durationUs={index.ends[i] - index.starts[i]}
         files={clipMediaFiles(sources, clip)}
-        sourceInUs={clip.sourceInUs}
-        speed={clip.speed}
+        sourceInUs={clip.freezeAtUs ?? clip.sourceInUs}
+        speed={isFreeze(clip) ? STILL_SPEED : clip.speed}
         volume={clip.volume}
         fadeInUs={clip.fadeInUs}
         fadeOutUs={clip.fadeOutUs}
@@ -194,8 +194,8 @@ export const MainLane = memo(function MainLane({
           clipId={clip.id}
           cutUs={index.ends[i]}
           pps={pps}
-          before={sourceLabel(sources, clip.source)}
-          after={sourceLabel(sources, main[i + 1].source)}
+          before={clipLabel(sources, clip)}
+          after={clipLabel(sources, main[i + 1])}
           transitionName={transition ? transitionName(transition) : null}
           transitionKind={transition ? transitionKind(transition) : ''}
           transitionUs={transition?.durationUs ?? 0}

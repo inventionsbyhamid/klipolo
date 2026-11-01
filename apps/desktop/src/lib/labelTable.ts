@@ -82,6 +82,11 @@ export const TABLE = {
     message: 'Separate camera',
     comment: 'Command and undo history entry',
   }),
+  'undo.freeze': msg({
+    id: 'undo.freeze',
+    message: 'Freeze frame',
+    comment: 'Command and undo history entry: the frame at the playhead holds still for a while',
+  }),
   // A recording's sources and markers: `{source}` is a source's name, e.g. Mic, Game sound.
   'undo.source.volume': msg({
     id: 'undo.source.volume',

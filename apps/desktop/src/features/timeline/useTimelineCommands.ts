@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import type { Clip } from '../../bindings/Clip';
 import { cameraState } from '../../lib/camera';
 import { labelText } from '../../lib/labels';
-import { findItem, hasOwnSound } from '../../lib/timeline';
+import { findItem, hasOwnSound, isFreeze } from '../../lib/timeline';
 import { useClipboard } from '../../state/clipboard';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
@@ -14,7 +14,7 @@ import { trackStepOps } from './keys/keyOps';
 import { nudge } from './keys/nudge';
 import { muteLabel } from '../preview';
 import { separateCamera, stepTrack, toggleAttach, toggleSoundMute } from './keys/layerActions';
-import { split, trimToPlayhead } from './keys/timelineActions';
+import { freezeFrame, nothingToFreeze, split, trimToPlayhead } from './keys/timelineActions';
 import { clipIndexAt, mainIndex } from './model/index';
 import { useTimelineNavCommands } from './useTimelineNavCommands';
 import { useTransitionCommands } from './useTransitionCommands';
@@ -22,8 +22,8 @@ import { useTransitionCommands } from './useTransitionCommands';
 const NO_CLIPS: Clip[] = [];
 
 /**
- * The timeline's commands: split, trims to the playhead, nudges, the clipboard, track moves, attaching, a sound or
- * video layer's mute and Separate camera, plus `useTransitionCommands`' (Add transition, ⌘T) and
+ * The timeline's commands: split, freeze frame, trims to the playhead, nudges, the clipboard, track moves, attaching,
+ * a sound or video layer's mute and Separate camera, plus `useTransitionCommands`' (Add transition, ⌘T) and
  * `useTimelineNavCommands`' (selection steps, edit points, zoom, snapping). Each has a stable id, is `enabled` only
  * when it can act on the selection, and runs the same code from its shortcut, the player bar and the block menu.
  * `useCommands` merges them.
@@ -38,6 +38,8 @@ export function useTimelineCommands(): Command[] {
   const index = mainIndex(project?.timeline.main ?? NO_CLIPS);
   // The playhead changes every frame: this re-renders only when it flips (a run reads the playhead then).
   const clipUnderPlayhead = usePlayback((s) => clipIndexAt(index, s.playheadUs) >= 0);
+  // A freeze needs a clip at the playhead, or the main track's end (its last frame).
+  const freezable = usePlayback((s) => index.starts.length > 0 && s.playheadUs <= index.mainEndUs);
   return useMemo(() => {
     if (!project) return [];
     const main = project.timeline.main;
@@ -65,9 +67,11 @@ export function useTimelineCommands(): Command[] {
       attach: labelText(found?.item.attach ? 'undo.attach.free' : 'undo.attach.keep'),
       mute: labelText(muteLabel(!mutable?.muted, mutable?.type === 'video' ? 'video' : 'sound')),
       camera: labelText('undo.separateCamera'),
+      freeze: labelText('undo.freeze'),
     };
     // A recording clip's camera, as the cards see it (`cameraState`).
-    const camera = clip ? cameraState(project, main[clipAt]) : 'none';
+    // A freeze frame's camera holds still with its screen: it has no footage to separate.
+    const camera = clip && !isFreeze(main[clipAt]) ? cameraState(project, main[clipAt]) : 'none';
 
     const edits: Command[] = [
       {
@@ -236,7 +240,25 @@ export function useTimelineCommands(): Command[] {
             : undefined,
         run: () => separateCamera(id),
       },
+      {
+        id: 'freeze-frame',
+        action: 'freezeFrame',
+        group: 'edit',
+        label: label.freeze,
+        shortcut: '⌥F',
+        keywords: searchWords(
+          t({
+            id: 'command.freeze.keywords',
+            message: 'hold, still, pause, frame hold, freeze',
+            comment: 'Comma-separated search words for Freeze frame',
+          }),
+        ),
+        enabled: freezable,
+        reason: freezable ? undefined : nothingToFreeze(),
+        // From a clip's menu, on that clip alone (as Split at playhead).
+        run: (options) => freezeFrame(options?.block),
+      },
     ];
     return [...edits, ...transitions, ...nav];
-  }, [t, project, selectedId, clipboard, nav, transitions, index, clipUnderPlayhead]);
+  }, [t, project, selectedId, clipboard, nav, transitions, index, clipUnderPlayhead, freezable]);
 }

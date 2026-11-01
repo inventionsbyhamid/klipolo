@@ -4,7 +4,7 @@ import type { Project } from '../../../bindings/Project';
 import { activeIntlLocale } from '../../../i18n';
 import { formatSeconds } from '../../../lib/format';
 import { formatPrecise, frameIndexAt, frameStartUs, snapToFrame } from '../../../lib/time';
-import { clipDurationUs, findItem, itemLabel, sourceLabel } from '../../../lib/timeline';
+import { clipDurationUs, clipLabel, findItem, itemLabel } from '../../../lib/timeline';
 import { useUi } from '../../../state/ui';
 import { LAYER_MIN_PX } from '../layout';
 import { mainIndex } from '../model/index';
@@ -33,7 +33,7 @@ export function trimGesture(project: Project, id: string, edge: Edge): Trim | nu
   }
   const clip = project.timeline.main.find((c) => c.id === id);
   return clip
-    ? { kind: 'trim', target: 'clip', clipId: id, edge, label: sourceLabel(project, clip.source) }
+    ? { kind: 'trim', target: 'clip', clipId: id, edge, label: clipLabel(project, clip) }
     : null;
 }
 

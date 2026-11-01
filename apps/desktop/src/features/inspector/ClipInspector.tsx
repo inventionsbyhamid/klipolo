@@ -7,7 +7,8 @@ import { useIntlLocale } from '../../i18n/react';
 import { Icon } from '../../layout/Icon';
 import { formatNumber } from '../../lib/format';
 import { clipOp } from '../../lib/ops';
-import { clipHasSound, sourceLabel } from '../../lib/timeline';
+import { formatTime } from '../../lib/time';
+import { clipHasSound, clipLabel, isFreeze } from '../../lib/timeline';
 import { clipNow } from '../../state/latest';
 import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
@@ -27,16 +28,20 @@ import { VolumeControls } from './VolumeControls';
  * shown, and the Fill focus while Fill crops (`FramingField`); Speed (0.5x to 2x, the clip's length follows); when
  * the clip has sound, Volume (0 to 200%) and Mute; and for a recording clip its Sounds, each recorded sound's own mute,
  * volume and sync and the camera's sync (`SourceMixTools`), then its camera's layout, shape, border and mirror
- * (`ClipCameraFields`). Each change is one undo step.
+ * (`ClipCameraFields`). A freeze frame has no Speed, Volume or Sounds: its card says which frame it holds instead.
+ * Each change is one undo step.
  */
 export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind }) {
   const { t } = useLingui();
   const locale = useIntlLocale();
   const project = useProject((s) => s.snapshot?.project);
   if (!project) return null;
-  const title = sourceLabel(project, clip.source);
+  const title = clipLabel(project, clip);
   const source = clip.source;
   const recording = source.type === 'recording' ? project.recordings.find((r) => r.id === source.id) : undefined;
+  // A freeze frame holds one frame, silent: no speed or sounds of its own.
+  const frozen = isFreeze(clip);
+  const frozenAt = formatTime(clip.freezeAtUs ?? 0);
   const close = () => useSelection.getState().select(null);
   const setSpeed = (speed: number) => setClipSpeed(clip, speed, title, `${formatNumber(locale, speed)}×`);
   return (
@@ -75,7 +80,17 @@ export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind
       </div>
       <div className="insp-body">
         <FramingField clip={clip} format={format} />
-        <SpeedField speed={clip.speed} onPick={setSpeed} />
+        {frozen ? (
+          <p className="field-note">
+            {t({
+              id: 'clip.freeze.note',
+              message: `Holds the frame at ${frozenAt}. Trim it to hold it longer or shorter.`,
+              comment: "A freeze frame's card; {frozenAt} is where in its file the frame is, e.g. 0:05",
+            })}
+          </p>
+        ) : (
+          <SpeedField speed={clip.speed} onPick={setSpeed} />
+        )}
         {clipHasSound(project, clip) && (
           <VolumeControls
             volume={clip.volume}
@@ -89,7 +104,7 @@ export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind
             }}
           />
         )}
-        {recording && <SourceMixTools clip={clip} recording={recording} />}
+        {recording && !frozen && <SourceMixTools clip={clip} recording={recording} />}
         <ClipCameraFields project={project} clip={clip} format={format} />
       </div>
     </aside>

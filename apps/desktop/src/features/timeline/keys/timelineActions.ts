@@ -2,10 +2,13 @@ import { t } from '@lingui/core/macro';
 import type { Edge } from '../../../bindings/Edge';
 import type { Op } from '../../../bindings/Op';
 import type { Project } from '../../../bindings/Project';
+import { activeIntlLocale } from '../../../i18n';
+import { formatSeconds } from '../../../lib/format';
 import { labelParts, type Label, type LabelId } from '../../../lib/labels';
 import { formatPrecise, formatTime, snapToFrame } from '../../../lib/time';
 import {
   clipDurationUs,
+  clipLabel,
   findClip,
   findItem,
   itemEndUs,
@@ -56,7 +59,7 @@ export function blockLabel(project: Project, id: string): string {
   const found = findItem(project, id);
   if (found) return itemLabel(project, found.item);
   const clip = findClip(project, id);
-  return clip ? sourceLabel(project, clip.source) : '';
+  return clip ? clipLabel(project, clip) : '';
 }
 
 /** Whether a timeline block has focus (the keyboard is working in the timeline). */
@@ -166,6 +169,46 @@ export function split(selectedId: string | null, block?: string) {
     commit('undo.split.layer', [{ type: 'splitItem', id: item.id, atUs }], said(itemLabel(project, item)));
   });
 }
+
+/** How long a freeze frame holds when nobody said: 2 s, as chat's. Trimming it makes it longer or shorter. */
+export const FREEZE_US = 2_000_000;
+
+/**
+ * ⌥F: the frame at the playhead holds still for 2 s (`freezeFrame`): the clip there is split around it and what follows
+ * moves later; at the main track's end, its last frame. From a clip's menu (`block`) it holds that clip's frame: the
+ * playhead must be inside it or at its end (its last frame, not the next clip's first), or it says why it can't.
+ */
+export function freezeFrame(block?: string) {
+  keyBurst.after(() => {
+    const project = editable();
+    if (!project) return;
+    const main = project.timeline.main;
+    const index = mainIndex(main);
+    const playheadUs = snapToFrame(usePlayback.getState().playheadUs, project.settings.fps);
+    const endUs = index.mainEndUs;
+    const i = block === undefined ? -1 : main.findIndex((c) => c.id === block);
+    if (i >= 0 && (playheadUs < index.starts[i] || playheadUs > index.ends[i]))
+      return toast.info(notInside(project, block!));
+    if (main.length === 0 || playheadUs > endUs) return toast.info(nothingToFreeze());
+    // At the clip's end the model would take the next clip's first frame: 1 µs before it is this clip's last.
+    const atUs = i >= 0 && playheadUs === index.ends[i] ? playheadUs - 1 : playheadUs;
+    const at = clipIndexAt(index, atUs);
+    const clip = main[i >= 0 ? i : at >= 0 ? at : main.length - 1];
+    const label = sourceLabel(project, clip.source);
+    const time = formatTime(playheadUs);
+    const length = formatSeconds(activeIntlLocale(), FREEZE_US / 1e6, 'short');
+    const said = t({
+      id: 'timeline.key.freeze',
+      message: `Froze ${label} at ${time} for ${length}`,
+      comment: 'Screen-reader note; {label} is a clip’s name, {time} a time like 1:05, {length} a length like 2 s',
+    });
+    commit('undo.freeze', [{ type: 'freezeFrame', atUs, durationUs: FREEZE_US }], said);
+  });
+}
+
+/** Why Freeze frame can't act: no clip is at the playhead. */
+export const nothingToFreeze = () =>
+  t({ id: 'timeline.freeze.none', message: "There's no clip at the playhead to freeze." });
 
 /**
  * Q / W: trims `edge` of block `id` to the playhead. Like S, it says why it can't (a locked track, the playhead outside
