@@ -298,6 +298,7 @@ pub(super) fn update_item(
         // Another file, or its file time slipped by hand, frees it from its source; a patch that ties it anew (Sync
         // lining it up) keeps the new tie; a patch that leaves the file time alone keeps the old one even when it
         // doesn't carry it.
+        follow_volume(&item.content, &mut content);
         let slipped = content.played() != item.content.played();
         if slipped && content.tie().is_some() && content.tie() == item.content.tie() {
             content.set_tie(None);
@@ -349,6 +350,28 @@ pub(super) fn update_item(
     p.timeline.tracks[t].items.remove(i);
     place(p, t, item, places);
     Ok(false)
+}
+
+/// A sound's whole volume changed by a patch that leaves its keys as they were: the keys' line moves with it
+/// (`volume::rescaled`), so a song-wide slider or chat's "turn it down" is heard on a sound with keys.
+fn follow_volume(was: &ItemContent, now: &mut ItemContent) {
+    if let (
+        ItemContent::Audio {
+            volume: old,
+            volume_keys: old_keys,
+            ..
+        },
+        ItemContent::Audio {
+            volume: new,
+            volume_keys: keys,
+            ..
+        },
+    ) = (was, now)
+    {
+        if *new != *old && keys == old_keys && !keys.is_empty() {
+            *keys = volume::rescaled(keys, *old, *new);
+        }
+    }
 }
 
 /// The layer's motion and volume keys fit its length (keys past the end go, presets shorten).

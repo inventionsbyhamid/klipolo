@@ -93,6 +93,21 @@ pub fn times(keys: &[Key], gain: f64) -> Vec<Key> {
         .collect()
 }
 
+/// The keys of a clip or layer whose whole volume went from `old` to `new` (a slider, chat's "turn it down"): each key
+/// times `new / old`, within [`LIMITS`], so the line moves with the volume; from no volume, every key takes `new`.
+pub fn rescaled(keys: &[Key], old: f64, new: f64) -> Vec<Key> {
+    if old > 0.0 {
+        times(keys, new / old)
+    } else {
+        keys.iter()
+            .map(|k| Key {
+                v: new.clamp(LIMITS.0, LIMITS.1),
+                ..k.clone()
+            })
+            .collect()
+    }
+}
+
 /// Why validation refuses the keys of a clip or layer `len_us` long, as a model code, or None.
 pub(crate) fn problem(keys: &[Key], len_us: Us) -> Option<&'static str> {
     if keys.len() > MAX_KEYS {

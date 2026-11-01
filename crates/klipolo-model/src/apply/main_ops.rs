@@ -631,6 +631,10 @@ pub(super) fn update_clip_at(
         volume::rescale(&mut clip.volume_keys, was, v, len);
     }
     if let Some(v) = patch.volume {
+        // A whole-volume change moves the keys' line with it, unless the patch sets the keys too.
+        if patch.volume_keys.is_none() && v != clip.volume {
+            clip.volume_keys = volume::rescaled(&clip.volume_keys, clip.volume, v);
+        }
         clip.volume = v;
     }
     if let Some(v) = &patch.volume_keys {

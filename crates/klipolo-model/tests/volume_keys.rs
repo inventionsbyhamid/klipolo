@@ -124,6 +124,77 @@ fn a_clip_s_keys_are_set_by_a_patch_and_checked_as_motion_keys_are() {
 }
 
 #[test]
+fn a_whole_volume_change_scales_every_key() {
+    // "Turn it down": half the volume halves the line, so chat's and the song-wide slider's change is heard.
+    let mut p = fixture();
+    p.timeline.main[1].volume_keys = vec![key(1.0, 1.0), key(3.0, 0.4)];
+    let half = |p: &Project, volume: f64| {
+        apply_ops(
+            p,
+            &[Op::UpdateClip {
+                id: "b".into(),
+                patch: ClipPatch {
+                    volume: Some(volume),
+                    ..Default::default()
+                },
+            }],
+        )
+        .unwrap()
+    };
+    let down = half(&p, 0.5);
+    assert_eq!(clip(&down, "b").volume, 0.5);
+    assert_eq!(
+        line(&clip(&down, "b").volume_keys),
+        [(1.0, 0.5), (3.0, 0.2)]
+    );
+    // Up again within 0 to 2, and from silence every key takes the new volume.
+    let up = half(&down, 2.0);
+    assert_eq!(line(&clip(&up, "b").volume_keys), [(1.0, 2.0), (3.0, 0.8)]);
+    p.timeline.main[1].volume = 0.0;
+    let from_silence = half(&p, 0.7);
+    assert_eq!(
+        line(&clip(&from_silence, "b").volume_keys),
+        [(1.0, 0.7), (3.0, 0.7)]
+    );
+    // A patch that sets the keys too sets them as given.
+    let given = apply_ops(
+        &fading(),
+        &[Op::UpdateClip {
+            id: "b".into(),
+            patch: ClipPatch {
+                volume: Some(0.5),
+                volume_keys: Some(vec![key(1.0, 1.5)]),
+                ..Default::default()
+            },
+        }],
+    )
+    .unwrap();
+    assert_eq!(line(&clip(&given, "b").volume_keys), [(1.0, 1.5)]);
+}
+
+#[test]
+fn a_sound_layer_s_whole_volume_change_scales_its_keys() {
+    let p = with_sound();
+    let mut content = layer(&p, "s").content.clone();
+    let ItemContent::Audio { volume, .. } = &mut content else {
+        unreachable!()
+    };
+    *volume = 0.5;
+    let down = apply_ops(
+        &p,
+        &[Op::UpdateItem {
+            id: "s".into(),
+            patch: ItemPatch {
+                content: Some(content),
+                ..Default::default()
+            },
+        }],
+    )
+    .unwrap();
+    assert_eq!(sound_keys(&down, "s"), [(1.0, 0.0), (5.0, 0.5)]);
+}
+
+#[test]
 fn keys_are_left_out_of_the_json_while_there_are_none() {
     let json = serde_json::to_string(&fixture().timeline.main[1]).unwrap();
     assert!(!json.contains("volumeKeys"), "{json}");
