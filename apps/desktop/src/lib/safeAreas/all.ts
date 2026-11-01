@@ -1,8 +1,8 @@
 import type { SafeAreaSpec } from './spec';
 
 /**
- * The union of TikTok, Reels and Shorts chrome (the editor's guide): 14 % top, 26 % bottom, 6 % left and
- * 13 % right.
+ * The union of TikTok, Reels and Shorts chrome (the guide when no platform is chosen): 14 % top, 26 % bottom, 6 %
+ * left and 13 % right.
  */
 export const ALL: SafeAreaSpec = {
   id: 'all',
