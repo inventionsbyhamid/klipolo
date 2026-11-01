@@ -2694,7 +2694,7 @@ mod follow {
     use klipolo_analysis::subject::{SubjectCopy, frames_for};
     use klipolo_app::chat::follow::NO_CROP;
     use klipolo_app::speaker::{Speaker, Trackers};
-    use klipolo_model::fill_focus::FillFocus;
+    use klipolo_model::fill_focus::{FillFocus, Keep, KeepRange, Who};
     use klipolo_model::project::FormatKind;
     use klipolo_model::time::{RangeUs, Us};
 
@@ -2872,6 +2872,51 @@ mod follow {
         f.chat.project.step(false).unwrap();
         assert!(speaker_x(&f.chat.project.project(), 10.0).is_none());
         assert!(f.chat.session.turns()[0].note.contains("Followed person"));
+    }
+
+    #[tokio::test]
+    async fn who_chat_keeps_in_frame_lands_on_the_clip_in_its_source_time() {
+        let mut project = talk();
+        // The clip plays the talk from 4 s: the timeline's 2 to 8 s is the file's 6 to 12 s.
+        project.timeline.main[0].source_in_us = secs(4.0);
+        let guest = fc(
+            "s",
+            "followSubject",
+            r#"{"description": "person", "focus": [{"fromSec": 2, "toSec": 8, "person": "P2"}]}"#,
+        );
+        let f = following_on(
+            project,
+            vec![answer(
+                "Keeping the guest in frame.",
+                vec![portrait(), guest],
+            )],
+        );
+        let r = reply(
+            &f.chat
+                .session
+                .send(request("keep the guest in frame while the host asks"))
+                .await
+                .unwrap(),
+        );
+        assert!(r["applied"].is_object(), "{r:#}");
+        let p = f.chat.project.project();
+        let Some(FillFocus::Speaker { keep, .. }) =
+            p.timeline.main[0].fill_focus.get(&FormatKind::Portrait)
+        else {
+            panic!("{:?}", p.timeline.main[0].fill_focus)
+        };
+        assert_eq!(
+            *keep,
+            Keep::Ranges {
+                ranges: vec![KeepRange {
+                    start_us: secs(6.0),
+                    end_us: secs(12.0),
+                    who: Who::Person { person: 2 },
+                }],
+            }
+        );
+        // One step, as any follow.
+        assert_eq!(f.chat.project.undo_steps(), 1);
     }
 
     #[tokio::test]

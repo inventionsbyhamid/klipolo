@@ -8,15 +8,24 @@
 //! - **A vertical or square version** of camera footage made without asking to follow: footage tracked before follows
 //!   at no charge; otherwise the reply offers it with its price.
 //!
+//! Where two or more people are on screen, `followSubject`'s focus (`keeps_for`) keeps who chat names over its parts
+//! of the timeline, as each clip's source time, and whoever speaks elsewhere.
+//!
 //! Without a follower (tests that don't give one), `followSubject` is said to be coming, as before.
+
+use std::collections::BTreeMap;
 
 use klipolo_analysis::subject::PERSON;
 use klipolo_analysis::subject::clips::followable_formats;
-use klipolo_chat::{Job, PlanOut};
+use klipolo_chat::{FollowFocus, Job, PlanOut};
 use klipolo_model::apply_ops;
 use klipolo_model::coded::ErrorParam;
+use klipolo_model::fill_focus::{Keep, KeepRange, MAX_KEEP_RANGES, Who};
+use klipolo_model::ids::Id;
 use klipolo_model::ops::{Op, Origin};
 use klipolo_model::project::FormatKind;
+use klipolo_model::query::clip_starts;
+use klipolo_model::time::{Us, unscaled};
 use klipolo_model::{Project, Transaction};
 
 use super::project::ProjectNow;
@@ -81,10 +90,10 @@ pub(super) async fn follow_jobs(
     let Some(speaker) = speaker else {
         return Follows::default();
     };
-    let mut asked: Vec<String> = Vec::new();
+    let mut asked: Vec<(String, Vec<FollowFocus>)> = Vec::new();
     out.compiled.jobs.retain(|job| match job {
-        Job::Follow { description } => {
-            asked.push(description.clone());
+        Job::Follow { description, focus } => {
+            asked.push((description.clone(), focus.clone()));
             false
         }
         _ => true,
@@ -103,8 +112,10 @@ pub(super) async fn follow_jobs(
     let clip_ids: Vec<String> = target.timeline.main.iter().map(|c| c.id.clone()).collect();
     let formats = target.settings.formats.clone();
     let mut follows = Follows::default();
-    if let Some(description) = asked.first() {
+    if let Some((description, focus)) = asked.first() {
         let phrase = phrase_for(description);
+        // Chat's times are the timeline's the message was sent on: each clip's source time stays put.
+        let keeps = keeps_for(&now.project, focus);
         let estimate = speaker
             .estimate(&target, &clip_ids, &formats, &phrase)
             .await;
@@ -116,7 +127,7 @@ pub(super) async fn follow_jobs(
             follows.note = format!("Nothing to follow {phrase} in: no clip can follow.");
             return follows;
         }
-        match speaker.follow(&target, &clip_ids, &formats, &phrase).await {
+        match (speaker.follow_keeping(&target, &clip_ids, &formats, &phrase, &keeps)).await {
             Err(why) => {
                 follows.note = format!("Following {phrase} failed: {why}");
                 follows.said.push(why);
@@ -187,6 +198,64 @@ pub(super) async fn follow_jobs(
     ));
     follows.note = format!("Offered to follow the speaker for {}.", about(estimate.usd));
     follows
+}
+
+/// Who each clip of `p` keeps for chat's `focus` (timeline ranges on `p`): the parts of it they cover, in its source
+/// time, in order (a later range wins where two overlap). A clip one range covers whole keeps that range's choice; a
+/// clip none touches isn't listed (whoever speaks).
+pub fn keeps_for(p: &Project, focus: &[FollowFocus]) -> BTreeMap<Id, Keep> {
+    let starts = clip_starts(&p.timeline.main);
+    let mut out = BTreeMap::new();
+    for (clip, start) in p.timeline.main.iter().zip(starts) {
+        let end = start.saturating_add(clip.duration_us());
+        let source = |t: Us| clip.source_in_us + unscaled(t - start, clip.speed);
+        let mut ranges: Vec<KeepRange> = Vec::new();
+        for f in focus {
+            let (from, to) = (f.range.start.max(start), f.range.end.min(end));
+            if from >= to {
+                continue;
+            }
+            let (a, b) = (source(from), source(to).min(clip.source_out_us));
+            if a >= b {
+                continue;
+            }
+            // A later range wins: what it covers is taken from the ones before.
+            let mut kept = Vec::new();
+            for r in ranges.drain(..) {
+                if r.end_us <= a || r.start_us >= b {
+                    kept.push(r);
+                    continue;
+                }
+                if r.start_us < a {
+                    kept.push(KeepRange { end_us: a, ..r });
+                }
+                if r.end_us > b {
+                    kept.push(KeepRange { start_us: b, ..r });
+                }
+            }
+            kept.push(KeepRange {
+                start_us: a,
+                end_us: b,
+                who: f.who,
+            });
+            kept.sort_by_key(|r| r.start_us);
+            ranges = kept;
+        }
+        ranges.truncate(MAX_KEEP_RANGES);
+        let keep = match ranges.as_slice() {
+            [] => continue,
+            [one] if one.start_us <= clip.source_in_us && one.end_us >= clip.source_out_us => {
+                match one.who {
+                    Who::Speaker => Keep::Speaker,
+                    Who::Both => Keep::Both,
+                    Who::Person { person } => Keep::Person { person },
+                }
+            }
+            _ => Keep::Ranges { ranges },
+        };
+        out.insert(clip.id.clone(), keep);
+    }
+    out
 }
 
 /// `ops` into the message's proposal (judged again on `work`, the project its additions leave), else its additions
