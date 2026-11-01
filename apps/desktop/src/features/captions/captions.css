@@ -49,9 +49,24 @@
   padding-bottom: 10%;
   overflow: hidden;
   border-radius: var(--radius-sm);
-  background: linear-gradient(160deg, var(--color-bay-press), var(--color-clip-deep) 55%, var(--color-night));
+  isolation: isolate;
   container-type: inline-size;
   transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+/* A caption sample is shown as over video, dark in both themes: its backdrop and the sample take the dark theme's
+   colours, while the frame itself (its ring when the style is chosen) follows the panel. */
+.style-frame::before,
+.style-frame > * {
+  color-scheme: dark;
+}
+
+.style-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(160deg, var(--color-bay-press), var(--color-clip-deep) 55%, var(--color-night));
 }
 
 .style-card:hover .style-frame {
@@ -65,10 +80,10 @@
 .style-off {
   align-items: center;
   padding: 0;
-  color: var(--color-ink-soft);
 }
 
 .style-off .ico {
+  color: var(--color-ink-soft);
   width: 26px;
   height: 26px;
 }

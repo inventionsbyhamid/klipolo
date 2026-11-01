@@ -20,6 +20,7 @@ import { errorMessage } from './lib/errors';
 import { PlayerBar } from './player/PlayerBar';
 import { Preview } from './preview/Preview';
 import { SettingsDialog } from './settings/SettingsDialog';
+import { useThemeSync } from './settings/useThemeSync';
 import {
   clearAnalysisOnProjectSwitch,
   followAnalysis,
@@ -121,6 +122,8 @@ export function App() {
     if (import.meta.env.DEV) void import('./dev/sampleSpeech').then((dev) => dev.listenForSampleSpeech());
     void loadOpenProject().finally(() => setAsked(true));
   }, []);
+  // Settings' Appearance on the page and the window, from before the first paint.
+  useThemeSync();
   useEngineSession();
   const open = useProject((s) => s.snapshot !== null);
   // A project has been open in this page: the start screen shows after All projects, not at launch.
