@@ -99,6 +99,33 @@ describe('the room a roll, slip or slide has', () => {
     });
   });
 
+  it("a separated sound inside the next clip holds a roll before the footage under it would be hidden", () => {
+    const p = abc();
+    const camera = withCamera(abc()).timeline.tracks[0].items[0];
+    // A sound of the take tied to b, 2 s into it (b starts at 18 s, its footage at 2 s): its moment is b's 4 s.
+    const voice: Item = {
+      ...camera,
+      id: 'voice',
+      startUs: 20 * S,
+      durationUs: S,
+      attach: { clipId: 'b', source: { type: 'asset', id: 'broll' }, sourceUs: 4 * S },
+      content: {
+        type: 'audio',
+        assetId: 'mic',
+        sourceInUs: 20 * S,
+        volume: 1,
+        fadeInUs: 0,
+        fadeOutUs: 0,
+        effect: null,
+        tie: { recording: 'rec', source: 'mic' },
+      },
+    };
+    p.timeline.tracks = [
+      { id: 'mic', kind: 'audio', name: 'Audio 1', hidden: false, muted: false, locked: false, items: [voice] },
+    ];
+    expect(editRoom(p, 'roll', 0)).toMatchObject({ max: 2 * S, maxBy: 'separated' });
+  });
+
   it('a freeze frame has no footage to slip', () => {
     const p = abc();
     p.timeline.main[1] = { ...p.timeline.main[1], freezeAtUs: 3 * S };

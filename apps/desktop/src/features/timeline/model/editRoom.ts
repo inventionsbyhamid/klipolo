@@ -11,7 +11,7 @@ import { mainIndex } from './index';
 export type EditKind = 'roll' | 'slip' | 'slide';
 
 /** What holds an edit at one end of its room. */
-export type EditLimit = 'footage' | 'length' | 'transition' | 'locked' | 'freeze';
+export type EditLimit = 'footage' | 'length' | 'transition' | 'locked' | 'freeze' | 'separated';
 
 /**
  * How far an edit can go, in timeline µs: `min` earlier (0 or less) and `max` later (0 or more), and what holds it at
@@ -141,7 +141,10 @@ export function editRoom(project: Project, kind: EditKind, i: number): EditRoom 
   };
 }
 
-/** A recording's separated sound and camera (`tie`) held to their files, and the layers on locked tracks it moves. */
+/**
+ * A recording's separated sound and camera (`tie`) held to their files, and by where they start inside a clip whose
+ * moving edge would hide their moment; and the layers on locked tracks it moves.
+ */
 function separatedRoom(
   project: Project,
   kind: EditKind,
@@ -178,6 +181,9 @@ function separatedRoom(
       const atStart = start && Math.abs(item.startUs - index.starts[k]) <= AT_EDGE_US;
       const atEnd = end && Math.abs(item.startUs + item.durationUs - index.ends[k]) <= AT_EDGE_US;
       if ((atStart || atEnd) && track.locked) return void Object.assign(b, locked());
+      // Inside the clip, not at its moving edge: its moment may not be hidden (the model refuses to cut it there).
+      if (start && !atStart && item.startUs > index.starts[k]) b.high(item.startUs - index.starts[k], 'separated');
+      if (end && !atEnd && item.startUs < index.ends[k]) b.low(item.startUs - index.ends[k], 'separated');
       if (!file) continue;
       if (atStart) {
         b.low(-within(file.from, file.pace), 'footage');
