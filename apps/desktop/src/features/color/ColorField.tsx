@@ -1,14 +1,16 @@
 import { useLingui } from '@lingui/react/macro';
 import { Ban } from 'lucide-react';
-import type { JSX, KeyboardEvent } from 'react';
+import { useState, type JSX, type KeyboardEvent } from 'react';
 import { keepAlpha, sameColor, sameRgb } from '../../design/color/colorMath';
 import { cn } from '../../design/cn';
 import { Popover, PopoverTrigger } from '../../design/Popover';
 import { Icon } from '../../layout/Icon';
 import { nearestColorName } from '../../lib/swatches';
 import { useKeyedPick } from '../../state/keyedPick';
+import { useRecentColors } from '../../state/recentColors';
 import { ColorPopover } from './ColorPopover';
 import { ContrastNote } from './ContrastNote';
+import { useKeySettle } from './useKeySettle';
 import './color.css';
 
 /** A named colour offered as one tap. */
@@ -78,6 +80,30 @@ export function ColorField(props: ColorFieldProps): JSX.Element {
     onCommit(kept);
     return true;
   };
+  /**
+   * A committed custom colour goes to Recent, unless the field offers it already (a preset) or only its opacity changed
+   * (the colour is the setting's own: Recent holds colours, so nothing new to put first).
+   */
+  const remember = (hex: string) => {
+    if (value !== null && sameRgb(hex, value)) return;
+    if (presets.some((p) => sameRgb(p.value, hex))) return;
+    useRecentColors.getState().push(hex);
+  };
+  /** The custom picker's keys, settled into one pick 400 ms after the last (sooner on closing, undo or unmount). */
+  const settle = useKeySettle((hex) => {
+    if (pick(hex)) remember(hex);
+  });
+  /** Bumped when a pick replaced keys still settling: the picker shows the setting's colour again. */
+  const [resync, setResync] = useState(0);
+  /** A pick replaces keys still settling (one undo step: the pick), so the keyed colour never lands on top of it. */
+  const commit = (c: string | null) => {
+    if (settle.drop()) setResync((n) => n + 1);
+    return pick(c);
+  };
+  /** A custom colour: one pick, as `commit`; Recent keeps it. */
+  const pickCustom = (hex: string) => {
+    if (commit(hex)) remember(hex);
+  };
   const keys = useKeyedPick<string | null>(value, (c) => void pick(c));
   const choices: Choice[] = [...(none ? [{ value: null, name: none.label }] : []), ...presets];
   /** A choice is the colour shown: with an alpha, by its red, green and blue alone. */
@@ -143,7 +169,9 @@ export function ColorField(props: ColorFieldProps): JSX.Element {
         ))}
         <Popover
           onOpenChange={(open) => {
-            if (!open) onPreviewEnd();
+            if (open) return;
+            settle.flush();
+            onPreviewEnd();
           }}
         >
           <PopoverTrigger asChild>
@@ -157,7 +185,26 @@ export function ColorField(props: ColorFieldProps): JSX.Element {
               {!custom && <Icon name="plus" />}
             </button>
           </PopoverTrigger>
-          <ColorPopover label={label} value={value} alpha={alpha} onCustom={(hex) => void pick(hex)} />
+          <ColorPopover
+            label={label}
+            value={value}
+            selected={alpha && value ? value.slice(0, 7) : value}
+            resync={resync}
+            alpha={alpha}
+            presets={presets}
+            none={none ? { value: null, name: none.label, kind: 'none' } : null}
+            onPreview={preview}
+            onPreviewEnd={onPreviewEnd}
+            onPick={(c) => void commit(c)}
+            onCustom={pickCustom}
+            onDrag={preview}
+            onRelease={pickCustom}
+            onKey={(hex) => {
+              preview(hex);
+              settle.keyed(keep(hex) ?? hex);
+            }}
+            onCancel={onPreviewEnd}
+          />
         </Popover>
       </div>
       {contrastWith && <ContrastNote color={value} against={contrastWith} />}
