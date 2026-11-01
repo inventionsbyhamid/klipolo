@@ -9,14 +9,22 @@ file. Nothing here runs on the event loop but the waits.
 
 Limits: the caller runs at most two at once (`app.state.sam_videos`); each
 step shares one timeout; the upload's size cap is the caller's; a video over
-`MAX_SECONDS` is refused, and the encode stops there whatever the header says.
+`MAX_SECONDS`, or of unknown length, is refused. Each run on the person's file
+reads it only as MOV/MP4 from a file (`-f mov -protocol_whitelist file`), on
+two threads, refuses pictures over 4K (`-max_pixels`), and runs at a lower
+priority under a memory limit (`MEMORY_LIMIT_BYTES`). Whatever ends a wait (a
+timeout, a cancel, an error), the child is killed and reaped.
 """
 
 import asyncio
 import json
 import logging
 import math
+import os
+import resource
 from pathlib import Path
+
+import anyio
 
 from relay.errors import RelayError
 
@@ -28,6 +36,13 @@ FFPROBE = "ffprobe"
 MAX_SECONDS = 600
 FPS = 2
 LONG_SIDE = 640
+# What one run may use: two threads, pictures up to 3840 x 2160, 1.5 GB of address space, a lower priority.
+THREADS = "2"
+MAX_PIXELS = str(3840 * 2160)
+MEMORY_LIMIT_BYTES = 1536 * 1024 * 1024
+NICENESS = 10
+# How the person's file is read: as MOV or MP4, from a file only, its probing bounded.
+_INPUT = ["-f", "mov", "-protocol_whitelist", "file"]
 
 UNREADABLE = "That video can't be read. Try another part of it."
 TOO_LONG = "Video tracking works on at most ten minutes at a time. Pick a shorter part."
@@ -45,7 +60,9 @@ async def make(src: Path, out: Path, timeout_s: float) -> int:
         return max(deadline - loop.time(), 0.0)
 
     seconds = await _duration(src, left())
-    if seconds is not None and seconds > MAX_SECONDS:
+    if seconds is None:
+        raise RelayError(400, "invalid_request", UNREADABLE)
+    if seconds > MAX_SECONDS:
         raise RelayError(413, "too_large", TOO_LONG)
     written = await _encode(src, out, left())
     counted = await _packets(out, left())
@@ -56,10 +73,12 @@ async def make(src: Path, out: Path, timeout_s: float) -> int:
 
 
 async def _duration(src: Path, timeout_s: float) -> float | None:
-    """The container's duration in seconds; None when it doesn't say (the encode
-    is capped anyway)."""
+    """The container's duration in seconds; None when it doesn't say."""
     out = await _run(
-        [FFPROBE, "-v", "error", "-show_entries", "format=duration", "-of", "json", str(src)], timeout_s
+        [FFPROBE, "-v", "error", *_INPUT, "-probesize", "5M", "-threads", THREADS, "-max_pixels", MAX_PIXELS,
+         "-show_entries",
+         "format=duration", "-of", "json", "-i", str(src)],
+        timeout_s,
     )
     try:
         value = float(json.loads(out)["format"]["duration"])
@@ -68,19 +87,24 @@ async def _duration(src: Path, timeout_s: float) -> float | None:
     return value if math.isfinite(value) and value >= 0 else None
 
 
-async def _encode(src: Path, out: Path, timeout_s: float) -> int:
-    """The first video stream only, `FPS` frames a second, its long side at most
-    `LONG_SIDE`, no sound, at most `MAX_SECONDS`. Gives the frames it wrote."""
+def encode_args(src: Path, out: Path) -> list[str]:
+    """The encode: the first video stream only, `FPS` frames a second, its long
+    side at most `LONG_SIDE`, no sound, at most `MAX_SECONDS`, on two threads."""
     scale = (
         f"fps={FPS},scale=w='min({LONG_SIDE},iw)':h='min({LONG_SIDE},ih)'"
         ":force_original_aspect_ratio=decrease:force_divisible_by=2"
     )
-    progress = await _run(
-        [FFMPEG, "-nostdin", "-v", "error", "-i", str(src), "-map", "0:v:0", "-an", "-sn", "-dn",
-         "-map_metadata", "-1", "-t", str(MAX_SECONDS), "-vf", scale, "-c:v", "libx264", "-preset", "veryfast",
-         "-crf", "30", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-progress", "pipe:1", "-y", str(out)],
-        timeout_s,
-    )
+    return [
+        FFMPEG, "-nostdin", "-v", "error", *_INPUT, "-threads", THREADS, "-max_pixels", MAX_PIXELS,
+        "-i", str(src), "-map", "0:v:0", "-an", "-sn", "-dn", "-map_metadata", "-1", "-t", str(MAX_SECONDS),
+        "-vf", scale, "-c:v", "libx264", "-threads", THREADS, "-preset", "veryfast", "-crf", "30",
+        "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-progress", "pipe:1", "-y", str(out),
+    ]
+
+
+async def _encode(src: Path, out: Path, timeout_s: float) -> int:
+    """Writes SAM's copy (`encode_args`) and gives the frames it wrote."""
+    progress = await _run(encode_args(src, out), timeout_s)
     frames = [line.split("=", 1)[1] for line in progress.splitlines() if line.startswith("frame=")]
     try:
         return int(frames[-1])
@@ -92,8 +116,8 @@ async def _packets(path: Path, timeout_s: float) -> int:
     """The video packets in the relay's own copy, as ffprobe counts them; it
     must hold exactly one stream."""
     out = await _run(
-        [FFPROBE, "-v", "error", "-count_packets", "-show_entries", "stream=codec_type,nb_read_packets",
-         "-of", "json", str(path)],
+        [FFPROBE, "-v", "error", *_INPUT, "-threads", THREADS, "-count_packets", "-show_entries",
+         "stream=codec_type,nb_read_packets", "-of", "json", "-i", str(path)],
         timeout_s,
     )
     try:
@@ -106,20 +130,42 @@ async def _packets(path: Path, timeout_s: float) -> int:
         raise RelayError(400, "invalid_request", UNREADABLE) from None
 
 
+def _limits() -> None:
+    """In the child, before it runs: a lower priority and a memory limit."""
+    os.nice(NICENESS)
+    resource.setrlimit(resource.RLIMIT_AS, (MEMORY_LIMIT_BYTES, MEMORY_LIMIT_BYTES))
+
+
 async def _run(args: list[str], timeout_s: float) -> str:
-    """`args`' standard output; 504 once `timeout_s` passes (the process is killed), 400 when it fails."""
+    """`args`' standard output; 504 once `timeout_s` passes, 400 when it fails.
+    The child runs low under a memory limit (`_limits`), and is killed and
+    reaped whatever ends the wait."""
     if timeout_s <= 0:
         raise RelayError(504, "timeout", TOO_SLOW)
     process = await asyncio.create_subprocess_exec(
-        *args, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        *args,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        preexec_fn=_limits,
     )
     try:
         out, err = await asyncio.wait_for(process.communicate(), timeout_s)
     except TimeoutError:
-        process.kill()
-        await process.wait()
+        await _reap(process)
         raise RelayError(504, "timeout", TOO_SLOW) from None
+    except BaseException:
+        await _reap(process)
+        raise
     if process.returncode != 0:
         logger.info("SAM copy: %s failed: %s", args[0], err.decode(errors="replace")[-300:])
         raise RelayError(400, "invalid_request", UNREADABLE)
     return out.decode(errors="replace")
+
+
+async def _reap(process: asyncio.subprocess.Process) -> None:
+    """Kills the child and waits for it, even while the caller is being cancelled."""
+    with anyio.CancelScope(shield=True):
+        if process.returncode is None:
+            process.kill()
+        await process.wait()
