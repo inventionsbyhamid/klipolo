@@ -888,7 +888,8 @@ fn fades_and_ducking_go_on_clips_and_music() {
         )],
     );
     assert!(
-        refused_to_model(&out, 0).contains("is music, which takes only fadeIn, fadeOut, duck and remove")
+        refused_to_model(&out, 0)
+            .contains("is music, which takes only fadeIn, fadeOut, duck and remove")
     );
 }
 
