@@ -64,6 +64,7 @@ pub struct Holds {
 }
 
 impl Holds {
+    /// The video started (true) or stopped (false) playing: a stop starts `SETTLE`, and forgets frames late.
     pub fn set_playing(&self, playing: bool) {
         self.change(|now| {
             if now.playing && !playing {
