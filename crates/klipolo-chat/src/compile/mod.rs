@@ -75,6 +75,7 @@ use map::Map;
 pub use media::{sticker_ops, sticker_placement};
 pub(crate) use recorded::recording_name;
 pub(crate) use sources::{OwnTrack, kind_of};
+pub use sources::{centre_ops, fill_gaps_ops};
 use trim::Trim;
 
 /// What the person is told when a tool needs a clip's words and Klipolo is still hearing or timing them.

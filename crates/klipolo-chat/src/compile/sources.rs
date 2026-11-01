@@ -272,10 +272,17 @@ impl OwnTrack {
     }
 }
 
-/// Each found sound's mix changed by `change`: with no clips named, the source's default (first, unless it stays as
-/// it is) and each clip of its recording with a mix of its own; with clips, only theirs. Ops only for what changes;
-/// the flag is true when a clip was left as it is because the sound plays from its own track there.
-fn change_mix(work: &Project, found: &[Found], change: impl Fn(&mut SourceMix)) -> (Vec<Op>, bool) {
+/// Each found sound's mix changed by `change` (given the source, for a change that depends on it): with no clips named,
+/// the source's default first and each clip of its recording with a mix of its own; with clips, only theirs. A clip's
+/// mix that ends up the default is dropped. The default is written even when it stays as it is, if no clip of its own
+/// changes either: a request that changes nothing still reads as done, as the timeline's lanes write it
+/// (`source-mix-parity.json` pins both). The flag is true when a clip was left as it is because the sound plays from
+/// its own track there.
+fn change_mix(
+    work: &Project,
+    found: &[Found],
+    change: impl Fn(&RecordingSource, &mut SourceMix),
+) -> (Vec<Op>, bool) {
     let main = &work.timeline.main;
     let starts = clip_starts(main);
     let mut ops = Vec::new();
@@ -287,8 +294,9 @@ fn change_mix(work: &Project, found: &[Found], change: impl Fn(&mut SourceMix)) 
         let layers = OwnTrack::of(work, source);
         let mut default = source.mix.clone();
         let everywhere = f.clips.is_empty();
+        let first = ops.len();
         let clips: Vec<usize> = if everywhere {
-            change(&mut default);
+            change(source, &mut default);
             let own = |i: &usize| {
                 let x = &main[*i];
                 matches!(&x.source, ClipSource::Recording { id } if *id == f.recording)
@@ -298,16 +306,6 @@ fn change_mix(work: &Project, found: &[Found], change: impl Fn(&mut SourceMix)) 
         } else {
             f.clips.clone()
         };
-        if everywhere && default != source.mix {
-            ops.push(Op::UpdateRecordingSource {
-                recording_id: f.recording.clone(),
-                source_id: f.source.clone(),
-                patch: SourcePatch {
-                    mix: Some(default.clone()),
-                    ..SourcePatch::default()
-                },
-            });
-        }
         for i in clips {
             let clip = &main[i];
             if layers.over(starts[i], starts[i].saturating_add(clip.duration_us())) {
@@ -315,7 +313,7 @@ fn change_mix(work: &Project, found: &[Found], change: impl Fn(&mut SourceMix)) 
                 continue;
             }
             let mut mix = clip.mix_for(source).clone();
-            change(&mut mix);
+            change(source, &mut mix);
             let mix = (mix != default).then_some(mix);
             if clip.source_mix.get(&f.source) != mix.as_ref() {
                 ops.push(Op::SetClipSourceMix {
@@ -324,6 +322,19 @@ fn change_mix(work: &Project, found: &[Found], change: impl Fn(&mut SourceMix)) 
                     mix,
                 });
             }
+        }
+        if everywhere && (default != source.mix || ops.len() == first) {
+            ops.insert(
+                first,
+                Op::UpdateRecordingSource {
+                    recording_id: f.recording.clone(),
+                    source_id: f.source.clone(),
+                    patch: SourcePatch {
+                        mix: Some(default),
+                        ..SourcePatch::default()
+                    },
+                },
+            );
         }
     }
     (ops, own_track)
@@ -335,7 +346,7 @@ fn mixed(
     work: &Project,
     (tool, values): (&str, Vec<(&str, ErrorParam)>),
     (sound, which, clips): (Sound, Option<&str>, Option<&[String]>),
-    change: impl Fn(&mut SourceMix),
+    change: impl Fn(&RecordingSource, &mut SourceMix),
 ) -> Result<Noted, Refused> {
     let named = named(c, work, tool, clips)?;
     let found = find(work, tool, sound, which, named.as_ref())?;
@@ -373,7 +384,7 @@ pub(super) fn mute(
         work,
         ("muteSource", vec![("mute", mute)]),
         (sound, which, clips),
-        |mix| mix.set_muted(muted),
+        |_, mix| mix.set_muted(muted),
     )
 }
 
@@ -390,8 +401,108 @@ pub(super) fn set_volume(
         work,
         ("setSourceVolume", vec![("percent", percent)]),
         (sound, which, clips),
-        |mix| mix.volume = volume,
+        |_, mix| mix.volume = volume,
     )
+}
+
+/// The timeline's Centre switch for `sound` in every recording: played in both ears from the side that carries it
+/// (`centred`), or as recorded again, on `change_mix`'s rules (the default and each clip's own mix, never a clip whose
+/// sound plays from its own track). `peaks` is how loud each file is on each channel, by asset id, as the app knows it.
+/// None when a sound's side isn't known: the switch asks which, never guessing. Chat has no tool for it: these are the
+/// rules the switch keeps, pinned by `source-mix-parity.json`. Nothing when the video has no such sound.
+pub fn centre_ops(
+    p: &Project,
+    sound: Sound,
+    centred: bool,
+    peaks: &[(&str, &[f32])],
+) -> Option<Vec<Op>> {
+    let Ok(found) = find(p, "centreSource", sound, None, None) else {
+        return Some(Vec::new());
+    };
+    let unknown = std::cell::Cell::new(false);
+    let (ops, _) = change_mix(p, &found, |source, mix| {
+        if !centred {
+            mix.centre_from = None;
+            return;
+        }
+        match live_channel(peaks, source).or(mix.centre_from) {
+            Some(k) => mix.centre_from = Some(k),
+            None => unknown.set(true),
+        }
+    });
+    (!unknown.get()).then_some(ops)
+}
+
+/// The channel `source` plays from when centred: the side that carries its sound, never a guess. Where `peaks` holds
+/// its two-channel files, the louder of the two over them (the first when even); else the channel it already plays
+/// centred from; else, when every file is known to have one channel (it plays centred either way), the first; else
+/// None. O(runs × files known).
+fn live_channel(peaks: &[(&str, &[f32])], source: &RecordingSource) -> Option<u8> {
+    let mut loudest: Option<(f32, f32)> = None;
+    let mut all_mono = true;
+    for run in &source.runs {
+        let known = (peaks.iter())
+            .find(|(id, _)| *id == run.asset_id)
+            .map(|(_, p)| *p);
+        match known {
+            Some(&[a, b, ..]) => {
+                let (l, r) = loudest.unwrap_or((0.0, 0.0));
+                loudest = Some((l.max(a), r.max(b)));
+            }
+            Some(&[_]) => {}
+            _ => all_mono = false,
+        }
+    }
+    match loudest {
+        Some((l, r)) => Some(u8::from(r > l)),
+        None => source.mix.centre_from.or(all_mono.then_some(0)),
+    }
+}
+
+/// The Sounds popover's Fill gaps switch on recording `recording`: whether its camera's own sound (a picture source
+/// whose files carry sound) plays where the recorded sound has nothing (`SourceMix::fills_gaps`), in its default mix and
+/// every clip's own mix of it. A clip's mix that ends up the default is dropped, and a default that doesn't change
+/// makes no op. The person's mute always wins: turning it on leaves a mix they muted silent. Chat has no tool for it:
+/// these are the rules the switch keeps, pinned by `source-mix-parity.json`. O(sources × clips).
+pub fn fill_gaps_ops(p: &Project, recording: &str, on: bool) -> Vec<Op> {
+    let mut ops = Vec::new();
+    let Some(r) = p.recording(recording) else {
+        return ops;
+    };
+    // A mix the person muted stays silent: only turning the fill off changes it.
+    let fill = |m: &SourceMix| SourceMix {
+        fills_gaps: on && !m.person_muted(),
+        ..m.clone()
+    };
+    for s in (r.sources.iter()).filter(|s| s.role.is_video() && makes_sound(p, s)) {
+        let default = fill(&s.mix);
+        if default != s.mix {
+            ops.push(Op::UpdateRecordingSource {
+                recording_id: r.id.clone(),
+                source_id: s.id.clone(),
+                patch: SourcePatch {
+                    mix: Some(default.clone()),
+                    ..SourcePatch::default()
+                },
+            });
+        }
+        let clips = (p.timeline.main.iter())
+            .filter(|x| matches!(&x.source, ClipSource::Recording { id } if *id == r.id));
+        for clip in clips {
+            let Some(own) = clip.source_mix.get(&s.id) else {
+                continue;
+            };
+            let mix = fill(own);
+            if mix != *own || mix == default {
+                ops.push(Op::SetClipSourceMix {
+                    clip_id: clip.id.clone(),
+                    source_id: s.id.clone(),
+                    mix: (mix != default).then_some(mix),
+                });
+            }
+        }
+    }
+    ops
 }
 
 /// One `DetachSource` per clip that plays the sound: the clips named, or every clip of the recordings with it. A clip
