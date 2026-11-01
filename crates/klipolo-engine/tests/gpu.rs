@@ -772,6 +772,47 @@ async fn the_preview_draws_a_pages_last_atlas_while_its_new_one_builds() {
     );
 }
 
+/// A build thread held back on purpose never holds up a frame. While it is held, the preview's frames of a page it
+/// hasn't built return without it (another page's words never stand in), a page asked in another style draws the
+/// page's last atlas, and every frame reaches the GPU and finishes; once it is let go, the page is built and shows.
+/// Nothing is timed: a frame that waited for the thread would return only once the hold gave up (a minute), which
+/// fails here. The five pages drawn first pass the cache's four, so atlases are let go, freed on the build thread and
+/// never on this one.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "needs a GPU"]
+async fn a_held_back_build_thread_never_holds_up_a_frame() {
+    let mut d = klipolo_engine::test_support::caption_drawer().await;
+    klipolo_engine::render::captions::forbid_builds_on_this_thread();
+    for page in 0..5 {
+        d.draw_page("caption.bold", page).await;
+    }
+    let held = d.hold_builds();
+    for _ in 0..20 {
+        assert!(
+            !d.preview_page("caption.bold", 20),
+            "page 20 isn't built while the thread is held"
+        );
+        assert!(
+            d.preview_page("caption.loud", 4),
+            "page 4 in Loud: Bold's atlas of it while Loud's waits"
+        );
+    }
+    d.settle();
+    assert!(
+        !held.timed_out(),
+        "a frame waited for the held build thread"
+    );
+    drop(held);
+    let started = std::time::Instant::now();
+    while !d.preview_page("caption.bold", 20) {
+        assert!(
+            started.elapsed().as_secs() < 30,
+            "the page shows once the thread is let go"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+}
+
 /// At 2160 × 3840 a Bold page is about 4.7 MB, so the byte bound evicts before the count does:
 /// the atlases kept stay within 16 MB, fewer than four, and the page drawn is still kept.
 #[tokio::test(flavor = "multi_thread")]

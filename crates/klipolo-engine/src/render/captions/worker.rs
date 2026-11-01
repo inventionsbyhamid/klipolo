@@ -69,6 +69,29 @@ pub(super) enum Job {
     Unkept(Box<Built>),
     /// The dropped drawer's end of the replies, with the pages built and not picked up: freed here.
     Close(Receiver<Reply>),
+    /// Tests: the thread waits here until the hold is let go, `HOLD_AT_MOST` at most (then it says it gave up).
+    #[cfg(feature = "test-support")]
+    Hold(Receiver<()>, Arc<AtomicBool>),
+}
+
+/// Tests: how long a held build thread waits before it gives up (`HeldBuilds::timed_out`).
+#[cfg(feature = "test-support")]
+const HOLD_AT_MOST: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Tests: the caption build thread held before its next job until this is dropped (`CaptionDrawer::hold_builds`).
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub struct HeldBuilds {
+    _release: Sender<()>,
+    timed_out: Arc<AtomicBool>,
+}
+
+#[cfg(feature = "test-support")]
+impl HeldBuilds {
+    /// Whether the thread gave up waiting before the hold was let go: something waited for it meanwhile.
+    pub fn timed_out(&self) -> bool {
+        self.timed_out.load(Ordering::Acquire)
+    }
 }
 
 /// A page built.
@@ -138,6 +161,18 @@ impl Worker {
         let _ = self.jobs.send(Job::Unkept(built));
     }
 
+    /// Tests: the thread stops before its next job until the returned hold is dropped (`HOLD_AT_MOST` at most).
+    #[cfg(feature = "test-support")]
+    pub(super) fn hold(&self) -> HeldBuilds {
+        let (release, until) = mpsc::channel();
+        let timed_out = Arc::new(AtomicBool::new(false));
+        let _ = self.jobs.send(Job::Hold(until, timed_out.clone()));
+        HeldBuilds {
+            _release: release,
+            timed_out,
+        }
+    }
+
     /// A reply if one is there.
     pub(super) fn try_reply(&self) -> Result<Option<Reply>, Gone> {
         match self.replies.try_recv() {
@@ -203,6 +238,13 @@ fn run(
             }
             Job::Close(replies) => {
                 drop(replies);
+                continue;
+            }
+            #[cfg(feature = "test-support")]
+            Job::Hold(until, timed_out) => {
+                if let Err(mpsc::RecvTimeoutError::Timeout) = until.recv_timeout(HOLD_AT_MOST) {
+                    timed_out.store(true, Ordering::Release);
+                }
                 continue;
             }
         };

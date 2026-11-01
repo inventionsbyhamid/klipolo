@@ -123,6 +123,13 @@ impl CaptionDrawer {
         self.builds
     }
 
+    /// Tests: holds the build thread before its next job until the returned hold is dropped (a minute at most).
+    #[cfg(feature = "test-support")]
+    #[doc(hidden)]
+    pub fn hold_builds(&self) -> super::HeldBuilds {
+        self.worker.hold()
+    }
+
     /// What the captions cost and hold (tests and the perf harness).
     #[doc(hidden)]
     pub fn stats(&self) -> CaptionStats {

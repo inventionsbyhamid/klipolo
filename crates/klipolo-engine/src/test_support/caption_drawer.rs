@@ -266,6 +266,12 @@ impl TestCaptionDrawer {
         self.drawer.builds()
     }
 
+    /// Holds the build thread before its next job until the returned hold is dropped (a minute at most).
+    #[cfg(feature = "test-support")]
+    pub fn hold_builds(&self) -> crate::render::captions::HeldBuilds {
+        self.drawer.hold_builds()
+    }
+
     /// The drawer's uploads of its frame buffers so far.
     pub fn uploads(&self) -> u64 {
         self.drawer.stats().uploads
