@@ -246,6 +246,18 @@ describe("a recording clip's menu", () => {
     expect(item).toHaveTextContent('Set the clip back to normal speed before separating its sound.');
   });
 
+  it("lists Separate camera with the sounds' Separate, in one group after their mutes", async () => {
+    show(fixtureSnapshot());
+    menuOf(/^Recording 1, clip 1 of 2/);
+    const menu = await screen.findByRole('menu');
+    await screen.findByRole('menuitem', { name: /^Separate camera/ });
+    const rows = [...menu.querySelectorAll('[role="menuitem"], [role="separator"]')].map((el) =>
+      el.getAttribute('role') === 'separator' ? '|' : (el.textContent ?? '').replace(/[⌫⌘⇧S]+$/u, ''),
+    );
+    const from = rows.indexOf('Mute Mic in this clip');
+    expect(rows.slice(from, from + 5)).toEqual(['Mute Mic in this clip', '|', 'Separate camera', 'Separate Mic', '|']);
+  });
+
   it('an imported clip has none', async () => {
     show(fixtureSnapshot());
     menuOf(/^broll\.mp4, clip 2 of 2/);
