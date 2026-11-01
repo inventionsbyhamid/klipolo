@@ -9,6 +9,15 @@ describe('undo labels as message ids', () => {
     expect(historyAction('undo', 'text.add')).toBe('Undo add text');
     expect(historyAction('redo', 'format.add.undo', { ratio: '9:16' })).toBe('Redo add 9:16 version');
     expect(historyAction('undo', 'gizmo.move.undo', { layer: 'camera' })).toBe('Undo move camera');
+    // A video layer is named apart from the Video lane.
+    expect(historyAction('undo', 'gizmo.move.undo', { layer: 'video' })).toBe('Undo move video layer');
+    expect(historyAction('undo', 'gizmo.resize.undo', { layer: 'video' })).toBe('Undo resize video layer');
+    expect(historyAction('undo', 'gizmo.rotate.undo', { layer: 'video' })).toBe('Undo rotate video layer');
+    expect(historyAction('undo', 'gizmo.nudge.undo', { layer: 'video' })).toBe('Undo nudge video layer');
+    expect(historyAction('undo', 'volume.mute.undo', { noun: 'video' })).toBe('Undo mute video layer');
+    expect(historyAction('redo', 'volume.unmute.undo', { noun: 'video' })).toBe('Redo unmute video layer');
+    expect(historyAction('undo', 'media.mirror.undo')).toBe('Undo mirror video layer');
+    expect(historyAction('undo', 'media.unmirror.undo')).toBe('Undo unmirror video layer');
     expect(
       historyAction('undo', 'text.look.apply.undo', { style: { code: 'text.look.box', params: {} } }),
     ).toBe('Undo apply Box style');

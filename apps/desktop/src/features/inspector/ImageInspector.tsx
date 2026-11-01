@@ -42,7 +42,7 @@ export function PictureFields({ item, format, primary }: { item: Item; format: F
       <Field label={size}>
         <ToolSlider
           label={size}
-          // Named as a resize on the canvas names it: "Resize video", "Resize image".
+          // Named as a resize on the canvas names it: "Resize video layer", "Resize image".
           commitLabel={{
             id: 'gizmo.resize.undo',
             params: { layer: item.content.type === 'video' ? 'video' : 'image' },

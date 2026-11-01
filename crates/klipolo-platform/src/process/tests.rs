@@ -182,9 +182,9 @@ fn a_child_that_ignores_sigterm_is_forced_after_the_grace_and_nothing_else_is() 
     assert!(bystander.0.try_wait().unwrap().is_none());
 }
 
-/// The speech worker's own priority, below normal and never idle. On Linux it is nice 10 (or
-/// the nicer value it ran at) and `SCHED_BATCH` for the calling thread and every thread it starts later; on a thread
-/// of its own here, so the test binary's others keep theirs.
+/// A lowered process's priority, below normal and never idle. On Linux it is nice 10 (or the nicer value it ran at)
+/// and `SCHED_BATCH` for the calling thread and every thread it starts later; on a thread of its own here, so the test
+/// binary's others keep theirs.
 #[cfg(target_os = "linux")]
 #[test]
 fn a_lowered_process_runs_below_normal_never_idle_and_so_do_the_threads_it_starts() {
@@ -208,8 +208,8 @@ fn a_lowered_process_runs_below_normal_never_idle_and_so_do_the_threads_it_start
     .unwrap();
 }
 
-/// On macOS: nice 10 for the process and utility QoS that the threads it starts inherit, never the
-/// darwin background band. (Lowers the whole test process: nice is the task's on macOS.)
+/// On macOS: nice 10 for the process and utility QoS that the threads it starts inherit, never the darwin background
+/// band. (Lowers the whole test process: nice is the task's on macOS.)
 #[cfg(target_os = "macos")]
 #[test]
 fn a_lowered_process_runs_at_utility_out_of_the_background_band() {
