@@ -2233,6 +2233,7 @@ async fn chats_media_tools_find_the_projects_music_and_sounds_and_the_pack() {
         kind: MediaKind::Music,
         asset: sound_file("klipolo-pack-soft-ambient", "soft-ambient.wav", 30.0),
         pack: true,
+        tags: Vec::new(),
     };
     let model = Script::new(vec![
         answer(

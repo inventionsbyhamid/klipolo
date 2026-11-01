@@ -1027,6 +1027,7 @@ fn a_part_refused_for_the_person_is_not_claimed_by_the_models_text() {
         kind: MediaKind::Music,
         asset: lofi,
         pack: false,
+        tags: Vec::new(),
     });
     let music = |id: &str| {
         fc(
