@@ -69,6 +69,12 @@ describe('engine bridge', () => {
     ]);
   });
 
+  it('tells the engine how long the socket’s playing frames take to arrive', async () => {
+    invoke.mockResolvedValue(undefined);
+    await engine.presentDelay(42);
+    expect(invoke.mock.calls).toEqual([['engine_present_delay', { ms: 42 }]]);
+  });
+
   it('dry-runs edits on a project revision and clears them', async () => {
     invoke.mockResolvedValue(undefined);
     await engine.preview('p', 4, [{ type: 'rename', name: 'X' }]);
