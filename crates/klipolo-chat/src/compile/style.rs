@@ -1,14 +1,19 @@
-//! `setLayer`'s style keys on words of the additions' working copy: a text layer's style, or animated words' look
-//! settings (`media::text_motion`), changed as the text card changes them, in the same step as the layout. A look goes
+//! `styleText` on words of the additions' working copy: a text layer's style, or animated words' look settings
+//! (`media::text_motion`), changed as the text card changes them, in one step. A look goes
 //! on first (its colour, box, outline at its step for the size, shadow), then each key given on top: a new size
 //! scales an outline with it, as the card does; bold and italic pick the font's nearest face. A font is named as
 //! `addText` names one, from the app's fonts; one still to download is said in the reply (`font_note`). A title
 //! template keeps its own look.
 
+use klipolo_model::Project;
+use klipolo_model::coded::ErrorParam;
+use klipolo_model::ids::Id;
 use klipolo_model::media::text_motion;
+use klipolo_model::ops::{ItemPatch, Op};
 use klipolo_model::timeline::{Item, ItemContent, Outline, TextStyle};
 
-use super::{Compiler, Refused, to_model};
+use super::motion::drawn;
+use super::{Compiler, Edit, Refused, label, to_model};
 use crate::tools::{OutlineStep, Paint, StyleChange};
 
 /// The weight bold is, and the one not bold is.
@@ -62,7 +67,7 @@ fn restyled(
             if let Some(step) = change.outline_width {
                 let Some(o) = &mut s.outline else {
                     return Err(to_model(format!(
-                        "setLayer: {said} has no outline for outlineWidth to change. Give outline a colour too."
+                        "styleText: {said} has no outline for outlineWidth to change. Give outline a colour too."
                     )));
                 };
                 o.width = step.width(s.size);
@@ -93,7 +98,7 @@ fn restyled(
             }
             None if change.font.is_some() => {
                 return Err(to_model(format!(
-                    "setLayer: no font is named {family:?}, here or at Google. Leave font out to keep {}.",
+                    "styleText: no font is named {family:?}, here or at Google. Leave font out to keep {}.",
                     s.font.family
                 )));
             }
@@ -134,13 +139,39 @@ pub(super) fn restyled_content(
             Ok((content, download))
         }
         ItemContent::Generator { .. } => Err(to_model(format!(
-            "setLayer: {said} is a title template with its own look, so it takes no style keys. Style words added with \
-             addText instead."
+            "styleText: {said} is a title template with its own look. Style words added with addText instead."
         ))),
         _ => Err(to_model(format!(
-            "setLayer: {said} is not words, so it takes no style keys (font, size, color and the rest)."
+            "styleText: {said} is not words. Name words by their ref, such as t1."
         ))),
     }
+}
+
+/// `styleText` on the words `id` of `work`, named `said`: one `UpdateItem`, and the font still to download, if any.
+pub(super) fn style_text(
+    c: &Compiler,
+    work: &Project,
+    (id, said): (&Id, &str),
+    change: &StyleChange,
+) -> Result<(Edit, Option<String>), Refused> {
+    let item = drawn(work, (id, said), "styleText")?;
+    let (content, download) = restyled_content(c, item, change, said)?;
+    let ops = if content == item.content {
+        Vec::new()
+    } else {
+        vec![Op::UpdateItem {
+            id: item.id.clone(),
+            patch: ItemPatch {
+                content: Some(content),
+                ..ItemPatch::default()
+            },
+        }]
+    };
+    let edit = Edit {
+        ops,
+        label: label("styleText", Vec::<(&str, ErrorParam)>::new()),
+    };
+    Ok((edit, download))
 }
 
 /// What the reply says of a font still to download, as `addText`'s note says it.

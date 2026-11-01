@@ -1,4 +1,4 @@
-//! The words' style, as `setLayer`'s keys (`STYLE_KEYS`): the text card's fields, by the card's words: a font from the
+//! The words' style tool (`styleText`), its keys `STYLE_KEYS`: the text card's fields, by the card's words: a font from the
 //! app's fonts, a size, the colour, a highlight behind the words, an outline and its width, the shadow, the alignment,
 //! bold and italic, and the card's one-click looks (`LOOKS`, as `apps/desktop/src/lib/textLook.ts` has them). A look
 //! comes first and the other keys go on top of it. Colours are `#RRGGBB` or `#RRGGBBAA`; whether a font has that name,
@@ -8,8 +8,10 @@ use klipolo_model::timeline::TextAlign;
 
 use super::args::Args;
 use super::error::{Problem, ToolError};
+use super::motion::layer_field;
 use super::schema::Word;
-use super::sets::Pair;
+use super::sets::{Pair, pairs, schema};
+use super::{Tool, ToolCall};
 
 /// An outline's width, as a share of the text size: the card's three steps.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -217,3 +219,34 @@ pub(super) fn read_style(p: &Pair, a: &Args, change: &mut StyleChange) -> Result
     }
     Ok(())
 }
+
+pub(super) const STYLE_TEXT: Tool = Tool {
+    name: "styleText",
+    description: "Style words on screen. Keys: look (clean, boldOutline, highlight, box, pop) first, then font, size \
+                  (px at 1080p), color, highlight and outline (#hex or none), outlineWidth (thin, medium, thick), \
+                  shadow, align, bold, italic.",
+    parameters: || vec![layer_field(), ("set", schema("Keys to set."))],
+    read: |a| {
+        let layer = a.layer_ref("layer")?;
+        let set = pairs(a, "set", &STYLE_KEYS)?;
+        if set.is_empty() {
+            return Err(a.error("set", Problem::Empty));
+        }
+        let mut change = StyleChange::default();
+        for p in &set {
+            read_style(p, a, &mut change)?;
+        }
+        if change.outline == Some(Paint::None) && change.outline_width.is_some() {
+            return Err(a.error(
+                "set",
+                Problem::Unused {
+                    why: "sets outlineWidth with outline none: leave outlineWidth out",
+                },
+            ));
+        }
+        Ok(ToolCall::StyleText {
+            layer,
+            change: Box::new(change),
+        })
+    },
+};

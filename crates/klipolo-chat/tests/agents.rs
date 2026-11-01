@@ -812,6 +812,13 @@ fn every_call() -> Vec<(ToolCall, bool)> {
             ),
             false,
         ),
+        (
+            parsed(
+                "styleText",
+                r#"{"layer": "t1", "set": [{"key": "bold", "value": true}]}"#,
+            ),
+            false,
+        ),
         (ToolCall::Undo, false),
         (
             ToolCall::AskUser {

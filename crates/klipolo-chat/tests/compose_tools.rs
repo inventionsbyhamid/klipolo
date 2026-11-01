@@ -1,6 +1,6 @@
 //! The tools the model composes any edit with, beyond the presets: keyframes and presets with their settings on any
 //! layer (`setMotion`), words that come in by letter, word or line (`animateText`), a layer's or clip's card fields by
-//! key (`setLayer`: place, size, turn, opacity, blend, corners, crop, Fit or Fill, order, words' style, fades and
+//! key (`setLayer`: place, size, turn, opacity, blend, corners, crop, Fit or Fill, order, fades and
 //! ducking), and one effect at a time from the catalogue (`setEffects`). The project is made here:
 //! - `talk.mov`, 30 s, played whole as `c1`, landscape;
 //! - `t1`: a title reading "Day one" from 0.5 to 3.5 s; `i1`: the Heart picture from 10.0 to 15.0 s; `m1`: a song from
@@ -621,13 +621,13 @@ fn set(layer: &str, pairs: Value) -> Value {
 
 #[test]
 fn set_layer_reads_its_keys_and_refuses_one_it_doesnt_take() {
-    let ToolCall::SetLayer { change, style, .. } = call(
+    let ToolCall::SetLayer { change, .. } = call(
         "setLayer",
         set(
             "i1",
             json!([{"key": "box", "value": "0.7 0.05 0.25 0.25"}, {"key": "rotation", "value": 15},
                 {"key": "opacity", "value": 0.8}, {"key": "corners", "value": 0.2}, {"key": "blend", "value": "screen"},
-                {"key": "crop", "value": "none"}, {"key": "order", "value": "back"}, {"key": "size", "value": 80},
+                {"key": "crop", "value": "none"}, {"key": "order", "value": "back"},
                 {"key": "fadeIn", "value": 1}]),
         ),
     ) else {
@@ -645,7 +645,6 @@ fn set_layer_reads_its_keys_and_refuses_one_it_doesnt_take() {
     );
     assert_eq!(change.crop, Some(klipolo_model::crop::Crop::NONE));
     assert_eq!(change.fade_in_us, Some(secs(1.0)));
-    assert_eq!(style.size, Some(80.0));
     assert!(
         refused("setLayer", set("i1", json!([{"key": "glow", "value": 1}])))
             .contains("must be one of box,")
@@ -669,10 +668,14 @@ fn set_layer_reads_its_keys_and_refuses_one_it_doesnt_take() {
     );
     assert_eq!(
         refused(
-            "setLayer",
+            "styleText",
             set("t1", json!([{"key": "color", "value": "red"}]))
         ),
-        "setLayer: set[0].value must be a hex colour like #FFD02E, not \"red\"."
+        "styleText: set[0].value must be a hex colour like #FFD02E, not \"red\"."
+    );
+    assert!(
+        refused("setLayer", set("t1", json!([{"key": "size", "value": 80}])))
+            .contains("must be one of box,")
     );
 }
 
@@ -755,12 +758,12 @@ fn forward_and_back_move_a_layer_onto_the_track_above_or_below() {
 }
 
 #[test]
-fn style_keys_restyle_words_as_the_text_card_does() {
+fn style_text_restyles_words_as_the_text_card_does() {
     let p = project();
     let out = run(
         &p,
         &[(
-            "setLayer",
+            "styleText",
             set(
                 "t1",
                 json!([{"key": "look", "value": "pop"}, {"key": "size", "value": 120}, {"key": "font", "value": "Anton"},
@@ -785,7 +788,7 @@ fn style_keys_restyle_words_as_the_text_card_does() {
     let out = run(
         &p,
         &[(
-            "setLayer",
+            "styleText",
             set("t1", json!([{"key": "font", "value": "Poppins"}])),
         )],
     );
@@ -798,7 +801,7 @@ fn style_keys_restyle_words_as_the_text_card_does() {
     let out = run(
         &p,
         &[(
-            "setLayer",
+            "styleText",
             set("t1", json!([{"key": "font", "value": "Comic Neue"}])),
         )],
     );
@@ -807,7 +810,7 @@ fn style_keys_restyle_words_as_the_text_card_does() {
     let out = run(
         &p,
         &[(
-            "setLayer",
+            "styleText",
             set("i1", json!([{"key": "bold", "value": true}])),
         )],
     );
@@ -825,7 +828,7 @@ fn style_keys_restyle_words_as_the_text_card_does() {
     let out = run(
         &animated,
         &[(
-            "setLayer",
+            "styleText",
             set("t1", json!([{"key": "color", "value": "#ff0000"}])),
         )],
     );
@@ -1106,4 +1109,38 @@ fn a_layer_ref_holds_only_while_the_layers_do_and_a_clips_while_the_timeline_doe
     );
     assert!(words.names_layer());
     let _ = TrackKind::Overlay;
+}
+
+#[test]
+fn the_prompt_names_every_effect_setting_look_and_preset_the_catalogue_has() {
+    use klipolo_model::contrib::{Catalog, ContribKind};
+    let prompt = klipolo_chat::prompt::SYSTEM_PROMPT;
+    let line = |start: &str| {
+        (prompt.lines())
+            .find(|l| l.starts_with(start))
+            .unwrap_or_else(|| panic!("no line {start}"))
+    };
+    let (effects, presets) = (line("- Effects:"), line("- Presets:"));
+    for def in Catalog::builtin().defs() {
+        let Some(word) = (def.id.as_str().strip_prefix("klipolo.builtin/"))
+            .and_then(|local| local.split_once('.'))
+            .map(|(_, word)| word)
+        else {
+            continue;
+        };
+        match def.kind {
+            ContribKind::Effect => {
+                assert!(effects.contains(&format!("{word} (")), "{word}");
+                for p in &def.params {
+                    assert!(effects.contains(&p.key), "{word}'s {}", p.key);
+                }
+            }
+            ContribKind::Look => assert!(effects.contains(word), "look {word}"),
+            ContribKind::Motion => {
+                let said = if word == "blur-in" { "blur" } else { word };
+                assert!(presets.contains(said), "preset {word}");
+            }
+            _ => {}
+        }
+    }
 }

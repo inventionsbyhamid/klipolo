@@ -18,17 +18,16 @@ use klipolo_model::timeline::{ItemContent, TrackKind};
 
 use super::animate::noun;
 use super::motion::drawn;
-use super::{Compiler, Edit, Refused, label, to_model};
-use crate::tools::{LayerChange, Order, StyleChange};
+use super::{Edit, Refused, label, to_model};
+use crate::tools::{LayerChange, Order};
 
-/// `setLayer` on the layer `id` of `work`, named `said`: its layout, a video layer's crop and framing and words' style in
-/// one `UpdateItem`, then its move up or down the stack; and the font still to download, if any.
+/// `setLayer` on the layer `id` of `work`, named `said`: its layout and a video layer's crop and framing in one
+/// `UpdateItem`, then its move up or down the stack.
 pub(super) fn set_layer(
-    c: &Compiler,
     work: &Project,
     (id, said): (&Id, &str),
-    (change, style): (&LayerChange, &StyleChange),
-) -> Result<(Edit, Option<String>), Refused> {
+    change: &LayerChange,
+) -> Result<Edit, Refused> {
     let item = drawn(work, (id, said), "setLayer")?;
     if change.fade_in_us.is_some() || change.fade_out_us.is_some() || change.duck.is_some() {
         return Err(to_model(format!(
@@ -61,7 +60,7 @@ pub(super) fn set_layer(
     if let Some(b) = change.blend {
         layout.blend = (b != Blend::Normal).then_some(b);
     }
-    let (mut content, download) = super::style::restyled_content(c, item, style, said)?;
+    let mut content = item.content.clone();
     if change.crop.is_some() || change.fill.is_some() {
         let ItemContent::Video { crop, fill, .. } = &mut content else {
             let field = if change.crop.is_some() {
@@ -98,7 +97,7 @@ pub(super) fn set_layer(
         ops,
         label: label("setLayer", vec![("layer", ErrorParam::from(noun(item)))]),
     };
-    Ok((edit, download))
+    Ok(edit)
 }
 
 /// The move of layer `id` onto the nearest unlocked track of its kind in `order`'s direction (forward is a higher
@@ -135,8 +134,8 @@ fn step(work: &Project, id: &Id, said: &str, order: Order) -> Result<Op, Refused
     })
 }
 
-/// What `change` and `style` set beyond a clip's or a song's fades and ducking, by key, for a refusal.
-fn beyond_sound(change: &LayerChange, style: &StyleChange, duck: bool) -> Option<&'static str> {
+/// What `change` sets beyond a clip's or a song's fades and ducking, by key, for a refusal.
+fn beyond_sound(change: &LayerChange, duck: bool) -> Option<&'static str> {
     let c = change;
     [
         (c.rect.is_some(), "box"),
@@ -148,7 +147,6 @@ fn beyond_sound(change: &LayerChange, style: &StyleChange, duck: bool) -> Option
         (c.fill.is_some(), "fill"),
         (c.order.is_some(), "order"),
         (c.duck.is_some() && !duck, "duck"),
-        (*style != StyleChange::default(), "a style key"),
     ]
     .into_iter()
     .find_map(|(set, key)| set.then_some(key))
@@ -159,9 +157,9 @@ fn beyond_sound(change: &LayerChange, style: &StyleChange, duck: bool) -> Option
 pub(super) fn set_clip_fades(
     work: &Project,
     (id, said): (&Id, &str),
-    (change, style): (&LayerChange, &StyleChange),
+    change: &LayerChange,
 ) -> Result<Edit, Refused> {
-    if let Some(key) = beyond_sound(change, style, false) {
+    if let Some(key) = beyond_sound(change, false) {
         return Err(to_model(format!(
             "setLayer: {said} is a clip, which takes only fadeIn and fadeOut here, not {key}. Use setClip for its \
              speed, volume or framing."
@@ -219,9 +217,9 @@ pub(super) fn set_clip_fades(
 pub(super) fn set_song_sound(
     work: &Project,
     (first, said): (&str, &str),
-    (change, style): (&LayerChange, &StyleChange),
+    change: &LayerChange,
 ) -> Result<Edit, Refused> {
-    if let Some(key) = beyond_sound(change, style, true) {
+    if let Some(key) = beyond_sound(change, true) {
         return Err(to_model(format!(
             "setLayer: {said} is music, which takes only fadeIn, fadeOut and duck here, not {key}."
         )));

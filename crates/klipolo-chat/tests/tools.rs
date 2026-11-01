@@ -12,8 +12,8 @@ use std::collections::BTreeSet;
 
 use klipolo_chat::tools::{
     BackgroundChoice, BubbleChange, CHAT_CAPTION_STYLES, ClipRef, EffectChange, Entrance,
-    FunctionCall, KeyIn, LayerChange, LayerRef, Moment, PictureSize, Position, Problem, Property,
-    SizeStep, Sound, TextPreset, ToolCall, TransitionKind, tools,
+    FunctionCall, KeyIn, LayerChange, LayerRef, Moment, Paint, PictureSize, Position, Problem,
+    Property, SizeStep, Sound, StyleChange, TextPreset, ToolCall, TransitionKind, tools,
 };
 use klipolo_model::captions::styles::{BuiltinCaptionStyle, CaptionStyles};
 use klipolo_model::layout::Anchor;
@@ -215,6 +215,7 @@ fn every_tool_schema_is_strict() {
             "setMotion",
             "animateText",
             "setLayer",
+            "styleText",
             "setEffects",
             "setCameraMode",
             "adjustCamera",
@@ -698,7 +699,6 @@ fn parses_each_tool_from_spike_shaped_calls() {
                     opacity: Some(0.8),
                     ..LayerChange::default()
                 }),
-                style: Box::default(),
             }],
         ),
         (
@@ -711,6 +711,17 @@ fn parses_each_tool_from_spike_shaped_calls() {
                     remove: false,
                     settings: Vec::new(),
                 }],
+            }],
+        ),
+        (
+            "make the title yellow with a black outline",
+            vec![StyleText {
+                layer: LayerRef::One("t1".into()),
+                change: Box::new(StyleChange {
+                    color: Some("#FFD02E".into()),
+                    outline: Some(Paint::Color("#000000".into())),
+                    ..StyleChange::default()
+                }),
             }],
         ),
     ];
@@ -1250,6 +1261,7 @@ fn every_tool_in_the_schema_has_a_reader_that_reads_it() {
                 args["presets"] = json!("enter fade");
             }
             "animateText" | "setLayer" => args["set"] = json!([{"key": "opacity", "value": 0.5}]),
+            "styleText" => args["set"] = json!([{"key": "bold", "value": true}]),
             _ => {}
         }
         let parsed = ToolCall::parse(&call(name, &args.to_string()))
@@ -1484,6 +1496,16 @@ fn the_prompt_names_only_real_tools() {
                 .cloned()
         })
         .collect();
+    // The composing tools' keys and the effects' settings, which the prompt names as the tools take them.
+    let mut arguments = arguments;
+    let keys = (klipolo_chat::tools::layer::LAYER_KEYS.iter())
+        .chain(&klipolo_chat::tools::style::STYLE_KEYS)
+        .chain(&klipolo_chat::tools::text_motion::TEXT_KEYS);
+    arguments.extend(keys.map(|k| (*k).to_owned()));
+    arguments.extend(
+        (klipolo_model::contrib::Catalog::builtin().defs())
+            .flat_map(|d| d.params.iter().map(|p| p.key.clone())),
+    );
     let prompt = klipolo_chat::prompt::system_prompt();
     let mut named = BTreeSet::new();
     for word in prompt.split(|c: char| !c.is_ascii_alphabetic()) {
@@ -1535,12 +1557,13 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
     // 914 measured with the clip tools' line and the recordings' line; 1,098 with autoZoom's line and the short's
-    // recipe.
-    assert!(prompt_tokens <= 1_100, "prompt {prompt_tokens} tokens");
+    // recipe; then the composing tools' lines and the catalogues they name (presets, effects, looks, fonts). Ruled at
+    // most 1,400.
+    assert!(prompt_tokens <= 1_400, "prompt {prompt_tokens} tokens");
     // 4,438 measured with the clip tools (setClip, setTransition), setBackground (about 210), freezeFrame (about 105),
     // addText's font (about 25) and the recording tools (the camera's three and the recorded sounds' three, about 1,010);
     // 4,831 with animate, the words' entrance, autoZoom and the shorts' two caption styles (about 390); 5,478 with the
-    // tools that compose any edit (setMotion, animateText, setLayer, setEffects: about 645), whose keys and words the
-    // prompt lists.
-    assert!(tools_tokens <= 5_500, "tools {tools_tokens} tokens");
+    // tools that compose any edit (setMotion, animateText, setLayer, styleText, setEffects), whose catalogues the prompt
+    // lists. Ruled at most 6,000 for every lane's tools.
+    assert!(tools_tokens <= 6_000, "tools {tools_tokens} tokens");
 }

@@ -402,13 +402,21 @@ pub(super) const SET_MOTION: Tool = Tool {
                 "keys",
                 nullable_list(
                     object(vec![
-                        ("property", words(&PROPERTIES, "What moves.")),
+                        (
+                            "property",
+                            words(&PROPERTIES, "x, y: frame shares; rotation: degrees."),
+                        ),
                         ("atSec", seconds("From the layer's start.")),
                         (
                             "value",
                             json!({"type": "number", "description": "Its value."}),
                         ),
-                        ("ease", super::schema::nullable_string("Into it.")),
+                        (
+                            "ease",
+                            super::schema::nullable_string(
+                                "linear, in, out, inOut, spring, spring 0.4 (bounce to 0.9), cubic x1 y1 x2 y2.",
+                            ),
+                        ),
                     ]),
                     "A property listed gets just these keys; [] removes all.",
                 ),
@@ -416,7 +424,7 @@ pub(super) const SET_MOTION: Tool = Tool {
             (
                 "presets",
                 super::schema::nullable_string(
-                    "enter, exit or loop and a preset; a semicolon between.",
+                    "Such as \"enter slide left 0.5s spring; exit fade; loop float 1.5 2s\".",
                 ),
             ),
         ]

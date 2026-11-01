@@ -1,9 +1,9 @@
 //! The layer tool (`setLayer`): where a layer sits and how big it is, its rotation, opacity, blend and rounded corners,
-//! a video layer's crop and Fit or Fill, its place in the stack, and words' style (`style`): the layer card's fields,
-//! the text card's and the timeline's Bring forward and Send back. They come as `{key, value}` pairs (`sets`,
-//! `LAYER_KEYS` and `style::STYLE_KEYS`), which the prompt lists, so the schema stays small. A box and a crop are
+//! a video layer's crop and Fit or Fill and its place in the stack, the layer card's fields and the timeline's Bring
+//! forward and Send back; and a clip's or a song's fades and a song's ducking, their cards'. They come as `{key, value}`
+//! pairs (`sets`, `LAYER_KEYS`), which its description lists, so the schema stays small. A box and a crop are
 //! fractions of the frame and of the picture; a value outside what the model takes is refused with its range. Whether
-//! the layer can take a crop, Fill or a style is the compiler's to judge.
+//! the layer can take a crop, Fill or fades is the compiler's to judge.
 
 use klipolo_model::crop::Crop;
 use klipolo_model::layout::BoxN;
@@ -13,7 +13,6 @@ use klipolo_model::time::{Us, secs_to_us};
 use super::error::Problem;
 use super::motion::layer_field;
 use super::sets::{pairs, schema};
-use super::style::{STYLE_KEYS, StyleChange, read_style};
 use super::{Tool, ToolCall};
 
 /// Up or down the stack: onto the track above or below.
@@ -67,22 +66,18 @@ pub struct LayerChange {
 
 pub(super) const SET_LAYER: Tool = Tool {
     name: "setLayer",
-    description: "Set a layer's or clip's card fields by key. Unset keys keep.",
+    description: "A layer's or clip's card fields. Keys: box (\"x y w h\", frame shares from the top left), \
+                  rotation, opacity, corners (0 to 0.5), blend (normal, multiply, screen, add, overlay), order (forward, \
+                  back); video layers: crop (\"l t r b\" or none), fill; clips and music: fadeIn, fadeOut (s); music: duck.",
     parameters: || vec![layer_field(), ("set", schema("Keys to set."))],
     read: |a| {
         let layer = a.layer_ref("layer")?;
         let mut change = LayerChange::default();
-        let mut style = StyleChange::default();
-        let keys: Vec<&'static str> = LAYER_KEYS.iter().chain(&STYLE_KEYS).copied().collect();
-        let set = pairs(a, "set", &keys)?;
+        let set = pairs(a, "set", &LAYER_KEYS)?;
         if set.is_empty() {
             return Err(a.error("set", Problem::Empty));
         }
         for p in set {
-            if STYLE_KEYS.contains(&p.key) {
-                read_style(&p, a, &mut style)?;
-                continue;
-            }
             match p.key {
                 "box" => {
                     let [x, y, w, h] = p.four(a, "four numbers: x y width height")?;
@@ -145,18 +140,9 @@ pub(super) const SET_LAYER: Tool = Tool {
                 }
             }
         }
-        if style.outline == Some(super::style::Paint::None) && style.outline_width.is_some() {
-            return Err(a.error(
-                "set",
-                Problem::Unused {
-                    why: "sets outlineWidth with outline none: leave outlineWidth out",
-                },
-            ));
-        }
         Ok(ToolCall::SetLayer {
             layer,
             change: Box::new(change),
-            style: Box::new(style),
         })
     },
 };

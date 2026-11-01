@@ -254,11 +254,16 @@ pub enum ToolCall {
         layer: LayerRef,
         motion: klipolo_model::media::text_motion::TextMotion,
     },
-    /// Place, size, turn, fade, blend, round, crop, frame or reorder the layer `layer` names, and restyle its words.
+    /// Place, size, turn, fade, blend, round, crop, frame or reorder the layer `layer` names, or set the fades of the
+    /// clip or song it names and the song's ducking.
     SetLayer {
         layer: LayerRef,
         change: Box<LayerChange>,
-        style: Box<StyleChange>,
+    },
+    /// Restyle the words `layer` names.
+    StyleText {
+        layer: LayerRef,
+        change: Box<StyleChange>,
     },
     /// Add, change, move or take off effects on the clip or layer `target` names.
     SetEffects {
@@ -346,6 +351,7 @@ impl ToolCall {
             ToolCall::SetMotion { .. } => "setMotion",
             ToolCall::AnimateText { .. } => "animateText",
             ToolCall::SetLayer { .. } => "setLayer",
+            ToolCall::StyleText { .. } => "styleText",
             ToolCall::SetEffects { .. } => "setEffects",
             ToolCall::Undo => "undo",
             ToolCall::AskUser { .. } => "askUser",
@@ -363,7 +369,8 @@ impl ToolCall {
             } => r.starts_with(['m', 'v']),
             ToolCall::Animate { layer, .. }
             | ToolCall::SetMotion { layer, .. }
-            | ToolCall::AnimateText { layer, .. } => matches!(layer, LayerRef::One(_)),
+            | ToolCall::AnimateText { layer, .. }
+            | ToolCall::StyleText { layer, .. } => matches!(layer, LayerRef::One(_)),
             ToolCall::SetLayer { layer: target, .. } | ToolCall::SetEffects { target, .. } => {
                 matches!(target, LayerRef::One(r) if !r.starts_with('c'))
             }
@@ -412,6 +419,7 @@ impl ToolCall {
             | ToolCall::AutoZoom { .. }
             | ToolCall::SetMotion { .. }
             | ToolCall::AnimateText { .. }
+            | ToolCall::StyleText { .. }
             | ToolCall::Undo
             | ToolCall::AskUser { .. }
             | ToolCall::CannotDo { .. } => false,
@@ -774,6 +782,7 @@ const TOOLS: &[Tool] = &[
     motion::SET_MOTION,
     text_motion::ANIMATE_TEXT,
     layer::SET_LAYER,
+    style::STYLE_TEXT,
     effects::SET_EFFECTS,
     recorded::SET_CAMERA_MODE,
     recorded::ADJUST_CAMERA,

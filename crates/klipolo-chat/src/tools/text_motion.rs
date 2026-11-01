@@ -40,7 +40,9 @@ pub const TEXT_KEYS: [&str; 11] = [
 
 pub(super) const ANIMATE_TEXT: Tool = Tool {
     name: "animateText",
-    description: "Words come in by letter, word or line, each from the values set.",
+    description: "Words come in by letter, word or line. Keys: by (letter, word, line); where each unit starts: y \
+                  (px below), scale, opacity, rotation, blur (px); sec, stagger (s between units), ease, order (start, \
+                  end, center, random), exit (true: they leave the same way).",
     parameters: || vec![layer_field(), ("set", schema("Keys to set."))],
     read: |a| {
         let layer = a.layer_ref("layer")?;

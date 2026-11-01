@@ -671,6 +671,7 @@ impl Compiler<'_> {
                 | ToolCall::SetMotion { .. }
                 | ToolCall::AnimateText { .. }
                 | ToolCall::SetLayer { .. }
+                | ToolCall::StyleText { .. }
                 | ToolCall::SetEffects { .. } => {
                     layers.push((i, call));
                     continue;
@@ -1079,7 +1080,8 @@ impl Compiler<'_> {
         let layer = match call {
             ToolCall::SetMotion { layer, .. }
             | ToolCall::AnimateText { layer, .. }
-            | ToolCall::SetLayer { layer, .. } => layer,
+            | ToolCall::SetLayer { layer, .. }
+            | ToolCall::StyleText { layer, .. } => layer,
             ToolCall::SetEffects { target, .. } => target,
             _ => return None,
         };
@@ -1109,23 +1111,13 @@ impl Compiler<'_> {
             }));
         }
         // A clip's fades, or a song's fades and ducking.
-        if let (ToolCall::SetLayer { change, style, .. }, LayerRef::One(r)) = (call, layer) {
+        if let (ToolCall::SetLayer { change, .. }, LayerRef::One(r)) = (call, layer) {
             let refs = &self.inputs.refs;
             if let Some(id) = refs.clip(r) {
-                return Some(
-                    layer::set_clip_fades(
-                        work,
-                        (&id.to_owned(), r),
-                        (change.as_ref(), style.as_ref()),
-                    )
-                    .map(done),
-                );
+                return Some(layer::set_clip_fades(work, (&id.to_owned(), r), change).map(done));
             }
             if let Some(first) = refs.music(r) {
-                return Some(
-                    layer::set_song_sound(work, (first, r), (change.as_ref(), style.as_ref()))
-                        .map(done),
-                );
+                return Some(layer::set_song_sound(work, (first, r), change).map(done));
             }
         }
         let id = match self.animated_layer((tool, "change"), calls, layer, i, added) {
@@ -1152,16 +1144,14 @@ impl Compiler<'_> {
             ToolCall::AnimateText { motion: m, .. } => {
                 text_motion::animate_text(work, target, m).map(done)
             }
-            ToolCall::SetLayer { change, style, .. } => {
-                layer::set_layer(self, work, target, (change.as_ref(), style.as_ref())).map(
-                    |(edit, download)| {
-                        Some(Done {
-                            note: download.map(|family| style::font_note(&family)),
-                            ..Done::edit(edit)
-                        })
-                    },
-                )
-            }
+            ToolCall::SetLayer { change, .. } => layer::set_layer(work, target, change).map(done),
+            ToolCall::StyleText { change, .. } => style::style_text(self, work, target, change)
+                .map(|(edit, download)| {
+                    Some(Done {
+                        note: download.map(|family| style::font_note(&family)),
+                        ..Done::edit(edit)
+                    })
+                }),
             ToolCall::SetEffects {
                 effects: changes, ..
             } => {

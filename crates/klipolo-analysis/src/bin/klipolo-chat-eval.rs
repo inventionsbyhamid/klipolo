@@ -948,13 +948,13 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
             "layer": layer_word(layer),
             "set": text_motion_said(motion),
         }),
-        ToolCall::SetLayer {
-            layer,
-            change,
-            style,
-        } => json!({
+        ToolCall::SetLayer { layer, change } => json!({
             "layer": layer_word(layer),
-            "set": layer_said(change, style),
+            "set": layer_said(change),
+        }),
+        ToolCall::StyleText { layer, change } => json!({
+            "layer": layer_word(layer),
+            "set": style_said(change),
         }),
         ToolCall::SetEffects { target, effects } => {
             let e = effects.first();
@@ -1052,10 +1052,7 @@ fn text_motion_said(m: &klipolo_model::media::text_motion::TextMotion) -> Vec<Va
 }
 
 /// `setLayer`'s keys as the model writes them.
-fn layer_said(
-    c: &klipolo_chat::tools::LayerChange,
-    st: &klipolo_chat::tools::StyleChange,
-) -> Vec<Value> {
+fn layer_said(c: &klipolo_chat::tools::LayerChange) -> Vec<Value> {
     let mut out = Vec::new();
     if let Some(r) = c.rect {
         out.push(pair(
@@ -1069,7 +1066,6 @@ fn layer_said(
         ("corners", c.corners),
         ("fadeIn", c.fade_in_us.map(s)),
         ("fadeOut", c.fade_out_us.map(s)),
-        ("size", st.size),
     ] {
         out.extend(value.map(|v| pair(key, json!(v))));
     }
@@ -1083,7 +1079,14 @@ fn layer_said(
         };
         pair("order", json!(said))
     }));
+    out
+}
+
+/// `styleText`'s keys as the model writes them.
+fn style_said(st: &klipolo_chat::tools::StyleChange) -> Vec<Value> {
+    let mut out = Vec::new();
     out.extend(st.look.map(|l| pair("look", json!(l.key))));
+    out.extend(st.size.map(|v| pair("size", json!(v))));
     out.extend(st.font.as_ref().map(|f| pair("font", json!(f))));
     out.extend(st.color.as_ref().map(|c| pair("color", json!(c))));
     for (key, paint) in [("highlight", &st.highlight), ("outline", &st.outline)] {

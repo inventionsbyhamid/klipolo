@@ -514,6 +514,7 @@ fn done(call: &ToolCall) -> Option<&'static str> {
         ToolCall::SetMotion { .. } => "The motion is set.",
         ToolCall::AnimateText { .. } => "The words are animated.",
         ToolCall::SetLayer { .. } => "The layer is changed.",
+        ToolCall::StyleText { .. } => "The words are restyled.",
         ToolCall::SetEffects { .. } => "The effects are changed.",
         ToolCall::FollowSubject { .. } | ToolCall::BlurObjects { .. } => "Working on it.",
         ToolCall::SetFormat { .. } => "The format is changed.",

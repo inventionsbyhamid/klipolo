@@ -65,11 +65,12 @@ fn setting(a: &mut Args) -> Result<(String, SettingValue), ToolError> {
 
 pub(super) const SET_EFFECTS: Tool = Tool {
     name: "setEffects",
-    description: "Add, change, move or remove one effect on a clip or layer.",
+    description: "Add, change, move or remove one effect on a clip or layer. Keys: its settings, at (its place from 0), \
+                  remove (true).",
     parameters: || {
         vec![
             ("target", string("A ref, or last.")),
-            ("name", string("An effect or look.")),
+            ("name", string("An effect, or a clip's look.")),
             ("set", sets::schema("Its settings, and at or remove.")),
         ]
     },
