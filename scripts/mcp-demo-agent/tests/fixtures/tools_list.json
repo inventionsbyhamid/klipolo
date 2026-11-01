@@ -1050,7 +1050,7 @@
       "annotations": {
         "readOnlyHint": false
       },
-      "description": "A layer's or clip's card fields. Keys: box (\"x y w h\", frame shares from the top left), rotation, opacity, corners (0 to 0.5), blend (normal, multiply, screen, add, overlay), order (forward, back); video layers: crop (\"l t r b\" or none), fill; clips and music: fadeIn, fadeOut (s); music: duck.",
+      "description": "A layer's or clip's card fields. Keys: box (\"x y w h\", frame shares from the top left), rotation, opacity, corners (0 to 0.5), blend (normal, multiply, screen, add, overlay), order (forward, back), start (timeline s), length (s), remove; video layers: crop (\"l t r b\" or none), fill; clips: crop, separate (its sound); clips and music: fadeIn, fadeOut (s); music: duck.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
