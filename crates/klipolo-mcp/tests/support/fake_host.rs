@@ -22,7 +22,8 @@ use klipolo_mcp::limits::undo_shares;
 use klipolo_mcp::words::KLIPOLO_CHAT;
 use klipolo_model::history::{ByApp, HistoryLimits, Maker, Refused};
 use klipolo_model::speech::{Speech, Transcript};
-use klipolo_model::{Document, Project, Transaction, apply_ops, load_project};
+use klipolo_model::media::music::apply_with_music_refit;
+use klipolo_model::{Document, Project, Transaction, load_project};
 
 const PROJECT: &str = include_str!("../../../klipolo-chat/tests/fixtures/project_two_clips.json");
 const TRANSCRIPT: &str =
@@ -400,8 +401,10 @@ impl Host for FakeHost {
         if doc.redo_steps_where(|maker| *maker != mine) > 0 {
             return Err(HostError::RedoWaits);
         }
-        let next =
-            apply_ops(doc.project(), &tx.ops).map_err(|e| HostError::Refused(e.to_string()))?;
+        // The music fitted to the video's new end, as the app's host does.
+        let next = apply_with_music_refit(doc.project(), tx.ops.clone())
+            .map_err(|e| HostError::Refused(e.to_string()))?
+            .project;
         let shares = undo_shares(client, limits);
         let by = ByApp {
             app: client,

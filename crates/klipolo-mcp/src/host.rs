@@ -105,7 +105,9 @@ pub trait Host: Send + Sync + 'static {
     /// The proposal waiting in the chat panel, if any.
     fn open_proposal(&self) -> Option<OpenProposal>;
 
-    /// Commits `tx` as one undo step made by `client`. Refused with `Moved`, nothing committed, when the project isn't
+    /// Commits `tx` as one undo step made by `client`, the music fitted to the video's new end in the same step as for
+    /// every edit of the person's (`media::music::apply_with_music_refit`): `tx` is the app's own edits, judged without
+    /// that refit. Refused with `Moved`, nothing committed, when the project isn't
     /// at `base`, or when a proposal waits that isn't `client`'s own (Klipolo's chat's or another app's): both checked
     /// under the host's own lock, in one step with the commit, so a proposal that appeared after the caller looked
     /// still wins. Implementations commit with `Document::commit_tx_keeping(tx, next, &ByApp { app: client, shares,

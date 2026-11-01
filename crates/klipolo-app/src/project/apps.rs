@@ -5,7 +5,7 @@
 
 use klipolo_app::chat::{At, Committed};
 use klipolo_mcp::limits::undo_shares;
-use klipolo_model::apply_ops;
+use klipolo_model::media::music::apply_with_music_refit;
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::history::{ByApp, LabelParams, Maker, Refused};
 use klipolo_model::risk::OpRisk;
@@ -45,9 +45,11 @@ fn from_earlier(client: &str) -> (String, Option<LabelParams>) {
 }
 
 /// Commits `tx`, app `client`'s batch, as one undo step the app made, when the open project stands where `stands` says
-/// the app read it; what changed and where the project stands now. Checked here, under the project's lock, in one step
-/// with the commit: the project's place, that it isn't read-only, that the batch takes nothing away (judged again from
-/// its ops on the project as it is, whatever origin it carries), and that no redo step of someone else's would go. The
+/// the app read it; what changed and where the project stands now. Its music is fitted to the video's new end in the
+/// same step, as for every edit of the person's. Checked here, under the project's lock, in one step with the commit:
+/// the project's place, that it isn't read-only, that the batch takes nothing away (judged again from its own ops on
+/// the project as it is, whatever origin it carries, the music's refit aside), and that no redo step of someone else's
+/// would go. The
 /// commit makes room only from the app's own steps, within its share of the history and all apps' (`undo_shares`).
 pub(crate) fn commit_by_app(
     state: &ProjectSessionState,
@@ -70,8 +72,14 @@ pub(crate) fn commit_by_app(
         if document.redo_steps_where(|maker| *maker != mine) > 0 {
             return Ok(Err(AppRefused::RedoWaits));
         }
-        let next = match apply_ops(document.project(), &tx.ops) {
-            Ok(next) => next,
+        // The music fitted to the video's new end, as for every edit of the person's (`apply_and_commit`).
+        let next = match apply_with_music_refit(document.project(), tx.ops.clone()) {
+            Ok(done) => {
+                if let Some(why) = &done.refused {
+                    tracing::warn!(%why, "the music's refit was refused");
+                }
+                done.project
+            }
             Err(e) => return Ok(Err(AppRefused::Invalid(e.to_string()))),
         };
         let limits = history_limits();

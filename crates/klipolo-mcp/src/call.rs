@@ -212,7 +212,14 @@ fn edit(
     // The waiting proposal the additions' commit dropped, if one waited.
     let mut dropped: Option<String> = None;
     if let Some(additions) = &out.additions {
-        let tx = from_app(additions, client);
+        // The music's refit is the host's to make, as for every edit of the person's: the app's edits are judged and
+        // committed without it, so a shorter video cutting the music isn't a removal of the app's.
+        let own = additions.ops.len().saturating_sub(out.music_refit);
+        let edits = Transaction {
+            ops: additions.ops[..own].to_vec(),
+            ..additions.clone()
+        };
+        let tx = from_app(&edits, client);
         if tx.needs_review(Some(&snap.project)) {
             return refused(words::REMOVES);
         }

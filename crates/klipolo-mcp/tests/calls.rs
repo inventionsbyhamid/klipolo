@@ -1461,3 +1461,52 @@ fn an_apps_clip_and_transition_changes_are_the_cards_applied_at_once() {
     assert_eq!(host.revision(), revision);
     assert!(host.project().timeline.main[0].transition_out.is_some());
 }
+
+#[test]
+fn an_apps_speed_up_with_music_to_the_end_applies_as_the_card_does() {
+    let host = FakeHost::two_clips();
+    // A song laid from the start to the video's end, as addMusic lays it.
+    host.change_project(|p| {
+        let song = klipolo_model::project::Asset {
+            id: "song".into(),
+            kind: klipolo_model::project::AssetKind::Audio,
+            path: "/media/song.mp3".into(),
+            name: "song.mp3".into(),
+            duration_us: 300_000_000,
+            width: 0,
+            height: 0,
+            fps: 0.0,
+            rotation: None,
+            has_audio: true,
+            audio_lead_us: None,
+            made_with: None,
+        };
+        p.assets.push(song.clone());
+        let opts = klipolo_model::media::music::MusicOpts::default();
+        let ops = klipolo_model::media::music::add_music_ops(p, &song, opts).unwrap();
+        *p = klipolo_model::apply_ops(p, &ops).unwrap();
+    });
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    let before = host.project();
+    let speed = json!({"clip": "c2", "speed": 2, "volume": null, "muted": null, "framing": null, "framingFormat": null});
+    let result = agent.call("setClip", speed);
+    assert_eq!(outcome(&result), "done", "{result}");
+    assert_eq!(text(&result), fill(DONE, &[("tools", "setClip")]));
+    // The card's change: the clip's speed, the music cut at the new end in the same step.
+    let by_hand = Op::UpdateClip {
+        id: before.timeline.main[1].id.clone(),
+        patch: klipolo_model::ops::ClipPatch {
+            speed: Some(2.0),
+            ..Default::default()
+        },
+    };
+    let card =
+        klipolo_model::media::music::apply_with_music_refit(&before, vec![by_hand.clone()]).unwrap();
+    assert!(card.ops.len() > 1, "the music is refitted");
+    assert_eq!(host.project(), card.project);
+    let s = host.state();
+    let (_, tx) = s.applied.last().expect("a batch");
+    assert_eq!(tx.ops, [by_hand], "the app's own edit; the host fits the music");
+}
