@@ -61,11 +61,16 @@ fn of_kind<'r>(p: &Project, r: &'r Recording, sound: Sound) -> Vec<&'r Recording
         .collect()
 }
 
-/// The source `which` names among `sources` (one recording's of a kind): a place, 1-based ("2", "second", "2nd"), or
-/// its name, a file's extension optional, any case.
-fn which_one<'r>(sources: &[&'r RecordingSource], which: &str) -> Option<&'r RecordingSource> {
+/// The source `which` names among `sources` (one recording's of `sound`'s kind): a place, 1-based ("2", "second",
+/// "2nd", or "mic 2" as the context names it), or its name, a file's extension optional, any case.
+fn which_one<'r>(
+    sources: &[&'r RecordingSource],
+    sound: Sound,
+    which: &str,
+) -> Option<&'r RecordingSource> {
     let w = which.trim().to_lowercase();
-    let place = match w.as_str() {
+    let kind = format!("{} ", sound.name());
+    let place = match w.strip_prefix(kind.as_str()).unwrap_or(w.as_str()) {
         "first" | "1st" => Some(1),
         "second" | "2nd" => Some(2),
         "third" | "3rd" => Some(3),
@@ -102,7 +107,7 @@ fn chosen(p: &Project, r: &Recording, sound: Sound, which: Option<&str>) -> (Vec
                 .collect(),
             false,
         ),
-        Some(w) => match which_one(&sources, w) {
+        Some(w) => match which_one(&sources, sound, w) {
             Some(s) => (vec![s.id.clone()], false),
             None => (Vec::new(), !sources.is_empty()),
         },

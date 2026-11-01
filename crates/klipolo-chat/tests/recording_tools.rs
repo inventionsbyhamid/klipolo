@@ -822,6 +822,12 @@ fn which_mic_when_a_recording_has_two() {
     let done = after(&p, &[second]);
     assert!(mix(&done, "a", "rec1", "mic-2").muted);
     assert!(!mix(&done, "a", "rec1", "mic").muted);
+    // As the context names it.
+    let named = call(
+        "muteSource",
+        json!({"source": "mic", "muted": true, "which": "Mic 2", "clips": ["c1"]}),
+    );
+    assert_eq!(after(&p, &[named]), done);
     let third = call(
         "muteSource",
         json!({"source": "mic", "muted": true, "which": "third", "clips": ["c1"]}),
