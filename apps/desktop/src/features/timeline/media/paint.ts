@@ -8,6 +8,8 @@ import { resolveToken } from '../../../lib/resolveToken';
 import { fileUs, runParts, runsKey, soundUs, sourceAtUs, type BlockRuns, type RunPart } from './runs';
 import { spriteCache, stripOf } from './spriteCache';
 import type { ZoomRest } from './zoomRest';
+import type { Key } from '../../../bindings/Key';
+import { levelAt } from '../../../lib/keys';
 
 /** The blocks' 3 px left edge (their kind's colour): a canvas starts under it, so its x 0 is the block's start. */
 const EDGE_PX = 3;
@@ -44,6 +46,8 @@ export interface PaintSpec {
   sourceInUs: number;
   speed: number;
   volume: number;
+  /** Its volume keys, from its start: its level over time in place of `volume` (`lib/keys`). */
+  volumeKeys?: readonly Key[];
   fadeInUs: number;
   fadeOutUs: number;
   muted: boolean;
@@ -121,11 +125,12 @@ export function paintBlock(canvas: HTMLCanvasElement, spec: PaintSpec, rest: Zoo
     const into = a - startUs + pxToUs((x + 0.5) / scale, pps);
     const fadeIn = spec.fadeInUs > 0 ? into / spec.fadeInUs : 1;
     const fadeOut = spec.fadeOutUs > 0 ? (durationUs - into) / spec.fadeOutUs : 1;
-    return spec.volume * Math.max(0, Math.min(1, fadeIn, fadeOut));
+    return levelAt(spec.volumeKeys, into, spec.volume) * Math.max(0, Math.min(1, fadeIn, fadeOut));
   };
   // What the picture depends on besides the loaded files (sprites and peaks never change once written).
   const look = [spec.kind, a, b, startUs, durationUs, sourceInUs, speed, pps, height, filmPx, wavePx, scale]
     .concat([spec.spanUs, spec.volume, spec.fadeInUs, spec.fadeOutUs, Number(spec.muted), spec.theme])
+    .concat((spec.volumeKeys ?? []).map((k) => `${k.tUs}:${k.v}:${JSON.stringify(k.ease ?? '')}`))
     .join()
     .concat('|', spec.waveToken, '|', runsKey(spec.runs));
 

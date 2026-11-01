@@ -155,6 +155,7 @@ export const ClipBlock = memo(function ClipBlock({
           sourceInUs={sourceInUs}
           speed={speed}
           volume={volume}
+          volumeKeys={volumeKeys}
           fadeInUs={fadeInUs}
           fadeOutUs={fadeOutUs}
           muted={muted}

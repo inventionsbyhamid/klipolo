@@ -228,6 +228,7 @@ export const ItemBlock = memo(function ItemBlock({
             speed={content.type === 'video' ? content.speed : layerRate(content)}
             centreFrom={content.type === 'audio' ? content.centreFrom : null}
             volume={content.volume}
+            volumeKeys={content.type === 'audio' ? content.volumeKeys : undefined}
             fadeInUs={content.type === 'audio' ? content.fadeInUs : 0}
             fadeOutUs={content.type === 'audio' ? content.fadeOutUs : 0}
             muted={content.type === 'video' ? content.muted : muted}
