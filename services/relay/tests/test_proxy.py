@@ -2801,6 +2801,11 @@ def test_a_sam_video_is_made_by_the_relay_and_its_frames_are_its_own(client, con
 
     assert response.status_code == 200, response.text
     assert response.json()["id"] == "file-sam"
+    # Uploaded for the person's own use, and gone after a day even if the app never deletes it.
+    parts = parse_multipart(route.calls.last.request)
+    assert parts["purpose"].get_payload(decode=True) == b"user_data"
+    assert parts["expires_after[anchor]"].get_payload(decode=True) == b"created_at"
+    assert parts["expires_after[seconds]"].get_payload(decode=True) == b"86400"
     # Meta gets the relay's file: one video track, no sound, 2 frames a second, its long side at most 640.
     [stream] = packets(sent_file(route), tmp_path)
     assert stream["codec_type"] == "video"

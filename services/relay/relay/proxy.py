@@ -642,6 +642,9 @@ async def make_sam_video(request: Request, device: RelayDevice, conn: Conn, sett
 
             files = {
                 "purpose": (None, b"user_data", "text/plain"),
+                # Gone after a day even if the app never deletes it, as the app's own uploads are.
+                "expires_after[anchor]": (None, b"created_at", "text/plain"),
+                "expires_after[seconds]": (None, b"86400", "text/plain"),
                 "file": ("video.mp4", data, "video/mp4"),
             }
             return Call("POST", "files", files=files, on_success=remember)
