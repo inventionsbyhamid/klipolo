@@ -120,10 +120,12 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
         <div className="stage-main">
           {hasVideo ? <Stage /> : <DropZone over={filesOver} />}
           {docked && <Inspector format={format} />}
-          {/* Drawn in the slot only (app.css): over the frame it would cover the video. */}
-          {hasVideo && !docked && !full && nothingSelected && (
-            <p className="stage-hint">
-              {t({ id: 'preview.hint.select', message: 'Select something on the video to change it.' })}
+          {/* The empty slot's outline, drawn in the slot only (app.css): over the frame it would cover the video. It
+              says what goes there while nothing is selected; a selection waiting for its card leaves it blank. */}
+          {hasVideo && !docked && !full && (
+            <p className="stage-hint" aria-hidden={!nothingSelected || undefined}>
+              {nothingSelected &&
+                t({ id: 'preview.hint.select', message: 'Select something on the video to change it.' })}
             </p>
           )}
         </div>

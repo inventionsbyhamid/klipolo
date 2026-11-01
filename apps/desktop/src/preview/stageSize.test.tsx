@@ -31,7 +31,7 @@ vi.mock('../bridge/framing', () => ({
   clipFraming: vi.fn(() => new Promise(() => undefined)),
 }));
 const { engine } = await import('../bridge/engine');
-const { releaseDock, useDockHold } = await import('../state/dockHold');
+const { holdDock, releaseDock, useDockHold } = await import('../state/dockHold');
 const { useEngine } = await import('../state/engine');
 const { useFullScreen } = await import('../state/fullScreen');
 const { useProject } = await import('../state/project');
@@ -136,6 +136,23 @@ describe('selecting never resizes the video', () => {
     expect(card()).toHaveAccessibleName('Title settings');
     expect(hint()).toBeNull();
     expect(stageBox()).toEqual(before);
+  });
+
+  it('the slot keeps its outline while a press holds the card back, with the note only when nothing is selected', () => {
+    useUi.setState({ previewFormat: 'portrait' });
+    Object.assign(frame, { width: 253, height: 450 });
+    renderWithProviders(<Preview />);
+    act(() => {
+      holdDock();
+      useSelection.getState().select('title');
+    });
+    expect(card()).toBeNull();
+    const slot = document.querySelector('.stage-hint');
+    expect(slot).toBeInTheDocument();
+    expect(slot).toHaveTextContent('');
+    act(() => releaseDock());
+    expect(card()).toHaveAccessibleName('Title settings');
+    expect(document.querySelector('.stage-hint')).toBeNull();
   });
 
   it('full screen keeps no slot: the 9:16 video is centred, with no note beside it', () => {
