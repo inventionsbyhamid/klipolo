@@ -1,5 +1,6 @@
 import { useLingui } from '@lingui/react/macro';
 import { memo, useCallback, type CSSProperties } from 'react';
+import type { Key } from '../../../bindings/Key';
 import { cn } from '../../../design/cn';
 import { countRender } from '../../../lib/renderCount';
 import { formatTime } from '../../../lib/time';
@@ -17,6 +18,7 @@ import { BlockMedia } from '../media/BlockMedia';
 import type { BlockFiles } from '../media/blockFiles';
 import { usToPx } from '../scale';
 import { TrimHandles } from './TrimHandles';
+import { VolumeLine } from './VolumeLine';
 
 interface ClipBlockProps {
   id: string;
@@ -31,6 +33,9 @@ interface ClipBlockProps {
   sourceInUs: number;
   speed: number;
   volume: number;
+  /** Its volume keys: a selected clip with sound shows its volume line (`VolumeLine`). */
+  volumeKeys?: Key[];
+  hasSound?: boolean;
   fadeInUs: number;
   fadeOutUs: number;
   muted: boolean;
@@ -67,6 +72,8 @@ export const ClipBlock = memo(function ClipBlock({
   sourceInUs,
   speed,
   volume,
+  volumeKeys,
+  hasSound = false,
   fadeInUs,
   fadeOutUs,
   muted,
@@ -153,6 +160,19 @@ export const ClipBlock = memo(function ClipBlock({
           muted={muted}
           pps={pps}
           height={innerPx}
+        />
+      )}
+      {/* Selected, its volume line over the waveform: a click adds a volume key, a drag sets the level. */}
+      {!tiny && selected && hasSound && (
+        <VolumeLine
+          startUs={startUs}
+          durationUs={durationUs}
+          content={{ volume, volumeKeys, fadeInUs, fadeOutUs, muted }}
+          target={{ kind: 'clip', id }}
+          volumeOps={(v) => [{ type: 'updateClip', id, patch: { volume: v } }]}
+          pps={pps}
+          height={innerPx}
+          tone="clip"
         />
       )}
       {/* The name in a tag at the top left, over the filmstrip and the playhead line. */}

@@ -4,10 +4,12 @@ import { useLingui } from '@lingui/react/macro';
 import { Film, Image, Link2, Lock, Music, Type, VolumeX, type LucideIcon } from 'lucide-react';
 import { memo, useCallback } from 'react';
 import type { ItemContent } from '../../../bindings/ItemContent';
+import type { Motion } from '../../../bindings/Motion';
 import { cn } from '../../../design/cn';
 import { layerRate } from '../../../lib/recording';
 import { countRender } from '../../../lib/renderCount';
 import { formatTime } from '../../../lib/time';
+import { runContentOps } from '../../../state/latest';
 import type { LayerKind } from '../../../lib/timeline';
 import { registerBlock } from '../drag/registry';
 import {
@@ -24,6 +26,7 @@ import type { BlockFiles } from '../media/blockFiles';
 import { usToPx } from '../scale';
 import { TrimHandles } from './TrimHandles';
 import { DuckTag, VolumeLine } from './VolumeLine';
+import { KeyDiamonds } from './KeyDiamonds';
 
 /** The icon before an overlay's name (T for text, the picture for an image). */
 const ICON: Partial<Record<LayerKind, LucideIcon>> = { text: Type, image: Image, video: Film, audio: Music };
@@ -79,6 +82,8 @@ interface ItemBlockProps {
   clipSound?: boolean;
   /** The lane it draws on; by kind when not given (sound layers on Sounds, the rest on Overlays). */
   look?: ItemLook;
+  /** Its motion: a layer with keys set by hand shows them as diamonds (`KeyDiamonds`). */
+  motion?: Motion;
   /** A keyboard click (Enter, Space) picks; a pointer picks on press, which also starts a drag. */
   onPick: (id: string) => void;
   onPress: PressBlock;
@@ -109,6 +114,7 @@ export const ItemBlock = memo(function ItemBlock({
   top,
   height,
   look = kind === 'audio' ? 'sound' : 'overlay',
+  motion,
   clipSound = false,
   onPick,
   onPress,
@@ -231,15 +237,19 @@ export const ItemBlock = memo(function ItemBlock({
             waveToken={look === 'music' ? '--color-lane-music' : recorded ? '--color-clip-2' : undefined}
           />
         )}
-        {/* Music's volume line and its dips under speech (their tag is beside the block: `DuckTag`). */}
-        {!tiny && look === 'music' && content.type === 'audio' && (
+        {/* Music's volume line and its dips under speech (their tag is beside the block: `DuckTag`), and a selected
+            sound's, with its volume keys. */}
+        {!tiny && (look === 'music' || (selected && look === 'sound')) && content.type === 'audio' && (
           <VolumeLine
-            id={id}
             startUs={startUs}
             durationUs={durationUs}
             content={content}
+            target={{ kind: 'sound', id }}
+            volumeOps={(volume) => runContentOps(id, content, { volume })}
+            duckOps={look === 'music' ? (duck) => runContentOps(id, content, { duck }) : undefined}
             pps={pps}
             height={height}
+            tone={look === 'music' ? 'music' : recorded ? 'clip' : 'sound'}
           />
         )}
         {!tiny && (
@@ -255,6 +265,20 @@ export const ItemBlock = memo(function ItemBlock({
           <TrimHandles selected={selected} onTrimPress={(e, edge) => onTrimPress(e, id, edge)} />
         )}
       </button>
+      {!tiny && look === 'overlay' && motion?.keys && (
+        <KeyDiamonds
+          id={id}
+          startUs={startUs}
+          durationUs={durationUs}
+          motion={motion}
+          pps={pps}
+          left={left}
+          width={width}
+          top={top}
+          height={height}
+          locked={locked}
+        />
+      )}
       {!tiny && look === 'music' && content.type === 'audio' && (
         <DuckTag
           id={id}
