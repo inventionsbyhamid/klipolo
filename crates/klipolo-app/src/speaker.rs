@@ -453,7 +453,12 @@ impl Speaker {
             if paths.is_empty() {
                 followed.not_found.push(target.id.clone());
             } else {
-                let people = clip_people(&target.footage, own, turns, voices);
+                // People to choose between only when following a person: two of a named thing aren't.
+                let people = if phrase == PERSON {
+                    clip_people(&target.footage, own, turns, voices)
+                } else {
+                    Vec::new()
+                };
                 followed.kept.insert(target.id.clone(), (keep, people));
                 followed.paths.push((target.id.clone(), paths));
             }

@@ -401,11 +401,14 @@ async fn another_phrase_follows_that_and_asks_nobody_whose_voice_it_is() {
     let p = &setup.project;
     let estimate = speaker.estimate(p, &ids(), &[Portrait], "red car").await;
     assert!((estimate.usd - ONE_MINUTE).abs() < 1e-9, "{estimate:?}");
-    speaker
+    let followed = speaker
         .follow(p, &ids(), &[Portrait], "red car")
         .await
         .unwrap();
     assert_eq!(setup.spark.asked.load(Ordering::SeqCst), 0);
+    // Two of them on screen, but no people to choose between on the card.
+    let next = apply_ops(p, &followed.ops(p)).unwrap();
+    assert!(focus(&next).2.is_empty());
 }
 
 #[test]
