@@ -1,4 +1,4 @@
-//! The probed settings and the numbers measured inside their range (plan row R3-k9 amended).
+//! The probed settings and the numbers measured inside their range.
 
 use klipolo_engine::make::measure::FakeMeter;
 

@@ -1,6 +1,6 @@
-//! What each path of a measurement costs: a size reached after the budget ran out draws nothing
-//!, Heavy's memory is its half-size path's, a Measure answers with the hardened text's hash, the class by
-//! time is decided against the table it is given, and a padded filter's own share is its grown pair.
+//! What each path of a measurement costs: a size reached after the budget ran out draws nothing, Heavy's memory is its
+//! half-size path's, a Measure answers with the hardened text's hash, the class by time is decided against the table it
+//! is given, and a padded filter's own share is its grown pair.
 
 use std::time::{Duration, Instant};
 
