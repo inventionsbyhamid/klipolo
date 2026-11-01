@@ -134,9 +134,12 @@ export function dropOnto(target: DropTarget): DropOnto {
   return target.trackId === null ? { type: 'auto' } : { type: 'track', id: target.trackId };
 }
 
-/** Whether a drop at `target` adds music: a sound let go on the Music lane. */
+/**
+ * Whether a drop at `target` adds music: a sound let go on the Music lane. Never one on a track's own row (every track
+ * showing): music goes on a track of its choosing, so there it is a sound effect on that track.
+ */
 export function isMusicTarget(target: DropTarget): target is Extract<DropTarget, { lane: 'sound' }> {
-  return target.lane === 'sound' && target.row === 'music';
+  return target.lane === 'sound' && target.row === 'music' && target.trackId === null;
 }
 
 /**

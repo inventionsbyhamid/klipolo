@@ -54,7 +54,15 @@ export function dropRefusal(clientX: number, clientY: number, kind: AssetKind | 
   // A read-only project takes nothing anywhere: no lane is the wrong one.
   if (!kind || useProject.getState().snapshot?.readOnly || dropTargetAt(clientX, clientY, kind)) return null;
   const lane = laneAt?.(clientX, clientY) ?? null;
-  return lane ? goesOn[kind]() : null;
+  if (!lane) return null;
+  // While every track shows, a track's own row says why it won't take a sound.
+  const track = useProject.getState().snapshot?.project.timeline.tracks.find((tr) => tr.id === lane);
+  if (track?.kind === 'audio' && kind === 'audio' && track.items.some(isMusic))
+    return t({
+      id: 'drop.refused.musicTrack',
+      message: 'This track holds music. Sound effects go on a track without it.',
+    });
+  return goesOn[kind]();
 }
 
 /** What Finder is dragging, by the files' extensions: one kind when they are all of it, else null (any lane). */
@@ -192,15 +200,15 @@ export function timelineTargetAt(
     if (!within(row)) continue;
     const lane = row.dataset.lane;
     // While every track shows, a track's own row: media goes onto that track, never a hidden or locked one or a zoom
-    // track; a sound on a track of music is added as music.
+    // track.
     const trackId = row.dataset.trackId;
     if (trackId) {
       const track = project.timeline.tracks.find((tr) => tr.id === trackId);
       if (!track || track.hidden || track.locked || track.kind === 'zoom') return null;
       if (track.kind === 'overlay') return kind === 'audio' ? null : { lane: 'picture', trackId, atUs: atUs() };
-      if (kind === 'video' || kind === 'image') return null;
-      const music = track.items.some(isMusic);
-      return { lane: 'sound', trackId, atUs: atUs(), row: music ? 'music' : 'sounds' };
+      // A sound let go on a track's row is a sound effect on that track, which a track holding music never takes.
+      if (kind === 'video' || kind === 'image' || track.items.some(isMusic)) return null;
+      return { lane: 'sound', trackId, atUs: atUs(), row: 'sounds' };
     }
     // The main track takes videos (and files from Finder of mixed kinds); a sound or a picture goes on its own lane.
     if (lane === 'main')

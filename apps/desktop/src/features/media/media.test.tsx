@@ -1,6 +1,7 @@
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Asset } from '../../bindings/Asset';
+import type { PackItem } from '../../bindings/PackItem';
 import { fixturePatch, fixtureSnapshot } from '../../test/fixtures';
 import { longProject } from '../../test/longProject';
 
@@ -31,6 +32,7 @@ const { registerDropTarget, timelineTargetAt, timelineLaneAt, dropAutoscroll, dr
 const { library } = await import('../../bridge/library');
 
 beforeEach(() => {
+  useUi.setState({ timelineExpanded: false });
   useProject.setState({ snapshot: fixtureSnapshot(), pending: 0 });
   useSelection.setState({ selectedId: null });
   usePlayback.setState({ playheadUs: 2_000_000 });
@@ -240,6 +242,57 @@ describe('where a drop lands on the timeline', () => {
     useProject.setState({ snapshot });
     expect(at(3, 30, 'image')).toBeNull();
     useUi.setState({ timelineExpanded: false });
+  });
+
+  it('while every track shows, a track that holds music takes no sound effect, so nothing lands elsewhere', () => {
+    useUi.setState({ pxPerSecond: 10, snapping: false, timelineExpanded: true });
+    const snapshot = fixtureSnapshot();
+    const song = snapshot.project.timeline.tracks[1].items[0];
+    if (song.content.type === 'audio') song.content = { ...song.content, duck: 0 };
+    useProject.setState({ snapshot });
+    const scroller = row({}, 0, 300);
+    scroller.append(row({ 'data-lane': 't2', 'data-track-id': 't2', 'data-track-kind': 'audio' }, 20, 34));
+    registerDropTarget(
+      (cx, cy, kind) => timelineTargetAt(scroller, 10, cx, cy, kind),
+      scroller,
+      (cx, cy) => timelineLaneAt(scroller, 10, cx, cy),
+    );
+    // Over Audio 1, which holds music: no target, and letting go says why.
+    expect(timelineTargetAt(scroller, 10, 128 + 30, 30, 'audio')).toBeNull();
+    expect(dropRefusal(128 + 30, 30, 'audio')).toBe(
+      'This track holds music. Sound effects go on a track without it.',
+    );
+    useUi.setState({ timelineExpanded: false });
+  });
+
+  it("a sound or a pack sound let go on a track's row lands there as a sound effect, never as music", async () => {
+    const { addMedia } = await import('./addMedia');
+    const { dropPackItem } = await import('./place');
+    vi.mocked(library.place).mockClear();
+    vi.mocked(library.addMusic).mockClear();
+    // A target on a track names that track, whatever its row: the music path takes no track.
+    const onTrack = { lane: 'sound', trackId: 't2', atUs: 4_000_000, row: 'music' } as const;
+    act(() => addMedia('music', onTrack));
+    await vi.waitFor(() => expect(library.place).toHaveBeenCalledTimes(1));
+    expect(library.place).toHaveBeenLastCalledWith([{ type: 'asset', id: 'music' }], 4_000_000, {
+      type: 'track',
+      id: 't2',
+    });
+    const whoosh: PackItem = {
+      id: 'whoosh',
+      name: 'Whoosh',
+      category: 'sound',
+      durationUs: 900_000,
+      width: 0,
+      height: 0,
+      tags: [],
+    };
+    await act(() => dropPackItem(whoosh, onTrack));
+    expect(library.place).toHaveBeenLastCalledWith([{ type: 'pack', id: 'whoosh' }], 4_000_000, {
+      type: 'track',
+      id: 't2',
+    });
+    expect(library.addMusic).not.toHaveBeenCalled();
   });
 
   it('only a lane that takes what is dragged is a target, so the indicator shows where it really lands', () => {
