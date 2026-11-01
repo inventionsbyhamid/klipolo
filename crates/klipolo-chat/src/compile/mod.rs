@@ -41,13 +41,15 @@
 //! `removals`, `trim` (both), `media` (the library's music, sounds, words and pictures, and the pictures to draw),
 //! `clips` (a clip's speed, volume, mute and framing, and the transitions at its cuts), `background` (what shows
 //! behind the video), `recorded` (a recording's camera, in `cameras` and `bubble`, and its sounds, in `sources`),
-//! `animate` (a layer's animation, with its sound), `zooms` (a recording's clicks as auto zooms), `map`.
+//! `animate` (a layer's animation, with its sound), `zooms` (a recording's clicks as auto zooms), `clear` (a picture in
+//! 9:16 kept off the person on screen), `map`.
 
 mod additions;
 mod animate;
 mod background;
 mod bubble;
 mod cameras;
+mod clear;
 mod clips;
 mod map;
 mod media;
