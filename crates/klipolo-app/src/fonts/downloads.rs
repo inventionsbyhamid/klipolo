@@ -339,18 +339,37 @@ pub async fn remove(
     if exporting() {
         return Err(klipolo_fonts::english::in_use(&id.family));
     }
-    let gone = id.clone();
-    tokio::task::spawn_blocking(move || store.remove(&gone))
-        .await
-        .map_err(|_| FontError::NotOurs.code())?
-        .map_err(failed)?;
+    // Out of the engine first, then asked again: an export that starts from here on records the downloads without it,
+    // so no job ever holds the files about to go. One that started in between keeps it: the removal is refused.
     let font = FontRef {
         family: id.family.clone(),
         source: klipolo_model::font::FontSource::Google {
             version: id.version.clone(),
         },
     };
+    let registered: Vec<_> = klipolo_engine::render::fonts::downloads()
+        .into_iter()
+        .filter(|d| d.family == id.family && d.version == id.version)
+        .collect();
     klipolo_engine::render::fonts::unregister(&klipolo_fonts::alias::alias(&font));
+    let put_back = || {
+        if !registered.is_empty() {
+            klipolo_engine::render::fonts::register(registered.clone());
+        }
+    };
+    if exporting() {
+        put_back();
+        return Err(klipolo_fonts::english::in_use(&id.family));
+    }
+    let gone = id.clone();
+    let removed = tokio::task::spawn_blocking(move || store.remove(&gone))
+        .await
+        .map_err(|_| FontError::NotOurs.code())
+        .and_then(|r| r.map_err(failed));
+    if let Err(e) = removed {
+        put_back();
+        return Err(e);
+    }
     host.changed(&id.family);
     Ok(())
 }
