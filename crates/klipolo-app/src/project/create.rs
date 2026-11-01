@@ -24,8 +24,9 @@ pub(crate) fn new_project(name: &str, formats: Vec<FormatKind>) -> Project {
     project
 }
 
-/// Saves `project` as a new file in `library` and opens it (the open one is saved and closed first, as `open_in` does):
-/// its snapshot, with the opening it made. When the open one can't be saved, it stays open and the new file goes.
+/// Saves `project` as a new file in `library` (a name whose file is taken gets the file's number too: `new_file`) and
+/// opens it (the open one is saved and closed first, as `open_in` does): its snapshot, with the opening it made. When
+/// the open one can't be saved, it stays open and the new file goes.
 pub(crate) fn create_in(
     state: &ProjectSessionState,
     library: &Path,
@@ -40,8 +41,10 @@ pub(crate) fn create_file_in(
     library: &Path,
     project: Project,
 ) -> Result<(Snapshot, PathBuf), Said> {
+    let (file, name) = new_file(library, &project.name);
+    let mut project = project;
+    project.name = name;
     let document = Document::new(project).map_err(|e| Said::Coded(e.coded()))?;
-    let file = new_file(library, &document.project().name);
     save(&file, document.project(), Durability::Ordered).map_err(|error| {
         tracing::warn!(error = error.detail(), "a new project couldn't be saved");
         Said::code("project.createFailed")

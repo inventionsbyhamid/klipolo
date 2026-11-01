@@ -20,7 +20,8 @@
 //! - the Record dialog's stills of each screen and app (`thumbs`), one screenshot each with the take's own filter and
 //!   the same JPEG;
 //! - the cursor as its own layer (`cursor`: the mouse-only monitor, the shapes, the self-check and its
-//!   sampled fallback), with the system cursor left out of the frames and put back live (`screen`).
+//!   sampled fallback), with the system cursor left out of the frames and put back live (`screen`);
+//! - whether one of macOS's own questions is on the screen, which a take's countdown waits for (`alerts`).
 //!
 //! Nothing in the listing files opens a device or asks for a permission. ScreenCaptureKit's content list, which shows
 //! macOS's monthly screen-recording prompt, is read only by the capture pipes' `start`, after Record, and by the live
@@ -28,6 +29,7 @@
 //! exceptions to capture only after a press). The one request Klipolo makes itself, Screen Recording's
 //! (`screen_permission`), runs only on the person's press of "Allow screen recording".
 
+mod alerts;
 mod apps;
 mod bubble;
 mod camera;
@@ -239,6 +241,11 @@ impl Backend for OsBackend {
             id => id,
         };
         !objc2_core_graphics::CGDisplayIsAsleep(id)
+    }
+
+    /// One of macOS's own questions on the screen, by the window list (`alerts`).
+    fn system_alert(&self) -> bool {
+        alerts::up()
     }
 
     fn decodes(&self, info: &StreamInfo, keyframe: &[u8]) -> Option<bool> {
