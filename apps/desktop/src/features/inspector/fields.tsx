@@ -1,20 +1,10 @@
-import { useLingui } from '@lingui/react/macro';
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type FocusEvent,
-  type KeyboardEvent,
-  type ReactNode,
-} from 'react';
+import { useId, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { Anchor } from '../../bindings/Anchor';
 import { cn } from '../../design/cn';
 import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '../../design/Menu';
-import { Popover, PopoverContent, PopoverTrigger } from '../../design/Popover';
 import { Icon } from '../../layout/Icon';
-import { registerBurst, SETTLE_MS } from '../../state/bursts';
+import { useKeyedPick } from '../../state/keyedPick';
+import { ColorField, type Swatch } from '../color/ColorField';
 
 /**
  * A row of the inspector: its label on the left (66 px, faint), the control on the right; `stack` puts
@@ -47,57 +37,13 @@ export function Field({
   );
 }
 
-export interface Swatch {
-  value: string;
-  name: string;
-}
-
-/**
- * A radio group's arrow keys as one change: each press moves the checked choice at once (`shown`), and the last one is
- * picked `SETTLE_MS` after the run (or as focus leaves the group, it unmounts, an undo or the close comes), so a run of
- * presses is one undo step. A click picks at once.
- */
-function useKeyedPick<T>(value: T, onPick: (value: T) => void) {
-  const [keyed, setKeyed] = useState<{ value: T } | null>(null);
-  const pending = useRef<{ value: T } | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const latest = useRef({ value, onPick });
-  latest.current = { value, onPick };
-  const settle = useCallback(() => {
-    clearTimeout(timer.current);
-    const run = pending.current;
-    pending.current = null;
-    setKeyed(null);
-    if (run && run.value !== latest.current.value) latest.current.onPick(run.value);
-    return run !== null;
-  }, []);
-  useEffect(() => registerBurst(() => settle()), [settle]);
-  // Unmounted mid-run (the selection moved on): the run is kept.
-  useEffect(() => () => void settle(), [settle]);
-  const key = (next: T) => {
-    pending.current = { value: next };
-    setKeyed({ value: next });
-    clearTimeout(timer.current);
-    timer.current = setTimeout(settle, SETTLE_MS);
-  };
-  const pick = (next: T) => {
-    clearTimeout(timer.current);
-    pending.current = null;
-    setKeyed(null);
-    onPick(next);
-  };
-  /** Focus left the group: the run is picked now. */
-  const onBlur = (e: FocusEvent<HTMLElement>) => {
-    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) settle();
-  };
-  return { shown: keyed ? keyed.value : value, key, pick, onBlur };
-}
-
-const HEX = /^#?([0-9a-f]{6})$/i;
+/** A named colour offered as one tap. */
+export type { Swatch } from '../color/ColorField';
 
 /**
  * Colour swatches: 20 px circles, the checked one ringed in paper; the last, "+", opens the color
- * any colour as hex. A radio group: the arrow keys move, a run of them one change (`useKeyedPick`).
+ * popover for any other colour (`ColorField`, without a dry run). A radio group: the arrow keys move, a run of them one
+ * change.
  */
 export function Swatches({
   label,
@@ -110,77 +56,8 @@ export function Swatches({
   swatches: Swatch[];
   onPick: (color: string) => void;
 }) {
-  const { t } = useLingui();
-  const [open, setOpen] = useState(false);
-  const [hex, setHex] = useState('');
-  const keys = useKeyedPick(value, onPick);
-  const current = keys.shown.slice(0, 7).toUpperCase();
-  const checked = swatches.findIndex((s) => s.value.toUpperCase() === current);
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
-    if (!step || !(e.target as HTMLElement).dataset.swatch) return;
-    e.preventDefault();
-    const next = swatches[(Math.max(0, checked) + step + swatches.length) % swatches.length];
-    keys.key(next.value);
-    e.currentTarget.querySelector<HTMLElement>(`[data-swatch="${next.value}"]`)?.focus();
-  };
-  const custom = () => {
-    const match = HEX.exec(hex.trim());
-    if (!match) return;
-    keys.pick(`#${match[1].toUpperCase()}`);
-    setOpen(false);
-  };
   return (
-    <div className="swatches" role="radiogroup" aria-label={label} onKeyDown={onKeyDown} onBlur={keys.onBlur}>
-      {swatches.map((s, i) => (
-        <button
-          key={s.value}
-          type="button"
-          role="radio"
-          data-swatch={s.value}
-          aria-checked={i === checked}
-          aria-label={s.name}
-          tabIndex={i === checked || (checked < 0 && i === 0) ? 0 : -1}
-          className="swatch"
-          style={{ ['--c' as string]: s.value }}
-          onClick={() => keys.pick(s.value)}
-        />
-      ))}
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            className="swatch add"
-            aria-label={t({
-              id: 'color.custom',
-              message: `${label}: more colors`,
-              comment: '{label} is e.g. Text color; opens a field to type any color',
-            })}
-          >
-            <Icon name="plus" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent>
-          <div className="hex-field">
-            <span aria-hidden>#</span>
-            <input
-              className="input input-sm"
-              aria-label={t({ id: 'color.hex', message: 'Hex color' })}
-              placeholder={current.slice(1)}
-              value={hex}
-              maxLength={7}
-              onChange={(e) => setHex(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  custom();
-                }
-              }}
-            />
-          </div>
-        </PopoverContent>
-      </Popover>
-    </div>
+    <ColorField label={label} value={value} presets={swatches} onCommit={(color) => color !== null && onPick(color)} />
   );
 }
 
