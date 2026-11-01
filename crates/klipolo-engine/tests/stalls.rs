@@ -1,5 +1,5 @@
-//! Exports survive a slow or stalled decoder. An export failed twice with "This file couldn't be
-//! read" when AVAssetReader stopped vending for over 3 s on a loaded Mac (at frames 210 and 881 of a 23.976 fps
+//! Exports survive a slow or stalled decoder. An export failed twice with "This file couldn't be read" when
+//! AVAssetReader stopped vending for over 3 s on a loaded Mac (at frames 210 and 881 of a 23.976 fps
 //! file), and its software fallback, started cold, missed the same 3 s. Here the stall is injected
 //! (`decode_wait::hooks`, trial builds) into `film-1080p-gop100-12s.mp4` (keyframes at frames 0, 100 and 200), never by
 //! loading the computer.
