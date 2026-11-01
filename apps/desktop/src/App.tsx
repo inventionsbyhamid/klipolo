@@ -30,6 +30,7 @@ import {
 } from './state/analysis';
 import { followApps } from './state/chat';
 import { followEditorView } from './state/editorView';
+import { keepLooping } from './state/loop';
 import { useProject } from './state/project';
 import { clearProposalOnProjectSwitch } from './state/proposal';
 import { clearRangeOnProjectSwitch } from './state/range';
@@ -115,6 +116,8 @@ export function App() {
     forgetRemovedClips();
     keepPlayheadInVideo();
     keepPlayheadOnReload();
+    // Loop: a forward run goes back to the selected range's start at its end.
+    keepLooping();
     clearRangeOnProjectSwitch();
     clearProposalOnProjectSwitch();
     // Other apps' calls read the person's view (the selection, the playhead) as Klipolo last heard it.
