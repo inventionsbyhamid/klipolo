@@ -12,6 +12,7 @@ vi.mock('../bridge/library', () => ({
     pack: vi.fn(() => Promise.resolve([])),
     picture: vi.fn(() => Promise.reject(new Error('no pictures in tests'))),
     speechRanges: vi.fn(() => Promise.resolve([])),
+    marks: vi.fn(() => Promise.resolve({})),
   },
 }));
 const { useProject } = await import('../state/project');
