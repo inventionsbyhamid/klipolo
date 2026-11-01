@@ -1581,3 +1581,87 @@ fn a_layer_splits_at_a_time_the_context_shows() {
     );
     assert!(refused_to_model(&out, 0).contains("split"));
 }
+
+/// A recording of a screen and a camera, played from 10 s of it for 20 s as c1.
+fn take() -> Project {
+    use klipolo_model::project::{
+        AssetKind, Recording, RecordingKind, RecordingSource, SourceMix, SourceRole, SourceRun,
+    };
+    let file = |id: &str| {
+        let mut a = asset(id, "video", &format!("{id}.mov"), 60.0, (1920, 1080), false);
+        a.kind = AssetKind::Video;
+        a
+    };
+    let source = |id: &str, role, file: &str| RecordingSource {
+        id: id.into(),
+        role,
+        label: format!("capture.source.{id}"),
+        runs: vec![SourceRun {
+            asset_id: file.into(),
+            offset_us: 0,
+            duration_us: secs(60.0),
+            drift_ppm: 0.0,
+            file_in_us: 0,
+        }],
+        nudge_us: 0,
+        mix: SourceMix::default(),
+        synced: None,
+    };
+    let mut p = Project::new("Take");
+    p.assets = vec![file("s1"), file("cam1")];
+    p.recordings = vec![Recording {
+        id: "rec1".into(),
+        kind: RecordingKind::Screen,
+        sources: vec![
+            source("screen", SourceRole::Screen, "s1"),
+            source("camera", SourceRole::Camera, "cam1"),
+        ],
+        primary: "screen".into(),
+        cursor: None,
+        markers: Vec::new(),
+        game: None,
+    }];
+    let mut clip = Clip::new(
+        ClipSource::Recording { id: "rec1".into() },
+        secs(10.0),
+        secs(30.0),
+    );
+    clip.id = "take".into();
+    clip.camera = Some(klipolo_model::timeline::CameraLayout::default());
+    p.timeline.main = vec![clip];
+    p
+}
+
+/// setMotion on a recording's clip keys its camera bubble: x, y and scale, from the clip's start, kept in the
+/// recording's own time as the bubble's keys are, so cuts keep them on the content. No presets, no turn or fade.
+#[test]
+fn set_motion_on_a_recordings_clip_keys_its_camera_bubble() {
+    let p = take();
+    let grow = json!({"layer": "c1", "keys": [
+        {"property": "scale", "atSec": 0, "value": 1, "ease": null},
+        {"property": "scale", "atSec": 2, "value": 1.5, "ease": "out"}
+    ], "presets": null});
+    let out = run(&p, &[("setMotion", grow)]);
+    let after = applied(&p, &out);
+    let bubble = &after.timeline.main[0].camera.as_ref().unwrap().bubble;
+    let keys = bubble.motion.as_ref().unwrap().keys.as_ref().unwrap();
+    assert_eq!(
+        keys.scale,
+        [key(10.0, 1.0, None), key(12.0, 1.5, Some(Ease::Power2Out))]
+    );
+    let floats = json!({"layer": "c1", "keys": null, "presets": "loop float"});
+    let out = run(&p, &[("setMotion", floats)]);
+    assert!(refused_to_model(&out, 0).contains("the camera bubble takes keys only"));
+    let turns = json!({"layer": "c1", "keys": [{"property": "rotation", "atSec": 0, "value": 10, "ease": null}],
+        "presets": null});
+    let out = run(&p, &[("setMotion", turns)]);
+    assert!(refused_to_model(&out, 0).contains("x, y and scale"));
+    let out = run(
+        &project(),
+        &[(
+            "setMotion",
+            json!({"layer": "c1", "keys": [], "presets": null}),
+        )],
+    );
+    assert!(refused_to_model(&out, 0).contains("has no camera"));
+}

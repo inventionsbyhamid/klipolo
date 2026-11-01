@@ -1142,6 +1142,13 @@ impl Compiler<'_> {
                 })
             }));
         }
+        // A recording's clip: setMotion keys its camera bubble.
+        if let (ToolCall::SetMotion { keys, presets, .. }, LayerRef::One(r)) = (call, layer)
+            && let Some(id) = self.inputs.refs.clip(r)
+        {
+            let edit = motion::bubble_motion(work, (&id.to_owned(), r), keys.as_deref(), presets);
+            return Some(edit.map(done));
+        }
         // A clip's fades, or a song's fades and ducking.
         if let (ToolCall::SetLayer { change, .. }, LayerRef::One(r)) = (call, layer) {
             let refs = &self.inputs.refs;

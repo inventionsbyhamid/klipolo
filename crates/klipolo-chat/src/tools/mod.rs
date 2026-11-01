@@ -369,10 +369,11 @@ impl ToolCall {
                 ..
             } => r.starts_with(['m', 'v']),
             ToolCall::Animate { layer, .. }
-            | ToolCall::SetMotion { layer, .. }
             | ToolCall::AnimateText { layer, .. }
             | ToolCall::StyleText { layer, .. } => matches!(layer, LayerRef::One(_)),
-            ToolCall::SetLayer { layer: target, .. } | ToolCall::SetEffects { target, .. } => {
+            ToolCall::SetMotion { layer: target, .. }
+            | ToolCall::SetLayer { layer: target, .. }
+            | ToolCall::SetEffects { target, .. } => {
                 matches!(target, LayerRef::One(r) if !r.starts_with('c'))
             }
             _ => false,
@@ -410,7 +411,7 @@ impl ToolCall {
                     || change.start_us.is_some()
                     || change.split_us.is_some()
             }
-            ToolCall::SetEffects { target, .. } => {
+            ToolCall::SetMotion { layer: target, .. } | ToolCall::SetEffects { target, .. } => {
                 matches!(target, LayerRef::One(r) if r.starts_with('c'))
             }
             ToolCall::RemoveSilences { .. }
@@ -423,7 +424,6 @@ impl ToolCall {
             | ToolCall::BlurObjects { .. }
             | ToolCall::Animate { .. }
             | ToolCall::AutoZoom { .. }
-            | ToolCall::SetMotion { .. }
             | ToolCall::AnimateText { .. }
             | ToolCall::StyleText { .. }
             | ToolCall::Undo

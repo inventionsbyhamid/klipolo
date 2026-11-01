@@ -15,7 +15,7 @@ use klipolo_model::coded::ErrorParam;
 use klipolo_model::contrib::builtin;
 use klipolo_model::ids::Id;
 use klipolo_model::motion::{self, Key, MAX_KEYS, Motion, MotionKeys, MotionUse};
-use klipolo_model::ops::{ItemPatch, Op};
+use klipolo_model::ops::{ClipPatch, ItemPatch, Op};
 use klipolo_model::params::ParamValue;
 use klipolo_model::time::Us;
 use klipolo_model::timeline::{Item, ItemContent};
@@ -219,5 +219,76 @@ pub(super) fn set_motion(
     Ok(Edit {
         ops,
         label: label("setMotion", vec![("layer", ErrorParam::from(noun(item)))]),
+    })
+}
+
+/// `setMotion` on the main track's clip `id`, named `said`: the keys of its recording's camera bubble, which moves and
+/// scales (x, y, scale) but takes no presets. Keys come from the clip's start, in its timeline time, and are kept in
+/// the recording's own time, as the bubble's keys are (`CameraLayout::bubble`), so cuts and speed changes keep them on
+/// the content. Each property listed gets exactly these keys; an empty list takes them all away.
+pub(super) fn bubble_motion(
+    work: &Project,
+    (id, said): (&Id, &str),
+    keys: Option<&[KeyIn]>,
+    presets: &[PresetIn],
+) -> Result<Edit, Refused> {
+    let Some(clip) = work.timeline.main.iter().find(|c| &c.id == id) else {
+        return Err(to_model(format!("setMotion: {said} is gone.")));
+    };
+    let Some(camera) = &clip.camera else {
+        return Err(to_model(format!(
+            "setMotion: {said} has no camera bubble. setMotion moves layers (t1, i1, v1) and a recording's camera."
+        )));
+    };
+    if !presets.is_empty() {
+        return Err(to_model(format!(
+            "setMotion: the camera bubble takes keys only (x, y, scale), no presets. Leave presets null for {said}."
+        )));
+    }
+    let keys = keys.unwrap_or_default();
+    if let Some(k) = keys
+        .iter()
+        .find(|k| matches!(k.property, Property::Rotation | Property::Opacity))
+    {
+        return Err(to_model(format!(
+            "setMotion: the camera bubble takes x, y and scale keys, not {}.",
+            word(k.property)
+        )));
+    }
+    let mut motion = camera.bubble.motion.clone().unwrap_or_default();
+    // Checked in the clip's own time, then kept in the recording's.
+    let timed = keyed(motion.keys.take(), keys, clip.duration_us()).map_err(to_model)?;
+    let source = |t: Us| {
+        clip.source_in_us
+            .saturating_add(klipolo_model::time::unscaled(t, clip.speed))
+    };
+    motion.keys = timed.map(|mut k| {
+        for (list, property) in [
+            (&mut k.x, Property::X),
+            (&mut k.y, Property::Y),
+            (&mut k.scale, Property::Scale),
+        ] {
+            if keys.iter().any(|g| g.property == property) {
+                list.iter_mut().for_each(|key| key.t_us = source(key.t_us));
+            }
+        }
+        k
+    });
+    let mut camera = camera.clone();
+    camera.bubble.motion = motion::kept(motion);
+    let ops = if Some(&camera) == clip.camera.as_ref() {
+        Vec::new()
+    } else {
+        vec![Op::UpdateClip {
+            id: id.clone(),
+            patch: ClipPatch {
+                camera: Some(camera),
+                ..ClipPatch::default()
+            },
+        }]
+    };
+    Ok(Edit {
+        ops,
+        label: label("setMotion", vec![("layer", ErrorParam::from("camera"))]),
     })
 }

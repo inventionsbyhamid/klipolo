@@ -149,7 +149,7 @@ export const CHAT_LABELS: Record<string, MessageDescriptor> = {
   'chat.setMotion': msg({
     id: 'chat.setMotion',
     message:
-      '{layer, select, words {Move the words} title {Move the title} video {Move the video layer} other {Move the picture}}',
+      '{layer, select, words {Move the words} title {Move the title} video {Move the video layer} camera {Move the camera} other {Move the picture}}',
     comment: 'Undo history entry: chat set a layer’s keyframes or its enter, exit and loop animations',
   }),
   'chat.animateText': msg({
