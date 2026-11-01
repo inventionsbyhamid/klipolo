@@ -8,6 +8,7 @@ import { BUILTINS } from '../../lib/contrib';
 import { clearPreview, dropPendingPreview, previewOps } from '../../state/livePreview';
 import { itemOp } from '../../lib/ops';
 import { TimingField } from './common';
+import { EffectsButton } from './EffectsButton';
 import { Field, Swatches, type Swatch } from './fields';
 import { commitLatest, contentNow } from '../../state/latest';
 
@@ -101,7 +102,7 @@ function WordsField({
 
 /**
  * A title template's fields (the lower third, the title card): its words (Name and Role, or Title and Subtitle), its
- * accent colour and its timing. Its place is the frame, so it has no position or size. The words are typed here, the
+ * accent colour, its effects and its timing. Its place is the frame, so it has no position or size. The words are typed here, the
  * preview showing each change; Enter or leaving the field makes it one undo step.
  */
 export function TemplateInspector({
@@ -150,6 +151,7 @@ export function TemplateInspector({
         }
         return null;
       })}
+      <EffectsButton target={{ type: 'item', id: item.id }} effects={item.effects} />
       <TimingField item={item} />
     </>
   );

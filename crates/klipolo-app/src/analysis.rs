@@ -15,7 +15,9 @@
 //!   pipeline, all at once (the Meta adapter keeps the device's request slots): its sound (step `audio`), its speaker
 //!   turns (`transcript`, published at once as turn-level captions), its word times (`words`), then its scene log
 //!   (`scenes`) for a video. Decoding (the sound, the scene log's small copy) runs one clip at a time on a thread of
-//!   utility priority, and one video call runs at a time. Editing copies wait while it decodes (`on_decoding`).
+//!   utility priority, and one video call runs at a time. Editing copies wait while it decodes (`on_decoding`), and it
+//!   makes way for playback, an export and a take (`holds`): the small copy waits while the video plays, the sound once
+//!   frames come late, and both while an export runs or a take records.
 //! - **Results** go into the engine's `Speech` (a new `Arc<Speech>` for the open revision: the captions update live),
 //!   with each clip's sound levels (`Speech::levels`, from the sound cache's energies), and are kept here for chat
 //!   (`AnalysisState::analysis_for`). Each finished step is cached (`klipolo_analysis::cache`): `transcript.json` as
@@ -33,6 +35,7 @@
 mod calls;
 pub mod chat;
 mod decoding;
+pub mod holds;
 pub mod media;
 mod run;
 
@@ -53,6 +56,7 @@ use tokio::task::JoinHandle;
 use ts_rs::TS;
 
 use crate::credentials::{AiMode, AiStatus, CODE_INACTIVE, Credentials};
+use holds::Holds;
 pub use media::{EngineMedia, Media};
 use run::{Outcome, Run};
 
@@ -444,6 +448,8 @@ pub struct AnalysisState {
     local: Semaphore,
     /// Told when that decoding starts and stops (`on_decoding`).
     decoding: Arc<decoding::Decoding>,
+    /// What that decoding makes way for: playback, an export, a take.
+    holds: Arc<Holds>,
     /// One video call at a time, whatever the mode.
     videos: Arc<Semaphore>,
 }
@@ -475,6 +481,7 @@ impl AnalysisState {
             inner: Mutex::default(),
             local: Semaphore::new(1),
             decoding: Arc::default(),
+            holds: Arc::default(),
             videos: Arc::new(Semaphore::new(1)),
         })
     }
@@ -484,6 +491,12 @@ impl AnalysisState {
     /// stops, from a few milliseconds up to about a second), and no copy starts until the step has ended.
     pub fn on_decoding(&self, f: impl Fn(bool) + Send + Sync + 'static) {
         self.decoding.listen(Box::new(f));
+    }
+
+    /// What decoding a clip on this Mac makes way for (`holds`): the app tells it when the video plays (and falls
+    /// behind), an export runs and a take records.
+    pub fn holds(&self) -> &Arc<Holds> {
+        &self.holds
     }
 
     /// The project switch count now (`Inner::generation`).

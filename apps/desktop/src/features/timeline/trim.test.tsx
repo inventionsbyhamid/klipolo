@@ -1,7 +1,7 @@
 import { act, fireEvent, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { builtinId } from '../../lib/contrib';
-import { fixtureSnapshot } from '../../test/fixtures';
+import { fixtureSnapshot, titleItem } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
 
 vi.mock('../../bridge/commands', () => ({ bridge: { apply: vi.fn() }, mediaUrl: (p: string) => p }));
@@ -84,6 +84,30 @@ describe('trimming and splitting', () => {
     expect(a.style.width).toBe('800px');
     expect(a.dataset.trimming).toBeUndefined();
     expect(b.style.transform).toBe('');
+  });
+
+  it("a clip's end trim leaves free layers where they are, as the trim does", async () => {
+    const S = 1_000_000;
+    const snapshot = fixtureSnapshot();
+    const [overlays, audio] = snapshot.project.timeline.tracks;
+    // After clip a's end (20 s): a free card at 22 s and a free whoosh at 21 s keep their time through any edit.
+    overlays.items.push({ ...titleItem, id: 'card', startUs: 22 * S, durationUs: S, attach: null });
+    audio.items = [{ ...audio.items[0], id: 'whoosh', startUs: 21 * S, durationUs: 2 * S }];
+    useProject.setState({ snapshot, pending: 0 });
+    renderWithProviders(<Timeline />);
+    const a = block(/^Recording 1/);
+    const byId = (id: string) => document.querySelector<HTMLElement>(`[data-block-id="${id}"]`)!;
+    // −40 px at 40 px/s: a ends at 19 s, and clip b comes 1 s earlier; the free layers stay.
+    fireEvent.pointerDown(edge(a, 'end'), { pointerId: 1, button: 0, clientX: 799, clientY: 10 });
+    fireEvent.pointerMove(a, { pointerId: 1, clientX: 759, clientY: 10 });
+    await frames();
+    expect(block(/^broll\.mp4/).style.transform).toContain('-40px');
+    expect(byId('card').style.transform).toBe('');
+    expect(byId('whoosh').style.transform).toBe('');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.pointerUp(a, { pointerId: 1, clientX: 759, clientY: 10 });
+    await frames();
+    expect(bridge.apply).not.toHaveBeenCalled();
   });
 
   it("a layer's edge trims to the frame, shows its new length and change, and commits one trimItem", async () => {

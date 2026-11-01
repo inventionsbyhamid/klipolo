@@ -81,6 +81,17 @@ pub fn extract_wav_16k_cancellable(
     out: &Path,
     cancel: &AtomicBool,
 ) -> Result<AudioInfo, AudioError> {
+    extract_wav_16k_paced(src, out, cancel, &mut || {})
+}
+
+/// `extract_wav_16k_cancellable`, calling `between` between decoded blocks: it may block (the app makes way for
+/// playback there), and the decode goes on from where it was once it returns. A cancel set meanwhile stops it there.
+pub fn extract_wav_16k_paced(
+    src: &Path,
+    out: &Path,
+    cancel: &AtomicBool,
+    between: &mut dyn FnMut(),
+) -> Result<AudioInfo, AudioError> {
     if !probe_media(src).map_err(AudioError::Decode)?.has_audio {
         return Ok(AudioInfo {
             duration_us: 0,
@@ -95,7 +106,7 @@ pub fn extract_wav_16k_cancellable(
             .max(1),
     );
     let tmp = durable::temp_path(out);
-    let written = write_wav(src, channels, &tmp, cancel).and_then(|info| {
+    let written = write_wav(src, channels, &tmp, cancel, between).and_then(|info| {
         std::fs::rename(&tmp, out)?;
         if let Some(dir) = out.parent().filter(|d| !d.as_os_str().is_empty()) {
             durable::fsync_dir(dir)?;
@@ -108,12 +119,14 @@ pub fn extract_wav_16k_cancellable(
     written
 }
 
-/// Decodes `src` into the WAV at `path` (the temporary file), until `cancel` is set.
+/// Decodes `src` into the WAV at `path` (the temporary file), calling `between` before each block, until `cancel` is
+/// set.
 fn write_wav(
     src: &Path,
     channels: usize,
     path: &Path,
     cancel: &AtomicBool,
+    between: &mut dyn FnMut(),
 ) -> Result<AudioInfo, AudioError> {
     let mut sink = WavSink::create(path)?;
     let mut decimator = Decimator::new();
@@ -122,6 +135,7 @@ fn write_wav(
     // The sink's error, kept here: the engine's `emit` can only pass a String back.
     let mut failed: Option<AudioError> = None;
     let mut emit = |_first: u64, samples: &[f32]| -> Result<bool, String> {
+        between();
         if cancel.load(Ordering::Relaxed) {
             return Ok(false);
         }

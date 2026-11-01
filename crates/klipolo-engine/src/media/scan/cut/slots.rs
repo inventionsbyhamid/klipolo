@@ -22,7 +22,7 @@ impl Cutter {
             if let Some(mut done) = self.sprite.take() {
                 self.write(&mut done);
             }
-            let Some(tile) = self.video.as_ref().map(|v| v.tile) else {
+            let Some(tile) = self.video.as_ref().map(|v| v.tile()) else {
                 return;
             };
             self.sprite = Some(Sprite::new(chunk, tile));
