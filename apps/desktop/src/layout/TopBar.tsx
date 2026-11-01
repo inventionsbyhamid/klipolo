@@ -67,8 +67,9 @@ function RenameField({ name, onDone }: { name: string; onDone: (refocus: boolean
 /**
  * The project menu, opened from the project's name: New project, All projects (closes the project once
  * its edits are saved, back to the start screen), Open recent (up to five other projects, last opened first: one opens
- * as its start screen card does), Rename (the name turns into a field) and Show in Finder (its file, selected). One at
- * a time: while a new project is made, another opens or the project closes, its items are off.
+ * as its start screen card does), Rename (the name turns into a field), Duplicate (a copy with the same footage and
+ * edits, opened as "<name> copy", to make another video from it) and Show in Finder (its file, selected). One at a time:
+ * while a new project is made, another opens or the project closes, its items are off.
  */
 function ProjectMenu({ name }: { name: string }) {
   const { t } = useLingui();
@@ -142,6 +143,13 @@ function ProjectMenu({ name }: { name: string }) {
         <MenuSeparator />
         <MenuItem onSelect={once(() => setRenaming(true))} disabled={switching || readOnly}>
           {t({ id: 'project.menu.rename', message: 'Rename', comment: 'Project menu item: the name becomes a field' })}
+        </MenuItem>
+        <MenuItem onSelect={once(() => void useProject.getState().duplicate())} disabled={switching || readOnly}>
+          {t({
+            id: 'project.menu.duplicate',
+            message: 'Duplicate',
+            comment: 'Project menu item: a copy of the project, opened as "<name> copy"',
+          })}
         </MenuItem>
         <MenuItem onSelect={once(showInFinder)} disabled={switching}>
           {t({ id: 'project.menu.finder', message: 'Show in Finder', comment: 'Project menu item' })}

@@ -16,6 +16,7 @@ vi.mock('../bridge/commands', () => ({
     createProject: vi.fn(),
     openProject: vi.fn(),
     closeProject: vi.fn(),
+    duplicateProject: vi.fn(),
   },
 }));
 vi.mock('../bridge/projects', () => ({ projects: { recent: vi.fn(), reveal: vi.fn() } }));
@@ -133,8 +134,29 @@ describe('TopBar', () => {
       'New project',
       'All projects',
       'Rename',
+      'Duplicate',
       'Show in Finder',
     ]);
+  });
+
+  it('Duplicate makes a copy of the project and opens it', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    const copy = fixtureSnapshot();
+    copy.project = { ...copy.project, id: 'copy', name: 'Billing tutorial copy' };
+    vi.mocked(bridge.duplicateProject).mockResolvedValue({ ...copy, opening: 2 });
+    render(<TopBar />);
+    await userEvent.click(within(await openMenu('Billing tutorial')).getByRole('menuitem', { name: 'Duplicate' }));
+    // The open project: Rust copies it as it stands, every edit in.
+    expect(bridge.duplicateProject).toHaveBeenCalledWith();
+    await waitFor(() => expect(useProject.getState().snapshot?.project.id).toBe('copy'));
+    expect(screen.getByRole('button', { name: 'Billing tutorial copy' })).toBeInTheDocument();
+  });
+
+  it("Duplicate is off for a project from a newer Klipolo, which this one can't copy whole", async () => {
+    useProject.setState({ snapshot: { ...fixtureSnapshot(), readOnly: 'model.readOnly' } });
+    render(<TopBar />);
+    const menu = await openMenu('Billing tutorial');
+    expect(within(menu).getByRole('menuitem', { name: 'Duplicate' })).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('Rename names the project in one undo step, its words trimmed; Escape keeps the name', async () => {
@@ -231,7 +253,7 @@ describe('TopBar', () => {
     // While the new project is made, the menu's items are off: another New project or All projects would overlap it.
     const menu = await openMenu('Billing tutorial');
     const items = within(menu).getAllByRole('menuitem');
-    expect(items.map((item) => item.getAttribute('aria-disabled'))).toEqual(['true', 'true', 'true', 'true']);
+    expect(items.map((item) => item.getAttribute('aria-disabled'))).toEqual(Array(5).fill('true'));
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'New project' }));
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'All projects' }));
     expect(bridge.createProject).toHaveBeenCalledTimes(1);
@@ -243,6 +265,7 @@ describe('TopBar', () => {
     // Once it has opened, the menu works again.
     const after = await openMenu('Untitled project');
     expect(within(after).getAllByRole('menuitem').map((item) => item.getAttribute('aria-disabled'))).toEqual([
+      null,
       null,
       null,
       null,
@@ -303,6 +326,7 @@ describe('TopBar', () => {
         'Untitled project',
         'Untitled project 2',
         'Rename',
+        'Duplicate',
         'Show in Finder',
       ]),
     );
@@ -324,7 +348,7 @@ describe('TopBar', () => {
     await waitFor(() => expect(useRecentProjects.getState().readFor).not.toBeNull());
     expect(within(menu).queryByRole('group')).toBeNull();
     expect(within(menu).queryByText('Open recent')).toBeNull();
-    expect(within(menu).getAllByRole('menuitem')).toHaveLength(4);
+    expect(within(menu).getAllByRole('menuitem')).toHaveLength(5);
     expect(menu.querySelectorAll('.menu-sep')).toHaveLength(1);
     await userEvent.keyboard('{Escape}');
 
@@ -334,7 +358,7 @@ describe('TopBar', () => {
     const again = await openMenu('Billing tutorial');
     await waitFor(() => expect(vi.mocked(projects.recent).mock.calls.length).toBeGreaterThan(1));
     await act(() => Promise.resolve());
-    expect(within(again).getAllByRole('menuitem')).toHaveLength(4);
+    expect(within(again).getAllByRole('menuitem')).toHaveLength(5);
     expect(useToasts.getState().toasts).toEqual([]);
   });
 

@@ -28,10 +28,17 @@ export function clockUs(at = performance.now()): number {
     : anchor.us;
 }
 
-/** Moves the clock (play, pause, seek, a re-anchor) and tells the playhead, the timecode and the follow. */
+/**
+ * Moves the clock (play, pause, seek, a re-anchor) and tells the playhead, the timecode and the follow. A listener
+ * that moves it again (the loop going back at a range's end) has told every listener the newer place: the rest never
+ * hear this older one after it.
+ */
 export function setClock(next: ClockAnchor) {
   anchor = next;
-  for (const listener of listeners) listener(next);
+  for (const listener of listeners) {
+    if (anchor !== next) return;
+    listener(next);
+  }
 }
 
 /** Holds the clock at `us` (paused, or waiting for the first frame of playback). */

@@ -1,13 +1,14 @@
 import { Button } from '../../design/Button';
 import { Icon } from '../../layout/Icon';
 import { exportedTitle } from '../../state/exportRun';
-import { revealExported, useExport } from '../../state/export';
+import { revealExported, shareExported, useExport } from '../../state/export';
 import { ExportFiles } from './ExportFiles';
 import { ExportIcon } from './icons';
 
 /**
  * The finished export: a paper check, "Exported 2 videos", where they were saved, one row per
- * file, then Done and Show in Finder (their folder, the first file selected).
+ * file, then Done, Share… (the Mac's share menu with every file, beside the button) and Show in Finder (their folder,
+ * the first file selected).
  */
 export function ExportOutcome({ onClose }: { onClose: () => void }) {
   const count = useExport((s) => s.ready.length);
@@ -33,6 +34,7 @@ export function ExportOutcome({ onClose }: { onClose: () => void }) {
         <Button data-primary onClick={onClose}>
           Done
         </Button>
+        <Button onClick={(e) => void shareExported(e.currentTarget)}>Share…</Button>
         <Button variant="primary" onClick={() => void revealExported()}>
           <ExportIcon name="folder" />
           Show in Finder

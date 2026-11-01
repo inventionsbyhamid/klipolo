@@ -110,6 +110,19 @@ pub(crate) fn sample_screen_color(done: Box<dyn FnOnce(Option<String>) + Send>) 
     done(None)
 }
 
+/// Later: Windows' share UI (`DataTransferManager`). None until then: nothing shows.
+pub(crate) fn share_supported() -> bool {
+    false
+}
+
+pub(crate) fn share_files(
+    _view: *mut std::ffi::c_void,
+    _anchor: crate::share::Anchor,
+    _files: &[PathBuf],
+) -> bool {
+    false
+}
+
 /// `FlushFileBuffers` either way (later: `MoveFileExW(WRITE_THROUGH)` and retries on antivirus locks).
 pub(crate) fn sync(file: &File, durability: Durability) -> io::Result<()> {
     match durability {

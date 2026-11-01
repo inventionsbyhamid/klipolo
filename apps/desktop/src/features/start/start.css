@@ -70,6 +70,27 @@
   background: var(--color-bay-hover);
 }
 
+/* A card's More button sits over its picture's top right corner, shown while the card is hovered or has the focus. */
+.start-item {
+  position: relative;
+}
+
+.start-more {
+  position: absolute;
+  top: calc(var(--space-4) + var(--space-3));
+  right: calc(var(--space-4) + var(--space-3));
+  background: var(--color-dialog);
+  box-shadow: var(--shadow-1);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.start-item:hover .start-more,
+.start-item:focus-within .start-more,
+.start-more[data-state="open"] {
+  opacity: 1;
+}
+
 /* Opening: pressed, with a spinner over its picture. Meta text is soft on the press colour. */
 .start-card.is-busy {
   background: var(--color-bay-press);

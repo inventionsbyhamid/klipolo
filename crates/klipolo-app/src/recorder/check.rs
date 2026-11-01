@@ -50,6 +50,7 @@ pub(super) fn camera_wanted(
         key: camera.clone(),
         args,
         asking: may == Some(true),
+        view: None,
     })
 }
 
