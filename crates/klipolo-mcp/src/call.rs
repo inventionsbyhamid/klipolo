@@ -4,6 +4,7 @@
 //!    app's own newest step and nothing else (`Host::undo_own`), once no one else's proposal waits.
 //! 2. The open project (`NO_PROJECT` without one). A call naming times or clip refs needs the app to have read the
 //!    project's main track as it is now (`Seen`): `READ_FIRST` when it never read, `STALE` when the clips moved since.
+//!    One naming a song or a video layer by its ref needs its layers as they are too (`STALE` when one came or went).
 //! 3. `findMoments` only points the person at moments (it is read-only): it compiles alone and is shown.
 //! 4. The proposal slot, shared with Klipolo's chat: while a proposal that isn't the app's own waits, every edit is
 //!    refused (`WAITING_OTHER`). The app's own absorbs the call: it compiles after the calls the proposal holds
@@ -33,7 +34,7 @@
 use klipolo_chat::{
     ANALYZE_FIRST, Audience, Compiled, FunctionCall, Job, Moment, ROUGH_FILLERS,
     ROUGH_FILLERS_STAY, Refusal, STILL_LISTENING, STILL_WATCHING, ToolCall, compile_for_app,
-    timeline_key,
+    layers_key, timeline_key,
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
@@ -84,6 +85,15 @@ pub fn run(mcp: &Mcp, session: &mut Session, call: &FunctionCall) -> Value {
         && let Err(said) = read_as_it_is(session.seen.as_ref(), &snap)
     {
         return refused(said);
+    }
+    // A layer ref names a layer by its place among the layers the app read: never a different one since.
+    if new.names_layer()
+        && session
+            .seen
+            .as_ref()
+            .is_some_and(|seen| seen.layers != layers_key(&snap.project))
+    {
+        return refused(words::STALE);
     }
     if matches!(new, ToolCall::FindMoments { .. }) {
         return show(host, client, &snap, new);

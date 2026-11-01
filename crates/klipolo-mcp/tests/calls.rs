@@ -1548,3 +1548,93 @@ fn an_apps_speed_that_leaves_a_transition_no_room_is_proposed_and_says_why() {
         "nothing changes until the person applies it"
     );
 }
+
+/// A song of `asset` laid as music on the sound track `track` from `start` for `length` seconds.
+fn song(id: &str, asset: &str, start: f64, length: f64) -> klipolo_model::timeline::Item {
+    use klipolo_model::layout::{Anchor, BoxN, Layout};
+    klipolo_model::timeline::Item {
+        id: id.into(),
+        start_us: (start * 1e6) as i64,
+        duration_us: (length * 1e6) as i64,
+        attach: None,
+        layout: Layout::new(
+            Anchor::TopLeft,
+            BoxN {
+                x: 0.05,
+                y: 0.05,
+                w: 0.4,
+                h: 0.1,
+            },
+        ),
+        content: klipolo_model::timeline::ItemContent::Audio {
+            asset_id: asset.into(),
+            source_in_us: 0,
+            volume: 1.0,
+            muted: false,
+            fade_in_us: 0,
+            fade_out_us: 0,
+            effect: None,
+            drift_ppm: 0.0,
+            centre_from: None,
+            tie: None,
+            duck: Some(-12.0),
+        },
+        effects: Vec::new(),
+    }
+}
+
+#[test]
+fn a_layer_ref_read_before_the_layers_changed_is_refused_never_a_different_layer() {
+    let host = FakeHost::two_clips();
+    let audio = |id: &str| klipolo_model::project::Asset {
+        id: id.into(),
+        kind: klipolo_model::project::AssetKind::Audio,
+        path: format!("/media/{id}.mp3"),
+        name: format!("{id}.mp3"),
+        duration_us: 300_000_000,
+        width: 0,
+        height: 0,
+        fps: 0.0,
+        rotation: None,
+        has_audio: true,
+        audio_lead_us: None,
+        made_with: None,
+    };
+    // Two songs: "intro" is m1 and "outro" m2.
+    host.change_project(|p| {
+        p.assets.extend([audio("intro"), audio("outro")]);
+        let mut track =
+            klipolo_model::timeline::Track::new(klipolo_model::timeline::TrackKind::Audio, "Music");
+        track.items = vec![
+            song("intro-1", "intro", 0.0, 10.0),
+            song("outro-1", "outro", 100.0, 10.0),
+        ];
+        p.timeline.tracks.push(track);
+    });
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    // The person deletes the first song: "outro" is m1 now, though the app read it as m2.
+    host.change_project(|p| {
+        let track = p.timeline.tracks.last_mut().unwrap();
+        track.items.retain(|i| i.id != "intro-1");
+    });
+    let revision = host.revision();
+    let result = agent.call("setClip", json!({"clip": "m1", "muted": true}));
+    assert_refused(&result, STALE);
+    assert_eq!(host.revision(), revision);
+    // Read again, the ref names what the app now sees.
+    agent.read();
+    let result = agent.call("setClip", json!({"clip": "m1", "muted": true}));
+    assert_eq!(outcome(&result), "done", "{result}");
+    let muted = (host.project().timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .any(|i| {
+            i.id == "outro-1"
+                && matches!(
+                    i.content,
+                    klipolo_model::timeline::ItemContent::Audio { muted: true, .. }
+                )
+        });
+    assert!(muted, "the song the app read as m1");
+}

@@ -639,6 +639,7 @@ fn reading_records_the_timeline_key() {
     let first = Seen {
         project_id: "space-station".into(),
         key: timeline_key(&host.project()),
+        layers: klipolo_chat::layers_key(&host.project()),
     };
     for (name, by_tool) in [
         ("getContext", true),
