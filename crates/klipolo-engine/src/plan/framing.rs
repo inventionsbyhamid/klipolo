@@ -138,19 +138,30 @@ pub fn cover_crop(source_aspect: f64, target_aspect: f64, focus_x: f64, focus_y:
 /// `base` (a Fill crop) scaled by 1 / `closer` (1–2) and centred on `centre`, kept inside the source frame: the
 /// vertical follow-crop. A centre or `closer` that isn't a number reads as the middle, or 1.
 pub fn follow_crop(base: BoxN, centre: (f64, f64), closer: f64) -> BoxN {
+    follow_crop_in(FULL, base, centre, closer)
+}
+
+/// [`follow_crop`] kept inside `bounds` (source-normalised: what a clip's crop leaves, `FULL` for the whole frame) rather
+/// than the frame.
+pub fn follow_crop_in(bounds: BoxN, base: BoxN, centre: (f64, f64), closer: f64) -> BoxN {
     let closer = if closer.is_finite() {
         closer.clamp(1.0, 2.0)
     } else {
         1.0
     };
-    let (w, h) = ((base.w / closer).min(1.0), (base.h / closer).min(1.0));
-    let at = |c: f64, side: f64| {
-        let c = if c.is_finite() { c } else { 0.5 };
-        (c - side / 2.0).clamp(0.0, 1.0 - side)
+    let (w, h) = (
+        (base.w / closer).min(bounds.w),
+        (base.h / closer).min(bounds.h),
+    );
+    let at = |c: f64, side: f64, lo: f64, room: f64| {
+        let c = if c.is_finite() { c } else { lo + room / 2.0 };
+        // A window as big as the room: `lo + room - side` can round to just under `lo`.
+        let hi = (lo + room - side).max(lo);
+        (c - side / 2.0).clamp(lo, hi)
     };
     BoxN {
-        x: at(centre.0, w),
-        y: at(centre.1, h),
+        x: at(centre.0, w, bounds.x, bounds.w),
+        y: at(centre.1, h, bounds.y, bounds.h),
         w,
         h,
     }

@@ -11,7 +11,7 @@ use klipolo_model::project::{AssetKind, Project};
 use klipolo_model::timeline::TextStyle;
 
 use super::effects::clamped;
-use super::{camera_layer_id, cursor_layer_id};
+use super::{backdrop_layer_id, camera_layer_id, cursor_layer_id};
 use crate::make::envelope::Envelope;
 
 /// Entries kept before the table starts over (text being typed makes a new string per keystroke).
@@ -24,6 +24,7 @@ pub struct Strings(Mutex<Table>);
 pub struct Table {
     strs: HashMap<Box<str>, Arc<str>>,
     cameras: HashMap<Box<str>, Arc<str>>,
+    backdrops: HashMap<Box<str>, Arc<str>>,
     cursors: HashMap<Box<str>, Arc<str>>,
     /// The last style of each text item.
     styles: HashMap<Box<str>, Arc<TextStyle>>,
@@ -81,6 +82,11 @@ impl Table {
     /// `camera:<clip id>` (`camera_layer_id`).
     pub fn camera(&mut self, clip_id: &str) -> Arc<str> {
         per_clip(&mut self.cameras, clip_id, camera_layer_id)
+    }
+
+    /// `backdrop:<clip id>` (`backdrop_layer_id`).
+    pub fn backdrop(&mut self, clip_id: &str) -> Arc<str> {
+        per_clip(&mut self.backdrops, clip_id, backdrop_layer_id)
     }
 
     /// `cursor:<clip id>` (`cursor_layer_id`).
