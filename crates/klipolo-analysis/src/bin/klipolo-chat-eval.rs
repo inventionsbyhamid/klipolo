@@ -907,6 +907,44 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
             clips,
         } => json!({"source": source.key(), "which": which, "clips": clips}),
         ToolCall::AutoZoom { on, scale } => json!({"on": on, "scale": scale}),
+        ToolCall::SetMotion {
+            layer,
+            keys,
+            presets,
+        } => json!({
+            "layer": layer_word(layer),
+            "keys": keys.as_ref().map(|keys| {
+                (keys.iter())
+                    .map(|k| json!({
+                        "property": format!("{:?}", k.property).to_lowercase(),
+                        "atSec": s(k.at_us),
+                        "value": k.value,
+                        "ease": k.ease.map(|e| e.name()),
+                    }))
+                    .collect::<Vec<_>>()
+            }),
+            "presets": (!presets.is_empty()).then(|| presets_said(presets)),
+        }),
+        ToolCall::AnimateText { layer, motion } => json!({
+            "layer": layer_word(layer),
+            "set": text_motion_said(motion),
+        }),
+        ToolCall::SetLayer {
+            layer,
+            change,
+            style,
+        } => json!({
+            "layer": layer_word(layer),
+            "set": layer_said(change, style),
+        }),
+        ToolCall::SetEffects { target, effects } => {
+            let e = effects.first();
+            json!({
+                "target": layer_word(target),
+                "name": e.map(|e| e.name.clone()),
+                "set": e.map(effect_said).unwrap_or_default(),
+            })
+        }
         ToolCall::AskUser { question } => json!({"question": question}),
         ToolCall::CannotDo { reason } => json!({"reason": reason}),
     };
@@ -919,6 +957,154 @@ fn word<T: serde::Serialize>(value: &T) -> String {
         Ok(Value::String(word)) => word,
         _ => String::new(),
     }
+}
+
+/// A layer ref as the model writes it.
+fn layer_word(layer: &LayerRef) -> &str {
+    match layer {
+        LayerRef::Last => "last",
+        LayerRef::One(r) => r.as_str(),
+    }
+}
+
+/// `setMotion`'s presets as the model writes them: `enter slide left 0.4s; loop float 1.5 0.8s`.
+fn presets_said(presets: &[klipolo_chat::tools::PresetIn]) -> String {
+    let said: Vec<String> = (presets.iter())
+        .map(|p| {
+            let slot = match p.slot {
+                klipolo_chat::tools::Slot::Enter => "enter",
+                klipolo_chat::tools::Slot::Exit => "exit",
+                klipolo_chat::tools::Slot::Loop => "loop",
+            };
+            let mut words = vec![
+                slot.to_owned(),
+                p.preset
+                    .map_or("none", |w| if w == "blur-in" { "blur" } else { w })
+                    .to_owned(),
+            ];
+            words.extend(p.from.map(str::to_owned));
+            words.extend(p.strength.map(|n| n.to_string()));
+            words.extend(p.duration_us.map(|d| format!("{}s", s(d))));
+            words.join(" ")
+        })
+        .collect();
+    said.join("; ")
+}
+
+/// A pair of a composing tool's `set`.
+fn pair(key: &str, value: Value) -> Value {
+    json!({"key": key, "value": value})
+}
+
+/// `animateText`'s keys as the model writes them.
+fn text_motion_said(m: &klipolo_model::media::text_motion::TextMotion) -> Vec<Value> {
+    use klipolo_model::media::text_motion::{Order, Unit};
+    let unit = match m.unit {
+        Unit::Letter => "letter",
+        Unit::Word => "word",
+        Unit::Line => "line",
+    };
+    let mut out = vec![pair("by", json!(unit))];
+    for (key, value) in [
+        ("y", m.from.y),
+        ("scale", m.from.scale),
+        ("opacity", m.from.opacity),
+        ("rotation", m.from.rotation),
+        ("blur", m.from.blur),
+        ("sec", m.unit_secs),
+        ("stagger", m.stagger_secs),
+    ] {
+        out.extend(value.map(|v| pair(key, json!(v))));
+    }
+    out.extend(m.ease.map(|e| pair("ease", json!(e.name()))));
+    out.extend(m.order.map(|o| {
+        let word = match o {
+            Order::Start => "start",
+            Order::End => "end",
+            Order::Center => "center",
+            Order::Random => "random",
+        };
+        pair("order", json!(word))
+    }));
+    if m.exit {
+        out.push(pair("exit", json!(true)));
+    }
+    out
+}
+
+/// `setLayer`'s keys as the model writes them.
+fn layer_said(
+    c: &klipolo_chat::tools::LayerChange,
+    st: &klipolo_chat::tools::StyleChange,
+) -> Vec<Value> {
+    let mut out = Vec::new();
+    if let Some(r) = c.rect {
+        out.push(pair(
+            "box",
+            json!(format!("{} {} {} {}", r.x, r.y, r.w, r.h)),
+        ));
+    }
+    for (key, value) in [
+        ("rotation", c.rotation),
+        ("opacity", c.opacity),
+        ("corners", c.corners),
+        ("fadeIn", c.fade_in_us.map(s)),
+        ("fadeOut", c.fade_out_us.map(s)),
+        ("size", st.size),
+    ] {
+        out.extend(value.map(|v| pair(key, json!(v))));
+    }
+    out.extend(c.blend.map(|b| pair("blend", json!(word(&b)))));
+    out.extend(c.fill.map(|f| pair("fill", json!(f))));
+    out.extend(c.duck.map(|d| pair("duck", json!(d))));
+    out.extend(c.order.map(|o| {
+        let said = match o {
+            klipolo_chat::tools::Order::Forward => "forward",
+            klipolo_chat::tools::Order::Back => "back",
+        };
+        pair("order", json!(said))
+    }));
+    out.extend(st.look.map(|l| pair("look", json!(l.key))));
+    out.extend(st.font.as_ref().map(|f| pair("font", json!(f))));
+    out.extend(st.color.as_ref().map(|c| pair("color", json!(c))));
+    for (key, paint) in [("highlight", &st.highlight), ("outline", &st.outline)] {
+        out.extend(paint.as_ref().map(|p| {
+            pair(
+                key,
+                json!(match p {
+                    klipolo_chat::tools::Paint::Color(c) => c.as_str(),
+                    klipolo_chat::tools::Paint::None => "none",
+                }),
+            )
+        }));
+    }
+    out.extend(st.shadow.map(|v| pair("shadow", json!(v))));
+    out.extend(st.align.map(|a| pair("align", json!(word(&a)))));
+    out.extend(st.bold.map(|v| pair("bold", json!(v))));
+    out.extend(st.italic.map(|v| pair("italic", json!(v))));
+    out
+}
+
+/// `setEffects`' keys as the model writes them.
+fn effect_said(e: &klipolo_chat::tools::EffectChange) -> Vec<Value> {
+    use klipolo_chat::tools::SettingValue;
+    let mut out: Vec<Value> = (e.settings.iter())
+        .map(|(k, v)| {
+            pair(
+                k,
+                match v {
+                    SettingValue::Number(n) => json!(n),
+                    SettingValue::Text(t) => json!(t),
+                    SettingValue::Flag(b) => json!(b),
+                },
+            )
+        })
+        .collect();
+    out.extend(e.at.map(|at| pair("at", json!(at))));
+    if e.remove {
+        out.push(pair("remove", json!(true)));
+    }
+    out
 }
 
 #[cfg(test)]
