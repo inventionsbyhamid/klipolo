@@ -28,9 +28,9 @@ interface PlaybackStore {
   seek: (us: number) => void;
   /**
    * Plays from the playhead at `rate` (1 by default); while looping a time range, forward from its start when the
-   * playhead is outside it. Sound plays at 1× only.
+   * playhead is outside it, unless `here` (a moment chat points at plays from where it starts). Sound plays at 1× only.
    */
-  play: (rate?: number) => void;
+  play: (rate?: number, opts?: { here?: boolean }) => void;
   pause: () => void;
   toggle: () => void;
   /** J and L: start in `direction`, or double the speed when already going that way (2× at most). */
@@ -126,10 +126,10 @@ export const usePlayback = create<PlaybackStore>((set, get) => ({
     set((s) => ({ playheadUs, seq: s.seq + 1 }));
     sendSeek(playheadUs);
   },
-  play: (rate = 1) => {
+  play: (rate = 1, opts) => {
     if (get().playing) return;
     const asked = get().playheadUs;
-    const from = rate > 0 ? loopRule.startAt(asked) : asked;
+    const from = rate > 0 && !opts?.here ? loopRule.startAt(asked) : asked;
     // The clock starts with the first playback frame (the sound may take a moment to open).
     holdClock(from);
     const fresh = dropShown() || movedToLoop(asked, from);

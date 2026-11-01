@@ -95,6 +95,14 @@ describe('loop playback', () => {
     expect(engine.play).toHaveBeenLastCalledWith(5_000_000, 1, 6);
   });
 
+  it('a run asked to play from where it is (a moment chat points at) starts there, outside the range too', () => {
+    useLoop.setState({ on: true });
+    useRange.getState().select(5_000_000, 8_000_000);
+    usePlayback.setState({ playheadUs: 20_000_000 });
+    usePlayback.getState().play(1, { here: true });
+    expect(engine.play).toHaveBeenLastCalledWith(20_000_000, 1, 4);
+  });
+
   it('a seek the run replaces is never sent after it: the run starts at the range', () => {
     useLoop.setState({ on: true });
     useRange.getState().select(5_000_000, 8_000_000);

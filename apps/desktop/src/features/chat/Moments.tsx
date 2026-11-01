@@ -31,7 +31,8 @@ export function Moments({ moments, revision, stale }: { moments: ChatMoment[]; r
             onClick={() => {
               const playback = usePlayback.getState();
               playback.seek(m.startUs);
-              playback.play();
+              // From the moment, even while Loop plays a time range elsewhere.
+              playback.play(1, { here: true });
             }}
           >
             <span className="mplay" aria-hidden>
