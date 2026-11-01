@@ -15,4 +15,6 @@ export const reverser = {
   },
   /** Stops clip `clipId`'s copy: its `make` fails with `reverse.stopped`, and nothing is left on the disk. */
   stop: (clipId: string) => call<void>('clip_reverse_stop', { clipId }),
+  /** Deletes reversed copy `path` the page didn't use (only a reversed copy, never one the open project plays). */
+  discard: (path: string) => call<void>('clip_reverse_discard', { path }),
 };

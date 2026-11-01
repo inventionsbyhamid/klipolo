@@ -24,7 +24,9 @@ vi.mock('../../bridge/engine', () => ({
     seek: vi.fn().mockResolvedValue(undefined),
   },
 }));
-vi.mock('../../bridge/reverse', () => ({ reverser: { make: vi.fn(), stop: vi.fn().mockResolvedValue(undefined) } }));
+vi.mock('../../bridge/reverse', () => ({
+  reverser: { make: vi.fn(), stop: vi.fn().mockResolvedValue(undefined), discard: vi.fn().mockResolvedValue(undefined) },
+}));
 const { bridge } = await import('../../bridge/commands');
 const { reverser } = await import('../../bridge/reverse');
 const { useProject } = await import('../../state/project');
@@ -32,6 +34,7 @@ const { usePlayback } = await import('../../state/playback');
 const { useSelection } = await import('../../state/selection');
 const { useUi } = await import('../../state/ui');
 const { useReversing } = await import('../../state/reversing');
+const { useToasts } = await import('../../state/toasts');
 const { Timeline } = await import('./Timeline');
 const { ReversingPill } = await import('../media-jobs/ReversingPill');
 const { useCommands } = await import('../command-palette/useCommands');
@@ -88,6 +91,7 @@ beforeEach(() => {
   vi.mocked(bridge.apply).mockReset().mockResolvedValue({ ...fixturePatch(reversed(4)), baseRevision: 3 });
   vi.mocked(reverser.make).mockReset();
   vi.mocked(reverser.stop).mockClear();
+  vi.mocked(reverser.discard).mockClear();
 });
 
 describe('Reverse', () => {
@@ -180,5 +184,63 @@ describe('Reverse', () => {
     expect(bridge.apply).not.toHaveBeenCalled();
     expect(screen.queryByRole('status', { name: /^Reversing broll/ })).toBeNull();
     expect(screen.getByText('Reversing stopped')).toBeInTheDocument();
+  });
+
+  /** Starts Reverse on clip b, its copy coming when `finish` is called. */
+  async function startReverse() {
+    let finish: (copy: ReversedCopy) => void = () => {};
+    vi.mocked(reverser.make).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    useSelection.setState({ selectedId: 'b' });
+    renderWithProviders(
+      <>
+        <Timeline />
+        <Commands />
+        <ReversingPill />
+      </>,
+    );
+    act(() => reverse()!.run());
+    await frames();
+    return (copy: ReversedCopy) => act(async () => finish(copy));
+  }
+
+  it('throws away a copy that ends after another project opened, and never puts it in that project', async () => {
+    const finish = await startReverse();
+    const other = fixtureSnapshot();
+    other.project.id = 'other';
+    act(() => useProject.setState({ snapshot: other }));
+    // The pill went with the project.
+    expect(screen.queryByRole('status', { name: /^Reversing/ })).toBeNull();
+    await finish({ asset: copyAsset, fromUs: 0, toUs: 10 * S });
+    await frames();
+    expect(bridge.apply).not.toHaveBeenCalled();
+    expect(reverser.discard).toHaveBeenCalledWith(copyAsset.path);
+  });
+
+  it('throws away a copy whose clip went while it was made, and says so', async () => {
+    const finish = await startReverse();
+    const gone = fixtureSnapshot();
+    gone.project.timeline.main = gone.project.timeline.main.slice(0, 1);
+    act(() => useProject.setState({ snapshot: gone }));
+    await finish({ asset: copyAsset, fromUs: 0, toUs: 10 * S });
+    await frames();
+    expect(bridge.apply).not.toHaveBeenCalled();
+    expect(reverser.discard).toHaveBeenCalledWith(copyAsset.path);
+    expect(useToasts.getState().toasts.map((m) => m.text)).toContain(
+      'broll.mp4 changed while it was reversed, so it plays as before.',
+    );
+  });
+
+  it('throws away a copy the model refuses', async () => {
+    vi.mocked(bridge.apply).mockRejectedValue(new Error('That clip no longer exists.'));
+    const finish = await startReverse();
+    await finish({ asset: copyAsset, fromUs: 0, toUs: 10 * S });
+    await frames();
+    expect(bridge.apply).toHaveBeenCalled();
+    expect(reverser.discard).toHaveBeenCalledWith(copyAsset.path);
   });
 });

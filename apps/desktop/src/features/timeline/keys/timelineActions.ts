@@ -120,11 +120,12 @@ export function notInside(project: Project, id: string): string {
 }
 
 /**
- * One undo step; `said` is announced once it has gone in, then `then` runs. It holds the timeline's commit queue until
- * it lands, so a drag or another edit builds on it. Call it only at an edit's turn, inside `keyBurst.after` (every
- * caller does): it sends at once, so called elsewhere it wouldn't wait for a commit already on its way.
+ * One undo step; `said` is announced once it has gone in, then `then` runs (`failed` when it didn't go in). It holds the
+ * timeline's commit queue until it lands, so a drag or another edit builds on it. Call it only at an edit's turn, inside
+ * `keyBurst.after` (every caller does): it sends at once, so called elsewhere it wouldn't wait for a commit already on
+ * its way.
  */
-export function commit(label: Label, ops: Op[], said: string, then?: () => void) {
+export function commit(label: Label, ops: Op[], said: string, then?: () => void, failed?: () => void) {
   if (ops.length === 0) return;
   const end = beginCommit();
   const [id, params] = labelParts(label);
@@ -133,7 +134,7 @@ export function commit(label: Label, ops: Op[], said: string, then?: () => void)
     .getState()
     .apply(id, ops, params)
     .then((ok) => {
-      if (!ok) return;
+      if (!ok) return failed?.();
       announce(said);
       then?.();
     })
