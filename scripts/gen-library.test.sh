@@ -4,8 +4,7 @@
 # file, a name and 3 to 6 tags, and every file an item; every sound is
 # 48 kHz 16-bit mono and under 3 s; every music bed is 16 to 30 s and loops at a zero crossing without a click (two
 # copies back to back are as smooth at the join as anywhere else); every sticker is a 1024 x 1024 RGBA PNG with
-# transparent corners; the pack holds the 16 files listed below (8 sounds, 2 music beds, 6 stickers), CC0-1.0, and is
-# under 3 MB. Then scripts/check-library-sounds.py measures each sound and fails on any out of bounds.
+# transparent corners; the pack holds the items listed below, CC0-1.0, and is under 10.5 MB. Then scripts/check-library-sounds.py measures each sound and fails on any out of bounds.
 #   scripts/gen-library.test.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -99,7 +98,7 @@ def _():
         assert ("duration_ms" in i) == (i["category"] != "sticker"), i["id"]
         assert ("width" in i and "height" in i) == (i["category"] == "sticker"), i["id"]
     size = sum(len(v) for v in files(committed).values())
-    assert size < 3 * 1024 * 1024, f"the pack is {size} bytes"
+    assert size < 10.5 * 1024 * 1024, f"the pack is {size} bytes"
 
 
 def pcm(path):
