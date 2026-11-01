@@ -244,7 +244,7 @@ pub struct Estimate {
     pub problem: Option<String>,
 }
 
-/// What a clip's analysis found so far: what chat reads (Plan 4), in the clip's own times (words and turns in its sound
+/// What a clip's analysis found so far: what chat reads, in the clip's own times (words and turns in its sound
 /// time, the scene log in its file time). Assets on one file share it.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct AssetAnalysis {
