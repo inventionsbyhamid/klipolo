@@ -282,6 +282,26 @@ describe('export dialog', () => {
     expect(exporter.reveal).toHaveBeenCalledWith(1);
   });
 
+  it('Try again asks for the captions file again only when the 16:9 video is made again', async () => {
+    vi.mocked(exporter.plan).mockImplementation(withWords as typeof exporter.plan);
+    useExport.setState({ captionFile: { save: true, kind: 'vtt' } });
+    renderExport();
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    await screen.findByRole('switch', { name: 'Also save captions as a file', checked: true });
+    await userEvent.click(screen.getByRole('checkbox', { name: /^9:16/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Export 2 videos' }));
+    const both = { ...started, files: [landscape, portrait] } as ExportEvent;
+    emit(both, { type: 'failed', message: 'The export stopped.' });
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(exporter.start).toHaveBeenLastCalledWith(['landscape', 'portrait'], 'high', expect.any(Function), {
+      captionFile: 'vtt',
+    });
+    // The 16:9 video and its captions file are in place; only 9:16 is made again, with no captions file.
+    emit(both, { type: 'fileReady', index: 0, path: landscape.path }, { type: 'failed', message: 'The export stopped.' });
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(exporter.start).toHaveBeenLastCalledWith(['portrait'], 'high', expect.any(Function));
+  });
+
   it('a captions file that couldn’t be saved is said plainly, and the video is ready', async () => {
     await openAndExport();
     emit(
