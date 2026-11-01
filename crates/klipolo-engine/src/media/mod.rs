@@ -32,7 +32,7 @@ use std::path::Path;
 use klipolo_model::project::{Asset, AssetKind, Project};
 use klipolo_model::query::{clip_starts, run_in_clip};
 use klipolo_model::time::Us;
-use klipolo_model::timeline::{ClipSource, ItemContent};
+use klipolo_model::timeline::{Clip, ClipSource, ItemContent};
 
 pub use events::{MediaEvent, MediaKind, MediaSink};
 pub use store::{Hold, ThumbStore, Want};
@@ -70,7 +70,7 @@ pub fn wants(project: &Project, playhead_us: Us) -> Vec<Want> {
     };
     let main = &project.timeline.main;
     for (clip, start) in main.iter().zip(clip_starts(main)) {
-        // A freeze frame wants its frame throughout (a recording's: where its range starts, at the frame unless trimmed).
+        // A freeze frame wants its frame throughout, wherever its placeholder range was trimmed to.
         let speed = if clip.is_freeze() { 0.0 } else { clip.speed };
         match &clip.source {
             ClipSource::Asset { id } => {
@@ -82,12 +82,30 @@ pub fn wants(project: &Project, playhead_us: Us) -> Vec<Want> {
                 let Some(r) = project.recording(id) else {
                     continue;
                 };
+                // A freeze frame: read as a clip starting at its frame, and only the run that holds it.
+                let held;
+                let clip = match clip.freeze_at_us {
+                    Some(frame) => {
+                        held = Clip {
+                            source_in_us: frame,
+                            source_out_us: frame.saturating_add(clip.duration_us()),
+                            ..clip.clone()
+                        };
+                        &held
+                    }
+                    None => clip,
+                };
                 for source in r.sources.iter().filter(|s| s.role.is_video()) {
                     for run in &source.runs {
-                        if let Some(span) = run_in_clip(clip, start, source, run) {
-                            let length = span.end_us - span.start_us;
-                            add(&run.asset_id, span.start_us, length, span.run_in_us, speed);
-                        }
+                        let Some(span) = run_in_clip(clip, start, source, run) else {
+                            continue;
+                        };
+                        let length = match clip.is_freeze() {
+                            true if span.start_us != start => continue,
+                            true => clip.duration_us(),
+                            false => span.end_us - span.start_us,
+                        };
+                        add(&run.asset_id, span.start_us, length, span.run_in_us, speed);
                     }
                 }
             }
