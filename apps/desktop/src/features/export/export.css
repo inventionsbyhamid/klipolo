@@ -163,7 +163,7 @@
 [aria-checked="true"] > .ex-box {
   background: var(--color-paper);
   box-shadow: none;
-  color: var(--color-navy);
+  color: var(--color-on-paper);
 }
 
 .ex-shape {
@@ -378,7 +378,7 @@
   height: 48px;
   border-radius: 50%;
   background: var(--color-paper);
-  color: var(--color-navy);
+  color: var(--color-on-paper);
 }
 
 .ex-done-mark .ico {

@@ -209,3 +209,47 @@ describe("a two-sided sound's Centre switch", () => {
     ]);
   });
 });
+
+describe("a camera sound's Fill gaps switch", () => {
+  /** r1 with a camera whose file carries sound, kept muted as a camera's sound starts. */
+  function withCameraSound(fillsGaps?: true): Snapshot {
+    const snap = twoTakesSnapshot();
+    const v1 = snap.project.assets[0];
+    snap.project.assets.push({ ...v1, id: 'cam1', path: '/media/cam1', name: 'cam1.mp4', hasAudio: true });
+    snap.project.recordings[0].sources.push({
+      id: 'camera',
+      role: 'camera',
+      label: 'capture.source.camera',
+      runs: [{ assetId: 'cam1', offsetUs: 0, durationUs: 60_000_000, driftPpm: 0 }],
+      nudgeUs: 0,
+      mix: { volume: 1, muted: true, effects: [], ...(fillsGaps && { fillsGaps }) },
+    });
+    return snap;
+  }
+
+  it('is named after its sound and fills the gaps, for the whole recording, in one step', async () => {
+    const camera = row(card('c2', withCameraSound()), 'camera');
+    const fill = within(camera).getByRole('switch', { name: 'Camera sound: fill gaps' });
+    expect(fill).toHaveAttribute('aria-checked', 'false');
+    await userEvent.click(fill);
+    const { label, ops } = await lastApply();
+    expect(label).toBe('undo.source.fillGaps');
+    expect(ops).toEqual([
+      {
+        type: 'updateRecordingSource',
+        recordingId: 'r1',
+        sourceId: 'camera',
+        patch: { mix: { volume: 1, muted: true, effects: [], fillsGaps: true } },
+      },
+    ]);
+  });
+
+  it('turned off, leaves the gaps silent again', async () => {
+    const camera = row(card('c2', withCameraSound(true)), 'camera');
+    const fill = within(camera).getByRole('switch', { name: 'Camera sound: fill gaps' });
+    expect(fill).toHaveAttribute('aria-checked', 'true');
+    await userEvent.click(fill);
+    const { label } = await lastApply();
+    expect(label).toBe('undo.source.noFillGaps');
+  });
+});

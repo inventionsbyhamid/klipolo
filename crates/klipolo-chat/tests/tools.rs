@@ -10,8 +10,8 @@
 use std::collections::BTreeSet;
 
 use klipolo_chat::tools::{
-    BackgroundChoice, CHAT_CAPTION_STYLES, FunctionCall, Moment, PictureSize, Position, Problem,
-    TextPreset, ToolCall, tools,
+    BackgroundChoice, CHAT_CAPTION_STYLES, ClipRef, FunctionCall, Moment, PictureSize, Position,
+    Problem, TextPreset, ToolCall, TransitionKind, tools,
 };
 use klipolo_model::captions::styles::{BuiltinCaptionStyle, CaptionStyles};
 use klipolo_model::ops::Edge;
@@ -189,6 +189,9 @@ fn every_tool_schema_is_strict() {
             "removeFillers",
             "trimClip",
             "splitAt",
+            "setClip",
+            "setTransition",
+            "setBackground",
             "setFormat",
             "setCaptions",
             "fixCaptionWords",
@@ -201,7 +204,6 @@ fn every_tool_schema_is_strict() {
             "addImage",
             "makeSticker",
             "makeTitleCard",
-            "setBackground",
             "undo",
             "askUser",
             "cannotDo",
@@ -228,6 +230,16 @@ fn every_tool_schema_is_strict() {
         nullable,
         [
             "removeSilences.minPauseSec",
+            "setClip.framing",
+            "setClip.framingFormat",
+            "setClip.muted",
+            "setClip.speed",
+            "setClip.volume",
+            "setTransition.durationSec",
+            "setBackground.color",
+            "setBackground.colorEnd",
+            "setBackground.kind",
+            "setBackground.padding",
             "setCaptions.style",
             "addMusic.atSec",
             "addMusic.duck",
@@ -243,10 +255,6 @@ fn every_tool_schema_is_strict() {
             "makeSticker.position",
             "makeTitleCard.atSec",
             "makeTitleCard.durationSec",
-            "setBackground.color",
-            "setBackground.colorEnd",
-            "setBackground.kind",
-            "setBackground.padding",
         ]
     );
 }
@@ -418,6 +426,42 @@ fn parses_each_tool_from_spike_shaped_calls() {
             }],
         ),
         (
+            "slow the intro down to half speed and mute the b-roll",
+            vec![
+                SetClip {
+                    clip: ClipRef::One("c1".into()),
+                    speed: Some(0.5),
+                    volume: None,
+                    muted: None,
+                    framing: None,
+                },
+                SetClip {
+                    clip: ClipRef::One("c3".into()),
+                    speed: None,
+                    volume: None,
+                    muted: Some(true),
+                    framing: None,
+                },
+            ],
+        ),
+        (
+            "add a crossfade between the two clips",
+            vec![SetTransition {
+                after: ClipRef::One("c1".into()),
+                kind: Some(TransitionKind::Dissolve),
+                duration_us: None,
+            }],
+        ),
+        (
+            "put a blurred background behind it",
+            vec![SetBackground {
+                kind: Some(BackgroundChoice::Blur),
+                color: None,
+                color_end: None,
+                padding: None,
+            }],
+        ),
+        (
             "add lofi as background music, quieter when I talk",
             vec![AddMusic {
                 file: "lofi-beat.mp3".into(),
@@ -467,15 +511,6 @@ fn parses_each_tool_from_spike_shaped_calls() {
                 prompt: "Lisbon trams".into(),
                 at_us: None,
                 duration_us: None,
-            }],
-        ),
-        (
-            "put a blurred background behind it",
-            vec![SetBackground {
-                kind: Some(BackgroundChoice::Blur),
-                color: None,
-                color_end: None,
-                padding: None,
             }],
         ),
     ];
@@ -1242,6 +1277,7 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
     assert!(prompt_tokens <= 900, "prompt {prompt_tokens} tokens");
-    // 2,890 measured with setBackground (every value nullable and described).
-    assert!(tools_tokens <= 2_900, "tools {tools_tokens} tokens");
+    // 3,304 measured with the clip tools (setClip, setTransition: about 410 of them) and setBackground (about 215),
+    // every value nullable and described.
+    assert!(tools_tokens <= 3_310, "tools {tools_tokens} tokens");
 }

@@ -1,5 +1,5 @@
 //! The platform-neutral half of every OS's recorder shell (the macOS, Windows and Linux shells build on it): the
-//! 21, 26 and 30 build on it): the status item's title and its menu's lines, the person's words for native menus, the
+//! status item's title and its menu's lines, the person's words for native menus, the
 //! hotkeys registered only while armed, and the take's power activity held only while a take the person started runs.
 //!
 //! - **The title** (`status_title`): "● 12:34" while recording, "❚❚ 12:34" while paused, `h:mm:ss` from an hour.

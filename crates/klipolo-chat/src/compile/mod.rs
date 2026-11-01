@@ -1,10 +1,11 @@
-//! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's
-//! context was built from, out as edits.
+//! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's context was
+//! built from, out as edits.
 //! - Additions (`setFormat`, `setCaptions`, `setBackground`, `fixCaptionWords`, `splitAt`, a trim that makes a clip
-//!   longer, and the media: `addMusic`, `addSound`, `addText`, `addImage` and `makeTitleCard`'s title) are one
-//!   `Transaction` the app applies at once: one undo step. An addition is judged by what its part does, not by its
-//!   tool: one that takes something away (the model's own `removals`, as a format dropped with what was placed in it)
-//!   is compiled again with the removals and proposed.
+//!   longer, the clip tools `setClip` and `setTransition`, and the media: `addMusic`, `addSound`, `addText`, `addImage`
+//!   and `makeTitleCard`'s title) are one `Transaction` the app applies at once: one undo step. An addition is judged
+//!   by what its part does, not by its tool: one that takes something away (the model's own `removals`, as a format
+//!   dropped with what was placed in it) is compiled again with the removals and proposed: a speed that leaves a
+//!   transition no room, or a transition taken away.
 //! - Removals (`cutRange`, `keepOnly`, `removeSilences`, `removeFillers`, a trim that makes a clip shorter) are one
 //!   `Proposal`: a `Transaction` for the project as the additions leave it, judged by the model's own review (what it
 //!   takes away, on the timeline), applied as one undo step when the person says so.
@@ -33,10 +34,13 @@
 //!
 //! Undo labels are message ids with values, worded by the UI: `chat.<tool>` (`chat.cutRange {startUs, endUs}`), and
 //! `chat.andMore {first, more}` for a step of several calls. Splitting by concern: `additions`, `removals`, `trim`
-//! (both), `media` (the library's music, sounds, words and pictures, and the pictures to draw), `map`.
+//! (both), `media` (the library's music, sounds, words and pictures, and the pictures to draw), `clips` (a clip's
+//! speed, volume, mute and framing, and the transitions at its cuts), `background` (what shows behind the video),
+//! `map`.
 
 mod additions;
 mod background;
+mod clips;
 mod map;
 mod media;
 mod removals;
@@ -60,6 +64,7 @@ use crate::evidence::{Evidence, Unfounded};
 use crate::library::Library;
 use crate::sanitize;
 use crate::tools::{Moment, PictureSize, Position, ToolCall};
+pub use clips::{NO_ROOM, NO_ROOM_ANYWHERE, NO_TRANSITIONS};
 use map::Map;
 pub use media::{sticker_ops, sticker_placement};
 use trim::Trim;
@@ -146,6 +151,16 @@ pub struct Compiled {
     pub undo: bool,
     /// The additions that went through but changed nothing (a format the video already has), by call index.
     pub unchanged: Vec<usize>,
+    /// Klipolo's own sentences on what the additions did beyond what was asked, for the reply after what is said of
+    /// them: a new speed that shortens a transition ("A transition is shortened.", as the clip card says it).
+    pub notes: Vec<String>,
+    /// Klipolo's own sentences on why a change the person asked for waits in `proposal`: a new speed that leaves a
+    /// transition no room.
+    pub waits: Vec<String>,
+    /// How many of `additions`' ops, at its end, fit the music to the video's new end, as every edit of the person's
+    /// is fitted (`media::music::with_music_refit`): what the edits do to the music, not the edits themselves. Another
+    /// app's batch is judged and committed without them, its host fitting the music as it does for the person.
+    pub music_refit: usize,
 }
 
 /// Removals for the person to approve.
@@ -300,6 +315,8 @@ struct Phase {
     labels: Vec<(usize, CodedError)>,
     /// The calls whose edits held no ops: they went through and changed nothing.
     unchanged: Vec<usize>,
+    /// How many of `ops`, at their end, are the music's refit (`refit_music`).
+    refit_ops: usize,
 }
 
 impl Phase {
@@ -310,6 +327,7 @@ impl Phase {
             ops: Vec::new(),
             labels: Vec::new(),
             unchanged: Vec::new(),
+            refit_ops: 0,
         }
     }
 
@@ -346,13 +364,6 @@ impl Phase {
         self.done = done;
         self.ops.extend(tried.edit.ops);
         self.labels.push((call, tried.edit.label));
-    }
-
-    /// `try_edit`, then `keep`.
-    fn add(&mut self, edit: Edit, call: usize) -> Result<(), ModelError> {
-        let tried = self.try_edit(edit)?;
-        self.keep(tried, call);
-        Ok(())
     }
 
     /// The phase's ops as one chat transaction, labelled for the first of its calls in the answer (the order the
@@ -453,6 +464,8 @@ impl Compiler<'_> {
         let mut format_proposed = false;
         // The pictures asked for so far: past `MAX_PICTURES`, the rest are refused before anything is drawn.
         let mut pictures = 0;
+        // Klipolo's notes on what the additions did, by call index (`Compiled::notes`).
+        let mut notes: Vec<(usize, String)> = Vec::new();
         for (i, call) in calls.iter().enumerate() {
             if out.undo && is_edit(call) {
                 let reason = format!(
@@ -485,6 +498,8 @@ impl Compiler<'_> {
                 waiting.push((i, Removal::Moved(call)));
                 continue;
             }
+            // `setTransition`'s sentence on the cuts with no room, said once its edit is in.
+            let mut skipped: Option<String> = None;
             let addition = match call {
                 ToolCall::Undo => continue,
                 ToolCall::AskUser { question } => {
@@ -550,8 +565,22 @@ impl Compiler<'_> {
                 | ToolCall::SetFormat { .. }
                 | ToolCall::SetCaptions { .. }
                 | ToolCall::SetBackground { .. }
-                | ToolCall::FixCaptionWords { .. } => {
+                | ToolCall::FixCaptionWords { .. }
+                | ToolCall::SetClip { .. } => {
                     (self.addition(&adding.work, call), Removal::Moved(call))
+                }
+                ToolCall::SetTransition {
+                    after,
+                    kind,
+                    duration_us,
+                } => {
+                    let edit =
+                        clips::set_transition(self, &adding.work, after, *kind, *duration_us);
+                    let edit = edit.map(|(edit, said)| {
+                        skipped = said;
+                        edit
+                    });
+                    (edit, Removal::Moved(call))
                 }
             };
             let (edit, if_it_removes) = addition;
@@ -564,7 +593,18 @@ impl Compiler<'_> {
                     format_proposed |= matches!(call, ToolCall::SetFormat { .. });
                     waiting.push((i, if_it_removes));
                 }
-                Ok(tried) => adding.keep(tried, i),
+                Ok(mut tried) => {
+                    // A new speed says what it did to transitions, as the clip card does.
+                    if matches!(call, ToolCall::SetClip { .. })
+                        && let Some(refit) = clips::note_refit(&adding.done, &mut tried)
+                    {
+                        notes.push((i, refit.said()));
+                    }
+                    if let Some(said) = skipped.take().filter(|_| tried.after.is_some()) {
+                        notes.push((i, said));
+                    }
+                    adding.keep(tried, i);
+                }
                 Err(r) => refuse(&mut out, i, r),
             }
         }
@@ -640,8 +680,10 @@ impl Compiler<'_> {
         out.jobs = jobs.into_iter().map(|(_, job)| job).collect();
         // The removals in call order, on top.
         let mut removing = Phase::new(with_additions);
+        let mut waits: Vec<(usize, String)> = Vec::new();
         for (i, removal) in waiting {
             let work = &removing.work;
+            let speed = matches!(removal, Removal::Moved(ToolCall::SetClip { .. }));
             let (call_name, edit) = match removal {
                 Removal::Call(call) => (call.name(), removals::compile(self, work, call)),
                 Removal::Shorter(t) => ("trimClip", trim::shorten(self, work, &t)),
@@ -649,7 +691,17 @@ impl Compiler<'_> {
                 Removal::Longer(t) => ("trimClip", trim::lengthen(self, work, &t)),
             };
             let added = edit.and_then(|edit| {
-                (removing.add(edit, i)).map_err(|e| to_model(format!("{call_name}: {e}")))
+                let mut tried =
+                    (removing.try_edit(edit)).map_err(|e| to_model(format!("{call_name}: {e}")))?;
+                // A speed that leaves a transition no room waits here, and says so; its label says what Apply does.
+                if speed
+                    && let Some(refit) = clips::note_refit(&removing.done, &mut tried)
+                    && refit.removed > 0
+                {
+                    waits.push((i, refit.waits()));
+                }
+                removing.keep(tried, i);
+                Ok(())
             });
             match added {
                 Ok(()) => out.proposed_calls.push(i),
@@ -660,8 +712,14 @@ impl Compiler<'_> {
         removing.refit_music(&adding.done);
 
         out.additions = adding.transaction();
+        out.music_refit = if out.additions.is_some() {
+            adding.refit_ops
+        } else {
+            0
+        };
         out.unchanged = adding.unchanged.clone();
         out.unchanged.sort_unstable();
+        notes.sort_by_key(|(i, _)| *i);
         match removing.transaction() {
             Some(tx) => {
                 let review = tx.review_applied(&adding.done, removing.done);
@@ -674,8 +732,13 @@ impl Compiler<'_> {
                 });
             }
             // Removals whose edits held no ops propose nothing.
-            None => out.proposed_calls.clear(),
+            None => {
+                out.proposed_calls.clear();
+                waits.clear();
+            }
         }
+        out.notes = notes.into_iter().map(|(_, said)| said).collect();
+        out.waits = waits.into_iter().map(|(_, said)| said).collect();
         out.refusals.sort_by_key(|r| r.call_index);
         out
     }
@@ -723,6 +786,28 @@ impl Compiler<'_> {
                 at_us,
                 duration_us,
             } => media::add_image(self, work, file, (*size, *position), (*at_us, *duration_us)),
+            ToolCall::SetClip {
+                clip,
+                speed,
+                volume,
+                muted,
+                framing,
+            } => {
+                let change = clips::Change {
+                    speed: *speed,
+                    volume: *volume,
+                    muted: *muted,
+                    framing: *framing,
+                };
+                clips::set_clip(self, work, clip, &change)
+            }
+            ToolCall::SetTransition {
+                after,
+                kind,
+                duration_us,
+            } => {
+                clips::set_transition(self, work, after, *kind, *duration_us).map(|(edit, _)| edit)
+            }
             other => Err(to_model(format!("{}: not an addition.", other.name()))),
         }
     }
@@ -863,6 +948,7 @@ impl Phase {
         }
         self.work = work;
         self.done = done;
+        self.refit_ops = refit.len();
         self.ops.extend(refit);
     }
 }

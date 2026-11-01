@@ -1,6 +1,6 @@
 //! Health while recording: the rules that keep a take from looking fine while a source is silent,
-//! stalled or dropping frames. Taxonomy and cadence from Cap's `PipelineHealthEvent` (design only); thresholds are the
-//! spec's. Pure: every time is an argument, so they are tested without threads.
+//! stalled or dropping frames. Taxonomy and cadence from Cap's `PipelineHealthEvent` (design only); thresholds are
+//! Klipolo's own. Pure: every time is an argument, so they are tested without threads.
 //!
 //! - **`MicRules`**, fed every mic block. A mic's silence has four patterns, each with its own note:
 //!   - exact zeros for 2 s (a muted or blocked mic: macOS and the hardware mute deliver zeros): `micZeros` at once;

@@ -41,6 +41,9 @@ describe('undo labels as message ids', () => {
       'removeFillers',
       'trimClip',
       'splitAt',
+      'setClip',
+      'setClip.note',
+      'setTransition',
       'setFormat',
       'setCaptions',
       'setBackground',
@@ -63,6 +66,45 @@ describe('undo labels as message ids', () => {
     expect(historyAction('undo', 'chat.setBackground', { kind: 'same', padding: 0.1 })).toBe(
       'Undo change the background',
     );
+  });
+
+  it("words chat's clip and transition changes as the cards' own entries, with a speed's note", () => {
+    const clip = (change: string) => historyAction('undo', 'chat.setClip', { clip: 'c2', change, noun: 'clip' });
+    expect(['speed', 'volume', 'mute', 'unmute', 'fit', 'fill', 'several'].map(clip)).toEqual([
+      'Undo change speed',
+      'Undo change volume',
+      'Undo mute clip',
+      'Undo unmute clip',
+      'Undo fit video',
+      'Undo fill video',
+      'Undo change clip',
+    ]);
+    const note = (removed: number, shortened: number) =>
+      historyAction('undo', 'chat.setClip.note', {
+        clip: 'c2',
+        change: 'speed',
+        note: { code: 'timeline.refit', params: { removed, shortened } },
+      });
+    // A song's and a video layer's, as their cards name them.
+    const layer = (change: string, noun: string) => historyAction('undo', 'chat.setClip', { clip: 'm1', change, noun });
+    expect([layer('mute', 'sound'), layer('unmute', 'video'), layer('volume', 'sound'), layer('several', 'video')]).toEqual([
+      'Undo mute sound',
+      'Undo unmute video layer',
+      'Undo change volume',
+      'Undo change video layer',
+    ]);
+    expect(note(1, 0)).toBe('Undo change speed. A transition is removed.');
+    expect(note(0, 2)).toBe('Undo change speed. 2 transitions are shortened.');
+    expect(note(2, 1)).toBe('Undo change speed. 2 transitions are removed and one is shortened.');
+    const cut = (change: string, count: number) =>
+      historyAction('undo', 'chat.setTransition', { after: 'all', change, count });
+    expect([cut('add', 1), cut('add', 3), cut('change', 1), cut('length', 1), cut('remove', 2)]).toEqual([
+      'Undo add transition',
+      'Undo add 3 transitions',
+      'Undo change transition',
+      'Undo change transition length',
+      'Undo remove 2 transitions',
+    ]);
   });
 
   it('names built-in contributions from their id, never their English name', () => {

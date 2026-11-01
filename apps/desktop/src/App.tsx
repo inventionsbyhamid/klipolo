@@ -22,6 +22,7 @@ import { errorMessage } from './lib/errors';
 import { PlayerBar } from './player/PlayerBar';
 import { Preview } from './preview/Preview';
 import { SettingsDialog } from './settings/SettingsDialog';
+import { useThemeSync } from './settings/useThemeSync';
 import {
   clearAnalysisOnProjectSwitch,
   followAnalysis,
@@ -132,6 +133,8 @@ export function App() {
       .then(reopenWhereLeft)
       .finally(() => setAsked(true));
   }, []);
+  // Settings' Appearance on the page and the window, from before the first paint.
+  useThemeSync();
   useEngineSession();
   useRecordShortcut();
   const open = useProject((s) => s.snapshot !== null);

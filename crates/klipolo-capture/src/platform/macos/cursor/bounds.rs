@@ -7,7 +7,7 @@
 //! process id: never a title key (the consent scan bans them in the cursor files).
 //!
 //! While the recorded window is dragged, positions map against bounds up to 250 ms old: a sawtooth as large as the
-//! drag's move in that time (a measurement weighs the cost of refreshing faster, and a smoke run the error).
+//! drag's move in that time (the cursor's benches measure the cost of refreshing faster, the screen smoke the error).
 
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicU64, Ordering, fence};
