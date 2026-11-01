@@ -103,10 +103,7 @@ async fn common_designs_fit_normal_at_1080p() {
         masked.targets < HD_LAYER,
         "its group, its mask, the mask's pass: {masked:?}"
     );
-    assert_eq!(
-        masked.partner, 0,
-        "masked, laid back as a quad: {masked:?}"
-    );
+    assert_eq!(masked.partner, 0, "masked, laid back as a quad: {masked:?}");
     assert!(
         normal(masked.split(HD_LAYER)),
         "a masked group is Normal: {masked:?}"
