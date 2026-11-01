@@ -1,0 +1,86 @@
+import { useLingui } from '@lingui/react/macro';
+import { useEffect, useRef, type MouseEvent, type PointerEvent } from 'react';
+import { Icon } from '../../layout/Icon';
+import { useProject } from '../../state/project';
+import { beginMediaDrag } from '../timeline/drag/mediaDrag';
+import { DRAG_SLOP_PX } from '../timeline/drag/session';
+import { addClip, toTheEnd } from './addMedia';
+import { squareTileStyle, useClipPicture } from './clipPicture';
+import { loadMarks, marked, markUsed, useMarks } from './marks';
+import { shelves, useNearView, type ShelfClip } from './shelves';
+
+/** On a Mac, Control-click is a right-click: it doesn't start a drag. */
+const MAC = typeof navigator !== 'undefined' && /^Mac/.test(navigator.platform);
+
+/**
+ * One clip's thumbnail on the folded library's rail: a button named by the clip (its tooltip too), its first frame
+ * over the clip art (which shows until the frame is here). A press adds it to the end, as its row's "+" does; pressed
+ * and moved, it drags onto the timeline as its row does (a whole recording onto the Video lane only), and the press
+ * that let go of a drag adds nothing more.
+ */
+function RailClip({ clip }: { clip: ShelfClip }) {
+  const art = useRef<HTMLSpanElement>(null);
+  const tile = useClipPicture(clip.asset.path, useNearView(art));
+  /** Where the press began, so the click that ends a drag adds nothing. */
+  const pressedAt = useRef<{ x: number; y: number } | null>(null);
+  const add = (target: Parameters<typeof addClip>[1]) => addClip(clip.source, target, () => markUsed(clip.key));
+  const onPointerDown = (e: PointerEvent<HTMLButtonElement>) => {
+    pressedAt.current = null;
+    if (e.button !== 0 || (MAC && e.ctrlKey)) return;
+    pressedAt.current = { x: e.clientX, y: e.clientY };
+    // No text selection and no native image drag; the button keeps the pointer wherever it goes.
+    e.preventDefault();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    beginMediaDrag(e, clip.asset, add, clip.source.type === 'recording' ? 'main' : 'any');
+  };
+  const onClick = (e: MouseEvent<HTMLButtonElement>) => {
+    const from = pressedAt.current;
+    pressedAt.current = null;
+    // From the keyboard (no pointer), or a press that never became a drag.
+    const dragged = e.detail > 0 && from !== null && Math.hypot(e.clientX - from.x, e.clientY - from.y) >= DRAG_SLOP_PX;
+    if (!dragged) add(toTheEnd);
+  };
+  return (
+    <li>
+      <button
+        type="button"
+        // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+        tabIndex={0}
+        className="rail-clip"
+        aria-label={clip.name}
+        title={clip.name}
+        data-recording-id={clip.source.type === 'recording' ? clip.source.id : undefined}
+        onPointerDown={onPointerDown}
+        onClick={onClick}
+        onDragStart={(e) => e.preventDefault()}
+      >
+        <span ref={art} className="rail-art" aria-hidden>
+          <Icon name="film" />
+          {tile && <span className="rail-tile" style={squareTileStyle(tile)} />}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+/**
+ * The folded library's clips (a 72 px rail of clip thumbnails), in the Clips tab's order: a recording as one
+ * (its main footage's picture), then the videos, favorites and the recently used first. Nothing when the project has
+ * no clips.
+ */
+export function ClipRail() {
+  const { t } = useLingui();
+  const project = useProject((s) => s.snapshot?.project);
+  const marks = useMarks((s) => s.marks);
+  useEffect(loadMarks, []);
+  if (!project) return null;
+  const clips = marked(shelves(project).clips, (clip) => clip.key, marks);
+  if (clips.length === 0) return null;
+  return (
+    <ul className="rail-clips" aria-label={t({ id: 'library.clips', message: 'Your clips' })}>
+      {clips.map((clip) => (
+        <RailClip key={`${clip.source.type}:${clip.source.id}`} clip={clip} />
+      ))}
+    </ul>
+  );
+}

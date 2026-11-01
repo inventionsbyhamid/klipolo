@@ -172,18 +172,91 @@
   display: none;
 }
 
-/* Folded (Control Command S), the library is its rail: Open library and Add files. Wins over the Captions view's
-   wider panel. */
+/* Folded (Control Command S), the library is its rail: Open library and Add files, then the clips' thumbnails (design
+   8). Wins over the Captions view's wider panel. */
 .workspace:has(.library.panel[data-collapsed="true"]) {
   --library-w: var(--library-rail);
 }
 
 .library-rail {
   display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+  padding-top: var(--space-5);
+}
+
+.rail-actions {
+  display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-4);
-  padding: var(--space-5) 0;
+  padding-bottom: var(--space-4);
+}
+
+/* The thumbnails scroll under the actions; a hairline parts them. */
+.rail-clips {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  justify-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: var(--space-4) 0 var(--space-5);
+  overflow-y: auto;
+  border-top: 1px solid var(--color-line);
+  list-style: none;
+  scrollbar-width: none;
+}
+
+/* A 56 px target around a 48 px picture, as a row: hover and press wash it, and it grabs like one. */
+.rail-clip {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.rail-clip:hover {
+  background: var(--color-bay-hover);
+}
+
+.rail-clip:active {
+  background: var(--color-bay-press);
+}
+
+/* Its picture over the clip art (the art shows until the picture is here, or where there is none). */
+.rail-art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--color-clip-deep);
+  color: var(--color-clip-2);
+}
+
+.rail-art .ico {
+  width: 22px;
+  height: 22px;
+}
+
+.rail-tile {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  background-repeat: no-repeat;
+  transform: translate(-50%, -50%);
 }
 
 .library .ico.is-mirrored {

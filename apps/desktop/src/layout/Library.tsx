@@ -4,6 +4,7 @@ import { SearchField } from '../design/SearchField';
 import { SpriteIcon } from '../design/SpriteIcon';
 import { CaptionsPanel } from '../features/captions/CaptionsPanel';
 import { LooksPanel } from '../features/looks/LooksPanel';
+import { ClipRail } from '../features/media/ClipRail';
 import { MediaList } from '../features/media/MediaList';
 import { useImportMedia } from '../features/media/useImportMedia';
 import { useCaptionsView, type LeftView } from '../state/captionsView';
@@ -19,13 +20,14 @@ export const LIBRARY_BODY_ID = 'library-body';
 
 /**
  * The library panel: the Library, Captions and Looks view tabs, Add files, Record your screen (the
- * Record dialog, as from the start screen and Shift Command R), a search over the tab
- * shown, and the filter pills Clips, Music, Sounds and Images over the files of each (yours first, then Klipolo's
- * pack). The search keeps its words from tab to tab. The pills scroll sideways in a narrow panel, with a fade at the
- * right edge. The arrow keys move between them. Its Captions tab shows the Captions view in its place,
- * and its Looks tab the looks (`LooksPanel`). Its head's Collapse library, Command B (or Control Command S), or a
- * double click on its edge folds it to its rail (`useLibraryPanel`), whose Open library (or the edge) opens it again;
- * folded, it stays mounted (`hidden` and `inert`), and a fold with the keyboard inside puts it on the rail.
+ * Record dialog, as from the start screen and Shift Command R), a search over the tab shown, and the filter pills
+ * Clips, Music, Sounds and Images over the files of each (yours first, then Klipolo's pack). The search keeps its words
+ * from tab to tab. The pills scroll sideways in a narrow panel, with a fade at the right edge. The arrow keys move
+ * between them. Its Captions tab shows the Captions view in its place, and its Looks tab the looks
+ * (`LooksPanel`). Its head's Collapse library, Command B (or Control Command S), or a double click on its edge folds it
+ * to its rail (`useLibraryPanel`): Open library (or the edge) opens it again, Add files is kept, and the clips'
+ * thumbnails do what their rows do (`ClipRail`). Folded, it stays mounted (`hidden` and `inert`), and a fold with the
+ * keyboard inside puts it on the rail.
  */
 export function Library() {
   const { t } = useLingui();
@@ -95,30 +97,33 @@ export function Library() {
       />
       {collapsed && (
         <div className="library-rail">
-          <button
-            ref={rail}
-            type="button"
-            className="icon-btn"
-            aria-label={t({ id: 'library.open', message: 'Open library' })}
-            title={t({ id: 'library.open.tip', message: 'Open library (Command B)' })}
-            aria-expanded={false}
-            aria-controls={LIBRARY_BODY_ID}
-            onClick={() => {
-              wantFocus.current = true;
-              useLibraryPanel.getState().setCollapsed(false);
-            }}
-          >
-            <SpriteIcon name="expand-panel" className="is-mirrored" />
-          </button>
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label={t({ id: 'library.addFiles', message: 'Add files' })}
-            title={t({ id: 'library.addFiles.tip', message: 'Add files (Command O)' })}
-            onClick={() => void importMedia()}
-          >
-            <Icon name="plus" />
-          </button>
+          <div className="rail-actions">
+            <button
+              ref={rail}
+              type="button"
+              className="icon-btn"
+              aria-label={t({ id: 'library.open', message: 'Open library' })}
+              title={t({ id: 'library.open.tip', message: 'Open library (Command B)' })}
+              aria-expanded={false}
+              aria-controls={LIBRARY_BODY_ID}
+              onClick={() => {
+                wantFocus.current = true;
+                useLibraryPanel.getState().setCollapsed(false);
+              }}
+            >
+              <SpriteIcon name="expand-panel" className="is-mirrored" />
+            </button>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={t({ id: 'library.addFiles', message: 'Add files' })}
+              title={t({ id: 'library.addFiles.tip', message: 'Add files (Command O)' })}
+              onClick={() => void importMedia()}
+            >
+              <Icon name="plus" />
+            </button>
+          </div>
+          <ClipRail />
         </div>
       )}
       <div
