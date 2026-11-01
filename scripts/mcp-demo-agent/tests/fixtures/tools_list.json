@@ -615,6 +615,350 @@
       "annotations": {
         "readOnlyHint": false
       },
+      "description": "Show a recording's camera as a bubble over the screen or split under the screen, or hide it.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "clips": {
+            "description": "Null for every clip with a camera.",
+            "items": {
+              "description": "A clip ref (c2) or a run (c3-c41).",
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "format": {
+            "description": "Only this format. Null for every format, but splitBottom is for portrait.",
+            "enum": [
+              "landscape",
+              "portrait",
+              "square",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mode": {
+            "description": "splitBottom puts it under the screen, for vertical.",
+            "enum": [
+              "bubble",
+              "splitBottom",
+              "hidden"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "clips",
+          "mode",
+          "format"
+        ],
+        "type": "object"
+      },
+      "name": "setCameraMode"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Move, resize or restyle a recording's camera bubble. Null leaves a setting as it is.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "border": {
+            "description": "True shows a border.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "clips": {
+            "description": "Null for every clip with a camera.",
+            "items": {
+              "description": "A clip ref (c2) or a run (c3-c41).",
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "format": {
+            "description": "Place and size it in this format only. Null for every format.",
+            "enum": [
+              "landscape",
+              "portrait",
+              "square",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mirror": {
+            "description": "True shows it as in a mirror.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "position": {
+            "description": "Where in the frame.",
+            "enum": [
+              "topLeft",
+              "topCenter",
+              "topRight",
+              "middleLeft",
+              "center",
+              "middleRight",
+              "bottomLeft",
+              "bottomCenter",
+              "bottomRight",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "shape": {
+            "description": "Its shape.",
+            "enum": [
+              "circle",
+              "rounded",
+              "square",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "size": {
+            "description": "medium is the usual size.",
+            "enum": [
+              "small",
+              "medium",
+              "large",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sizeStep": {
+            "description": "One step bigger or smaller than now.",
+            "enum": [
+              "bigger",
+              "smaller",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "clips",
+          "position",
+          "size",
+          "sizeStep",
+          "shape",
+          "border",
+          "mirror",
+          "format"
+        ],
+        "type": "object"
+      },
+      "name": "adjustCamera"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Make a recording's camera a layer of its own, to move, trim and cut apart from the screen.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "clips": {
+            "description": "Null for every clip with a camera.",
+            "items": {
+              "description": "A clip ref (c2) or a run (c3-c41).",
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "clips"
+        ],
+        "type": "object"
+      },
+      "name": "detachCamera"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Mute or unmute one recorded sound, everywhere or in some clips.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "clips": {
+            "description": "Null for every clip with that sound.",
+            "items": {
+              "description": "A clip ref (c2) or a run (c3-c41).",
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "muted": {
+            "description": "False unmutes it.",
+            "type": "boolean"
+          },
+          "source": {
+            "description": "computerSound is the computer's sound; videoSound the camera's own sound.",
+            "enum": [
+              "mic",
+              "computerSound",
+              "gameSound",
+              "videoSound"
+            ],
+            "type": "string"
+          },
+          "which": {
+            "description": "2 for mic 2, when a recording has several. Null for all.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "source",
+          "muted",
+          "which",
+          "clips"
+        ],
+        "type": "object"
+      },
+      "name": "muteSource"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Make one recorded sound louder or quieter, everywhere or in some clips.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "clips": {
+            "description": "Null for every clip with that sound.",
+            "items": {
+              "description": "A clip ref (c2) or a run (c3-c41).",
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "source": {
+            "description": "computerSound is the computer's sound; videoSound the camera's own sound.",
+            "enum": [
+              "mic",
+              "computerSound",
+              "gameSound",
+              "videoSound"
+            ],
+            "type": "string"
+          },
+          "volume": {
+            "description": "Percent of how it was recorded, 0 to 200. 100 is as recorded, 50 half as loud.",
+            "type": "number"
+          },
+          "which": {
+            "description": "2 for mic 2, when a recording has several. Null for all.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "source",
+          "volume",
+          "which",
+          "clips"
+        ],
+        "type": "object"
+      },
+      "name": "setSourceVolume"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Put one recorded sound on a track of its own, to trim and cut apart from the video.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "clips": {
+            "description": "Null for every clip with that sound.",
+            "items": {
+              "description": "A clip ref (c2) or a run (c3-c41).",
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "source": {
+            "description": "computerSound is the computer's sound; videoSound the camera's own sound.",
+            "enum": [
+              "mic",
+              "computerSound",
+              "gameSound",
+              "videoSound"
+            ],
+            "type": "string"
+          },
+          "which": {
+            "description": "2 for mic 2, when a recording has several. Null for all.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "source",
+          "which",
+          "clips"
+        ],
+        "type": "object"
+      },
+      "name": "separateSound"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
       "description": "Undo the last change.",
       "inputSchema": {
         "additionalProperties": false,
