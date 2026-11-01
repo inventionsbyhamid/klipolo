@@ -18,10 +18,11 @@
 //! Adding a tool is one `ToolCall` variant and one entry in `TOOLS`, where its name, description, parameters and reader
 //! sit together; the tests check every schema is strict and every reader reads the fields its schema lists. Splitting
 //! by concern: `schema` (the pieces of a schema, and the words a tool takes), `args` (a call's arguments read field by
-//! field), `error` (why a call couldn't be read), `media` (the media tools and their words), `recorded` (a recording's
-//! camera and recorded sounds, and their words).
+//! field), `error` (why a call couldn't be read), `media` (the media tools and their words), `clips` (the clip and
+//! transition tools and their words), `recorded` (a recording's camera and recorded sounds, and their words).
 
 mod args;
+pub mod clips;
 mod error;
 pub mod media;
 pub mod recorded;
@@ -33,11 +34,12 @@ use klipolo_model::captions::styles::BuiltinCaptionStyle;
 use klipolo_model::ops::Edge;
 use klipolo_model::project::FormatKind;
 use klipolo_model::time::{RangeUs, Us};
-use klipolo_model::timeline::CameraMode;
+use klipolo_model::timeline::{CameraMode, FramingMode};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use args::{Args, kind};
+pub use clips::{ClipRef, TransitionKind};
 pub use error::{Problem, ToolError};
 pub use media::{PictureSize, Position, TextPreset};
 pub use recorded::{BubbleChange, BubbleSize, SizeStep, Sound};
@@ -82,6 +84,25 @@ pub enum ToolCall {
     TrimClip { clip: String, edge: Edge, to_us: Us },
     /// Split the clip playing at `at_us` in two.
     SplitAt { at_us: Us },
+    /// Set the clip `clip` names (or every clip) to play at `speed` (one of `clip_settings::SPEEDS`), at `volume`
+    /// (`clip_settings::is_volume`), muted or not, and framed `framing.0` in the format `framing.1` (None: every
+    /// format the video has); None leaves each as it is, and at least one is set. Speed, volume and mute are the clip
+    /// card's; it is an addition, unless the new speed leaves a transition no room.
+    SetClip {
+        clip: ClipRef,
+        speed: Option<f64>,
+        volume: Option<f64>,
+        muted: Option<bool>,
+        framing: Option<(FramingMode, Option<FormatKind>)>,
+    },
+    /// Give the cut after the clip `after` names (or every cut) a transition of `kind` lasting `duration_us` (within
+    /// `clips::TRANSITION_SECS`; None: the default for a new one, its own length for one already there), or take it
+    /// away (`kind` None, with no length). Taking one away is a removal.
+    SetTransition {
+        after: ClipRef,
+        kind: Option<TransitionKind>,
+        duration_us: Option<Us>,
+    },
     /// Make `format` the main format, keeping the others too when `keep_others`.
     SetFormat {
         format: FormatKind,
@@ -228,6 +249,8 @@ impl ToolCall {
             ToolCall::RemoveFillers => "removeFillers",
             ToolCall::TrimClip { .. } => "trimClip",
             ToolCall::SplitAt { .. } => "splitAt",
+            ToolCall::SetClip { .. } => "setClip",
+            ToolCall::SetTransition { .. } => "setTransition",
             ToolCall::SetFormat { .. } => "setFormat",
             ToolCall::SetCaptions { .. } => "setCaptions",
             ToolCall::FixCaptionWords { .. } => "fixCaptionWords",
@@ -252,10 +275,16 @@ impl ToolCall {
         }
     }
 
+    /// Whether the call names a song or a video layer by its ref (`m1`, `v1`), which holds only while the layers stay
+    /// as the context named them (`context::layers_key`).
+    pub fn names_layer(&self) -> bool {
+        matches!(self, ToolCall::SetClip { clip: ClipRef::One(r), .. } if r.starts_with(['m', 'v']))
+    }
+
     /// Whether the call names a timeline time or a clip ref, which hold only while the main track's clips stay where
-    /// the context put them (`context::timeline_key`): a range, a split, a trim, a moment, a media tool's start when it
-    /// gives one (None is the playhead), or a recording tool's clips when it names them (None is every clip). Every
-    /// tool is listed, so a new one must say.
+    /// the context put them (`context::timeline_key`): a range, a split, a trim, a moment, a clip tool's ref (not
+    /// `all`), a media tool's start when it gives one (None is the playhead), or a recording tool's clips when it names
+    /// them (None is every clip). Every tool is listed, so a new one must say.
     pub fn names_timeline(&self) -> bool {
         match self {
             ToolCall::CutRange { .. }
@@ -264,6 +293,8 @@ impl ToolCall {
             | ToolCall::SplitAt { .. }
             | ToolCall::FindMoments { .. }
             | ToolCall::AddSound { .. } => true,
+            ToolCall::SetClip { clip: target, .. }
+            | ToolCall::SetTransition { after: target, .. } => *target != ClipRef::All,
             ToolCall::AddMusic { at_us, .. }
             | ToolCall::AddText { at_us, .. }
             | ToolCall::AddImage { at_us, .. }
@@ -313,7 +344,7 @@ pub const CHAT_CAPTION_STYLES: [(BuiltinCaptionStyle, &str); 5] = [
     (BuiltinCaptionStyle::Boxed, "sentences on rounded boxes"),
 ];
 
-/// The formats `setFormat` offers, and the recording tools' `format`.
+/// The formats `setFormat` offers, `setClip`'s framing names, and the recording tools' `format`.
 const FORMATS: [FormatKind; 3] = [
     FormatKind::Landscape,
     FormatKind::Portrait,
@@ -453,6 +484,8 @@ const TOOLS: &[Tool] = &[
             })
         },
     },
+    clips::SET_CLIP,
+    clips::SET_TRANSITION,
     Tool {
         name: "setFormat",
         description: "Set the video's shape. It becomes the main format.",

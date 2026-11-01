@@ -22,7 +22,7 @@ fn the_writer_stays_within_its_disk_budget() {
     let smooth = cursor_bytes_per_hour(continuous(250.0, 60.0));
     let smooth_typical = cursor_bytes_per_hour(typical_mix(60.0));
     // Real pointer motion (accelerating flicks on whole and half points) thins only where it slows: never still for the
-    // worst case, which stays under the 40 MB an hour (the format's floor, every move written, is about 41.9
+    // worst case, which stays under the 40 MB an hour (the format's floor, every move written, is about 41.9); moving
     // 30 % of the time for the typical one.
     let real = cursor_bytes_per_hour(real_motion(250.0, 60.0));
     let real_typical = cursor_bytes_per_hour(real_mix(60.0));

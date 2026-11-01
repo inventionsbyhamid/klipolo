@@ -7,6 +7,7 @@ import {
   fittedTransitionsUs,
   maxTransitionUs,
   splitDuration,
+  transitionLengthUs,
   transitionWindows,
   type TransitionWindow,
 } from './transitions';
@@ -18,7 +19,14 @@ interface Case {
   windows: TransitionWindow[];
   /** Each clip's transition length once Rust's `normalize` has refitted the project (0: none). */
   fitted: number[];
+  /**
+   * On the frame grid at `fps`: a new transition's length at each clip's cut (`default_transition_us`), and for each
+   * cut the lengths the asks of Rust's `ASKED_US` land on (`transition_length_us`, with that cut's `max`).
+   */
+  grid: { fps: number; defaults: number[]; lengths: number[][] }[];
 }
+/** Rust's `ASKED_US`: the lengths each cut is asked for. */
+const ASKED_US = [0, 90_000, 100_000, 333_333, 500_000, 1_234_567, 5_000_000, 7_000_000];
 const all = cases as unknown as Case[];
 
 describe('transitions (pinned to Rust by transition-parity.json)', () => {
@@ -53,6 +61,16 @@ describe('transitions (pinned to Rust by transition-parity.json)', () => {
       [0, 0],
       [2_000_001, 0, 0],
     ]);
+  });
+
+  it('puts a new transition and a chosen length on the frame grid as Rust does', () => {
+    for (const { project, max, grid } of all) {
+      expect(grid.map((g) => g.fps)).toEqual([24, 25, 30, 60]);
+      for (const { fps, defaults, lengths } of grid) {
+        expect(project.timeline.main.map((_, i) => defaultTransitionUs(project, i, fps))).toEqual(defaults);
+        expect(max.map((m) => ASKED_US.map((us) => transitionLengthUs(us, m, fps)))).toEqual(lengths);
+      }
+    }
   });
 
   it('splits a length around the cut with the odd microsecond after it', () => {

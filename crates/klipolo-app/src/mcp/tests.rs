@@ -796,6 +796,8 @@ fn switch_off_removes_the_connection_file() {
     let state = McpState::new(mcp, Some(dir.path().to_owned()), handle);
     assert!(!state.status().enabled);
     assert!(state.status().connected.is_empty());
+    // The switch saves only itself: the theme picked in Settings stays.
+    prefs::update(dir.path(), |p| p.theme = prefs::Theme::Dark).unwrap();
 
     let on = state.set_enabled(true).unwrap();
     assert!(on.enabled);
@@ -834,6 +836,11 @@ fn switch_off_removes_the_connection_file() {
     assert!(off.connected.is_empty());
     assert!(!file.exists(), "the connection file goes");
     assert!(!prefs::load(dir.path()).mcp_enabled, "saved off");
+    assert_eq!(
+        prefs::load(dir.path()).theme,
+        prefs::Theme::Dark,
+        "the theme stays"
+    );
     // The port closes once the accept loop hears the stop.
     let closed = Instant::now();
     while TcpStream::connect(("127.0.0.1", port)).is_ok() {
@@ -887,7 +894,7 @@ fn at_launch_listens_or_clears_what_a_crash_left() {
         "a live Klipolo's stays"
     );
     assert!(!state.status().enabled);
-    prefs::save(dir.path(), &prefs::Prefs { mcp_enabled: true }).unwrap();
+    prefs::update(dir.path(), |p| p.mcp_enabled = true).unwrap();
     state.at_launch();
     assert!(state.status().enabled);
     assert_eq!(

@@ -10,16 +10,18 @@ use klipolo_capture::manifest::{read_manifest, write_manifest};
 use klipolo_capture::protocol::Command;
 use klipolo_capture::session::ImportTarget;
 use klipolo_capture::shell::WorkerState::*;
+use klipolo_model::Op;
 use klipolo_model::coded::CodedError;
 use klipolo_model::cursor_style::{ClickSource, CursorCapture, RecordingCursor};
-use klipolo_model::project::FormatKind;
+use klipolo_model::layout::resolve_rect;
+use klipolo_model::project::{FormatKind, Settings};
 use klipolo_model::timeline::ClipSource;
 
 use super::destination::{Day, recording_name, today, utc_day};
 use super::setup::Files;
 use super::test_support::*;
 use super::test_takes::*;
-use crate::project::uses_path;
+use crate::project::{build_and_apply, uses_path};
 
 /// The take's own project, open.
 fn armed_in(sessions: &Sessions) -> ImportTarget {
@@ -538,4 +540,46 @@ fn a_stuck_drive_says_what_happens_and_what_to_do() {
         "The drive stopped answering. Klipolo finishes the recording from what was saved. Check the drive before you \
          record again."
     );
+}
+
+/// A take's camera bubble lands round in every format, whatever the project's main format: in a 9:16 or 1:1 project
+/// too, not the 16:9 box stretched into a tall pill.
+#[test]
+fn the_camera_bubble_lands_round_in_every_format_whatever_the_main_format() {
+    let formats = [
+        FormatKind::Landscape,
+        FormatKind::Portrait,
+        FormatKind::Square,
+    ];
+    for primary in formats {
+        let sessions = Sessions::with_project();
+        let settings = Settings {
+            formats: formats.to_vec(),
+            primary_format: primary,
+            ..sessions.project().settings
+        };
+        build_and_apply(&sessions.state, None, None, "test.format", |_| {
+            Ok(vec![Op::SetSettings { settings }])
+        })
+        .unwrap();
+        let recorded = Recorded {
+            camera: Some(true),
+            ..Recorded::default()
+        };
+        let take = TakeFixture::saved(recorded, armed_in(&sessions));
+        sessions
+            .land(&take.done(false, sessions.open_file()), None)
+            .unwrap();
+        let clip = sessions.project().timeline.main.last().unwrap().clone();
+        let bubble = clip.camera.expect("the take has a camera").bubble;
+        for format in formats {
+            let rect = resolve_rect(&bubble, primary, format);
+            let (w, h) = format.size();
+            let (w, h) = (rect.w * f64::from(w), rect.h * f64::from(h));
+            assert!(
+                (w - h).abs() < 0.5,
+                "{primary:?} project, {format:?}: {w} x {h} px"
+            );
+        }
+    }
 }

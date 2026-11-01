@@ -165,10 +165,32 @@ impl CameraLayout {
             .copied()
             .unwrap_or(self.mode)
     }
-}
 
-impl Default for CameraLayout {
-    fn default() -> Self {
+    /// A new clip's camera in a project whose main format is `primary`: the default, with its bubble a 384 px square
+    /// (of 1080 on the format's shorter side) 4 % in from the main format's bottom-right corner. The bubble's box is in
+    /// the main format's shares, so sized there it is round in that format and in every format placed from it; the
+    /// 16:9 box in a 9:16 project would be a tall pill.
+    pub fn for_primary(primary: FormatKind) -> Self {
+        let rect = match primary {
+            FormatKind::Landscape => BoxN {
+                x: 0.76,
+                y: 0.6044,
+                w: 0.2,
+                h: 0.3556,
+            },
+            FormatKind::Portrait => BoxN {
+                x: 0.6044,
+                y: 0.76,
+                w: 0.3556,
+                h: 0.2,
+            },
+            FormatKind::Square => BoxN {
+                x: 0.6044,
+                y: 0.6044,
+                w: 0.3556,
+                h: 0.3556,
+            },
+        };
         let mut mode_overrides = BTreeMap::new();
         mode_overrides.insert(FormatKind::Portrait, CameraMode::SplitBottom);
         Self {
@@ -177,17 +199,15 @@ impl Default for CameraLayout {
             shape: CameraShape::Circle,
             border: true,
             mirror: true,
-            // 384 px square in a 1920×1080 canvas, 4 % margin from the bottom-right corner.
-            bubble: Layout::new(
-                Anchor::BottomRight,
-                BoxN {
-                    x: 0.76,
-                    y: 0.6044,
-                    w: 0.2,
-                    h: 0.3556,
-                },
-            ),
+            bubble: Layout::new(Anchor::BottomRight, rect),
         }
+    }
+}
+
+/// The camera a clip starts with in a 16:9 project (`CameraLayout::for_primary`).
+impl Default for CameraLayout {
+    fn default() -> Self {
+        Self::for_primary(FormatKind::Landscape)
     }
 }
 

@@ -107,6 +107,17 @@
       "calls": [{"name": "setFormat", "call_id": "call_24", "arguments": "{\"format\": \"portrait\", \"keepOthers\": false}"}]
     },
     {
+      "request": "slow the intro down to half speed and mute the b-roll",
+      "calls": [
+        {"name": "setClip", "call_id": "call_40", "arguments": "{\"speed\": 0.5, \"clip\": \"c1\", \"volume\": null, \"muted\": null, \"framing\": null, \"framingFormat\": null}"},
+        {"name": "setClip", "call_id": "call_41", "arguments": "{\"clip\": \"c3\", \"muted\": true}"}
+      ]
+    },
+    {
+      "request": "add a crossfade between the two clips",
+      "calls": [{"name": "setTransition", "call_id": "call_42", "arguments": "{\"kind\": \"dissolve\", \"after\": \"c1\", \"durationSec\": null}"}]
+    },
+    {
       "request": "add lofi as background music, quieter when I talk",
       "calls": [{"name": "addMusic", "call_id": "call_25", "arguments": "{\"duck\": true, \"file\": \"lofi-beat.mp3\", \"volume\": null, \"atSec\": 0}"}]
     },

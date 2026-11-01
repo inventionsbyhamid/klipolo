@@ -56,7 +56,7 @@ fn a_game_keeps_a_burned_in_cursor_only_when_asked_and_never_follows_it() {
         recording.cursor.as_ref().map(|c| c.capture),
         Some(CursorCapture::Burned)
     );
-    let clip = clip_for(&recording, false);
+    let clip = clip_for(&recording, false, FormatKind::Landscape);
     let mut project = Project::new("game");
     project.recordings.push(recording);
     let framing = default_framing(&project, &clip, FormatKind::Portrait);

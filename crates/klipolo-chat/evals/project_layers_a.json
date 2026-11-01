@@ -1,0 +1,155 @@
+{
+ "version": 7,
+ "id": "space-station-layers",
+ "name": "Space station Q&A with music and b-roll",
+ "settings": {
+  "fps": 30,
+  "formats": [
+   "landscape"
+  ],
+  "primaryFormat": "landscape"
+ },
+ "assets": [
+  {
+   "id": "clip-a",
+   "kind": "video",
+   "path": "/media/astronauts.mp4",
+   "name": "astronauts.mp4",
+   "durationUs": 155040000,
+   "width": 1280,
+   "height": 720,
+   "fps": 29.97,
+   "hasAudio": true
+  },
+  {
+   "id": "lofi",
+   "kind": "audio",
+   "path": "/media/lofi-beat.mp3",
+   "name": "lofi-beat.mp3",
+   "durationUs": 200000000,
+   "width": 0,
+   "height": 0,
+   "fps": 0.0,
+   "hasAudio": true
+  },
+  {
+   "id": "broll",
+   "kind": "video",
+   "path": "/media/rocket-launch.mp4",
+   "name": "rocket-launch.mp4",
+   "durationUs": 30000000,
+   "width": 1280,
+   "height": 720,
+   "fps": 30.0,
+   "hasAudio": true
+  }
+ ],
+ "timeline": {
+  "main": [
+   {
+    "id": "clip-a1",
+    "source": {
+     "type": "asset",
+     "id": "clip-a"
+    },
+    "sourceInUs": 0,
+    "sourceOutUs": 155040000,
+    "speed": 1.0,
+    "volume": 1.0,
+    "muted": false,
+    "fadeInUs": 0,
+    "fadeOutUs": 0,
+    "look": {
+     "preset": null,
+     "strength": 1.0,
+     "lutId": null,
+     "lutStrength": 1.0
+    }
+   }
+  ],
+  "tracks": [
+   {
+    "id": "overlays",
+    "kind": "overlay",
+    "name": "Overlays",
+    "hidden": false,
+    "muted": false,
+    "locked": false,
+    "items": [
+     {
+      "id": "broll-1",
+      "startUs": 40000000,
+      "durationUs": 10000000,
+      "attach": null,
+      "layout": {
+       "anchor": "topLeft",
+       "opacity": 1.0,
+       "overrides": {},
+       "radius": 0.0,
+       "rect": {
+        "x": 0.55,
+        "y": 0.55,
+        "w": 0.4,
+        "h": 0.4
+       },
+       "rotation": 0.0
+      },
+      "content": {
+       "type": "video",
+       "assetId": "broll",
+       "sourceInUs": 0,
+       "speed": 1.0,
+       "volume": 1.0,
+       "muted": false
+      },
+      "effects": []
+     }
+    ]
+   },
+   {
+    "id": "music",
+    "kind": "audio",
+    "name": "Music",
+    "hidden": false,
+    "muted": false,
+    "locked": false,
+    "items": [
+     {
+      "id": "lofi-1",
+      "startUs": 0,
+      "durationUs": 155040000,
+      "attach": null,
+      "layout": {
+       "anchor": "topLeft",
+       "opacity": 1.0,
+       "overrides": {},
+       "radius": 0.0,
+       "rect": {
+        "x": 0.05,
+        "y": 0.05,
+        "w": 0.4,
+        "h": 0.1
+       },
+       "rotation": 0.0
+      },
+      "content": {
+       "type": "audio",
+       "assetId": "lofi",
+       "sourceInUs": 0,
+       "volume": 0.3,
+       "fadeInUs": 1000000,
+       "fadeOutUs": 2000000,
+       "effect": null,
+       "duck": -12.0
+      },
+      "effects": []
+     }
+    ]
+   }
+  ]
+ },
+ "captions": {
+  "enabled": true,
+  "style": "klipolo.builtin/caption.clean"
+ }
+}
