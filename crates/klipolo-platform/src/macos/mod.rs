@@ -12,6 +12,7 @@ mod pressure;
 mod process;
 pub(crate) mod sandbox;
 mod screen_color;
+mod share;
 
 use std::fs::File;
 use std::io;
@@ -33,6 +34,7 @@ pub(crate) use process::{
     set_background, status,
 };
 pub(crate) use screen_color::{sample_screen_color, screen_color_supported};
+pub(crate) use share::{share_files, share_supported};
 
 use crate::durable::Durability;
 use crate::qos::Qos;

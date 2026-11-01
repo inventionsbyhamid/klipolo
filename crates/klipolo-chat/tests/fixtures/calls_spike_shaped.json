@@ -1,5 +1,5 @@
 {
-  "source": "Function calls shaped as muse-spark-1.3 wrote them in a first trial of the planner: arguments as JSON text, keys in any order, {} for a tool without arguments, several calls in one answer. The first 12 are that trial's requests and answers in this tool set's names and words (keepOthers true unless only one format is asked for); the rest cover the tools that trial did not have, the media tools last, with times from the clip A context fixture.",
+  "source": "Function calls shaped as muse-spark-1.3 wrote them in a first trial of the planner: arguments as JSON text, keys in any order, {} for a tool without arguments, several calls in one answer. The first 12 are that trial's requests and answers in this tool set's names and words (keepOthers true unless only one format is asked for); the rest cover the tools that trial did not have, then the media tools with times from the clip A context fixture, then a recording's camera and sounds last.",
   "answers": [
     {
       "request": "Make this vertical for TikTok",
@@ -139,6 +139,34 @@
     {
       "request": "make a title card saying Day 1 in Lisbon with trams behind it",
       "calls": [{"name": "makeTitleCard", "call_id": "call_30", "arguments": "{\"prompt\": \"Lisbon trams\", \"title\": \"Day 1 in Lisbon\", \"atSec\": null, \"durationSec\": null}"}]
+    },
+    {
+      "request": "hide my camera",
+      "calls": [{"name": "setCameraMode", "call_id": "call_31", "arguments": "{\"mode\": \"hidden\", \"clips\": null, \"format\": null}"}]
+    },
+    {
+      "request": "make the camera a split screen in vertical",
+      "calls": [{"name": "setCameraMode", "call_id": "call_32", "arguments": "{\"format\": \"portrait\", \"mode\": \"splitBottom\", \"clips\": null}"}]
+    },
+    {
+      "request": "move my bubble to the top left, bigger and square",
+      "calls": [{"name": "adjustCamera", "call_id": "call_33", "arguments": "{\"position\": \"topLeft\", \"sizeStep\": \"bigger\", \"shape\": \"square\", \"clips\": null, \"size\": null, \"border\": null, \"mirror\": null, \"format\": null}"}]
+    },
+    {
+      "request": "separate the camera so I can cut it",
+      "calls": [{"name": "detachCamera", "call_id": "call_34", "arguments": "{\"clips\": null}"}]
+    },
+    {
+      "request": "mute the mic in the second recording",
+      "calls": [{"name": "muteSource", "call_id": "call_35", "arguments": "{\"source\": \"mic\", \"muted\": true, \"clips\": [\"c3\"], \"which\": null}"}]
+    },
+    {
+      "request": "turn the system sound down",
+      "calls": [{"name": "setSourceVolume", "call_id": "call_36", "arguments": "{\"volume\": 50, \"source\": \"computerSound\", \"which\": null, \"clips\": null}"}]
+    },
+    {
+      "request": "separate the sound",
+      "calls": [{"name": "separateSound", "call_id": "call_37", "arguments": "{\"source\": \"mic\", \"which\": null, \"clips\": null}"}]
     }
   ]
 }

@@ -1260,3 +1260,20 @@ async fn a_new_registry_for_the_same_revision_draws_with_it() {
     })
     .await;
 }
+
+/// The player bar's volume is the preview's listening level: it reaches the backend as the person sets it, held to 0 to
+/// 1, and a value that isn't a number changes nothing.
+#[tokio::test]
+async fn the_listening_volume_reaches_the_backend_held_to_0_to_1() {
+    let (_feed, rx) = watch::channel(None);
+    let backend = BlankBackend::new();
+    let volumes = backend.volume_log();
+    let engine = Engine::start(options(), rx, backend).await.unwrap();
+    engine.set_volume(0.25);
+    engine.set_volume(1.5);
+    engine.set_volume(-1.0);
+    engine.set_volume(f32::NAN);
+    engine.set_volume(0.5);
+    eventually(|| volumes.lock().unwrap().len() == 4).await;
+    assert_eq!(*volumes.lock().unwrap(), vec![0.25, 1.0, 0.0, 0.5]);
+}

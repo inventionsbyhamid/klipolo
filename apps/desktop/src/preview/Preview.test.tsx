@@ -6,16 +6,24 @@ import { renderWithProviders } from '../test/render';
 
 /*
  * The preview's header: every control in it does something where it shows. The safe area guide is drawn
- * only in 9:16, so elsewhere its switch is off and says where it shows; full screen isn't there until it works.
+ * only in 9:16, so elsewhere its switch is off and says where it shows; full screen needs a video to show.
  */
 
 vi.mock('../bridge/commands', () => ({ bridge: {}, mediaUrl: (p: string) => p }));
-vi.mock('../bridge/engine', () => ({ engine: {} }));
+vi.mock('../bridge/engine', () => ({
+  engine: { seek: vi.fn(() => Promise.resolve()), setView: vi.fn(() => Promise.resolve()) },
+}));
+vi.mock('../bridge/appWindow', () => ({
+  appWindow: { fullScreen: vi.fn(() => Promise.resolve(false)), isFullScreen: vi.fn(() => Promise.resolve(true)) },
+}));
+const { appWindow } = await import('../bridge/appWindow');
 const { useProject } = await import('../state/project');
 const { useUi } = await import('../state/ui');
+const { useFullScreen } = await import('../state/fullScreen');
 const { Preview } = await import('./Preview');
 
 beforeEach(() => {
+  useFullScreen.setState({ on: false });
   // An empty project in 16:9 and 9:16: the drop zone shows, under the header.
   const snapshot = fixtureSnapshot();
   snapshot.project.settings.formats = ['landscape', 'portrait'];
@@ -51,8 +59,27 @@ describe('the preview’s header', () => {
     expect(safe).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('has no full screen button until full screen works', () => {
+  it('Full screen is off with no video yet, and says why', async () => {
     renderWithProviders(<Preview />);
-    expect(screen.queryByRole('button', { name: 'Full screen preview' })).toBeNull();
+    const full = screen.getByRole('button', { name: 'Full screen preview' });
+    expect(full).toHaveAttribute('aria-disabled', 'true');
+    expect(full).toHaveAttribute('title', 'Add a video to watch it full screen');
+    await userEvent.click(full);
+    expect(useFullScreen.getState().on).toBe(false);
+  });
+
+  it('Full screen fills the screen with the preview, and the same button leaves', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    renderWithProviders(<Preview />);
+    const full = screen.getByRole('button', { name: 'Full screen preview' });
+    expect(full).toHaveAttribute('title', 'Full screen preview (F)');
+    await userEvent.click(full);
+    expect(useFullScreen.getState().on).toBe(true);
+    expect(appWindow.fullScreen).toHaveBeenLastCalledWith(true);
+    const leave = screen.getByRole('button', { name: 'Leave full screen' });
+    expect(leave).toHaveAttribute('title', 'Leave full screen (Esc)');
+    await userEvent.click(leave);
+    expect(useFullScreen.getState().on).toBe(false);
+    expect(appWindow.fullScreen).toHaveBeenLastCalledWith(false);
   });
 });

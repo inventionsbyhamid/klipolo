@@ -11,6 +11,9 @@
 //!   mic rule firing holds it. When both are done, at host time T0, the session clock starts, `Gate` is journaled and
 //!   every video pipe is asked for a keyframe. A take whose main picture (its screen, window or game; the camera in
 //!   Camera only) didn't start records nothing: `Failed`, and exit 3.
+//! - **A system alert** on the screen from the start until the gate (`system_alert`: macOS's own question, which a
+//!   take's first stream can raise) holds the countdown too, and once it goes the countdown starts again from the top,
+//!   so the question is never in the recording.
 //! - **The start key's take.** When the person's start key began the take (the editor hidden: "Start from my game"),
 //!   the same key answers the countdown's question, "{source} isn't sending anything yet.", with "Record without it"
 //!   for the source it names; the item's Cancel answers it with no take. Unanswered, the countdown holds: no answer
@@ -55,7 +58,7 @@ pub(super) enum PauseWhy {
     Lock,
 }
 
-/// The countdown's progress: it runs only while neither the gate nor a mic rule holds it.
+/// The countdown's progress: it runs only while neither the gate nor a mic rule nor a system alert holds it.
 #[derive(Clone, Debug, Default)]
 pub(super) struct Countdown {
     pub(super) running_since: Option<u64>,
@@ -68,6 +71,8 @@ pub(super) struct Countdown {
     pub(super) held_by: Option<SourceId>,
     /// That rule's note: the HUD shows it while the countdown is held.
     pub(super) held_note: Option<CodedError>,
+    /// A system alert is on the screen (`SessionCore::system_alert`): held until it goes.
+    pub(super) alert: bool,
     /// Whether the last status went out while held, so a hold or its end sends a new one.
     pub(super) held_shown: bool,
 }

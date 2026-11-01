@@ -11,3 +11,4 @@ pub(crate) mod library;
 pub(crate) mod media;
 pub(crate) mod screen_color;
 pub(crate) mod settings;
+pub(crate) mod window;

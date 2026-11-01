@@ -10,6 +10,8 @@ const { useProject } = await import('../state/project');
 const { usePlayback } = await import('../state/playback');
 const { useSelection } = await import('../state/selection');
 const { useUi } = await import('../state/ui');
+const { useLoop } = await import('../state/loop');
+const { useRange } = await import('../state/range');
 const { Timeline } = await import('../features/timeline/Timeline');
 const { PlayerBar } = await import('./PlayerBar');
 
@@ -25,6 +27,8 @@ beforeEach(() => {
   useSelection.setState({ selectedId: null });
   usePlayback.setState({ playheadUs: 0, playing: false });
   useUi.setState({ pxPerSecond: 40 });
+  useLoop.setState({ on: false });
+  useRange.getState().clear();
 });
 
 function Editor() {
@@ -55,13 +59,31 @@ describe('the player bar', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Select something first');
   });
 
-  it('shows no control that looks live and does nothing: no volume or loop until they work', () => {
+  it('shows no control that looks live and does nothing: every slider in the bar moves', () => {
     const { container } = renderWithProviders(<Editor />);
     const bar = container.querySelector('footer.playerbar')!;
-    // Every slider in the bar is one the person can move.
     for (const slider of bar.querySelectorAll('.slider')) expect(slider).toHaveAttribute('role', 'slider');
-    expect(bar.querySelector('.vol')).toBeNull();
-    expect(within(bar as HTMLElement).queryByRole('button', { name: 'Loop the selection' })).toBeNull();
+  });
+
+  it('Loop turns looping on and off, says what it loops and its key, and shows a dot while on', async () => {
+    renderWithProviders(<Editor />);
+    const loop = screen.getByRole('button', { name: 'Loop' });
+    expect(loop).toHaveAttribute('aria-pressed', 'false');
+    act(() => loop.focus());
+    const tip = await screen.findByRole('tooltip');
+    expect(tip).toHaveTextContent('Loop the video');
+    expect(within(tip).getByText('⌘L').tagName).toBe('KBD');
+    await userEvent.click(loop);
+    expect(useLoop.getState().on).toBe(true);
+    expect(loop).toHaveAttribute('aria-pressed', 'true');
+    // With a time range selected, it loops that.
+    act(() => useRange.getState().select(2_000_000, 4_000_000));
+    expect(loop).toHaveAttribute('aria-pressed', 'true');
+    act(() => loop.blur());
+    act(() => loop.focus());
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Stop looping the selection');
+    await userEvent.click(loop);
+    expect(useLoop.getState().on).toBe(false);
   });
 
   it('the zoom slider says its value and steps 1 or 10 with the arrows', async () => {
