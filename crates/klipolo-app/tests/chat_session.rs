@@ -468,6 +468,12 @@ async fn additions_apply_at_once_as_one_undo_step_from_chat() {
     assert_eq!(r["applied"]["change"]["baseRevision"], 0);
     assert_eq!(r["applied"]["change"]["history"]["revision"], 1);
     assert_eq!(r["applied"]["undo"]["code"], "chat.andMore");
+    // A step of several changes lists each, in the order asked, for the reply to show.
+    let changes: Vec<&str> = (r["applied"]["changes"].as_array().expect("each change"))
+        .iter()
+        .map(|c| c["code"].as_str().unwrap())
+        .collect();
+    assert_eq!(changes, ["chat.setFormat", "chat.setCaptions"]);
     assert!(r["proposal"].is_null());
     let p = chat.project.project();
     assert_eq!(p.settings.primary_format, FormatKind::Portrait);

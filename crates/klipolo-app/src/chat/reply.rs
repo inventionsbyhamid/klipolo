@@ -228,6 +228,12 @@ impl ChatReply {
         self
     }
 
+    /// The additions applied at once, each change of a step of several listed too.
+    pub fn applied_with(mut self, applied: ChatApplied) -> Self {
+        self.applied = Some(applied);
+        self
+    }
+
     pub fn undone(mut self, change: SnapshotPatch) -> Self {
         self.undone = Some(change);
         self
