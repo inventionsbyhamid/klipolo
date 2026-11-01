@@ -1,11 +1,11 @@
-//! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's
-//! context was built from, out as edits.
+//! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's context was
+//! built from, out as edits.
 //! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, a trim that makes a clip longer, the clip
 //!   tools `setClip` and `setTransition`, and the media: `addMusic`, `addSound`, `addText`, `addImage` and
-//!   `makeTitleCard`'s title) are one `Transaction` the app
-//!   applies at once: one undo step. An addition is judged by what its part does, not by its tool: one that takes
-//!   something away (the model's own `removals`, as a format dropped with what was placed in it) is compiled again with
-//!   the removals and proposed: a speed that leaves a transition no room, or a transition taken away.
+//!   `makeTitleCard`'s title) are one `Transaction` the app applies at once: one undo step. An addition is judged by
+//!   what its part does, not by its tool: one that takes something away (the model's own `removals`, as a format
+//!   dropped with what was placed in it) is compiled again with the removals and proposed: a speed that leaves a
+//!   transition no room, or a transition taken away.
 //! - Removals (`cutRange`, `keepOnly`, `removeSilences`, `removeFillers`, a trim that makes a clip shorter) are one
 //!   `Proposal`: a `Transaction` for the project as the additions leave it, judged by the model's own review (what it
 //!   takes away, on the timeline), applied as one undo step when the person says so.
