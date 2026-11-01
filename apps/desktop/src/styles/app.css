@@ -319,7 +319,7 @@
 
 .pill[aria-selected="true"] {
   background: var(--color-paper);
-  color: var(--color-navy);
+  color: var(--color-on-paper);
 }
 
 .seg {
@@ -347,7 +347,7 @@
 
 .seg button[aria-checked="true"] {
   background: var(--color-paper);
-  color: var(--color-navy);
+  color: var(--color-on-paper);
 }
 
 .chip {
@@ -687,7 +687,7 @@
   margin-left: -20px;
   border-radius: 50%;
   background: var(--color-paper);
-  color: var(--color-navy);
+  color: var(--color-on-paper);
   box-shadow: 0 6px 18px var(--color-shade);
 }
 
@@ -1066,7 +1066,7 @@
   pointer-events: none;
 }
 
-/* Trim handles: a 12 px pad on each edge; a selected clip shows 8 x 22 paper grips, a selected overlay navy ones. */
+/* Trim handles: a 12 px pad on each edge; a selected clip shows 8 x 22 paper grips, a selected overlay on-paper ones. */
 .tl-trim {
   position: absolute;
   top: 0;
@@ -1096,7 +1096,7 @@
   transform: translateY(-50%);
   border-radius: 3px;
   background: var(--color-paper);
-  box-shadow: 0 0 0 1.5px var(--color-navy);
+  box-shadow: 0 0 0 1.5px var(--color-on-paper);
   opacity: 0;
   transition: opacity var(--dur-fast) var(--ease-out);
 }
@@ -1165,7 +1165,7 @@
 .tl-transition.is-selected {
   background: var(--color-paper);
   box-shadow: none;
-  color: var(--color-navy);
+  color: var(--color-on-paper);
 }
 
 .tl-transition .ico,
@@ -1309,7 +1309,7 @@
   overflow: visible;
   background: var(--color-paper);
   box-shadow: none;
-  color: var(--color-navy);
+  color: var(--color-on-paper);
 }
 
 .tl-item.is-overlay .tl-trim::after {
@@ -1320,7 +1320,7 @@
   bottom: 3px;
   transform: none;
   border-radius: 2px;
-  background: var(--color-navy);
+  background: var(--color-on-paper);
   box-shadow: none;
 }
 
@@ -1365,7 +1365,7 @@
   border-radius: var(--radius-xs);
   background: var(--color-lane-music);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-bay) 90%, transparent);
-  color: var(--color-navy);
+  color: var(--color-on-lane);
   font-weight: var(--weight-strong);
   line-height: 15px;
 }
@@ -1490,7 +1490,7 @@
   padding: 0 5px;
   border-radius: var(--radius-xs);
   background: var(--color-cut);
-  color: var(--color-navy);
+  color: var(--color-on-cut);
   font-size: var(--text-2xs);
   line-height: 16px;
   font-weight: var(--weight-title);
@@ -1535,7 +1535,7 @@
   padding: 0 6px;
   border-radius: var(--radius-xs);
   background: var(--color-paper);
-  color: var(--color-navy);
+  color: var(--color-on-paper);
   font-size: var(--text-2xs);
   line-height: 16px;
   font-weight: var(--weight-strong);
@@ -1551,7 +1551,7 @@
   margin-top: -11px;
   border-radius: 3px;
   background: var(--color-paper);
-  box-shadow: 0 0 0 1.5px var(--color-navy);
+  box-shadow: 0 0 0 1.5px var(--color-on-paper);
   cursor: ew-resize;
   pointer-events: auto;
 }
@@ -1723,7 +1723,7 @@
 }
 
 .toggle[data-state="checked"] .toggle-knob {
-  background: var(--color-navy);
+  background: var(--color-on-paper);
   transform: translateX(16px);
 }
 
@@ -1805,7 +1805,7 @@
   height: 48px;
   border-radius: 50%;
   background: var(--color-paper);
-  color: var(--color-navy);
+  color: var(--color-on-paper);
   transition: transform var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
 }
 
@@ -2305,7 +2305,7 @@
   height: 10px;
   border-radius: 2px;
   background: var(--color-paper);
-  box-shadow: 0 0 0 1.5px var(--color-navy);
+  box-shadow: 0 0 0 1.5px var(--color-on-paper);
 }
 
 /* Each handle can be taken 4 px past what it draws. */
@@ -2770,7 +2770,7 @@
 }
 
 .pos-grid button.on::after {
-  background: var(--color-navy);
+  background: var(--color-on-paper);
 }
 
 .seg-sm button {

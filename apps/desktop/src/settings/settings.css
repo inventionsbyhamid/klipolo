@@ -456,7 +456,7 @@
 }
 
 /* The toggle, scoped here until the shared one lands: a 36 x 20 track. Off: raised, a line-strong edge and
-   an ink-soft knob. On: paper with a navy knob. The knob slides in 140 ms, and not at all with reduced motion. */
+   an ink-soft knob. On: paper with an on-paper knob. The knob slides in 140 ms, and not at all with reduced motion. */
 .settings-dialog .settings-switch {
   position: relative;
   flex: none;
@@ -501,7 +501,7 @@
 
 .settings-dialog .settings-switch[aria-checked="true"]::after {
   transform: translateX(16px);
-  background: var(--color-navy);
+  background: var(--color-on-paper);
 }
 
 .settings-dialog .settings-switch:focus-visible {

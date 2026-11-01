@@ -14,10 +14,10 @@
   --color-signal-strong: var(--color-paper-edge);
   --color-signal-ink: var(--color-paper);
   --color-focus: var(--color-paper);
-  --color-on-signal: var(--color-navy);
+  --color-on-signal: var(--color-on-paper);
   --color-tally: var(--color-cut);
   --color-tally-strong: var(--color-cut);
-  --color-on-tally: var(--color-navy);
+  --color-on-tally: var(--color-on-cut);
   --color-layer-video: var(--color-clip);
   --color-layer-text: var(--color-lane-overlay);
   --color-layer-image: var(--color-lane-overlay);
