@@ -1,13 +1,12 @@
 //! A scan's video decoder, and its decoded keyframes as tiles: downloaded from the GPU when the hardware decoder made
 //! them, scaled (area averaging) straight to the tile as full-range 4:2:0, then turned upright. CPU work on a 72 px
-//! tile, about once per second of video. The file's first picture is scaled once more, to its poster.
+//! tile, about once per second of video.
 
 use ffmpeg::format::Pixel;
 use ffmpeg::software::scaling;
 
 use crate::media::keyframes::StoredKeys;
 use crate::media::sprite::tile_size;
-use crate::media::thumbs::poster_size;
 use crate::vendor::cap::ffmpeg_hw_device::{CodecContextExt, HwDevice};
 use klipolo_model::time::Us;
 
@@ -26,9 +25,8 @@ pub(super) struct Video {
     /// Seconds per pts unit, and the stream's first pts.
     time_base: f64,
     start: i64,
-    /// The tile and the poster as shown, and the clockwise turn that shows the stored frames upright.
+    /// The tile as shown, and the clockwise turn that shows the stored frames upright.
     tile: Fit,
-    poster: Fit,
     rotation: u16,
     pub(super) frame: ffmpeg::frame::Video,
 }
@@ -178,7 +176,6 @@ impl Video {
             time_base: f64::from(tb),
             start,
             tile: Fit::new(tile_size(upright_w, upright_h)),
-            poster: Fit::new(poster_size(upright_w, upright_h)),
             rotation,
             frame: ffmpeg::frame::Video::empty(),
         };
@@ -213,17 +210,6 @@ impl Video {
 
     /// The last decoded frame as a tile (its planes and strides).
     pub(super) fn tile_planes(&mut self) -> Option<Planes<'_>> {
-        self.planes(false)
-    }
-
-    /// The last decoded frame as the poster: its size, planes and strides.
-    pub(super) fn poster_planes(&mut self) -> Option<((u32, u32), Planes<'_>)> {
-        let size = self.poster.size;
-        Some((size, self.planes(true)?))
-    }
-
-    /// The last decoded frame scaled to the tile, or to the poster.
-    fn planes(&mut self, poster: bool) -> Option<Planes<'_>> {
         let mut downloaded = self.hw.as_ref().and_then(|hw| hw.get_hwframe(&self.frame));
         let src = match downloaded.as_mut() {
             Some(frame) => frame,
@@ -231,17 +217,12 @@ impl Video {
         };
         // JPEG-style formats (MJPEG's yuvj420p) are their plain layout at full range: swscale warns about the J names.
         let full_range_in = plain_layout(src) || src.color_range() == ffmpeg::color::Range::JPEG;
-        let fit = if poster {
-            &mut self.poster
-        } else {
-            &mut self.tile
-        };
-        fit.planes(src, full_range_in, self.rotation)
+        self.tile.planes(src, full_range_in, self.rotation)
     }
 }
 
 /// Relabels a JPEG-style frame (`yuvj4xxp`) as its plain layout at full range, the same bytes; true when it was one
-/// (the frame then says full range, so the poster's scaling of the same frame reads it as full range too).
+/// (the frame then says full range, so a second scaling of the same frame reads it as full range too).
 pub(crate) fn plain_layout(frame: &mut ffmpeg::frame::Video) -> bool {
     let plain = match frame.format() {
         Pixel::YUVJ420P => Pixel::YUV420P,
@@ -297,7 +278,13 @@ fn full_range_out(scaler: &mut scaling::Context, full_range_in: bool) {
 }
 
 /// Turns a `w × h` plane clockwise by `degrees` (90, 180 or 270) into `out`, tightly packed.
-fn turn(src: &[u8], stride: usize, (w, h): (usize, usize), degrees: u16, out: &mut Vec<u8>) {
+pub(crate) fn turn(
+    src: &[u8],
+    stride: usize,
+    (w, h): (usize, usize),
+    degrees: u16,
+    out: &mut Vec<u8>,
+) {
     out.clear();
     out.resize(w * h, 0);
     let at = |x: usize, y: usize| src[y * stride + x];

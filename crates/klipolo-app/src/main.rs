@@ -189,8 +189,13 @@ fn main() {
                 .state::<commands::analysis::AnalysisHandle>()
                 .holds()
                 .clone();
+            let exporting = holds.clone();
             app.state::<klipolo_app::export::ExportState>()
-                .on_busy(Arc::new(move |busy| holds.set_exporting(busy)));
+                .on_busy(Arc::new(move |busy| exporting.set_exporting(busy)));
+            // The start screen's posters, for every listed project, waiting on the same holds.
+            if let Some(posters) = project::start_posters(app.handle(), holds.clone()) {
+                app.manage(posters);
+            }
             // Analysis is the person's own action: copies wait while it decodes a clip on this Mac.
             let analyzing = copies.clone();
             app.state::<commands::analysis::AnalysisHandle>()
@@ -254,6 +259,7 @@ fn main() {
             commands::media::media_add_music,
             commands::media::media_add_sound,
             commands::media::media_add_image,
+            commands::media::media_set_background,
             commands::media::media_place,
             commands::media::media_add_text,
             commands::media::media_update_item,

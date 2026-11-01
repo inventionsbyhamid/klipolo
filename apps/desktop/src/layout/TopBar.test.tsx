@@ -140,6 +140,33 @@ describe('TopBar', () => {
     ]);
   });
 
+  it('a project listed by its file name shows that name here too, until it is renamed', async () => {
+    // Made before new projects took their file's number: "Untitled project" inside, listed as "Untitled project 3".
+    const older = fixtureSnapshot();
+    older.project = { ...older.project, name: 'Untitled project' };
+    useProject.setState({
+      snapshot: { ...older, listedAs: { name: 'Untitled project', fileName: 'Untitled project 3' } },
+    });
+    const renamed = fixtureSnapshot();
+    renamed.project.name = 'Launch video';
+    renamed.history = { ...renamed.history, revision: 4, undoLabel: 'editor.rename.undo' };
+    vi.mocked(bridge.apply).mockReset().mockResolvedValue({ ...fixturePatch(renamed), baseRevision: 3 });
+    render(<TopBar />);
+    const name = screen.getByRole('button', { name: 'Untitled project 3' });
+    expect(name.title).toBe('Untitled project 3');
+    // Rename starts from that name; left as it is, nothing is renamed (the file keeps its name inside).
+    await userEvent.click(within(await openMenu('Untitled project 3')).getByRole('menuitem', { name: 'Rename' }));
+    const field = await screen.findByRole('textbox', { name: 'Project name' });
+    expect(field).toHaveValue('Untitled project 3');
+    await userEvent.keyboard('{Enter}');
+    expect(bridge.apply).not.toHaveBeenCalled();
+    // Renamed, its own name shows.
+    await userEvent.click(within(await openMenu('Untitled project 3')).getByRole('menuitem', { name: 'Rename' }));
+    await userEvent.clear(await screen.findByRole('textbox', { name: 'Project name' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Project name' }), 'Launch video{Enter}');
+    expect(await screen.findByRole('button', { name: 'Launch video' })).toBeInTheDocument();
+  });
+
   it('Duplicate makes a copy of the project and opens it', async () => {
     useProject.setState({ snapshot: fixtureSnapshot() });
     const copy = fixtureSnapshot();

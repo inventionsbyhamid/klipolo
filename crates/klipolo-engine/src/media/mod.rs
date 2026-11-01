@@ -16,6 +16,7 @@ pub mod key;
 pub mod keyframes;
 pub mod luma_frames;
 pub mod open;
+pub mod poster;
 pub mod proxy;
 pub mod reversed;
 pub mod scan;

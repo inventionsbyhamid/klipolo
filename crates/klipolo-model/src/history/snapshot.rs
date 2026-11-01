@@ -25,6 +25,24 @@ pub struct Snapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional, type = "number")]
     pub opening: Option<u64>,
+    /// The name the host's project list shows for this project when it isn't the project's own (`ListedAs`), set by the
+    /// host as it sends the whole project; left out of the JSON while None.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub listed_as: Option<ListedAs>,
+}
+
+/// The name a project is listed by in place of its own `name`, while it keeps that name: its file's name, when another
+/// project in the library has the same name (a project made before new projects took their file's number). The UI shows
+/// it wherever it names the project, so every place names it alike; the project's file is never rewritten for it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ListedAs {
+    /// The project's own name this stands in for: once it is renamed, its own name shows.
+    pub name: String,
+    /// The name it is listed by.
+    pub file_name: String,
 }
 
 /// What the UI needs after an edit, undo or redo: the change (to apply to the revision it was made on) and the new
@@ -48,6 +66,7 @@ impl Document {
             history: self.history(),
             read_only: crate::contrib::read_only_notice(&self.project).map(str::to_owned),
             opening: None,
+            listed_as: None,
         }
     }
 
