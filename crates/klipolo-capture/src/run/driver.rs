@@ -60,7 +60,9 @@ impl Core {
                         .unwrap_or_default();
                     self.pipes.stats_into(&mut self.stats);
                     let awake = self.backend.display_awake();
-                    self.core.tick(now, &snap, free, &self.stats, awake)
+                    let mut fx = self.core.tick(now, &snap, free, &self.stats, awake);
+                    fx.extend(self.system_alert(now));
+                    fx
                 }
                 Input::ReadBack(problems) => self.core.read_back(problems, now),
                 Input::Started {
@@ -90,7 +92,11 @@ impl Core {
                 Input::CursorInFrames { ok, host_ns } => {
                     self.core.cursor_in_frames(ok, host_ns, now)
                 }
-                Input::Poll => self.core.poll(now),
+                Input::Poll => {
+                    let mut fx = self.core.poll(now);
+                    fx.extend(self.system_alert(now));
+                    fx
+                }
                 Input::Event {
                     src,
                     start_no,
@@ -107,6 +113,16 @@ impl Core {
             }
         }
         1
+    }
+
+    /// From the start until the gate, whether a system alert is on the screen, as the backend reads it now: read at each
+    /// tick and poll (ten times a second while a separate cursor is watched, as on a Mac's screen take), never after.
+    fn system_alert(&mut self, now: u64) -> Vec<Effect> {
+        if !self.core.watches_system_alerts() {
+            return vec![];
+        }
+        let up = self.backend.system_alert();
+        self.core.system_alert(up, now)
     }
 
     /// The source's id when the input comes from its pipe's current start (an older start's are dropped).
