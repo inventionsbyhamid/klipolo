@@ -56,8 +56,8 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
     at >= 0 && !!project && !!main[at].camera && !isFreeze(main[at]) && recordingCameras(project, main[at]).length > 0;
   // An imported clip whose file has sound: Separate sound (off, saying why, once it is a layer or while sped up).
   const hasSound = at >= 0 && !!project && clipSoundState(project, at) !== 'none';
-  // An imported clip plays backward, or forward again: Reverse.
-  const turns = at >= 0 && !!project && ['backward', 'forward'].includes(clipReverseState(project, main[at]));
+  // An imported clip plays backward, or forward again: Reverse (off, saying why, while its sound is in a layer).
+  const turns = at >= 0 && !!project && ['backward', 'forward', 'separated'].includes(clipReverseState(project, at));
 
   // A sound layer, or a video layer whose file has sound, has Mute.
   const mutes = !!project && !!found && hasOwnSound(project, found.item);

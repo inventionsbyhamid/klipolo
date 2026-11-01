@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Asset } from '../../bindings/Asset';
 import type { ReversedCopy } from '../../bindings/ReversedCopy';
 import type { Snapshot } from '../../bindings/Snapshot';
-import { fixturePatch, fixtureSnapshot } from '../../test/fixtures';
+import { fixturePatch, fixtureSnapshot, titleItem } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
 
 /*
@@ -242,5 +242,43 @@ describe('Reverse', () => {
     await frames();
     expect(bridge.apply).toHaveBeenCalled();
     expect(reverser.discard).toHaveBeenCalledWith(copyAsset.path);
+  });
+
+  it("is off while the clip's sound plays in its own layer, saying why: that layer would keep playing forward", async () => {
+    const apart = fixtureSnapshot();
+    apart.project.timeline.main[1].muted = true;
+    apart.project.timeline.tracks.push({
+      id: 't9',
+      kind: 'audio',
+      name: 'Audio 2',
+      hidden: false,
+      muted: false,
+      locked: false,
+      items: [
+        {
+          ...titleItem,
+          id: 'b-sound',
+          startUs: 20 * S,
+          durationUs: 10 * S,
+          layout: { ...titleItem.layout, motion: undefined },
+          attach: { clipId: 'b', source: { type: 'asset', id: 'broll' }, sourceUs: 0 },
+          content: { type: 'audio', assetId: 'broll', sourceInUs: 0, volume: 1, fadeInUs: 0, fadeOutUs: 0, effect: null },
+        },
+      ],
+    });
+    useProject.setState({ snapshot: apart });
+    renderWithProviders(
+      <>
+        <Timeline />
+        <Commands />
+      </>,
+    );
+    act(() => useSelection.setState({ selectedId: 'b' }));
+    expect(reverse()).toMatchObject({
+      enabled: false,
+      reason: "This clip's sound plays in its own layer. Remove that layer before reversing the clip.",
+    });
+    await menuOf(/^broll\.mp4/);
+    expect(screen.getByRole('menuitem', { name: /^Reverse/ })).toHaveAttribute('aria-disabled', 'true');
   });
 });

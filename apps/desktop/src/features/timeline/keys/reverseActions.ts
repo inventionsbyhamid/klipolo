@@ -28,10 +28,11 @@ export const reversingName = (name: string) =>
 export function reverseClip(clipId: string) {
   keyBurst.after(() => {
     const project = editable();
-    const clip = project ? findClip(project, clipId) : null;
-    if (!project || !clip) return;
+    const at = project ? project.timeline.main.findIndex((c) => c.id === clipId) : -1;
+    if (!project || at < 0) return;
+    const clip = project.timeline.main[at];
     const label = blockLabel(project, clipId);
-    const state = clipReverseState(project, clip);
+    const state = clipReverseState(project, at);
     if (state === 'forward') {
       const said = t({ id: 'timeline.key.forward', message: `${label} plays forward again` });
       commit('undo.reverse', [{ type: 'reverseClip', clipId, copy: null }], said);

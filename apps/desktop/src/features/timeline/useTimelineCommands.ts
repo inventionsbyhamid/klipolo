@@ -82,7 +82,7 @@ export function useTimelineCommands(): Command[] {
     // An imported clip's own sound, for Separate sound.
     const sound = clip ? clipSoundState(project, clipAt) : 'none';
     // What Reverse does to it.
-    const turn = clip ? clipReverseState(project, main[clipAt]) : 'none';
+    const turn = clip ? clipReverseState(project, clipAt) : 'none';
 
     const edits: Command[] = [
       {
@@ -308,11 +308,13 @@ export function useTimelineCommands(): Command[] {
         reason:
           turn === 'freeze'
             ? codedMessage({ code: 'model.reverse.freeze', params: {} })
-            : turn === 'none' && clip
-              ? codedMessage({ code: 'model.reverse.recording', params: {} })
-              : turn === 'backward' && reversing
-                ? codedMessage({ code: 'reverse.busy', params: {} })
-                : undefined,
+            : turn === 'separated'
+              ? codedMessage({ code: 'model.reverse.sound', params: {} })
+              : turn === 'none' && clip
+                ? codedMessage({ code: 'model.reverse.recording', params: {} })
+                : turn === 'backward' && reversing
+                  ? codedMessage({ code: 'reverse.busy', params: {} })
+                  : undefined,
         run: () => reverseClip(id),
       },
     ];
