@@ -82,6 +82,21 @@ export const TABLE = {
     message: 'Separate camera',
     comment: 'Command and undo history entry',
   }),
+  'undo.sound.separate': msg({
+    id: 'undo.sound.separate',
+    message: 'Separate sound',
+    comment: "Command and undo history entry: an imported clip's own sound becomes a layer of its own",
+  }),
+  'undo.freeze': msg({
+    id: 'undo.freeze',
+    message: 'Freeze frame',
+    comment: 'Command and undo history entry: the frame at the playhead holds still for a while',
+  }),
+  'undo.reverse': msg({
+    id: 'undo.reverse',
+    message: 'Reverse',
+    comment: 'Command and undo history entry: the clip plays backward, or forward again',
+  }),
   // A recording's sources and markers: `{source}` is a source's name, e.g. Mic, Game sound.
   'undo.source.volume': msg({
     id: 'undo.source.volume',

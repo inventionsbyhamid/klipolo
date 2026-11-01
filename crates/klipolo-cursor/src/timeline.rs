@@ -148,6 +148,10 @@ fn mapped(
     let (mut still, mut screen, mut sound) = (Vec::new(), Vec::new(), Vec::new());
     let main = &p.timeline.main;
     for (clip, &start) in main[clips.clone()].iter().zip(&starts[clips]) {
+        // A freeze frame plays none of its take: no clicks, typing or stillness of its own.
+        if clip.is_freeze() {
+            continue;
+        }
         let Some((r, w)) = window(p, clip, start) else {
             continue;
         };
@@ -225,7 +229,9 @@ pub fn cursor_at(
         return None;
     }
     let (r, w) = window(p, clip, starts[i])?;
-    let source = clip.source_in_us + unscaled(t - starts[i], clip.speed);
+    // A freeze frame holds the cursor where it was at its frame.
+    let source = (clip.freeze_at_us)
+        .unwrap_or_else(|| clip.source_in_us + unscaled(t - starts[i], clip.speed));
     track(r)?.position(source.saturating_sub(w.nudge))
 }
 
@@ -240,7 +246,9 @@ pub struct RawCursor {
 struct RawClip {
     start: Us,
     end: Us,
+    /// A freeze frame's frame: the source time throughout.
     source_in: Us,
+    frozen: bool,
     speed: f64,
     nudge: Us,
     track: Arc<CursorTrack>,
@@ -268,7 +276,8 @@ impl RawCursor {
             Some(RawClip {
                 start,
                 end: start.saturating_add(clip.duration_us()),
-                source_in: clip.source_in_us,
+                source_in: clip.freeze_at_us.unwrap_or(clip.source_in_us),
+                frozen: clip.is_freeze(),
                 speed: clip.speed,
                 nudge: w.nudge,
                 track: track(r)?,
@@ -287,7 +296,11 @@ impl RawCursor {
         if t >= c.end {
             return None;
         }
-        let source = c.source_in + unscaled(t - c.start, c.speed);
+        let source = if c.frozen {
+            c.source_in
+        } else {
+            c.source_in + unscaled(t - c.start, c.speed)
+        };
         c.track.position(source.saturating_sub(c.nudge))
     }
 }

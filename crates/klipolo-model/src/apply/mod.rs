@@ -155,6 +155,7 @@ fn indexes_after(op: &Op, touched: &Touched, places: &mut Places) {
         Op::InsertClip { .. }
             | Op::MoveClip { .. }
             | Op::Split { .. }
+            | Op::FreezeFrame { .. }
             | Op::DeleteRanges { .. }
             | Op::RemoveClip { .. }
     ) {
@@ -175,6 +176,7 @@ fn indexes_after(op: &Op, touched: &Touched, places: &mut Places) {
 pub fn finish_parts(next: &mut Project) -> Result<()> {
     crate::transitions::normalize(next);
     generator_pieces::sync_scene_requirement(next);
+    main_ops::sync_freeze_requirement(next);
     validate(next)
 }
 
@@ -246,6 +248,12 @@ fn apply_one(p: &mut Project, op: &Op, places: &mut Places) -> Result<Touched> {
         Op::Slip { clip_id, by_us } => main(edit_points::slip(p, clip_id, *by_us, places)),
         Op::Slide { clip_id, by_us } => main(edit_points::slide(p, clip_id, *by_us, places)),
         Op::Split { at_us } => main(main_ops::split(p, *at_us)),
+        Op::ReverseClip { clip_id, copy } => {
+            main(main_ops::reverse_clip(p, clip_id, copy.as_ref(), places))
+        }
+        Op::FreezeFrame { at_us, duration_us } => {
+            main(main_ops::freeze_frame(p, *at_us, *duration_us))
+        }
         Op::DeleteRanges { ranges } => main(main_ops::delete_ranges(p, ranges)),
         Op::RemoveClip { id } => main(main_ops::remove_clip(p, id, places)),
         // Speed changes a clip's length; volume, fades, look, camera, framing and effects change no timing.
@@ -288,6 +296,10 @@ fn apply_one(p: &mut Project, op: &Op, places: &mut Places) -> Result<Touched> {
         // The clip's camera mode or its own mix of the source changes too, which is no timing.
         Op::DetachSource { clip_id, source_id } => {
             detach::detach_source(p, clip_id, source_id, places).map(Touched::Layers)
+        }
+        // The clip's mute changes too, which is no timing.
+        Op::DetachSound { clip_id } => {
+            detach::detach_sound(p, clip_id, places).map(Touched::Layers)
         }
         // A source's mix, name or sync: no timing; a sync change slips its separated sound layers, and those cut back
         // at their start have new starts and anchors.
@@ -713,7 +725,7 @@ pub(crate) fn fits_in_order(track: &Track, start: Us, end: Us, ignore: Option<&s
 
 /// Every id in the project, copied into a set for an edit that names many things ([`IdPool`]). Generated ids avoid
 /// all of them, so validation never sees a duplicate.
-fn all_ids(p: &Project) -> HashSet<Id> {
+pub(super) fn all_ids(p: &Project) -> HashSet<Id> {
     std::iter::once(&p.id)
         .chain(p.assets.iter().map(|a| &a.id))
         .chain(p.recordings.iter().map(|r| &r.id))

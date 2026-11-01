@@ -4,7 +4,7 @@ import type { Track } from '../../../bindings/Track';
 import { useLocale } from '../../../i18n/react';
 import { mixFor, runInClip } from '../../../lib/recording';
 import { paramText } from '../../../lib/sourceNames';
-import type { Sources } from '../../../lib/timeline';
+import { isFreeze, type Sources } from '../../../lib/timeline';
 import { SOURCE_PART_MIN_PX } from '../layout';
 import { BlockMedia } from '../media/BlockMedia';
 import { sourceFiles } from '../media/blockFiles';
@@ -126,10 +126,11 @@ const SourceLane = memo(function SourceLane({ clips, kind, sources, innerPx, pps
   useLocale();
   const index = mainIndex(clips);
   const [first, end] = visibleRange(index, fromUs, toUs);
-  /** Clip `i`'s source of this kind, if it plays a recording with one. */
+  /** Clip `i`'s source of this kind, if it plays a recording with one (a freeze frame plays none). */
   const sourceAt = (i: number) => {
     const s = clips[i].source;
-    return s.type === 'recording' ? kind.sources.find(({ recording }) => recording.id === s.id) : undefined;
+    if (s.type !== 'recording' || isFreeze(clips[i])) return undefined;
+    return kind.sources.find(({ recording }) => recording.id === s.id);
   };
   const out: ReactNode[] = [];
   for (const piece of mergeTiny(index, first, end, pps, SOURCE_PART_MIN_PX, () => false)) {

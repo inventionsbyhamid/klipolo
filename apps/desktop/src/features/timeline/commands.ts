@@ -17,6 +17,7 @@ export { allEffects, allSound, countOf, groupMuted, groupVolume, groupVolumeOps,
 export { trackStepOps } from './keys/keyOps';
 export { noteMutedTrack, stepTrack } from './keys/layerActions';
 export { deleteBlock, deleteRange, markRange } from './keys/timelineActions';
+export { reversingName, stopReversing } from './keys/reverseActions';
 export { speedNote } from './model/refit';
 export { removeTransition, transitionName, transitionNow, transitionOp } from './keys/transitionActions';
 export { useTimelineCommands } from './useTimelineCommands';

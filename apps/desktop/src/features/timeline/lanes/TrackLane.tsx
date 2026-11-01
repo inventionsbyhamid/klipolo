@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Item } from '../../../bindings/Item';
 import type { Track } from '../../../bindings/Track';
-import { itemLabel, itemTitle, sourceLabel, type Sources } from '../../../lib/timeline';
+import { assetById, itemLabel, itemTitle, sourceLabel, type Sources } from '../../../lib/timeline';
 import { ItemBlock, type ItemLook } from '../blocks/ItemBlock';
 import type { PressRoll } from '../blocks/RollHandle';
 import type { PressBlock, PressTrim } from '../drag/useBlockDrag';
@@ -97,6 +97,7 @@ export function linePieces(
         durationUs={item.durationUs}
         content={item.content}
         files={itemFiles(o.sources, item.content)}
+        clipSound={item.content.type === 'audio' && assetById(o.sources, item.content.assetId)?.kind === 'video'}
         muted={track.kind === 'audio' && track.muted}
         pps={o.pps}
         selected={o.selection.has(item.id)}

@@ -246,7 +246,8 @@ fn a_review_applies_once_and_agrees_with_the_risk() {
 fn the_op_schema_lists_every_op_and_tags_match_the_json() {
     let tags = op_tags();
     // The first 34, then `fixWords`, then five recording ops in place of `detachCamera`, then `setWordLook`, then
-    // `setCursorStyle`, then `useRecording` and `addRecordingSource`, then `roll`, `slip` and `slide`.
+    // `setCursorStyle`, then `useRecording` and `addRecordingSource`, then `detachSound`, `freezeFrame` and
+    // `reverseClip`, then `roll`, `slip` and `slide`.
     assert_eq!(tags.len(), 34 + 1 + 4 + 1 + 1 + 2 + 3, "{tags:?}");
     for op in [
         Op::Split { at_us: 0 },

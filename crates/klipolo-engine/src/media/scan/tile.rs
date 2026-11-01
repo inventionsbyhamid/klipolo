@@ -242,7 +242,7 @@ impl Video {
 
 /// Relabels a JPEG-style frame (`yuvj4xxp`) as its plain layout at full range, the same bytes; true when it was one
 /// (the frame then says full range, so the poster's scaling of the same frame reads it as full range too).
-fn plain_layout(frame: &mut ffmpeg::frame::Video) -> bool {
+pub(crate) fn plain_layout(frame: &mut ffmpeg::frame::Video) -> bool {
     let plain = match frame.format() {
         Pixel::YUVJ420P => Pixel::YUV420P,
         Pixel::YUVJ422P => Pixel::YUV422P,
