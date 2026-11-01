@@ -924,13 +924,31 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
 });
 
 describe('chat: more on proposals and the panel', () => {
-  it('drops an open proposal when the words are timed again, though the revision is the same', async () => {
-    const fake = chat({ reply: (r) => reply(r.id, 'I found 3.', { proposal: cuts() }) });
+  it('keeps an open proposal when words are timed again in a file it does not cut', async () => {
+    const fake = chat({
+      reply: (r) => reply(r.id, 'I found 3.', { proposal: { ...cuts(), files: ['broll'] } }),
+      apply: () => ({ change: changed(4, code('chat.removeFillers')), undo: code('chat.removeFillers') }),
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'cut the ums{Enter}');
+    const card = await screen.findByRole('group', { name: 'Cut 2 pauses and 1 filler word' });
+    // A song's words were timed: Rust says the speech changed, and whose words.
+    act(() => useSpeech.setState((s) => ({ pagesEpoch: s.pagesEpoch + 1, wordsChanged: ['song'] })));
+    expect(
+      screen.queryByText('This proposal was dropped because the project changed. Ask again to get a new one.'),
+    ).toBeNull();
+    expect(useProposal.getState().proposal?.id).toBe('p1');
+    await userEvent.click(within(card).getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(fake.applied).toEqual(['p1']));
+  });
+
+  it('drops an open proposal when words under its cuts are timed again, though the revision is the same', async () => {
+    const fake = chat({ reply: (r) => reply(r.id, 'I found 3.', { proposal: { ...cuts(), files: ['broll'] } }) });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'cut the ums{Enter}');
     await screen.findByRole('group', { name: 'Cut 2 pauses and 1 filler word' });
-    // Captions' "Time the words again" finished: Rust says the speech changed.
-    act(() => useSpeech.setState((s) => ({ pagesEpoch: s.pagesEpoch + 1 })));
+    // Time words again above the video finished for the clip it cuts: Rust says its words changed.
+    act(() => useSpeech.setState((s) => ({ pagesEpoch: s.pagesEpoch + 1, wordsChanged: ['song', 'broll'] })));
     expect(
       await screen.findByText('This proposal was dropped because the project changed. Ask again to get a new one.'),
     ).toBeInTheDocument();

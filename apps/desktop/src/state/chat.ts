@@ -244,11 +244,12 @@ useProject.subscribe((s, was) => {
   }
 });
 
-// Words timed again (Captions' "Time the words again", or word timing finishing) are new words at new times on the same
-// revision: an open proposal made on the old ones would cut where they were, so it is dropped as a hand edit drops it
-// (Rust refuses it too). The panel follows `speech-changed` (`startSpeechFeed`).
+// Words timed again (Time words again above the video, or word timing finishing) are new words at new times on the same
+// revision: an open proposal whose cuts stand on them would cut where they were, so it is dropped as a hand edit drops
+// it (Rust refuses it too). Words of a file it doesn't cut into leave it open. The panel follows `speech-changed`
+// (`startSpeechFeed`).
 useSpeech.subscribe((s, was) => {
   if (s.pagesEpoch === was.pagesEpoch) return;
-  const next = dropStale(useChat.getState().messages, null);
+  const next = dropStale(useChat.getState().messages, s.wordsChanged);
   if (next) useChat.setState(withMessages(next));
 });

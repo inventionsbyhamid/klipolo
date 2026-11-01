@@ -106,14 +106,17 @@ export function replaceOpen(messages: Message[]): { messages: Message[]; replace
 }
 
 /**
- * `messages` with every open proposal not made on `revision` dropped (a hand edit, an undo, another project); with no
- * revision, every open proposal (the words were timed again: new words at new times on the same revision).
+ * `messages` with every open proposal not made on `since`, a revision, dropped (a hand edit, an undo, another project);
+ * given the files whose words changed instead, every open proposal whose cuts stand on one of them (their words timed
+ * again: new words at new times on the same revision).
  */
-export function dropStale(messages: Message[], revision: number | null): Message[] | null {
+export function dropStale(messages: Message[], since: number | string[]): Message[] | null {
   let changed = false;
   const next = messages.map((m) => {
     if (m.from !== 'klipolo' || m.kind !== 'reply' || m.proposal?.state !== 'open') return m;
-    if (revision !== null && m.proposal.proposal.baseRevision === revision) return m;
+    const { baseRevision, files } = m.proposal.proposal;
+    const stands = typeof since === 'number' ? baseRevision === since : !files.some((f) => since.includes(f));
+    if (stands) return m;
     changed = true;
     return { ...m, proposal: { ...m.proposal, state: 'dropped' as const } };
   });

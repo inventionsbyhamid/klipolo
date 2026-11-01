@@ -26,4 +26,9 @@ removedUs: number,
 /**
  * A short reason over each cut ("um", "pause").
  */
-tags: Array<ProposalTag>, };
+tags: Array<ProposalTag>, 
+/**
+ * The files whose words its cuts stand on, by asset id: those under its cuts that had words when it was made.
+ * Their words timed again (`speech-changed`) drop it; another file's leave it standing.
+ */
+files: Array<string>, };

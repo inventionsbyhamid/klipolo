@@ -10,7 +10,7 @@
 
 #![allow(dead_code)]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use klipolo_chat::{
@@ -69,6 +69,8 @@ pub struct State {
     pub message: String,
     /// Each file's analysis where it isn't done.
     pub analysis: HashMap<String, AnalysisState>,
+    /// The files whose rough words the preview's header offers to time again.
+    pub time_again: HashSet<String>,
     pub slot: Option<Slot>,
     /// What became of each client's latest proposal once it no longer waits.
     pub outcomes: HashMap<String, ProposalOutcome>,
@@ -144,6 +146,7 @@ impl FakeHost {
                 view: View::default(),
                 message: String::new(),
                 analysis: HashMap::new(),
+                time_again: HashSet::new(),
                 slot: None,
                 outcomes: HashMap::new(),
                 next_proposal: 1,
@@ -361,6 +364,7 @@ impl Host for FakeHost {
                     (a.id.clone(), state.unwrap_or(AnalysisState::Done))
                 })
                 .collect(),
+            time_again: s.time_again.clone(),
             library: s.library.clone(),
         };
         Some(Snapshot {
