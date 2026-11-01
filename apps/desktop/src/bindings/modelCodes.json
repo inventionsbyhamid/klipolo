@@ -809,6 +809,11 @@
     "params": []
   },
   {
+    "code": "model.layer.crop",
+    "message": "A layer's crop must leave at least a tenth of its picture each way.",
+    "params": []
+  },
+  {
     "code": "model.layer.videoOutside",
     "message": "A video layer is outside its source media.",
     "params": []

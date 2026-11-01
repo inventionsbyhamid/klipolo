@@ -47,6 +47,8 @@ fn layer_over_grey(mirror: bool, effects: Vec<EffectInstance>, blend: Option<Ble
         volume: 1.0,
         muted: true,
         mirror,
+        fill: false,
+        crop: None,
         tie: None,
     };
     let mut layer = item("v", 0.0, 4.0, bx(0.0, 0.0, 1.0, 1.0), content);

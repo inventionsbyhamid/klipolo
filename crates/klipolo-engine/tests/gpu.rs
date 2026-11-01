@@ -61,6 +61,8 @@ async fn video_layer_is_bt709_and_framed_on_the_background() {
                 volume: 1.0,
                 muted: false,
                 mirror: false,
+                fill: false,
+                crop: None,
                 tie: None,
             },
         )],

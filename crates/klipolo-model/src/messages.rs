@@ -184,6 +184,7 @@ pub const MESSAGES: Messages = &[
     ("model.layer.videoMissing", "A video layer's file is missing."),
     ("model.layer.speed", "Layer speed must be between 0.25× and 4×."),
     ("model.layer.volume", "Layer volume must be between 0 and 200 %."),
+    ("model.layer.crop", "A layer's crop must leave at least a tenth of its picture each way."),
     ("model.layer.videoOutside", "A video layer is outside its source media."),
     ("model.layer.imageMissing", "An image layer's file is missing."),
     ("model.text.empty", "A text layer has no text."),
