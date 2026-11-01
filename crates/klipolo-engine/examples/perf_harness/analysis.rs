@@ -1,12 +1,13 @@
 //! `cargo run -p klipolo-engine --example perf_harness -- analysis <video to play> <clip analysed beside it>`: what
 //! analysis's decoding beside playback costs it, and so what making way saves. The real actor and GPU backend play
-//! `PLAY_S` of the video at 1x three times, each on a fresh engine: alone (what playback gets while the scene log's
-//! picture decode makes way), beside the clip's every-frame picture decode (the scene log's: its cut finder reads each
-//! frame grey, the decode half of its small copy), and beside the clip's sound decode (the speech copy's). The work
-//! beside it runs on a thread of its own at utility priority, as analysis runs it, starting over at the clip's end.
-//! Reported per run: frames drawn per second, render ms per frame, the late runs the engine said (`FramesLate`, at most
-//! one a playback), and how far the work beside it got. Nothing is captured and no sound device opens. Cap the CPUs (a
-//! container's `--cpus 4`) to see a small computer.
+//! `PLAY_S` of the video at 1x five times, each on a fresh engine: alone (what playback gets while the scene log's
+//! picture decode makes way); beside the clip's every-frame picture decode (the scene log's: its cut finder reads each
+//! frame grey, the decode half of its small copy); beside the clip's sound decode (the speech copy's), as it ran and as
+//! it makes way now (waiting once frames come late); then alone again. The work beside it runs on a thread of its own
+//! at utility priority, as analysis runs it, starting over at the clip's end. Reported per run: frames drawn per
+//! second, render ms per frame, the late runs the engine said (`FramesLate`, at most one a playback), and how far the
+//! work beside it got. Nothing is captured and no sound device opens. Cap the CPUs (a container's `--cpus 4`) to see a
+//! small computer.
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -41,6 +42,8 @@ enum Beside {
     Nothing,
     Picture,
     Sound,
+    /// The sound decode, waiting once frames come late (as analysis makes way).
+    SoundUntilLate,
 }
 
 pub async fn run(args: &[String]) {
@@ -80,7 +83,11 @@ pub async fn run(args: &[String]) {
         ),
         (
             Beside::Sound,
-            "beside the clip's sound decode (it goes on until frames come late)",
+            "beside the clip's sound decode (it never made way)",
+        ),
+        (
+            Beside::SoundUntilLate,
+            "beside the clip's sound decode, waiting once frames come late (as it makes way now)",
         ),
         (Beside::Nothing, "alone again"),
     ] {
@@ -114,12 +121,13 @@ fn project(video: &str, width: u32, height: u32, fps: f64, duration_us: i64) -> 
 }
 
 /// Decodes `clip` (`beside`) over and over on a thread of utility priority until `stop`; counts what it got through:
-/// frames for the picture, blocks for the sound.
+/// frames for the picture, blocks for the sound. `SoundUntilLate` waits while `late` says playback fell behind.
 fn work_beside(
     clip: String,
     beside: Beside,
     stop: Arc<AtomicBool>,
     done: Arc<AtomicU64>,
+    late: Arc<AtomicU64>,
 ) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         qos::set_current(Qos::Utility);
@@ -132,12 +140,18 @@ fn work_beside(
                         true
                     });
                 }
-                Beside::Sound => {
+                Beside::Sound | Beside::SoundUntilLate => {
                     let _ = klipolo_engine::audio::decode::decode(
                         Path::new(&clip),
                         0,
                         None,
                         &mut |_, _| {
+                            while beside == Beside::SoundUntilLate
+                                && late.load(Ordering::Relaxed) > 0
+                                && !stop.load(Ordering::Relaxed)
+                            {
+                                std::thread::sleep(Duration::from_millis(50));
+                            }
                             done.fetch_add(1, Ordering::Relaxed);
                             Ok(!stop.load(Ordering::Relaxed))
                         },
@@ -210,7 +224,13 @@ async fn play(name: &str, project: Arc<Project>, clip: &str, beside: Beside) {
         Arc::new(AtomicBool::new(false)),
         Arc::new(AtomicU64::new(0)),
     );
-    let side = work_beside(clip.to_owned(), beside, stop.clone(), worked.clone());
+    let side = work_beside(
+        clip.to_owned(),
+        beside,
+        stop.clone(),
+        worked.clone(),
+        late.clone(),
+    );
     // The work beside it under way first, as when the person presses play while a clip is analysed.
     tokio::time::sleep(Duration::from_millis(300)).await;
     let before = worked.load(Ordering::Relaxed);
@@ -237,7 +257,7 @@ async fn play(name: &str, project: Arc<Project>, clip: &str, beside: Beside) {
     let unit = match beside {
         Beside::Nothing => "",
         Beside::Picture => " frames",
-        Beside::Sound => " sound blocks",
+        Beside::Sound | Beside::SoundUntilLate => " sound blocks",
     };
     report(
         &format!(
