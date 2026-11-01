@@ -1,6 +1,7 @@
 //! The services the analysis needs, behind interfaces it owns: a `Transcriber` hears speaker turns in a WAV, an
 //! `Aligner` times each turn's words, a `SceneLogger` watches a video and logs what happens in it, a `SubjectTracker`
-//! finds and follows every person (or other named thing) frame by frame. Their types and
+//! finds and follows every person (or other named thing) frame by frame, a `VoiceMatcher` says which person on screen
+//! a voice is. Their types and
 //! errors are Klipolo's own, so no vendor's type reaches the pipeline: each vendor lives in an adapter that implements
 //! the traits and maps its types and errors (`meta` today). Tests use small fakes of the traits.
 //!
@@ -12,6 +13,7 @@ pub mod meta;
 pub mod meta_chat;
 pub mod meta_images;
 mod meta_sam;
+mod meta_voices;
 
 use std::future::Future;
 use std::path::Path;
@@ -284,6 +286,51 @@ pub trait SubjectTracker: Send + Sync {
         video: &'a Path,
         phrase: &'a str,
     ) -> BoxFuture<'a, Result<Tracking, ProviderError>>;
+}
+
+/// Where someone is on screen: parts of the picture's width and height from its top left.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScreenBox {
+    pub left: f64,
+    pub top: f64,
+    pub right: f64,
+    pub bottom: f64,
+}
+
+/// Whose a voice is: a person on screen (from 1 at the left), nobody on screen, or an answer that didn't say.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Heard {
+    Person { person: u8 },
+    Nobody,
+    Unclear,
+}
+
+/// A matcher's answer for one video.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VoiceAnswer {
+    pub heard: Heard,
+    /// What the call cost, in US dollars.
+    pub cost_usd: f64,
+}
+
+/// A few seconds of video in which one voice speaks, and the people on screen, to which of them is speaking.
+pub trait VoiceMatcher: Send + Sync {
+    /// The model's id, kept with its answers.
+    fn model(&self) -> &str;
+
+    /// What asking about `seconds` of video costs, in US dollars, before any call.
+    fn estimate_usd(&self, seconds: f64) -> f64;
+
+    /// Which of `people` (numbered from 1, left to right) speaks in `video` (an MP4 with its sound, at most 2 frames a
+    /// second), or nobody on screen.
+    fn who_speaks<'a>(
+        &'a self,
+        video: &'a Path,
+        people: &'a [ScreenBox],
+    ) -> BoxFuture<'a, Result<VoiceAnswer, ProviderError>>;
 }
 
 /// What kind of failure a service reported, which decides what the pipeline does next.

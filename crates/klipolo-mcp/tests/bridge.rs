@@ -401,7 +401,7 @@ fn sends_the_token_session_and_version_and_never_an_origin() {
     let dir = tempfile::tempdir().unwrap();
     file_for(dir.path(), klipolo.port, TOKEN, std::process::id());
     let (bridge, out) = bridge(dir.path());
-    bridge.line(&hello(1, "Example Client"));
+    bridge.line(&hello(1, "Muse Spark agent"));
     bridge.wait();
     bridge.line(&call(2, "getSummary", json!({})));
     bridge.serve(Cursor::new(Vec::new()));
@@ -416,7 +416,7 @@ fn sends_the_token_session_and_version_and_never_an_origin() {
             "DELETE"
         ]
     );
-    let sent: Value = serde_json::from_str(&hello(1, "Example Client")).unwrap();
+    let sent: Value = serde_json::from_str(&hello(1, "Muse Spark agent")).unwrap();
     assert_eq!(got[0].json()["params"], sent["params"]);
     assert_eq!(
         got[2].json(),
@@ -455,7 +455,7 @@ fn sends_the_token_session_and_version_and_never_an_origin() {
 fn rereads_the_file_after_a_restart() {
     let mut k = Klipolo::start();
     let (bridge, out) = bridge(k.dir());
-    bridge.line(&hello(1, "Example Client"));
+    bridge.line(&hello(1, "Muse Spark agent"));
     bridge.line(&call(2, "getSummary", json!({})));
     bridge.wait();
     assert_eq!(out.reply(2)["result"]["isError"], false);
@@ -468,7 +468,7 @@ fn rereads_the_file_after_a_restart() {
     bridge.wait();
     let reply = out.reply(3);
     assert_eq!(reply["result"]["isError"], false, "{reply}");
-    assert_eq!(k.connected(), ["Example Client"]);
+    assert_eq!(k.connected(), ["Muse Spark agent"]);
 }
 
 #[test]

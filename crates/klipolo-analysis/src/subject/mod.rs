@@ -13,9 +13,12 @@
 //!   many stretches as cover it, and never paid for again. A failed or stopped request stores nothing; an answer cut off
 //!   part-way stores only the frames it holds, so asking again pays only for the rest.
 //! - **Times:** frame n of a stretch is at its start plus n / `fps` on the file's clock; the cuts are on that clock too.
+//! - **Who speaks** (`voices`): where two or more people don't all fit the crop, each voice of the file's transcript
+//!   is matched to one of them, so the path keeps whoever is speaking (`path`'s notes); `clips` puts it together.
 
 pub mod clips;
 pub mod path;
+pub mod voices;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -29,6 +32,7 @@ use crate::cache::Dir;
 use crate::cuts::Finder;
 use crate::error::{AnalysisError, VideoError};
 use crate::providers::{SubjectTracker, TrackedFrame};
+use crate::proxy;
 
 /// Frames a second sent: a speaker moves little in half a second, and a 60 s short is 120 frames.
 pub const FPS: f64 = 2.0;
@@ -102,6 +106,19 @@ pub trait SubjectCopy: Send + Sync {
         out: &Path,
         cancel: &AtomicBool,
     ) -> Result<Vec<Us>, VideoError>;
+
+    /// `range` of `src` at `fps` with its sound, as a model watches and hears it (`voices`), written to `out`.
+    /// Blocking; `cancel` stops it. A copy without sound by default.
+    fn copy_with_sound(
+        &self,
+        src: &Path,
+        range: RangeUs,
+        fps: f64,
+        out: &Path,
+        cancel: &AtomicBool,
+    ) -> Result<(), VideoError> {
+        self.copy(src, range, fps, out, cancel).map(|_| ())
+    }
 }
 
 /// The engine's small copy, with no sound, its cut finder watching every source frame.
@@ -134,6 +151,35 @@ impl SubjectCopy for EngineCopy {
             SmallCopyError::Failed(e) => VideoError::Failed(e),
         })?;
         Ok(finder.finish())
+    }
+
+    /// The scene log's small copy (640 × 360, its bitrates, sound in AAC), of just `range`.
+    fn copy_with_sound(
+        &self,
+        src: &Path,
+        range: RangeUs,
+        fps: f64,
+        out: &Path,
+        cancel: &AtomicBool,
+    ) -> Result<(), VideoError> {
+        let spec = SmallCopy {
+            range,
+            fit: proxy::FIT,
+            max_fps: fps,
+            video_bps: proxy::VIDEO_BPS,
+            audio_bps: proxy::AUDIO_BPS,
+            threads: small_copy::background_threads(
+                std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get),
+            ),
+        };
+        small_copy::write(src, out, &spec, cancel, None)
+            .map(|_| ())
+            .map_err(|e| match e {
+                SmallCopyError::NoVideo => VideoError::NoVideo,
+                SmallCopyError::NoEncoder => VideoError::NoEncoder,
+                SmallCopyError::Stopped => VideoError::Stopped,
+                SmallCopyError::Failed(e) => VideoError::Failed(e),
+            })
     }
 }
 
@@ -337,7 +383,7 @@ async fn track_part(
 }
 
 /// The small copy's file, removed when dropped.
-struct Copy(PathBuf);
+pub(crate) struct Copy(pub(crate) PathBuf);
 
 impl Drop for Copy {
     fn drop(&mut self) {
@@ -346,7 +392,7 @@ impl Drop for Copy {
 }
 
 /// A name no other copy has: the time and a counter.
-fn unique_name() -> String {
+pub(crate) fn unique_name() -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let nanos = (std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH))

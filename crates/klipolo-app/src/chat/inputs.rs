@@ -18,7 +18,7 @@ use klipolo_model::time::Us;
 use klipolo_model::timeline::ItemContent;
 
 use super::sources::Findings;
-use crate::analysis::chat::{scene_entries, speaker_turns};
+use crate::analysis::chat::{people_voices, person_turns, scene_entries};
 
 /// A sound file this long or longer is music on the library's tabs, unless the timeline plays it as a sound effect (the
 /// page's `MUSIC_MIN_US`, `features/media`).
@@ -81,7 +81,9 @@ pub fn inputs_for(
             speech.transcripts.insert(id.clone(), transcript.clone());
         }
         if !found.turns.is_empty() {
-            turns.insert(id.clone(), speaker_turns(&found.turns));
+            // A voice matched to someone on screen reads as that person's number, as the People line names them.
+            let people = people_voices(project, id);
+            turns.insert(id.clone(), person_turns(&found.turns, &people));
         }
         if let Some(log) = &found.scenes {
             scenes.insert(id.clone(), scene_entries(log));

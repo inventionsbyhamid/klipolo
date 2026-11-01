@@ -248,7 +248,7 @@ async fn the_paths_make_the_clip_follow_in_one_step() {
     let next = apply_ops(p, &ops).unwrap();
     let clip = &next.timeline.main[0];
     assert_eq!(clip.framing[&Portrait].mode, FramingMode::Fill);
-    let Some(FillFocus::Speaker { path }) = clip.fill_focus.get(&Portrait) else {
+    let Some(FillFocus::Speaker { path, .. }) = clip.fill_focus.get(&Portrait) else {
         panic!("{:?}", clip.fill_focus)
     };
     assert!(!clip.fill_focus.contains_key(&Landscape));
@@ -364,7 +364,7 @@ async fn each_clip_follows_the_speaker_of_its_own_file() {
         .unwrap();
     let next = apply_ops(p, &followed.ops(p)).unwrap();
     let x = |i: usize, at: f64| match next.timeline.main[i].fill_focus.get(&Portrait) {
-        Some(FillFocus::Speaker { path }) => path.centre_at(s(at)).unwrap().0,
+        Some(FillFocus::Speaker { path, .. }) => path.centre_at(s(at)).unwrap().0,
         other => panic!("{other:?}"),
     };
     assert!((x(0, 80.0) - 0.3).abs() < 0.02, "{}", x(0, 80.0));
@@ -459,7 +459,8 @@ async fn footage_longer_than_the_tracker_takes_goes_in_parts_priced_together() {
     assert!((followed.paid_usd - estimate.usd).abs() < 1e-9);
     // The parts' tracks make one path across the whole clip.
     let next = apply_ops(p, &followed.ops(p)).unwrap();
-    let Some(FillFocus::Speaker { path }) = next.timeline.main[0].fill_focus.get(&Portrait) else {
+    let Some(FillFocus::Speaker { path, .. }) = next.timeline.main[0].fill_focus.get(&Portrait)
+    else {
         panic!()
     };
     for at in [10.0, 600.0, 890.0] {

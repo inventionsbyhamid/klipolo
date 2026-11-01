@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { FormatKind } from '../../bindings/FormatKind';
+import type { Keep } from '../../bindings/Keep';
 import { speakerBridge } from '../../bridge/speaker';
 import { useProject } from '../../state/project';
 import { toast } from '../../state/toasts';
@@ -10,13 +11,15 @@ const runKey = (clipId: string, format: FormatKind) => `${clipId}:${format}`;
 interface SpeakerRuns {
   /** How far each follow under way is (0 to 100), by `runKey`. */
   runs: Record<string, number>;
+  /** The changes of who is kept under way, by `runKey`: nothing is tracked for them, so no progress is shown. */
+  keeping: Record<string, true>;
 }
 
 /**
  * The follows under way, so a clip card shows its progress again when the clip is selected again while Rust still
  * tracks. Progress comes from `speaker://progress`, for every clip a follow names.
  */
-export const useSpeakerRuns = create<SpeakerRuns>(() => ({ runs: {} }));
+export const useSpeakerRuns = create<SpeakerRuns>(() => ({ runs: {}, keeping: {} }));
 
 const setRun = (key: string, pct: number | null) =>
   useSpeakerRuns.setState((s) => {
@@ -29,6 +32,18 @@ const setRun = (key: string, pct: number | null) =>
 /** How far clip `clipId`'s follow in `format` is, or null when none is under way. */
 export const useSpeakerRun = (clipId: string, format: FormatKind) =>
   useSpeakerRuns((s) => s.runs[runKey(clipId, format)] ?? null);
+
+/** Whether a change of who clip `clipId` keeps in `format` is under way. */
+export const useSpeakerKeep = (clipId: string, format: FormatKind) =>
+  useSpeakerRuns((s) => s.keeping[runKey(clipId, format)] === true);
+
+const setKeeping = (key: string, on: boolean) =>
+  useSpeakerRuns.setState((s) => {
+    const keeping = { ...s.keeping };
+    if (on) keeping[key] = true;
+    else delete keeping[key];
+    return { keeping };
+  });
 
 /**
  * Follows the speaker in clip `clipId` in `format`: its progress shown while Rust tracks, and its change (one undo step,
@@ -45,8 +60,10 @@ export async function followSpeaker(clipId: string, format: FormatKind): Promise
     })
     .catch(() => () => undefined);
   try {
-    const change = await speakerBridge.follow(clipId, format);
-    await useProject.getState().adopt(change);
+    const followed = await speakerBridge.follow(clipId, format);
+    await useProject.getState().adopt(followed.change);
+    // Who speaks couldn't be told: say why the crop follows the main person.
+    if (followed.note) toast.info(followed.note);
     return true;
   } catch (error) {
     toast.error(error instanceof Error ? error.message : String(error));
@@ -54,5 +71,27 @@ export async function followSpeaker(clipId: string, format: FormatKind): Promise
   } finally {
     stop();
     setRun(key, null);
+  }
+}
+
+/**
+ * Keeps `keep` in frame in clip `clipId` in `format` (Rust makes it from what the follow tracked, at no charge), its
+ * change taken into the project as one undo step. A failure is said in a toast. Nothing while a follow of the same
+ * clip and format runs.
+ */
+export async function keepInFrame(clipId: string, format: FormatKind, keep: Keep): Promise<boolean> {
+  const key = runKey(clipId, format);
+  const { runs, keeping } = useSpeakerRuns.getState();
+  if (runs[key] !== undefined || keeping[key]) return false;
+  setKeeping(key, true);
+  try {
+    const change = await speakerBridge.keep(clipId, format, keep);
+    await useProject.getState().adopt(change);
+    return true;
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : String(error));
+    return false;
+  } finally {
+    setKeeping(key, false);
   }
 }

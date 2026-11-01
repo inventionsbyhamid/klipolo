@@ -499,10 +499,49 @@
           "description": {
             "description": "One short noun phrase naming who or what to follow, such as woman astronaut.",
             "type": "string"
+          },
+          "focus": {
+            "description": "Who to keep in frame when, as People names them. Null: whoever speaks.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "fromSec": {
+                  "description": "Start.",
+                  "type": "number"
+                },
+                "person": {
+                  "description": "P1 is leftmost.",
+                  "enum": [
+                    "speaker",
+                    "both",
+                    "P1",
+                    "P2",
+                    "P3",
+                    "P4"
+                  ],
+                  "type": "string"
+                },
+                "toSec": {
+                  "description": "End.",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "fromSec",
+                "toSec",
+                "person"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           }
         },
         "required": [
-          "description"
+          "description",
+          "focus"
         ],
         "type": "object"
       },
