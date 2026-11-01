@@ -643,11 +643,30 @@ fn missing(expected: &[ExpectedCall], actual: &[(String, Value)]) -> String {
     if !absent.is_empty() {
         return format!("no {}", absent.join(" and no "));
     }
-    let named: Vec<(String, Value)> = (actual.iter())
-        .filter(|(n, _)| expected.iter().any(|e| e.name == *n))
-        .cloned()
-        .collect();
-    mismatch(expected, &named)
+    // The first listed call no call of its name matches, by its first argument that doesn't fit.
+    for e in expected {
+        let fits = |args: &Value| {
+            (e.args.iter()).all(|(k, want)| args.get(k).is_some_and(|got| value_matches(want, got)))
+        };
+        let same: Vec<&Value> = (actual.iter())
+            .filter(|(n, _)| *n == e.name)
+            .map(|(_, args)| args)
+            .collect();
+        if same.iter().any(|args| fits(args)) {
+            continue;
+        }
+        for (key, rule) in &e.args {
+            if let Some(got) = same
+                .iter()
+                .map(|args| args.get(key))
+                .find(|got| !got.is_some_and(|g| value_matches(rule, g)))
+            {
+                let got = got.map_or("missing".to_owned(), Value::to_string);
+                return format!("{}.{key} is {got}, not {rule}", e.name);
+            }
+        }
+    }
+    "the calls don't pair up with the expected ones".to_owned()
 }
 
 fn mismatch(expected: &[ExpectedCall], actual: &[(String, Value)]) -> String {
@@ -1011,6 +1030,15 @@ mod tests {
         assert!(calls_match(&want, &extra, true));
         assert!(!calls_match(&want, &extra[1..], true));
         assert_eq!(missing(&want, &extra[1..]), "no removeSilences");
+        let off = got(&[
+            ("removeSilences", json!({"minPauseSec": 2})),
+            ("setFormat", json!({"format": "square"})),
+            ("setFormat", json!({"format": "portrait"})),
+        ]);
+        assert_eq!(
+            missing(&want, &off),
+            "removeSilences.minPauseSec is 2, not 1.0"
+        );
     }
 
     #[test]
