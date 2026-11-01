@@ -275,8 +275,8 @@ export function recordingName(project: Pick<Project, 'recordings'>, recordingId:
 }
 
 /**
- * A clip's name: a recording's own ("Recording 1", never its screen file's), else its file's as the Library names it
- * ("Screen of Recording 1" for a recording's file added on its own).
+ * A clip's name: a recording's own ("Recording 1", never its screen file's), else its file's (`assetName`: "Screen of
+ * Recording 1" for a recording's file played on its own).
  */
 export function sourceLabel(project: Sources, source: ClipSource): string {
   if (source.type === 'recording') return recordingName(project, source.id);
@@ -296,9 +296,9 @@ export function clipLabel(project: Sources, clip: Clip): string {
 }
 
 /**
- * A file's name in the Library and on the timeline: a recording's files by their source and their recording ("Screen
- * of Recording 1", "Camera of Recording 1"), as each plays that source alone (only the recording's own clip is
- * "Recording 1"); any other file by its own name.
+ * A file's name on the timeline and in its card: a recording's files by their source and their recording ("Screen of
+ * Recording 1", "Camera of Recording 1"), as each plays that source alone (only the recording's own clip is "Recording
+ * 1", and the Library lists the take as one row of that name); any other file by its own name.
  */
 export function assetName(project: Sources, asset: Asset): string {
   for (const recording of project.recordings) {

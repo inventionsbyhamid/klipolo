@@ -1,11 +1,18 @@
 import { useEffect, useState, type RefObject } from 'react';
 import { create } from 'zustand';
 import type { Asset } from '../../bindings/Asset';
+import type { ClipSource } from '../../bindings/ClipSource';
 import type { PackItem } from '../../bindings/PackItem';
 import type { Project } from '../../bindings/Project';
+import type { Recording } from '../../bindings/Recording';
+import { codedMessage } from '../../bridge/call';
 import { library } from '../../bridge/library';
 import { IMAGE_US } from '../../lib/placement';
+import { firstAsset, primarySource } from '../../lib/recording';
+import { assetById } from '../../lib/timeline';
 import { useProject } from '../../state/project';
+import { fileKey } from './marks';
+import { recordingFiles, recordingRows, type RecordingRow } from './recordings';
 import { MUSIC_MIN_US } from './useImportMedia';
 
 /** The id a pack item's asset has in a project (`crates/klipolo-app/src/pack.rs`). */
@@ -18,21 +25,23 @@ export function madeWith(asset: Asset): string | null {
   return /(^|\/)[^/]* Media\/Muse Image\/[^/]+$/.test(asset.path) ? 'Muse Image' : null;
 }
 
-/** What the timeline uses of each file: as a clip, music, a sound effect or a layer. */
+/** What the timeline uses of each file: as a clip, music, a sound effect or a layer; and the recordings it plays. */
 export interface Uses {
   any: Set<string>;
   music: Set<string>;
   sounds: Set<string>;
+  recordings: Set<string>;
 }
 
 const usesOf = new WeakMap<Project['timeline'], Uses>();
 
-/** The files `project` puts on its timeline, worked out once per timeline. */
+/** The files and recordings `project` puts on its timeline, worked out once per timeline. */
 export function uses(project: Project): Uses {
   let found = usesOf.get(project.timeline);
   if (found) return found;
-  found = { any: new Set(), music: new Set(), sounds: new Set() };
-  for (const clip of project.timeline.main) if (clip.source.type === 'asset') found.any.add(clip.source.id);
+  found = { any: new Set(), music: new Set(), sounds: new Set(), recordings: new Set() };
+  for (const clip of project.timeline.main)
+    (clip.source.type === 'asset' ? found.any : found.recordings).add(clip.source.id);
   for (const track of project.timeline.tracks)
     for (const item of track.items) {
       const c = item.content;
@@ -44,27 +53,82 @@ export function uses(project: Project): Uses {
   return found;
 }
 
+/** One item on the Clips tab: a video file, or a whole recording (whose files are never listed on their own). */
+export interface ShelfClip {
+  /** What it is: the file, or the recording. */
+  source: ClipSource;
+  name: string;
+  /**
+   * What its drag carries (its kind, name and length): the file, or a recording's main footage named and timed as the
+   * whole take. Its path is the file its picture comes from.
+   */
+  asset: Asset;
+  /** A recording's length and sources ("1:00, screen and mic"); none for a file, whose row shows its length. */
+  meta?: string;
+  /** Words a search finds it by besides its name: a recording's sources ("Screen", "Mic"). */
+  tags: string[];
+  /** Its favorite and recently used mark: its file's, a recording's main footage's. */
+  key: string;
+}
+
+const fileClip = (asset: Asset): ShelfClip => ({
+  source: { type: 'asset', id: asset.id },
+  name: asset.name,
+  asset,
+  tags: [],
+  key: fileKey(asset.path),
+});
+
+/** Recording `row` as a Clips item, standing for its main footage `footage` (none: its file is gone). */
+function recordingClip(row: RecordingRow, recording: Recording, footage: Asset | null): ShelfClip {
+  const asset: Asset = {
+    ...(footage ?? { id: row.id, kind: 'video', path: '', width: 0, height: 0, fps: 0, hasAudio: false }),
+    name: row.name,
+    durationUs: row.durationUs,
+  };
+  return {
+    source: { type: 'recording', id: row.id },
+    name: row.name,
+    asset,
+    meta: row.meta,
+    tags: recording.sources.map((s) => codedMessage({ code: s.label, params: {} }) || s.label),
+    key: fileKey(asset.path),
+  };
+}
+
 /**
- * The person's own files on each tab: videos on Clips; a sound on Music when it plays as music or is long
+ * The person's own files on each tab: videos and recordings on Clips, a recording as one item for the
+ * whole take (`recordingFiles` are listed nowhere on their own); a sound on Music when it plays as music or is long
  * enough to be a song, on Sounds when it plays as an effect or is short (both, if it plays as both); pictures on
  * Images. The pack's own files are listed with the pack, not here.
  */
 export function shelves(project: Project) {
-  const own = project.assets.filter((a) => !a.id.startsWith('klipolo-pack-'));
+  const taken = recordingFiles(project);
+  const own = project.assets.filter((a) => !a.id.startsWith('klipolo-pack-') && !taken.has(a.id));
   const used = uses(project);
   const audio = own.filter((a) => a.kind === 'audio');
-  // Clips in the order the video plays them (first use), then those not on it yet, as imported.
+  // Clips in the order the video plays them (first use), then those not on it yet, as imported (a recording where its
+  // first file came in).
   const order = new Map<string, number>();
   project.timeline.main.forEach((clip, i) => {
-    if (clip.source.type === 'asset' && !order.has(clip.source.id)) order.set(clip.source.id, i);
+    const key = `${clip.source.type}:${clip.source.id}`;
+    if (!order.has(key)) order.set(key, i);
   });
-  const place = (a: Asset) => order.get(a.id) ?? Infinity;
+  const imported = new Map(project.assets.map((a, i) => [a.id, i]));
+  const rows = recordingRows(project);
+  const clips = [
+    ...own.filter((a) => a.kind === 'video').map((a) => ({ clip: fileClip(a), at: imported.get(a.id) ?? Infinity })),
+    ...project.recordings.map((recording, i) => {
+      const files = recording.sources.flatMap((s) => s.runs.map((run) => imported.get(run.assetId) ?? Infinity));
+      const footage = assetById(project, firstAsset(primarySource(recording)));
+      return { clip: recordingClip(rows[i], recording, footage), at: Math.min(Infinity, ...files) };
+    }),
+  ];
+  const place = (c: ShelfClip) => order.get(`${c.source.type}:${c.source.id}`) ?? Infinity;
   return {
-    clips: own
-      .filter((a) => a.kind === 'video')
-      .map((a, i) => [a, i] as const)
-      .sort(([a, i], [b, j]) => place(a) - place(b) || i - j)
-      .map(([a]) => a),
+    clips: clips
+      .sort((a, b) => place(a.clip) - place(b.clip) || a.at - b.at)
+      .map(({ clip }) => clip),
     music: audio.filter((a) => used.music.has(a.id) || (!used.sounds.has(a.id) && a.durationUs >= MUSIC_MIN_US)),
     sounds: audio.filter((a) => used.sounds.has(a.id) || (!used.music.has(a.id) && a.durationUs < MUSIC_MIN_US)),
     images: own.filter((a) => a.kind === 'image' && !madeWith(a)),
