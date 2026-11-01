@@ -265,6 +265,31 @@ describe('the inspector', () => {
     );
   });
 
+  it('quick presses of Larger text step through the sizes and are one change, the outline growing with the text', () => {
+    vi.useFakeTimers();
+    useProject.setState({ snapshot: withTitleStyle({ outline: { color: '#000000', width: 2.88 } }) });
+    useSelection.setState({ selectedId: 'title' });
+    renderWithProviders(<Inspector format="landscape" />);
+    const larger = screen.getByRole('button', { name: 'Larger text' });
+    for (let i = 0; i < 3; i++) fireEvent.click(larger);
+    // Shown at once; nothing is committed while the presses go on.
+    expect(screen.getByRole('slider', { name: 'Size' })).toHaveAttribute('aria-valuenow', '112');
+    expect(apply).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(400));
+    expect(apply.mock.calls.map(([label]) => label)).toEqual(['text.size.undo']);
+    expect(styleOf(apply.mock.calls[0])).toMatchObject({ size: 112, outline: { color: '#000000', width: 4.48 } });
+  });
+
+  it('Smaller text stops at the smallest size', () => {
+    useProject.setState({ snapshot: withTitleStyle({ size: 8 }) });
+    useSelection.setState({ selectedId: 'title' });
+    renderWithProviders(<Inspector format="landscape" />);
+    const smaller = screen.getByRole('button', { name: 'Smaller text' });
+    expect(smaller).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(smaller);
+    expect(screen.getByRole('slider', { name: 'Size' })).toHaveAttribute('aria-valuenow', '8');
+  });
+
   it('quick size keys and a custom colour typed in the colour popover are one change each', async () => {
     vi.useFakeTimers();
     useSelection.setState({ selectedId: 'title' });

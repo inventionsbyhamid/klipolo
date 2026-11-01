@@ -74,3 +74,16 @@
   gap: var(--space-2);
   min-width: 0;
 }
+
+/* Size: − and + either side of the slider. */
+.text-size-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.text-size-row .slider-row {
+  flex: 1;
+  min-width: 0;
+}

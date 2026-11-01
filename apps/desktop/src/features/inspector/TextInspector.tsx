@@ -25,19 +25,14 @@ import { AnimationField, PositionField, TimingField } from './common';
 import { Field } from './fields';
 import { TextField } from './TextField';
 import { TextLooks } from './TextLooks';
-import { ToolSlider } from './ToolSlider';
+import { TextSizeField } from './TextSizeField';
 import './textInspector.css';
 
 type TextContent = Extract<ItemContent, { type: 'text' }>;
 
-/** The size slider's range: up to the largest size the model takes (`model.text.size`, 4 to 400); under 8 none reads. */
-export const MIN_TEXT_SIZE = 8;
-export const MAX_TEXT_SIZE = 400;
-
 /** Bold's weight, and the weight it goes back to. */
 const BOLD = 700;
 const REGULAR = 400;
-
 
 /** The text colours offered, then "+" for any other. */
 export function textSwatches(t: (d: { id: string; message?: string }) => string): Swatch[] {
@@ -144,16 +139,7 @@ export function TextInspector({
         </div>
       </Field>
       <Field label={sizeLabel}>
-        <ToolSlider
-          label={sizeLabel}
-          commitLabel="text.size.undo"
-          value={style.size}
-          min={MIN_TEXT_SIZE}
-          max={MAX_TEXT_SIZE}
-          step={1}
-          format={(v) => String(Math.round(v))}
-          ops={(size) => styleOps((now) => scaledStyle(now, size))}
-        />
+        <TextSizeField size={style.size} ops={(size) => styleOps((now) => scaledStyle(now, size))} />
       </Field>
       <Field label={t({ id: 'text.style.field', message: 'Style', comment: 'Bold and alignment of a text' })}>
         <div className="text-style-row">
