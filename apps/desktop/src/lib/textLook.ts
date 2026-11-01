@@ -2,6 +2,7 @@ import type { MessageDescriptor } from '@lingui/core';
 import { msg } from '@lingui/core/macro';
 import type { CSSProperties } from 'react';
 import type { TextStyle } from '../bindings/TextStyle';
+import { luminance, sameColor } from '../design/color/colorMath';
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
@@ -27,8 +28,6 @@ export function outlineStep(style: TextStyle): OutlineStep | null {
   const off = (step: OutlineStep) => Math.abs(OUTLINE_EM[step] - em);
   return OUTLINE_STEPS.map((s) => s.value).reduce((best, step) => (off(step) < off(best) ? step : best));
 }
-
-const sameColor = (a: string | null, b: string | null) => (a ?? '').toUpperCase() === (b ?? '').toUpperCase();
 
 /** Whether two styles look the same: colour, highlight, outline and shadow. */
 export function sameLook(a: TextLook, b: TextLook): boolean {
@@ -142,15 +141,8 @@ export function scaledStyle(style: TextStyle, size: number): TextStyle {
   return { ...style, size, outline: outline ? { ...outline, width: round2(outline.width * k) } : outline };
 }
 
-/** WCAG 2's relative luminance of `#rrggbb` (0 black to 1 white); 1 for anything else. */
-function lightness(hex: string): number {
-  if (!/^#[0-9a-f]{6}/i.test(hex)) return 1;
-  const [r, g, b] = [1, 3, 5].map((i) => {
-    const s = parseInt(hex.slice(i, i + 2), 16) / 255;
-    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
+/** WCAG 2's relative luminance of `#rrggbb` (0 black to 1 white; `colorMath`'s, the one copy); 1 for anything else. */
+const lightness = (hex: string) => (/^#[0-9a-f]{6}/i.test(hex) ? luminance(hex) : 1);
 
 /**
  * The caret typing a title on the video: one that shows where the letters' own colour may not (a white title over a
