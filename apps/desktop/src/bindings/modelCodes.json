@@ -1002,6 +1002,36 @@
     "params": []
   },
   {
+    "code": "model.roll.noCut",
+    "message": "There's no cut after this clip to roll.",
+    "params": []
+  },
+  {
+    "code": "model.slide.alone",
+    "message": "Only a clip with a clip on each side can slide.",
+    "params": []
+  },
+  {
+    "code": "model.edit.noFootage",
+    "message": "There's no more footage that way.",
+    "params": []
+  },
+  {
+    "code": "model.edit.transition",
+    "message": "A transition needs the footage this edit would use. Shorten or remove it first.",
+    "params": []
+  },
+  {
+    "code": "model.edit.locked",
+    "message": "A layer on a locked track would move. Unlock its track first.",
+    "params": []
+  },
+  {
+    "code": "model.edit.separated",
+    "message": "A separated sound or camera starts in the footage this edit hides. Trim it first.",
+    "params": []
+  },
+  {
     "code": "model.transition.noRoom",
     "message": "There isn't enough extra footage at this cut for a transition.",
     "params": []
