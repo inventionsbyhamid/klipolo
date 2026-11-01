@@ -13,6 +13,7 @@ import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
 import { deleteBlock, duplicate } from '../timeline/commands';
 import { ClipCameraFields } from './CameraFields';
+import { EffectsButton } from './EffectsButton';
 import { setClipSpeed } from './clipSpeed';
 import { cardEscape } from './common';
 import { FramingField } from './FramingField';
@@ -24,8 +25,8 @@ import { VolumeControls } from './VolumeControls';
  * film icon and the clip's name (its file's, or a recording's own: "Recording 1"), a more menu (Duplicate, Delete: the
  * timeline's own commands; a main clip has no layer order) and a close button. Its fields: Fit or Fill in the format
  * shown, and the Fill focus while Fill crops (`FramingField`); Speed (0.5x to 2x, the clip's length follows); when
- * the clip has sound, Volume (0 to 200%) and Mute; and a recording's camera (`ClipCameraFields`). Each change is one
- * undo step.
+ * the clip has sound, Volume (0 to 200%) and Mute; its effects (`EffectsButton`); and a recording's camera
+ * (`ClipCameraFields`). Each change is one undo step.
  */
 export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind }) {
   const { t } = useLingui();
@@ -85,6 +86,7 @@ export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind
             }}
           />
         )}
+        <EffectsButton target={{ type: 'clip', id: clip.id }} effects={clip.effects} />
         <ClipCameraFields project={project} clip={clip} format={format} />
       </div>
     </aside>

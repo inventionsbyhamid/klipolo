@@ -2545,6 +2545,34 @@
   justify-self: start;
 }
 
+/* A card's Effects button, at its own width, with the count of effects on a pill. */
+.insp-effects {
+  justify-self: start;
+}
+
+.fx-count {
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bay-press);
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The Effects popover: the stack, scrolling when it is tall. */
+.fx-pop {
+  width: 320px;
+  max-width: calc(100vw - 16px);
+  max-height: min(32rem, 70vh);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+/* A checked swatch's gap takes the popover's surface, not the card's. */
+.popover .swatch[aria-checked="true"] {
+  box-shadow: 0 0 0 2px var(--color-dialog), 0 0 0 4px var(--color-paper);
+}
+
 .field-note {
   margin: 0;
   color: var(--color-ink-soft);
