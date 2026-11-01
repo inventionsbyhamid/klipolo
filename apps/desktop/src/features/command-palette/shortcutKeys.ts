@@ -1,6 +1,6 @@
 /*
- * How the editor's shortcuts read a keydown (`useEditorShortcuts`): the app's
- * modifier, the letter a ⌃⌘ key stands for, and whether an open menu or dialog has the keyboard.
+ * How the editor's shortcuts read a keydown (`useEditorShortcuts`): the app's modifier, the letter a ⌃⌘ key stands
+ * for, and whether an open menu or dialog has the keyboard.
  */
 
 /**
@@ -38,6 +38,12 @@ export function controlLetter(e: { key?: string; code?: string }): string {
   return code?.[1]?.toLowerCase() ?? '';
 }
 
+/** Keys typed into a field belong to the field. */
+export function typing(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+}
+
 /** An open menu, popup list or dialog owns the keyboard (its type-to-search letters, arrows and Enter). */
 export const OWNS_KEYS = '[role="menu"], [role="listbox"], [role="dialog"], [role="alertdialog"]';
 /**
@@ -69,4 +75,20 @@ export function controlCommand(e: ControlPress, map: Readonly<Record<string, str
   if (e.repeat || e.altKey || e.shiftKey || e.defaultPrevented || inPopup(e.target)) return undefined;
   const letter = controlLetter(e);
   return letter && Object.hasOwn(map, letter) ? map[letter] : undefined;
+}
+
+type RecordPress = Pick<
+  KeyboardEvent,
+  'key' | 'code' | 'repeat' | 'altKey' | 'shiftKey' | 'metaKey' | 'ctrlKey' | 'defaultPrevented' | 'target'
+>;
+
+/**
+ * ⇧⌘R (⇧ Ctrl R on Windows and Linux), Record your screen: R by its letter as ⌃⌘ shortcuts read it, once
+ * per press (its repeats ask for nothing). Never with ⌥ or both ⌘ and Ctrl, while typing in a field, from an open menu,
+ * list or dialog, or once a control handled the key.
+ */
+export function recordShortcut(e: RecordPress, mac = MAC): boolean {
+  if (e.repeat || e.altKey || !e.shiftKey || e.defaultPrevented) return false;
+  if ((e.ctrlKey && e.metaKey) || !primaryHeld(e, mac)) return false;
+  return controlLetter(e) === 'r' && !typing(e.target) && !inPopup(e.target);
 }

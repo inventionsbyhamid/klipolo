@@ -16,6 +16,8 @@ path = "src/lib.rs"
 tauri-build = { version = "=2.7.1", features = [] }
 
 [dependencies]
+# A new take's auto zoom: its clicks planned into Auto zoom items as the engine plans them (`zooms`).
+klipolo-cursor = { path = "../klipolo-cursor" }
 klipolo-engine = { path = "../klipolo-engine" }
 # The bundled fonts' folder, configured once for the engine at launch.
 klipolo-fonts = { path = "../klipolo-fonts" }
@@ -30,6 +32,9 @@ klipolo-meta = { path = "../klipolo-meta" }
 klipolo-chat = { path = "../klipolo-chat" }
 # The OS's logs folder for the app's log; the analysis thread's QoS.
 klipolo-platform = { path = "../klipolo-platform" }
+# Screen recording: the take's worker (`--record-worker`, this binary), the setup read without capture or prompts, and
+# the OS's capture backends (`real-capture`, which only the app turns on).
+klipolo-capture = { path = "../klipolo-capture", features = ["real-capture"] }
 # `klipolo-app --mcp`: the stdio bridge to the MCP server, for apps that start a command.
 klipolo-mcp = { path = "../klipolo-mcp" }
 # `protocol-asset`: the page reads imported media and the engine's thumbnails through `asset:` URLs.
@@ -45,9 +50,16 @@ thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+# The Record dialog's preview frames: the JPEG of a worker's preview event, once, into the bytes the page draws (the
+# version the lockfile already has).
+base64 = "0.22.1"
 # The import's types for the page (`cargo test` writes them to apps/desktop/src/bindings).
 ts-rs = "12"
 uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(unix)'.dependencies]
+# The local date a take's new project is named for ("Recording, Oct 31": `localtime_r`).
+libc = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # The Keychain (generic passwords) for the Meta key and the relay token; the version the lockfile already has.
@@ -59,6 +71,8 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "tiff"
 # Reading a test file's streams as the probe does (the engine's FFmpeg bindings, at their version and features).
 ffmpeg = { package = "ffmpeg-next", version = "=9.0.0", default-features = false, features = ["codec", "format"] }
 libc = "0.2"
+# The recorder's tests: the fake backend (no device, no prompt) beside the real one the app builds.
+klipolo-capture = { path = "../klipolo-capture", features = ["real-capture", "synthetic"] }
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "test-util"] }
 # Meta and the relay, mocked for the credentials tests.

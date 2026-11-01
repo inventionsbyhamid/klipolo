@@ -6,6 +6,7 @@ import { audioLines } from './lanes/audioRole';
 import { LaneRow } from './lanes/LaneRow';
 import { LayersLane, layersLanePx } from './lanes/LayersLane';
 import { MainLane } from './lanes/MainLane';
+import { SourceLanes } from './lanes/SourceLanes';
 import type { LineView } from './lanes/TrackLane';
 import { CLIP_INNER_PX } from './layout';
 import { createZoomRest } from './media/zoomRest';
@@ -29,13 +30,16 @@ interface TimelineLanesProps {
 
 /**
  * The timeline's four lanes under the ruler, always shown: Overlays (text and images, packed in up to
- * three rows), Video (the clips, taking the spare height), Sounds and Music. Empty lanes are a faint strip. It gives
+ * three rows), Video (the clips, taking the spare height), Sounds and Music; and between Video and Sounds, one lane per
+ * kind of sound the takes recorded (`SourceLanes`), only while a take has it. Empty lanes are a faint strip. It gives
  * the blocks' media the window it draws in and this timeline's zoom gestures to wait out (`media/BlockMedia`).
  */
 export function TimelineLanes({ project, viewport, view, width, clipPx = CLIP_INNER_PX, onSeek }: TimelineLanesProps) {
   const { t } = useLingui();
   const { main, tracks } = project.timeline;
   const { assets, recordings } = project;
+  // One object per asset and recording lists, which the source lanes' kinds are kept by.
+  const sources = useMemo(() => ({ assets, recordings }), [assets, recordings]);
   const [zoomRest] = useState(() => createZoomRest());
   // A new value only when the window steps (or on a zoom), so the blocks' media re-renders only then.
   const { fromUs, toUs, widthPx, scrollPx } = viewport;
@@ -81,6 +85,16 @@ export function TimelineLanes({ project, viewport, view, width, clipPx = CLIP_IN
             {...view}
           />
         </LaneRow>
+        {/* Each kind of recorded sound's own lane, under the video it was recorded with. */}
+        <SourceLanes
+          clips={main}
+          sources={sources}
+          tracks={tracks}
+          view={ghostWindow}
+          rowPx={sizes.source}
+          width={width}
+          onSeek={onSeek}
+        />
         <LaneRow
           lane="sounds"
           icon="pulse"

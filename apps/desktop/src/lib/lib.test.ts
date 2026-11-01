@@ -66,9 +66,18 @@ describe('timeline queries', () => {
     expect(visualItemsAt(p, 5 * S)).toEqual([]);
   });
   it('labels sources and items', () => {
-    expect(sourceLabel(p, p.timeline.main[0].source)).toBe('screen.mp4');
+    expect(sourceLabel(p, p.timeline.main[0].source)).toBe('Recording 1');
     expect(itemLabel(p, findItem(p, 'title')!.item)).toBe('Set up billing');
     expect(itemLabel(p, findItem(p, 'song')!.item)).toBe('music.mp3');
+  });
+  it('names a recording file on the timeline as the Library does', () => {
+    // The Library's "+" on "Screen of Recording 1" adds that file alone, and "Mic of Recording 1" goes on the Music
+    // lane: their blocks, menus and messages say the same.
+    expect(sourceLabel(p, { type: 'asset', id: 'screen' })).toBe('Screen of Recording 1');
+    const song = findItem(p, 'song')!.item;
+    const mic = { ...song, content: { ...song.content, assetId: 'mic' } as typeof song.content };
+    expect(itemLabel(p, mic)).toBe('Mic of Recording 1');
+    expect(sourceLabel(p, { type: 'asset', id: 'broll' })).toBe('broll.mp4');
   });
   it('names a missing motion graphic as one', () => {
     const title = findItem(p, 'title')!.item;

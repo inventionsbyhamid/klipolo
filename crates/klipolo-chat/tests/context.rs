@@ -1302,6 +1302,7 @@ fn library_item(name: &str, kind: MediaKind, pack: bool) -> LibraryItem {
         kind,
         asset,
         pack,
+        tags: Vec::new(),
     }
 }
 

@@ -330,7 +330,6 @@ impl MediaJobs {
 
     /// A take is recording (true, from arming until it has landed) or not (false): copies wait, so nothing competes
     /// with the take. The engine's own background work waits through the same take's hold (`Hold::Recording`).
-    #[allow(dead_code, reason = "the recorder's take hold calls it")]
     pub fn set_recording(&self, recording: bool) {
         self.send(Msg::Recording(recording));
     }

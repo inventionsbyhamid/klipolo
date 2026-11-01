@@ -57,13 +57,13 @@ describe('the timeline from the keyboard', () => {
         <ShortcutsHarness />
       </>,
     );
-    // Anchored: the title's name ends "moves with screen.mp4".
-    const a = screen.getByRole('button', { name: /^screen\.mp4/ });
+    // Anchored: the title's name ends "moves with Recording 1".
+    const a = screen.getByRole('button', { name: /^Recording 1/ });
     act(() => a.focus());
     fireEvent.keyDown(a, { key: 'ArrowRight' });
     await frames();
     // The cut between the clips first: a stop that selects nothing when it has no transition.
-    const cut = screen.getByRole('button', { name: /^Cut between screen\.mp4 and broll\.mp4/ });
+    const cut = screen.getByRole('button', { name: /^Cut between Recording 1 and broll\.mp4/ });
     expect(cut).toHaveFocus();
     expect(useSelection.getState().selectedId).toBeNull();
     fireEvent.keyDown(cut, { key: 'ArrowRight' });
@@ -86,7 +86,7 @@ describe('the timeline from the keyboard', () => {
     act(() => title.focus());
     fireEvent.keyDown(title, { key: 'ArrowDown' });
     await frames();
-    expect(screen.getByRole('button', { name: /^screen\.mp4/ })).toHaveFocus();
+    expect(screen.getByRole('button', { name: /^Recording 1/ })).toHaveFocus();
   });
 
   it('holding . nudges a layer as one undo step', async () => {
@@ -168,7 +168,7 @@ describe('the timeline from the keyboard', () => {
     useUi.setState({ pxPerSecond: 400 });
     const { unmount } = renderWithProviders(<Timeline />);
     expect(document.querySelector('[data-block-id="b"]')).toBeNull();
-    const a = screen.getByRole('button', { name: /^screen\.mp4/ });
+    const a = screen.getByRole('button', { name: /^Recording 1/ });
     act(() => a.focus());
     // The cut at 20 s is outside the window too: focus on it draws it.
     fireEvent.keyDown(a, { key: 'ArrowRight' });
@@ -186,7 +186,7 @@ describe('the timeline from the keyboard', () => {
     useUi.setState({ pxPerSecond: 0.5 });
     renderWithProviders(<Timeline />);
     expect(document.querySelector('[data-block-id="b"]')).toBeNull();
-    const first = screen.getByRole('button', { name: /^screen\.mp4/ });
+    const first = screen.getByRole('button', { name: /^Recording 1/ });
     expect(first.tabIndex).toBe(0);
     act(() => first.focus());
     fireEvent.keyDown(first, { key: 'End' });
@@ -217,7 +217,7 @@ describe('the timeline from the keyboard', () => {
     await frames();
     fireEvent.keyDown(document.activeElement!, { key: 'ArrowLeft' });
     await frames();
-    const a = screen.getByRole('button', { name: /^screen\.mp4/ });
+    const a = screen.getByRole('button', { name: /^Recording 1/ });
     expect(a).toHaveFocus();
     // Chromium and WebView2 blur a focused block React moves (a clip's nudge reorders them): focus is back on it by
     // the time the blur is looked at, so it still counts as the timeline's.
@@ -233,7 +233,7 @@ describe('the timeline from the keyboard', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: /^broll\.mp4/ }));
     // The selection follows, so a second ⌫ deletes the neighbour.
     expect(useSelection.getState().selectedId).toBe('b');
-    expect(screen.getByRole('status')).toHaveTextContent('Deleted screen.mp4');
+    expect(screen.getByRole('status')).toHaveTextContent('Deleted Recording 1');
   });
 
   it("W trims the selected clip's end to the playhead, and says so", async () => {
@@ -466,7 +466,7 @@ describe('the timeline from the keyboard', () => {
   });
 
   it('←/→ on the "+N" marker of a packed layer go from where it is, and the selection follows', async () => {
-    // The title (1 to 4 s) under three layers at 0.5 s: packed away. The clip under it is screen.mp4.
+    // The title (1 to 4 s) under three layers at 0.5 s: packed away. The clip under it is Recording 1.
     const snapshot = fixtureSnapshot();
     const [overlay] = snapshot.project.timeline.tracks;
     const [title] = overlay.items;

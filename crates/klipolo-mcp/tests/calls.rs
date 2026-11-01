@@ -1383,3 +1383,258 @@ fn chat_worded_refusals_are_said_for_apps() {
     }
     assert_eq!(host.state().counts.applies, 0);
 }
+
+/// A 2 s dissolve from c1 into c2, with c1 playing the file to 1 s before its end (1 s of footage after its out point,
+/// c2 13 s before its in point): at 2x c1's spare footage lasts 0.5 s, so the dissolve shortens to 1 s.
+fn with_dissolve(host: &FakeHost) {
+    host.change_project(|p| {
+        p.timeline.main[0].source_out_us = p.assets[0].duration_us - 1_000_000;
+        p.timeline.main[0].transition_out = Some(klipolo_model::timeline::Transition {
+            effect: klipolo_model::contrib::builtin::TRANSITION_DISSOLVE.into(),
+            duration_us: 2_000_000,
+            params: Default::default(),
+        });
+        p.requires
+            .insert(klipolo_model::transitions::FEATURE.to_owned());
+    });
+}
+
+#[test]
+fn an_apps_clip_and_transition_changes_are_the_cards_applied_at_once() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    let before = host.revision();
+    let set = json!({"after": "c1", "kind": "dissolve", "durationSec": null});
+    let result = agent.call("setTransition", set);
+    assert_eq!(outcome(&result), "done", "{result}");
+    assert_eq!(text(&result), fill(DONE, &[("tools", "setTransition")]));
+    assert_eq!(host.revision(), before + 1);
+    let added = host.project().timeline.main[0].transition_out.clone();
+    assert_eq!(added.map(|t| t.duration_us), Some(500_000));
+    // A speed that shortens a transition applies at once, as the card's does, and says so.
+    with_dissolve(&host);
+    agent.read();
+    let speed = json!({"clip": "c1", "speed": 2, "volume": null, "muted": null, "framing": null, "framingFormat": null});
+    let result = agent.call("setClip", speed);
+    assert_eq!(outcome(&result), "done", "{result}");
+    assert_eq!(
+        text(&result),
+        format!(
+            "{} A transition is shortened.",
+            fill(DONE, &[("tools", "setClip")])
+        )
+    );
+    let project = host.project();
+    assert_eq!(project.timeline.main[0].speed, 2.0);
+    assert_eq!(
+        project.timeline.main[0]
+            .transition_out
+            .as_ref()
+            .map(|t| t.duration_us),
+        Some(1_000_000)
+    );
+    {
+        let s = host.state();
+        let (client, tx) = s.applied.last().expect("a batch");
+        assert_eq!(
+            (client.as_str(), tx.label.as_str()),
+            ("Agent", "chat.setClip.note")
+        );
+    }
+    // A value the card doesn't offer is refused with the reason, and nothing changes.
+    let revision = host.revision();
+    let result = agent.call("setClip", json!({"clip": "c1", "speed": 3}));
+    assert_refused(
+        &result,
+        "setClip: speed must be one of 0.5, 0.75, 1, 1.25, 1.5, 2 or null, not 3.",
+    );
+    assert_eq!(host.revision(), revision);
+    // Taking the transitions away waits for the person, as every removal does.
+    let result = agent.call("setTransition", json!({"after": "all", "kind": "none"}));
+    assert_eq!(outcome(&result), "proposed", "{result}");
+    assert_eq!(
+        text(&result),
+        fill(PROPOSED_NO_FOOTAGE, &[("tools", "setTransition")])
+    );
+    assert_eq!(host.revision(), revision);
+    assert!(host.project().timeline.main[0].transition_out.is_some());
+}
+
+#[test]
+fn an_apps_speed_up_with_music_to_the_end_applies_as_the_card_does() {
+    let host = FakeHost::two_clips();
+    // A song laid from the start to the video's end, as addMusic lays it.
+    host.change_project(|p| {
+        let song = klipolo_model::project::Asset {
+            id: "song".into(),
+            kind: klipolo_model::project::AssetKind::Audio,
+            path: "/media/song.mp3".into(),
+            name: "song.mp3".into(),
+            duration_us: 300_000_000,
+            width: 0,
+            height: 0,
+            fps: 0.0,
+            rotation: None,
+            has_audio: true,
+            audio_lead_us: None,
+            made_with: None,
+        };
+        p.assets.push(song.clone());
+        let opts = klipolo_model::media::music::MusicOpts::default();
+        let ops = klipolo_model::media::music::add_music_ops(p, &song, opts).unwrap();
+        *p = klipolo_model::apply_ops(p, &ops).unwrap();
+    });
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    let before = host.project();
+    let speed = json!({"clip": "c2", "speed": 2, "volume": null, "muted": null, "framing": null, "framingFormat": null});
+    let result = agent.call("setClip", speed);
+    assert_eq!(outcome(&result), "done", "{result}");
+    assert_eq!(text(&result), fill(DONE, &[("tools", "setClip")]));
+    // The card's change: the clip's speed, the music cut at the new end in the same step.
+    let by_hand = Op::UpdateClip {
+        id: before.timeline.main[1].id.clone(),
+        patch: klipolo_model::ops::ClipPatch {
+            speed: Some(2.0),
+            ..Default::default()
+        },
+    };
+    let card = klipolo_model::media::music::apply_with_music_refit(&before, vec![by_hand.clone()])
+        .unwrap();
+    assert!(card.ops.len() > 1, "the music is refitted");
+    assert_eq!(host.project(), card.project);
+    let s = host.state();
+    let (_, tx) = s.applied.last().expect("a batch");
+    assert_eq!(
+        tx.ops,
+        [by_hand],
+        "the app's own edit; the host fits the music"
+    );
+}
+
+#[test]
+fn an_apps_speed_that_leaves_a_transition_no_room_is_proposed_and_says_why() {
+    let host = FakeHost::two_clips();
+    // c1 plays the file to 0.08 s before its end, joined to c2 by a 0.16 s dissolve: at 2x no transition fits there.
+    host.change_project(|p| {
+        p.timeline.main[0].source_out_us = p.assets[0].duration_us - 80_000;
+        p.timeline.main[0].transition_out = Some(klipolo_model::timeline::Transition {
+            effect: klipolo_model::contrib::builtin::TRANSITION_DISSOLVE.into(),
+            duration_us: 160_000,
+            params: Default::default(),
+        });
+        p.requires
+            .insert(klipolo_model::transitions::FEATURE.to_owned());
+    });
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    let revision = host.revision();
+    let result = agent.call("setClip", json!({"clip": "c1", "speed": 2}));
+    assert_eq!(outcome(&result), "proposed", "{result}");
+    assert_eq!(
+        text(&result),
+        format!(
+            "{} At that speed a transition no longer fits, so the change waits for Apply.",
+            fill(PROPOSED_NO_FOOTAGE, &[("tools", "setClip")])
+        )
+    );
+    assert_eq!(
+        host.revision(),
+        revision,
+        "nothing changes until the person applies it"
+    );
+}
+
+/// A song of `asset` laid as music on the sound track `track` from `start` for `length` seconds.
+fn song(id: &str, asset: &str, start: f64, length: f64) -> klipolo_model::timeline::Item {
+    use klipolo_model::layout::{Anchor, BoxN, Layout};
+    klipolo_model::timeline::Item {
+        id: id.into(),
+        start_us: (start * 1e6) as i64,
+        duration_us: (length * 1e6) as i64,
+        attach: None,
+        layout: Layout::new(
+            Anchor::TopLeft,
+            BoxN {
+                x: 0.05,
+                y: 0.05,
+                w: 0.4,
+                h: 0.1,
+            },
+        ),
+        content: klipolo_model::timeline::ItemContent::Audio {
+            asset_id: asset.into(),
+            source_in_us: 0,
+            volume: 1.0,
+            muted: false,
+            fade_in_us: 0,
+            fade_out_us: 0,
+            effect: None,
+            drift_ppm: 0.0,
+            centre_from: None,
+            tie: None,
+            duck: Some(-12.0),
+        },
+        effects: Vec::new(),
+    }
+}
+
+#[test]
+fn a_layer_ref_read_before_the_layers_changed_is_refused_never_a_different_layer() {
+    let host = FakeHost::two_clips();
+    let audio = |id: &str| klipolo_model::project::Asset {
+        id: id.into(),
+        kind: klipolo_model::project::AssetKind::Audio,
+        path: format!("/media/{id}.mp3"),
+        name: format!("{id}.mp3"),
+        duration_us: 300_000_000,
+        width: 0,
+        height: 0,
+        fps: 0.0,
+        rotation: None,
+        has_audio: true,
+        audio_lead_us: None,
+        made_with: None,
+    };
+    // Two songs: "intro" is m1 and "outro" m2.
+    host.change_project(|p| {
+        p.assets.extend([audio("intro"), audio("outro")]);
+        let mut track =
+            klipolo_model::timeline::Track::new(klipolo_model::timeline::TrackKind::Audio, "Music");
+        track.items = vec![
+            song("intro-1", "intro", 0.0, 10.0),
+            song("outro-1", "outro", 100.0, 10.0),
+        ];
+        p.timeline.tracks.push(track);
+    });
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    // The person deletes the first song: "outro" is m1 now, though the app read it as m2.
+    host.change_project(|p| {
+        let track = p.timeline.tracks.last_mut().unwrap();
+        track.items.retain(|i| i.id != "intro-1");
+    });
+    let revision = host.revision();
+    let result = agent.call("setClip", json!({"clip": "m1", "muted": true}));
+    assert_refused(&result, STALE);
+    assert_eq!(host.revision(), revision);
+    // Read again, the ref names what the app now sees.
+    agent.read();
+    let result = agent.call("setClip", json!({"clip": "m1", "muted": true}));
+    assert_eq!(outcome(&result), "done", "{result}");
+    let muted = (host.project().timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .any(|i| {
+            i.id == "outro-1"
+                && matches!(
+                    i.content,
+                    klipolo_model::timeline::ItemContent::Audio { muted: true, .. }
+                )
+        });
+    assert!(muted, "the song the app read as m1");
+}

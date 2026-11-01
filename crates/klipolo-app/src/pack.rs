@@ -39,6 +39,9 @@ pub struct PackItem {
     /// Stickers; 0 for sounds and music.
     pub width: u32,
     pub height: u32,
+    /// Words for what it is or suits ("transition", "swipe"), as the manifest lists them: the library's search and
+    /// chat find it by them too.
+    pub tags: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -58,6 +61,8 @@ struct ManifestItem {
     width: Option<u32>,
     #[serde(default)]
     height: Option<u32>,
+    #[serde(default)]
+    tags: Vec<String>,
 }
 
 /// The pack as read from its folder: each item, and its file there.
@@ -98,6 +103,7 @@ impl Pack {
                         duration_us: item.duration_ms.unwrap_or(0).saturating_mul(1000),
                         width: item.width.unwrap_or(0),
                         height: item.height.unwrap_or(0),
+                        tags: item.tags,
                     };
                     (listed, file)
                 })
@@ -228,6 +234,29 @@ mod tests {
             (AssetKind::Image, 1024, 1024)
         );
         assert!(pack.asset("nope").is_none());
+    }
+
+    /// Each item keeps its manifest's tags, for the library's search and chat; an item with none has none.
+    #[test]
+    fn the_pack_keeps_each_items_tags() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("pop.wav"), b"RIFF").unwrap();
+        std::fs::write(dir.path().join("tap.wav"), b"RIFF").unwrap();
+        std::fs::write(
+            dir.path().join("manifest.json"),
+            r#"{"items": [
+                {"id": "pop", "name": "Pop", "category": "sound", "file": "pop.wav", "duration_ms": 160,
+                 "tags": ["boom", "impact"]},
+                {"id": "tap", "name": "Tap", "category": "sound", "file": "tap.wav", "duration_ms": 90}
+            ]}"#,
+        )
+        .unwrap();
+        let tags: Vec<Vec<String>> = Pack::read(dir.path())
+            .items()
+            .into_iter()
+            .map(|item| item.tags)
+            .collect();
+        assert_eq!(tags, [vec!["boom", "impact"], vec![]]);
     }
 
     /// A manifest naming a file outside its folder, or one that isn't there, lists nothing for it.

@@ -94,7 +94,7 @@ describe('dragging blocks', () => {
 
   it("dragging a clip past the next clip's middle commits moveClip", async () => {
     renderWithProviders(<Timeline />);
-    const a = block(/^screen\.mp4/);
+    const a = block(/^Recording 1/);
     // Pressed at 2.5 s; b's middle is at 25 s: 27.5 s passes it.
     await drag(a, 100, 1100);
     fireEvent.pointerUp(a, { pointerId: 1, clientX: 1100, clientY: 10 });
@@ -107,7 +107,7 @@ describe('dragging blocks', () => {
 
   it('attached layers follow a dragged clip on screen', async () => {
     renderWithProviders(<Timeline />);
-    await drag(block(/^screen\.mp4/), 100, 300);
+    await drag(block(/^Recording 1/), 100, 300);
     expect(block(/Set up billing/).style.transform).toContain('200px');
   });
 
@@ -259,24 +259,24 @@ describe('dragging blocks', () => {
     ];
     useProject.setState({ snapshot });
     renderWithProviders(<Timeline />);
-    const clip = block(/^screen\.mp4/);
+    const clip = block(/^Recording 1/);
     await drag(clip, 100, 1100);
     expect(screen.getByText('Position 2 of 2 · A transition is removed.')).toBeInTheDocument();
     fireEvent.pointerUp(clip, { pointerId: 1, clientX: 1100, clientY: 10 });
     await frames();
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Moved screen.mp4 to position 2. A transition is removed.',
+      'Moved Recording 1 to position 2. A transition is removed.',
     );
   });
 
   it('the live region stays one element; each message is new in it, so the same words twice are heard twice', () => {
     renderWithProviders(<LiveRegion />);
     const region = screen.getByRole('status');
-    act(() => announce('Moved screen.mp4 to position 2'));
+    act(() => announce('Moved Recording 1 to position 2'));
     const first = region.firstElementChild;
-    act(() => announce('Moved screen.mp4 to position 2'));
+    act(() => announce('Moved Recording 1 to position 2'));
     expect(screen.getByRole('status')).toBe(region);
     expect(region.firstElementChild).not.toBe(first);
-    expect(region).toHaveTextContent('Moved screen.mp4 to position 2');
+    expect(region).toHaveTextContent('Moved Recording 1 to position 2');
   });
 });

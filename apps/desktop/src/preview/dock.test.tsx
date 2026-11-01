@@ -77,7 +77,7 @@ describe('the dock holds still through a timeline press', () => {
   it("a trim on a clip that wasn't selected keeps the frame's size until the release, then docks the card", async () => {
     renderWithProviders(<Editor />);
     expect(docked()).toBe(false);
-    const a = block(/^screen\.mp4/);
+    const a = block(/^Recording 1/);
     press(edge(a, 'end'), 799);
     // The press selects the clip at once, but the frame keeps its size under the edge frame the trim shows.
     expect(useSelection.getState().selectedId).toBe('a');
@@ -87,11 +87,11 @@ describe('the dock holds still through a timeline press', () => {
     move(a, 719);
     await frames();
     expect(docked()).toBe(false);
-    expect(screen.queryByRole('complementary', { name: 'screen.mp4 settings' })).toBeNull();
+    expect(screen.queryByRole('complementary', { name: 'Recording 1 settings' })).toBeNull();
     release(a, 719);
     await frames();
     expect(docked()).toBe(true);
-    expect(screen.getByRole('complementary', { name: 'screen.mp4 settings' })).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'Recording 1 settings' })).toBeInTheDocument();
   });
 
   it('a move press keeps the dock as it was until the release; a plain click docks once it lets go', async () => {
@@ -110,7 +110,7 @@ describe('the dock holds still through a timeline press', () => {
     // A still click: the card docks at the release.
     act(() => useSelection.getState().select(null));
     expect(docked()).toBe(false);
-    const a = block(/^screen\.mp4/);
+    const a = block(/^Recording 1/);
     press(a, 100);
     expect(docked()).toBe(false);
     release(a, 100);
@@ -121,7 +121,7 @@ describe('the dock holds still through a timeline press', () => {
     useSelection.setState({ selectedId: 'b' });
     renderWithProviders(<Editor />);
     expect(docked()).toBe(true);
-    const a = block(/^screen\.mp4/);
+    const a = block(/^Recording 1/);
     press(edge(a, 'end'), 799);
     move(a, 759);
     await frames();
@@ -133,7 +133,7 @@ describe('the dock holds still through a timeline press', () => {
 
   it('a release lost to another app lets the dock follow the selection once the window loses focus', async () => {
     renderWithProviders(<Editor />);
-    const a = block(/^screen\.mp4/);
+    const a = block(/^Recording 1/);
     press(a, 100);
     expect(useSelection.getState().selectedId).toBe('a');
     expect(docked()).toBe(false);
@@ -157,7 +157,7 @@ describe('the dock holds still while the keyboard walks the Video lane', () => {
     useSelection.setState({ selectedId: 'a' });
     renderWithProviders(<Editor />);
     expect(docked()).toBe(true);
-    act(() => block(/^screen\.mp4/).focus());
+    act(() => block(/^Recording 1/).focus());
     // Clip, bare cut (nothing selected), clip: the frame keeps its size at every step.
     await step('ArrowRight');
     expect(cut()).toHaveFocus();

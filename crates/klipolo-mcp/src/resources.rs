@@ -10,7 +10,7 @@
 //! app that read only it hasn't seen what is said or shown at the times it would name. Nor does checking it for the
 //! revision bring a read the person's edit made stale up to date.
 
-use klipolo_chat::{build_context, full_transcript, timeline_key};
+use klipolo_chat::{build_context, full_transcript, layers_key, timeline_key};
 use klipolo_model::time::{MAX_TIME_US, Us, secs_to_us};
 use serde_json::{Value, json};
 
@@ -111,6 +111,7 @@ fn seen(host: &dyn Host, session: &mut Session) -> Result<Snapshot, Read> {
     session.seen = Some(Seen {
         project_id: snap.project.id.clone(),
         key: timeline_key(&snap.project),
+        layers: layers_key(&snap.project),
     });
     Ok(snap)
 }

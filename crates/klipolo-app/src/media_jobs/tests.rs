@@ -1019,6 +1019,43 @@ fn a_source_put_back_is_picked_up_without_an_edit() {
     });
 }
 
+/// The recorder's hold reaches copies, as the app's sink holds them at arming and lets them go once the take has landed
+/// (`recorder::hold_background`): the copy being made waits for the take, and is made on after it.
+#[test]
+fn a_take_s_hold_pauses_copies_until_it_lets_go() {
+    tauri::async_runtime::block_on(async {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a.mp4");
+        overwrite(&a, b"source a");
+        let root = dir.path().join("media/proxies");
+        let worker = Arc::new(StandIn::default());
+        let stops = Arc::new(Notify::new());
+        *worker.hold.lock().unwrap() = Some(stops.clone());
+        let jobs = scheduler(&root, &worker, &Arc::default());
+        let preview = Arc::new(FakePreview::default());
+        jobs.attach_preview(preview.clone(), None);
+        let (_publish, rx) = watch::channel(feed(&[&a]));
+        jobs.watch(rx);
+        eventually("a's copy is being made", &jobs, || {
+            state_of(&jobs.list().jobs, &a) == Some(MediaJobState::Working)
+        })
+        .await;
+
+        crate::recorder::hold_background(None, Some(&jobs), true);
+        stops.notify_one();
+        eventually("a's copy waits for the take", &jobs, || {
+            reason_of(&jobs, &a).as_deref() == Some("copies.paused.recording")
+        })
+        .await;
+
+        crate::recorder::hold_background(None, Some(&jobs), false);
+        eventually("a's copy is made after the take", &jobs, || {
+            preview.last().contains_key(&*a.to_string_lossy())
+        })
+        .await;
+    });
+}
+
 /// A take holds copies from arming until it has landed: the copy being made pauses (its finished segments kept), its
 /// row says why, nothing else starts meanwhile, and it is made on from its job once the take ends.
 #[test]

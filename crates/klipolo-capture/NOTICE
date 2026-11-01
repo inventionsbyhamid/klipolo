@@ -1,0 +1,25 @@
+Klipolo capture
+
+Files derived from Cap's MIT-licensed `scap-*` and `cap-camera*` crates (https://github.com/CapSoftware/Cap),
+commit d327051c175aa092c06ad9fc6684298b1b5fed6b, Copyright (c) 2023-present Cap Software, Inc., are used under the
+MIT licence (its text ships as `Cap-MIT.txt` in the app's licences). Each starts `// SPDX-License-Identifier: MIT`
+and names its crate:
+  src/vendor/cap/sck/capture.rs: from crates/scap-screencapturekit/src/capture.rs (scap-screencapturekit)
+  src/vendor/cap/sck/config.rs: from crates/scap-screencapturekit/src/config.rs (scap-screencapturekit)
+  src/vendor/cap/sck/mod.rs: from crates/scap-screencapturekit/src/lib.rs (scap-screencapturekit; its two modules)
+  src/platform/macos/camera.rs: from crates/camera-avfoundation/src/lib.rs (cap-camera-avfoundation; the sample-buffer
+    delegate), with the session set-up and teardown of crates/camera/src/macos.rs (cap-camera)
+
+Files derived from other Cap crates, at the same commit, Copyright (c) 2023-present Cap Software, Inc., are used under
+the GNU Affero General Public License version 3 (AGPL-3.0), the licence Klipolo is distributed under (LICENSE at the
+repository root):
+  src/probe/ladder.rs: from crates/enc-ffmpeg/src/video/h264.rs (the Windows encoder ladders and the live options,
+    copied as data by hand); its Linux ladder and `vaapi`/`vulkan` options are Klipolo's own
+  src/hosttime.rs: from crates/timestamp/src/macos.rs and crates/timestamp/src/win.rs (`from_cpal`, adapted by hand
+    to the host clock in ns); its re-base follows the design of crates/recording/src/sources/capture_clock.rs
+
+Each file names its Cap source path and lists Klipolo's changes in its header. Sources whose design only was taken (no
+code) are cited in the files that follow them.
+
+The crates the recorder's OS backends add (cpal, cidre, objc2, tray-icon, global-hotkey) are listed, with their
+licences, in the app's THIRD-PARTY-NOTICES.txt.

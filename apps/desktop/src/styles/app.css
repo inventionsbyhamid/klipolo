@@ -24,7 +24,8 @@
   }
 
   /* No background on the page or on any box around the preview: on macOS the engine's layer sits under the
-     transparent webview and shows through the preview hole. The window itself is painted --color-night. */
+     transparent webview and shows through the preview hole. The window itself is painted --color-night of the theme in
+     use (Rust, `appearance`). */
   html,
   body,
   #root {
@@ -235,7 +236,7 @@
 /* aria-disabled: inert but still focusable, so its tooltip can say why; drawn as disabled. */
 .btn:disabled,
 .btn[aria-disabled="true"] {
-  background: #1e2642;
+  background: var(--color-off);
   color: var(--color-ink-disabled);
 }
 
@@ -294,6 +295,49 @@
   height: 28px;
 }
 
+/* ---------- Search ---------- */
+
+/* A 30 px raised pill with a search icon: the Captions words and the library. */
+.search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 30px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--color-bay-raised);
+  color: var(--color-ink-faint);
+  font-size: var(--text-sm);
+}
+
+.search:focus-within {
+  box-shadow: inset 0 0 0 2px var(--color-paper);
+}
+
+.search .ico {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+
+.search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--color-ink);
+  font: inherit;
+  outline: none;
+}
+
+.search input::placeholder {
+  color: var(--color-ink-faint);
+}
+
+.search input::-webkit-search-cancel-button {
+  display: none;
+}
+
 /* ---------- Pills and segmented ---------- */
 
 .pills {
@@ -319,7 +363,7 @@
 
 .pill[aria-selected="true"] {
   background: var(--color-paper);
-  color: var(--color-navy);
+  color: var(--color-on-paper);
 }
 
 .seg {
@@ -347,7 +391,7 @@
 
 .seg button[aria-checked="true"] {
   background: var(--color-paper);
-  color: var(--color-navy);
+  color: var(--color-on-paper);
 }
 
 .chip {
@@ -615,6 +659,7 @@
 }
 
 .frame.is-socket {
+  /* The video: black in both themes. */
   background: #000;
 }
 
@@ -686,8 +731,8 @@
   margin-left: -20px;
   border-radius: 50%;
   background: var(--color-paper);
-  color: var(--color-navy);
-  box-shadow: 0 6px 18px rgb(0 0 0 / 0.5);
+  color: var(--color-on-paper);
+  box-shadow: 0 6px 18px var(--color-shade);
 }
 
 .drop-title {
@@ -1065,7 +1110,7 @@
   pointer-events: none;
 }
 
-/* Trim handles: a 12 px pad on each edge; a selected clip shows 8 x 22 paper grips, a selected overlay navy ones. */
+/* Trim handles: a 12 px pad on each edge; a selected clip shows 8 x 22 paper grips, a selected overlay on-paper ones. */
 .tl-trim {
   position: absolute;
   top: 0;
@@ -1095,7 +1140,7 @@
   transform: translateY(-50%);
   border-radius: 3px;
   background: var(--color-paper);
-  box-shadow: 0 0 0 1.5px var(--color-navy);
+  box-shadow: 0 0 0 1.5px var(--color-on-paper);
   opacity: 0;
   transition: opacity var(--dur-fast) var(--ease-out);
 }
@@ -1164,7 +1209,7 @@
 .tl-transition.is-selected {
   background: var(--color-paper);
   box-shadow: none;
-  color: var(--color-navy);
+  color: var(--color-on-paper);
 }
 
 .tl-transition .ico,
@@ -1249,6 +1294,48 @@
   background: color-mix(in srgb, var(--color-lane-music) 40%, transparent);
 }
 
+.tl-band.is-source {
+  top: 2px;
+  bottom: 3px;
+  background: color-mix(in srgb, var(--color-clip-deep) 70%, transparent);
+}
+
+/* A recorded sound's lane under Video: each clip's part of the sound in the clip's blue, its waveform in clip-2,
+   dimmed where the sound is muted. Nothing on it is picked: a press there seeks, as on empty lane. */
+.tl-source-part {
+  position: absolute;
+  top: 2px;
+  bottom: 3px;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--color-clip-deep) 70%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-clip-2) 40%, transparent);
+  pointer-events: none;
+}
+
+.tl-source-part[data-muted="true"] {
+  opacity: 0.6;
+}
+
+/* Its header in the 40 px gutter: the kind's icon, which opens its volume, and Mute. */
+.tl-source-head {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.icon-btn.tl-source-btn {
+  width: 19px;
+  height: 19px;
+  border-radius: var(--radius-xs);
+}
+
+.source-volume {
+  display: grid;
+  gap: var(--space-3);
+  width: 240px;
+}
+
 /* Layers: overlays (paper at 16 % with a 2 px paper edge; solid paper when selected), sound effects (teal, named to
    the right in teal) and music (violet body and edge, its waveform at 40 %, its name in a violet tag). */
 .tl-item {
@@ -1308,7 +1395,7 @@
   overflow: visible;
   background: var(--color-paper);
   box-shadow: none;
-  color: var(--color-navy);
+  color: var(--color-on-paper);
 }
 
 .tl-item.is-overlay .tl-trim::after {
@@ -1319,7 +1406,7 @@
   bottom: 3px;
   transform: none;
   border-radius: 2px;
-  background: var(--color-navy);
+  background: var(--color-on-paper);
   box-shadow: none;
 }
 
@@ -1346,6 +1433,31 @@
   box-shadow: 0 0 0 2px var(--color-paper);
 }
 
+/* A take's own sound separated from its clip: the clip's blue, its waveform in clip-2, named in a tag inside it as a
+   clip is, so it reads as part of the footage rather than an effect. */
+.tl-item.is-sound.is-recorded {
+  align-items: flex-start;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-clip-deep) 70%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-clip-2) 55%, transparent);
+}
+
+.tl-item.is-sound.is-recorded .tl-item-name {
+  position: relative;
+  left: auto;
+  margin: 1px 0 0 3px;
+  padding: 0 5px;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--color-night) 78%, transparent);
+  color: var(--color-ink);
+  font-weight: var(--weight-medium);
+  overflow: hidden;
+}
+
+.tl-item.is-sound.is-recorded.is-selected {
+  box-shadow: inset 0 0 0 2px var(--color-paper);
+}
+
 .tl-item.is-music {
   align-items: flex-start;
   overflow: hidden;
@@ -1364,7 +1476,7 @@
   border-radius: var(--radius-xs);
   background: var(--color-lane-music);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-bay) 90%, transparent);
-  color: var(--color-navy);
+  color: var(--color-on-lane);
   font-weight: var(--weight-strong);
   line-height: 15px;
 }
@@ -1489,7 +1601,7 @@
   padding: 0 5px;
   border-radius: var(--radius-xs);
   background: var(--color-cut);
-  color: var(--color-navy);
+  color: var(--color-on-cut);
   font-size: var(--text-2xs);
   line-height: 16px;
   font-weight: var(--weight-title);
@@ -1534,7 +1646,7 @@
   padding: 0 6px;
   border-radius: var(--radius-xs);
   background: var(--color-paper);
-  color: var(--color-navy);
+  color: var(--color-on-paper);
   font-size: var(--text-2xs);
   line-height: 16px;
   font-weight: var(--weight-strong);
@@ -1550,7 +1662,7 @@
   margin-top: -11px;
   border-radius: 3px;
   background: var(--color-paper);
-  box-shadow: 0 0 0 1.5px var(--color-navy);
+  box-shadow: 0 0 0 1.5px var(--color-on-paper);
   cursor: ew-resize;
   pointer-events: auto;
 }
@@ -1692,6 +1804,9 @@
 
 /* ---------- Toggle ---------- */
 
+/* A 36 x 20 track. Off: raised, a line-strong edge (ink-soft under the pointer) and an ink-soft knob. On: paper with
+   an on-paper knob. Disabled: an empty track with a faint edge. Styled from aria-checked, not data-state: a tooltip
+   trigger sets its own data-state on the same element. */
 .toggle {
   display: inline-flex;
   align-items: center;
@@ -1702,7 +1817,13 @@
   border-radius: var(--radius-pill);
   background: var(--color-bay-raised);
   box-shadow: inset 0 0 0 1px var(--color-line-strong);
-  transition: background-color var(--dur-fast) var(--ease-out);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.toggle:not(:disabled):hover {
+  box-shadow: inset 0 0 0 1px var(--color-ink-soft);
 }
 
 .toggle-knob {
@@ -1716,17 +1837,18 @@
     background-color var(--dur-fast) var(--ease-out);
 }
 
-.toggle[data-state="checked"] {
+.toggle[aria-checked="true"] {
   background: var(--color-paper);
   box-shadow: none;
 }
 
-.toggle[data-state="checked"] .toggle-knob {
-  background: var(--color-navy);
+.toggle[aria-checked="true"] .toggle-knob {
+  background: var(--color-on-paper);
   transform: translateX(16px);
 }
 
 .toggle:disabled {
+  background: transparent;
   box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
@@ -1804,7 +1926,7 @@
   height: 48px;
   border-radius: 50%;
   background: var(--color-paper);
-  color: var(--color-navy);
+  color: var(--color-on-paper);
   transition: transform var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
 }
 
@@ -1819,7 +1941,7 @@
 
 .play:not(:disabled):hover {
   transform: scale(var(--hover-scale));
-  background: #ffffff;
+  background: var(--color-paper-hover);
 }
 
 .play:not(:disabled):active {
@@ -1827,7 +1949,7 @@
 }
 
 .play:disabled {
-  background: #2b3352;
+  background: var(--color-off-canvas);
   color: var(--color-ink-disabled);
 }
 
@@ -1896,7 +2018,7 @@
   margin-left: -7px;
   border-radius: 50%;
   background: var(--color-paper);
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.5);
+  box-shadow: 0 2px 6px var(--color-shade);
 }
 
 /* ---------- Chat ---------- */
@@ -1986,7 +2108,7 @@
   height: 36px;
   flex: none;
   border-radius: 50%;
-  background: #232b48;
+  background: var(--color-off);
   color: var(--color-ink-disabled);
 }
 
@@ -2182,6 +2304,47 @@
   line-height: var(--lh-xs);
 }
 
+/* The library's search, over its tab's files, and what it says when it finds none there. */
+.lib-search {
+  margin: var(--space-1) var(--space-6) var(--space-3);
+}
+
+.lib-none {
+  padding: var(--space-4) var(--space-4) 0;
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+/* An item's star: shown on hover and focus with the "+", and kept, filled, while it is a favorite. Its row keeps room
+   for it so the title never runs under it. */
+.favorite[aria-pressed="true"] {
+  opacity: 1;
+  color: var(--color-ink);
+}
+
+.favorite[aria-pressed="true"]::after {
+  content: none;
+}
+
+.favorite[aria-pressed="true"] .ico {
+  fill: currentColor;
+}
+
+.lib-row:not(:hover):not(:focus-within) .favorite[aria-pressed="true"] {
+  background: transparent;
+}
+
+.lib-row.is-favorite .row-text {
+  padding-right: 34px;
+}
+
+/* On a picture, the star sits top left (the "+" is top right). */
+.picture .row-action.favorite {
+  right: auto;
+  left: var(--space-2);
+}
+
 /* Images: a 3-column grid of pictures on a checkerboard (they may be see-through), each named under it. */
 .image-grid {
   display: grid;
@@ -2248,9 +2411,12 @@
   grid-area: 1 / 1;
 }
 
+/* Over the video, dark in both themes: the layers' outlines and handles, the snap guides and the safe area keep the
+   dark theme's colours. */
 .frame-handles {
   position: relative;
   pointer-events: none;
+  color-scheme: dark;
 }
 
 .frame-handles[data-settling] {
@@ -2304,7 +2470,7 @@
   height: 10px;
   border-radius: 2px;
   background: var(--color-paper);
-  box-shadow: 0 0 0 1.5px var(--color-navy);
+  box-shadow: 0 0 0 1.5px var(--color-on-paper);
 }
 
 /* Each handle can be taken 4 px past what it draws. */
@@ -2490,6 +2656,13 @@
   gap: var(--space-4);
 }
 
+/* A note with its action under it (a camera that is its own layer now): the button at its own width. */
+.insp-note {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+}
+
 /* The transition card's Remove: a small secondary button at its own width, after the fields. */
 .insp-remove {
   justify-self: start;
@@ -2622,6 +2795,66 @@
   gap: var(--space-3);
 }
 
+/* A recording clip's Sounds: a row per recorded sound, its name and mute, its volume, then its sync. */
+.sound-rows {
+  display: grid;
+  gap: var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sound-row {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.sound-row-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.sound-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sound-sync {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+}
+
+.sound-sync-text {
+  flex: 1;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.sound-switch {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.sound-switch-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.sound-switch-label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-xs);
+}
+
 /* A typed time or length: its label inside the field, faint, before the value. */
 .value-field {
   gap: var(--space-2);
@@ -2676,7 +2909,7 @@
   height: 14px;
   border-radius: 50%;
   background: var(--color-paper);
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.5);
+  box-shadow: 0 2px 6px var(--color-shade);
 }
 
 .slider-thumb:focus-visible {
@@ -2704,7 +2937,7 @@
   padding: 0;
   border-radius: 50%;
   background: var(--c);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.2);
+  box-shadow: inset 0 0 0 1px var(--color-swatch-edge);
 }
 
 .swatch[aria-checked="true"] {
@@ -2769,7 +3002,7 @@
 }
 
 .pos-grid button.on::after {
-  background: var(--color-navy);
+  background: var(--color-on-paper);
 }
 
 .seg-sm button {

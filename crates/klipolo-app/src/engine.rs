@@ -150,6 +150,8 @@ async fn start_engine(
             );
     }
     let thumbs = backend.thumbs();
+    // A take holds its background media work from the start (`EngineState::hold_for_recording`).
+    state.set_thumbs(thumbs.clone());
     let options = EngineOptions {
         allowed_origins: allowed_origins(),
         max_preview_pixels: backend.max_preview_pixels(),

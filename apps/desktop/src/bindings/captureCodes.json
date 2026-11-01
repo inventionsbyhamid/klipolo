@@ -1,0 +1,766 @@
+[
+  {
+    "code": "capture.source.screen",
+    "message": "Screen",
+    "params": []
+  },
+  {
+    "code": "capture.source.game",
+    "message": "Game",
+    "params": []
+  },
+  {
+    "code": "capture.source.camera",
+    "message": "Camera",
+    "params": []
+  },
+  {
+    "code": "capture.source.mic",
+    "message": "Mic",
+    "params": []
+  },
+  {
+    "code": "capture.source.gameSound",
+    "message": "Game sound",
+    "params": []
+  },
+  {
+    "code": "capture.source.computerSound",
+    "message": "Computer sound",
+    "params": []
+  },
+  {
+    "code": "capture.source.appSound",
+    "message": "App sound",
+    "params": []
+  },
+  {
+    "code": "capture.health.micZeros",
+    "message": "Your microphone is sending no sound. It may be muted or blocked.",
+    "params": []
+  },
+  {
+    "code": "capture.health.micQuiet",
+    "message": "Klipolo can barely hear anything from {device}.",
+    "params": [
+      "device"
+    ]
+  },
+  {
+    "code": "capture.health.micNotHeard",
+    "message": "Klipolo hasn't heard you yet. Is {device} the microphone you meant?",
+    "params": [
+      "device"
+    ]
+  },
+  {
+    "code": "capture.health.diskLow",
+    "message": "About {minutes} min of space left.",
+    "params": [
+      "minutes"
+    ]
+  },
+  {
+    "code": "capture.health.slowDrive",
+    "message": "This drive can't keep up.",
+    "params": []
+  },
+  {
+    "code": "capture.health.dropping",
+    "message": "Some frames are being dropped. Try the Light quality.",
+    "params": []
+  },
+  {
+    "code": "capture.health.lost",
+    "message": "{source} disconnected.",
+    "params": [
+      "source"
+    ]
+  },
+  {
+    "code": "capture.health.reconnecting",
+    "message": "{source} is reconnecting…",
+    "params": [
+      "source"
+    ]
+  },
+  {
+    "code": "capture.health.restarting",
+    "message": "Restarting screen capture…",
+    "params": []
+  },
+  {
+    "code": "capture.health.micFallback",
+    "message": "{device} disconnected. Recording with {fallback} instead.",
+    "params": [
+      "device",
+      "fallback"
+    ]
+  },
+  {
+    "code": "capture.health.micBack",
+    "message": "{device} is back. Recording with it again.",
+    "params": [
+      "device"
+    ]
+  },
+  {
+    "code": "capture.health.hot",
+    "message": "Your computer is very hot. Recording may drop frames.",
+    "params": []
+  },
+  {
+    "code": "capture.health.appQuit",
+    "message": "{app} quit. Recording is paused until it comes back.",
+    "params": [
+      "app"
+    ]
+  },
+  {
+    "code": "capture.health.presenterOverlay",
+    "message": "Presenter Overlay is on, so your camera is in the screen video too.",
+    "params": []
+  },
+  {
+    "code": "capture.health.readBack",
+    "message": "Something is wrong with what was saved so far. Check your disk, or stop and try again.",
+    "params": []
+  },
+  {
+    "code": "capture.stop.disk",
+    "message": "Your disk is almost full, so the recording stopped and was saved.",
+    "params": []
+  },
+  {
+    "code": "capture.stop.slowDrive",
+    "message": "This drive couldn't keep up, so the recording stopped and was saved.",
+    "params": []
+  },
+  {
+    "code": "capture.stop.sharing",
+    "message": "Screen sharing was stopped, so the recording stopped and was saved.",
+    "params": []
+  },
+  {
+    "code": "capture.stop.permission",
+    "message": "Klipolo lost permission to record, so the recording stopped and was saved.",
+    "params": []
+  },
+  {
+    "code": "capture.stop.noSources",
+    "message": "Every source stopped, so the recording was saved.",
+    "params": []
+  },
+  {
+    "code": "capture.stop.crashLoop",
+    "message": "The recorder kept stopping, so the recording was saved.",
+    "params": []
+  },
+  {
+    "code": "capture.stop.slept",
+    "message": "Your computer slept for a long time, so the recording stopped and was saved.",
+    "params": []
+  },
+  {
+    "code": "capture.stop.encoder",
+    "message": "The video encoder stopped, so the recording stopped and was saved. Press Record to try again.",
+    "params": []
+  },
+  {
+    "code": "capture.stop.sharingBeforeStart",
+    "message": "Screen sharing was turned off before the recording started, so nothing was recorded.",
+    "params": []
+  },
+  {
+    "code": "capture.startOver.kept",
+    "message": "Started over. The last take couldn't be moved to the Trash, so it waits on Home.",
+    "params": []
+  },
+  {
+    "code": "capture.startOver.undoFailed",
+    "message": "The last take couldn't be put back. If it isn't on Home, look for it in the Trash.",
+    "params": []
+  },
+  {
+    "code": "capture.gate.waiting",
+    "message": "{source} isn't sending anything yet.",
+    "params": [
+      "source"
+    ]
+  },
+  {
+    "code": "capture.paused.sleep",
+    "message": "Recording paused while your computer slept.",
+    "params": []
+  },
+  {
+    "code": "capture.paused.lock",
+    "message": "Recording paused while your screen was locked.",
+    "params": []
+  },
+  {
+    "code": "capture.paused.focus",
+    "message": "Paused while {app} isn't in front.",
+    "params": [
+      "app"
+    ]
+  },
+  {
+    "code": "capture.note.gap",
+    "message": "{source} stopped for {seconds} s at {atUs}. Everything else was recorded.",
+    "params": [
+      "source",
+      "seconds",
+      "atUs"
+    ]
+  },
+  {
+    "code": "capture.note.soundBlock",
+    "message": "A moment of sound was dropped.",
+    "params": []
+  },
+  {
+    "code": "capture.note.silentSound",
+    "message": "{source} was silent the whole recording.",
+    "params": [
+      "source"
+    ]
+  },
+  {
+    "code": "capture.note.micFlapping",
+    "message": "{source} keeps disconnecting, so Klipolo waits until it settles before using it again.",
+    "params": [
+      "source"
+    ]
+  },
+  {
+    "code": "capture.note.cameraDropped",
+    "message": "The camera stopped recording. The screen kept recording.",
+    "params": []
+  },
+  {
+    "code": "capture.note.savedFromFiles",
+    "message": "The recorder stopped while saving, so Klipolo finished the recording from its files.",
+    "params": []
+  },
+  {
+    "code": "capture.note.micDropping",
+    "message": "{source} keeps disconnecting. Klipolo records it again each time it's back.",
+    "params": [
+      "source"
+    ]
+  },
+  {
+    "code": "capture.note.levels",
+    "message": "{source}'s sound level couldn't be measured, so it plays as it was recorded.",
+    "params": [
+      "source"
+    ]
+  },
+  {
+    "code": "capture.note.encoderFallback",
+    "message": "{source} was recorded with another video encoder, as the usual one didn't start.",
+    "params": [
+      "source"
+    ]
+  },
+  {
+    "code": "capture.note.didntStart",
+    "message": "{source} didn't start. {why}",
+    "params": [
+      "source",
+      "why"
+    ]
+  },
+  {
+    "code": "capture.note.cursorBurned",
+    "message": "From {atUs} the cursor is part of the picture: Klipolo couldn't follow it there.",
+    "params": [
+      "atUs"
+    ]
+  },
+  {
+    "code": "capture.note.cursorSampled",
+    "message": "From {atUs} clicks were timed less exactly, as the system stopped sending them.",
+    "params": [
+      "atUs"
+    ]
+  },
+  {
+    "code": "capture.note.cursorShapes",
+    "message": "The cursor changed shape too many times, so some of its later shapes weren't recorded.",
+    "params": []
+  },
+  {
+    "code": "capture.preflight.diskBlock",
+    "message": "There isn't enough space to record. Free up at least 2 GB.",
+    "params": []
+  },
+  {
+    "code": "capture.preflight.diskShort",
+    "message": "Less than 30 minutes of space left at this quality. Free up space or choose Light.",
+    "params": []
+  },
+  {
+    "code": "capture.preflight.virtualMic",
+    "message": "{device} is a virtual microphone. Your voice may not be recorded.",
+    "params": [
+      "device"
+    ]
+  },
+  {
+    "code": "capture.preflight.bluetoothMic",
+    "message": "Your headphones' microphone lowers the sound quality while recording, so we picked {fallback}.",
+    "params": [
+      "fallback"
+    ]
+  },
+  {
+    "code": "capture.preflight.micMissing",
+    "message": "The microphone you chose isn't connected, so we picked {fallback}.",
+    "params": [
+      "fallback"
+    ]
+  },
+  {
+    "code": "capture.preflight.cameraBusy",
+    "message": "{device} is in use by another app.",
+    "params": [
+      "device"
+    ]
+  },
+  {
+    "code": "capture.preflight.cameraOff",
+    "message": "{device} is turned off or covered.",
+    "params": [
+      "device"
+    ]
+  },
+  {
+    "code": "capture.preflight.cameraWithScreen",
+    "message": "This computer can't record your camera at the same time as the screen.",
+    "params": []
+  },
+  {
+    "code": "capture.preflight.lowBattery",
+    "message": "Your battery is low. Plug in for long recordings.",
+    "params": []
+  },
+  {
+    "code": "capture.preflight.slowDrive",
+    "message": "This drive is slow. Long recordings may stop early.",
+    "params": []
+  },
+  {
+    "code": "capture.preflight.noEncoder",
+    "message": "This computer has no video encoder Klipolo can record with.",
+    "params": []
+  },
+  {
+    "code": "capture.preflight.osTooOld",
+    "message": "Recording needs {os} {version} or later.",
+    "params": [
+      "os",
+      "version"
+    ]
+  },
+  {
+    "code": "capture.preflight.profilePreset",
+    "message": "The quality you chose for {app} isn't available on this computer now, so we picked the best one for it.",
+    "params": [
+      "app"
+    ]
+  },
+  {
+    "code": "capture.preflight.cursorBurned",
+    "message": "This computer keeps the cursor in the picture, so it can't be restyled later.",
+    "params": []
+  },
+  {
+    "code": "capture.preflight.networkFolder",
+    "message": "Recordings can't be saved safely in this folder. Choose a folder on this computer, not on a network drive.",
+    "params": []
+  },
+  {
+    "code": "capture.permission.screen",
+    "message": "Allow Klipolo to record your screen, then reopen Klipolo.",
+    "params": []
+  },
+  {
+    "code": "capture.permission.screenNeeded",
+    "message": "Klipolo needs your permission to record your screen.",
+    "params": []
+  },
+  {
+    "code": "capture.permission.screenTurnOn",
+    "message": "Turn on Klipolo in the list that opened, then reopen Klipolo.",
+    "params": []
+  },
+  {
+    "code": "capture.permission.screenStillRefused",
+    "message": "macOS still isn't letting Klipolo record the screen. This can happen when an older copy of Klipolo is in the list.",
+    "params": []
+  },
+  {
+    "code": "capture.permission.screenRemoveOld",
+    "message": "Open Screen & System Audio Recording, select Klipolo, remove it with the minus button, then press Allow again.",
+    "params": []
+  },
+  {
+    "code": "capture.permission.allowScreen",
+    "message": "Allow screen recording",
+    "params": []
+  },
+  {
+    "code": "capture.permission.reopen",
+    "message": "Reopen Klipolo",
+    "params": []
+  },
+  {
+    "code": "capture.permission.openSettings",
+    "message": "Open privacy settings",
+    "params": []
+  },
+  {
+    "code": "capture.permission.settingsDidntOpen",
+    "message": "System Settings didn't open. Open it from the Apple menu, then choose Privacy & Security.",
+    "params": []
+  },
+  {
+    "code": "capture.permission.reopenExporting",
+    "message": "An export is running. Reopen Klipolo when it's done.",
+    "params": []
+  },
+  {
+    "code": "capture.permission.reopenMoveFirst",
+    "message": "Move Klipolo to your Applications folder, then open it again.",
+    "params": []
+  },
+  {
+    "code": "capture.permission.camera",
+    "message": "Allow Klipolo to use your camera in your computer's privacy settings, then try again.",
+    "params": []
+  },
+  {
+    "code": "capture.permission.mic",
+    "message": "Allow Klipolo to use your microphone in your computer's privacy settings, then try again.",
+    "params": []
+  },
+  {
+    "code": "capture.liveView.unavailable",
+    "message": "The live view isn't available right now.",
+    "params": []
+  },
+  {
+    "code": "capture.recovered.interrupted",
+    "message": "Klipolo closed while recording at {timeAtMs}. {durationUs} was saved.",
+    "params": [
+      "timeAtMs",
+      "durationUs"
+    ]
+  },
+  {
+    "code": "capture.recovered.ready",
+    "message": "Your recording from {timeAtMs} is ready.",
+    "params": [
+      "timeAtMs"
+    ]
+  },
+  {
+    "code": "capture.recovered.live",
+    "message": "A recording is still running. Stop it from {place}.",
+    "params": [
+      "place"
+    ]
+  },
+  {
+    "code": "capture.recovered.approximate",
+    "message": "Some timing in this recording is approximate.",
+    "params": []
+  },
+  {
+    "code": "capture.recovered.partKept",
+    "message": "Part of {source} couldn't be repaired automatically. Its files are kept in the take's folder.",
+    "params": [
+      "source"
+    ]
+  },
+  {
+    "code": "capture.recovered.sourceKept",
+    "message": "{source} couldn't be repaired automatically. Its files are kept in the take's folder.",
+    "params": [
+      "source"
+    ]
+  },
+  {
+    "code": "capture.recovered.failed",
+    "message": "This recording couldn't be opened. Its files are kept in the take's folder.",
+    "params": []
+  },
+  {
+    "code": "capture.recovered.driveFull",
+    "message": "This recording couldn't be opened because its drive is full. Free up some space, then open it again.",
+    "params": []
+  },
+  {
+    "code": "capture.recovered.driveReadOnly",
+    "message": "This recording couldn't be opened because its drive is read-only. Reconnect the drive or make it writable, then open it again.",
+    "params": []
+  },
+  {
+    "code": "capture.recovered.trashFailed",
+    "message": "This recording couldn't be moved to the Trash. Its files are kept in the take's folder.",
+    "params": []
+  },
+  {
+    "code": "capture.recovered.recycleFailed",
+    "message": "This recording couldn't be moved to the Recycle Bin. Its files are kept in the take's folder.",
+    "params": []
+  },
+  {
+    "code": "capture.recovered.trashTooBig",
+    "message": "This recording is too big for the Recycle Bin, so it's still in its folder.",
+    "params": []
+  },
+  {
+    "code": "capture.busy",
+    "message": "A recording is already running. Stop it from {place}.",
+    "params": [
+      "place"
+    ]
+  },
+  {
+    "code": "capture.busyDictating",
+    "message": "Finish dictating first, then record.",
+    "params": []
+  },
+  {
+    "code": "capture.orphan",
+    "message": "Klipolo closed. The recording goes on until you stop it here.",
+    "params": []
+  },
+  {
+    "code": "capture.quit.ask",
+    "message": "A recording is running. Stop and save it, then quit?",
+    "params": []
+  },
+  {
+    "code": "capture.import.noVideo",
+    "message": "This take has no picture to edit. Its sound files are in the recording's folder.",
+    "params": []
+  },
+  {
+    "code": "capture.import.videoUnreadable",
+    "message": "This take's picture couldn't be read, so there's nothing to edit. Its files are kept in the take's folder.",
+    "params": []
+  },
+  {
+    "code": "capture.import.unreadable",
+    "message": "Part of {source} ({seconds} s at {atUs}) couldn't be read, so it isn't in the edit. Its file is kept in the take's folder.",
+    "params": [
+      "source",
+      "seconds",
+      "atUs"
+    ]
+  },
+  {
+    "code": "capture.import.notAdded",
+    "message": "The recording couldn't be added to your project. Its files are in Movies / Klipolo / Recordings.",
+    "params": []
+  },
+  {
+    "code": "capture.import.addedNotOpened",
+    "message": "The recording was added to your project. Open the project from the start screen to see it.",
+    "params": []
+  },
+  {
+    "code": "capture.menu.stop",
+    "message": "Stop and save",
+    "params": []
+  },
+  {
+    "code": "capture.menu.pause",
+    "message": "Pause",
+    "params": []
+  },
+  {
+    "code": "capture.menu.resume",
+    "message": "Resume",
+    "params": []
+  },
+  {
+    "code": "capture.menu.marker",
+    "message": "Mark this moment",
+    "params": []
+  },
+  {
+    "code": "capture.menu.space",
+    "message": "Space left: about {left}",
+    "params": [
+      "left"
+    ]
+  },
+  {
+    "code": "capture.menu.fps",
+    "message": "{source}: {fps} fps",
+    "params": [
+      "source",
+      "fps"
+    ]
+  },
+  {
+    "code": "capture.menu.reconnecting",
+    "message": "{source}: reconnecting…",
+    "params": [
+      "source"
+    ]
+  },
+  {
+    "code": "capture.menu.idle",
+    "message": "{source}",
+    "params": [
+      "source"
+    ]
+  },
+  {
+    "code": "capture.menu.ready",
+    "message": "Ready: press {keys} in your game",
+    "params": [
+      "keys"
+    ]
+  },
+  {
+    "code": "capture.menu.cancel",
+    "message": "Cancel",
+    "params": []
+  },
+  {
+    "code": "capture.menu.startOver",
+    "message": "Start over",
+    "params": []
+  },
+  {
+    "code": "capture.keys.taken",
+    "message": "{keys} is used by another app, so it won't work in this recording.",
+    "params": [
+      "keys"
+    ]
+  },
+  {
+    "code": "capture.hud.recording",
+    "message": "● REC {time}",
+    "params": [
+      "time"
+    ]
+  },
+  {
+    "code": "capture.hud.answer",
+    "message": "Press {keys} to record without it, or Cancel from {place}.",
+    "params": [
+      "keys",
+      "place"
+    ]
+  },
+  {
+    "code": "capture.duration.hoursMinutes",
+    "message": "{hours} h {minutes} min",
+    "params": [
+      "hours",
+      "minutes"
+    ]
+  },
+  {
+    "code": "capture.duration.hours",
+    "message": "{hours} h",
+    "params": [
+      "hours"
+    ]
+  },
+  {
+    "code": "capture.duration.minutes",
+    "message": "{minutes} min",
+    "params": [
+      "minutes"
+    ]
+  },
+  {
+    "code": "capture.place.menuBar",
+    "message": "the menu bar",
+    "params": []
+  },
+  {
+    "code": "capture.place.notificationArea",
+    "message": "the notification area",
+    "params": []
+  },
+  {
+    "code": "capture.place.tray",
+    "message": "the system tray",
+    "params": []
+  },
+  {
+    "code": "capture.error.unsupported",
+    "message": "This computer can't record that.",
+    "params": []
+  },
+  {
+    "code": "capture.error.permission",
+    "message": "Klipolo isn't allowed to record that yet.",
+    "params": []
+  },
+  {
+    "code": "capture.error.permissionPending",
+    "message": "Your computer is still asking whether Klipolo may record this. Answer that question, then try again.",
+    "params": []
+  },
+  {
+    "code": "capture.error.noDevice",
+    "message": "That device isn't connected.",
+    "params": []
+  },
+  {
+    "code": "capture.error.busy",
+    "message": "That device is in use.",
+    "params": []
+  },
+  {
+    "code": "capture.error.encoder",
+    "message": "The video encoder stopped.",
+    "params": []
+  },
+  {
+    "code": "capture.error.os",
+    "message": "Recording failed.",
+    "params": []
+  },
+  {
+    "code": "capture.error.staleTake",
+    "message": "That recording has already ended.",
+    "params": []
+  },
+  {
+    "code": "capture.error.driveStuck",
+    "message": "The drive stopped answering. Klipolo finishes the recording from what was saved. Check the drive before you record again.",
+    "params": []
+  },
+  {
+    "code": "capture.error.testRun",
+    "message": "Recording is off in this test run.",
+    "params": []
+  },
+  {
+    "code": "capture.error.noSettingsFolder",
+    "message": "Klipolo can't find its settings folder, so it can't record. Reopen Klipolo, then try again.",
+    "params": []
+  },
+  {
+    "code": "capture.error.setUp",
+    "message": "The recording couldn't be set up. Check that your Movies folder can be written to, then press Record again.",
+    "params": []
+  },
+  {
+    "code": "capture.error.workerDidntStart",
+    "message": "The recorder didn't start. Reopen Klipolo, then press Record again.",
+    "params": []
+  }
+]

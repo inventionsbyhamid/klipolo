@@ -83,6 +83,7 @@ impl Projects for ProjectSessionState {
                     kind,
                     asset,
                     pack: true,
+                    tags: item.tags,
                 })
             })
             .collect()

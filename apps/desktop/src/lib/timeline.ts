@@ -7,6 +7,7 @@ import type { ItemContent } from '../bindings/ItemContent';
 import type { Project } from '../bindings/Project';
 import type { Timeline } from '../bindings/Timeline';
 import type { Track } from '../bindings/Track';
+import { codedMessage } from '../bridge/call';
 import { activeIntlLocale } from '../i18n';
 import { agentName } from './agentNames';
 import { contribLabel, isInstalled, isScene } from './contrib';
@@ -186,16 +187,48 @@ export function primaryAsset(project: Sources, source: ClipSource): Asset | null
   return assetById(project, recording ? firstAsset(primarySource(recording)) : null);
 }
 
-export function sourceLabel(project: Sources, source: ClipSource): string {
-  return (
-    primaryAsset(project, source)?.name ??
-    (source.type === 'asset'
-      ? missingMedia()
-      : t({ id: 'layer.recording', message: 'Recording', comment: 'A clip recorded in Klipolo' }))
-  );
+/**
+ * A recording's name, the one Klipolo gives it wherever it shows (its clips on the timeline and in the clip card, the
+ * Library, the toast that said it landed, export's notes): "Recording 2" for the project's second, by its place among
+ * the project's recordings (the model's `name.recording`). "Recording" when the project doesn't have it.
+ */
+export function recordingName(project: Pick<Project, 'recordings'>, recordingId: string): string {
+  const number = project.recordings.findIndex((r) => r.id === recordingId) + 1;
+  const plain = t({ id: 'layer.recording', message: 'Recording', comment: 'A clip recorded in Klipolo' });
+  return (number > 0 && codedMessage({ code: 'name.recording', params: { number } })) || plain;
 }
 
-export function itemLabel(project: Pick<Project, 'assets'>, item: Item): string {
+/**
+ * A clip's name: a recording's own ("Recording 1", never its screen file's), else its file's as the Library names it
+ * ("Screen of Recording 1" for a recording's file added on its own).
+ */
+export function sourceLabel(project: Sources, source: ClipSource): string {
+  if (source.type === 'recording') return recordingName(project, source.id);
+  const asset = primaryAsset(project, source);
+  return asset ? assetName(project, asset) : missingMedia();
+}
+
+/**
+ * A file's name in the Library and on the timeline: a recording's files by their source and their recording ("Screen
+ * of Recording 1", "Camera of Recording 1"), as each plays that source alone (only the recording's own clip is
+ * "Recording 1"); any other file by its own name.
+ */
+export function assetName(project: Sources, asset: Asset): string {
+  for (const recording of project.recordings) {
+    const source = recording.sources.find((s) => s.runs.some((run) => run.assetId === asset.id));
+    if (!source) continue;
+    const name = recordingName(project, recording.id);
+    const role = codedMessage({ code: source.label, params: {} }) || source.label;
+    return t({
+      id: 'library.recordingFile',
+      message: `${role} of ${name}`,
+      comment: 'A file of a recording made in Klipolo: {role} is Screen, Camera or Mic, {name} is Recording 1',
+    });
+  }
+  return asset.name;
+}
+
+export function itemLabel(project: Sources, item: Item): string {
   const content = item.content;
   switch (content.type) {
     case 'text':
@@ -213,8 +246,10 @@ export function itemLabel(project: Pick<Project, 'assets'>, item: Item): string 
       return contribLabel(content.source, isScene(content.source) ? 'scene' : 'generator');
     case 'adjustment':
       return t({ id: 'layer.adjustment', message: 'Adjustment', comment: 'An adjustment layer' });
-    default:
-      return assetById(project, content.assetId)?.name ?? missingMedia();
+    default: {
+      const asset = assetById(project, content.assetId);
+      return asset ? assetName(project, asset) : missingMedia();
+    }
   }
 }
 

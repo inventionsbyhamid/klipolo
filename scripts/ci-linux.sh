@@ -12,6 +12,8 @@
 # a Mac's target/debug).
 set -uo pipefail
 cd "$(dirname "$0")/.."
+# The consent guard: a real capture panics before any OS call while this is set (klipolo-capture's `guard`).
+export KLIPOLO_TEST="${KLIPOLO_TEST:-1}"
 
 # The page's generated files as checked out, before any test step writes the bindings again ("bindings are current").
 generated=$(mktemp -d)
@@ -48,19 +50,24 @@ run "cargo fmt --all --check" cargo fmt --all --check
 # The bundled pack (assets/library): what scripts/gen-library.py writes, the same bytes every run, CC0 and small.
 run "bundled pack" scripts/gen-library.test.sh
 run "cargo check --workspace --all-targets" cargo check --workspace --all-targets --locked
-run "clippy model, cursor, platform, engine, fonts, speech-wire, meta, analysis, chat, mcp" \
+run "clippy model, cursor, platform, engine, fonts, speech-wire, meta, analysis, chat, mcp, capture" \
   cargo clippy -p klipolo-model -p klipolo-cursor -p klipolo-platform -p klipolo-engine -p klipolo-fonts \
-  -p klipolo-speech-wire -p klipolo-meta -p klipolo-analysis -p klipolo-chat -p klipolo-mcp --all-targets --locked \
-  -- -D warnings
+  -p klipolo-speech-wire -p klipolo-meta -p klipolo-analysis -p klipolo-chat -p klipolo-mcp \
+  -p klipolo-capture --features klipolo-capture/synthetic --all-targets --locked -- -D warnings
 # The app crate: its non-GUI code (the engine commands, on the blank backend here; no window opens).
 run "clippy app" cargo clippy -p klipolo-app --all-targets --locked -- -D warnings
 # What only trial builds compile (the slow-disk hook `render::pool::slow_stats`, the decoders' measurement counters),
 # linted too so it can't rot.
 run "clippy engine (trial)" cargo clippy -p klipolo-engine --all-targets --features trial --locked -- -D warnings
-# The Meta client's tests answer from a local mock server; nothing here reaches Meta.
-run "test model, cursor, platform, fonts, speech-wire, meta, analysis, chat, mcp" cargo test \
+# The recorder's real backends as Linux builds them (the stub, with tray-icon and global-hotkey), compiled so they
+# can't rot before the app depends on them; nothing here runs them.
+run "check capture (real-capture)" cargo check -p klipolo-capture --features real-capture --locked
+# The Meta client's tests answer from a local mock server; nothing here reaches Meta. The recorder's tests use
+# its synthetic sources and fake backend (the kill sweep included); nothing here captures.
+run "test model, cursor, platform, fonts, speech-wire, meta, analysis, chat, mcp, capture" cargo test \
   -p klipolo-model -p klipolo-cursor -p klipolo-platform -p klipolo-fonts -p klipolo-speech-wire -p klipolo-meta \
-  -p klipolo-analysis -p klipolo-chat -p klipolo-mcp --locked --no-fail-fast
+  -p klipolo-analysis -p klipolo-chat -p klipolo-mcp -p klipolo-capture --features klipolo-capture/synthetic --locked \
+  --no-fail-fast
 run "test app" cargo test -p klipolo-app --locked --no-fail-fast
 # The fonts crate's download tests against a local server (`test-hosts`); nothing here reaches Google.
 run "test fonts (local download server)" cargo test -p klipolo-fonts --features test-hosts --locked
@@ -83,6 +90,10 @@ run "pnpm install" pnpm install --frozen-lockfile --store-dir .build/pnpm-store
 # The third-party notices the app ships list what Cargo.lock and the page's build hold: after a dependency change, run
 # scripts/release/third-party.sh and commit its file (a few seconds: crates are fetched, not built).
 run "third-party notices are current" scripts/release/third-party.sh --check
+# Cap-MIT.txt's first line names exactly the files from Cap's MIT crates (scripts/release/lib.sh's cap_mit_check): a
+# file vendored, renamed or removed without it fails here, not at a release build's bundle check.
+run "Cap's MIT licence names its files" \
+  bash -c '. scripts/release/lib.sh && cap_mit_check . "$1" "$1"' _ crates/klipolo-app/licenses/Cap-MIT.txt
 run "page typecheck" pnpm -C apps/desktop typecheck
 run "page tests" pnpm -C apps/desktop test
 # What the engine's probe reads for sync (the sound lead, creation time and audio format), on the fixtures.

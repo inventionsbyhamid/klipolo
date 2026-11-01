@@ -135,6 +135,11 @@ export const TABLE = {
     message: 'Add recording',
     comment: 'Undo history entry: a finished recording added to the project',
   }),
+  'undo.autoZoom': msg({
+    id: 'undo.autoZoom',
+    message: 'Add auto zoom',
+    comment: "Undo history entry: zooms that follow a new recording's clicks, added right after it",
+  }),
   'undo.marker.add': msg({ id: 'undo.marker.add', message: 'Add marker', comment: 'Undo history entry' }),
   'undo.marker.remove': msg({
     id: 'undo.marker.remove',
@@ -328,6 +333,14 @@ export const TABLE = {
     id: 'undo.followCursor.closer',
     message: 'Change how close it follows',
     comment: 'Undo history entry: how far the following crop zooms in',
+  }),
+  // What an edit does to transitions, said after it: aloud, and at the end of a speed change's entry (a chat
+  // change's names it as a value, `chat.setClip.note`).
+  'timeline.refit': msg({
+    id: 'timeline.refit',
+    message:
+      '{removed, plural, =0 {{shortened, plural, =0 {} =1 {A transition is shortened.} other {# transitions are shortened.}}} =1 {A transition is removed{shortened, plural, =0 {.} =1 { and one is shortened.} other { and # are shortened.}}} other {# transitions are removed{shortened, plural, =0 {.} =1 { and one is shortened.} other { and # are shortened.}}}}',
+    comment: 'What an edit does to transitions, said after what it did, e.g. “2 transitions are removed and one is shortened.”',
   }),
   'speed.undo': msg({ id: 'speed.undo', message: 'Change speed', comment: 'Undo history entry' }),
   'speed.undo.note': msg({

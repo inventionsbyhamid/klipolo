@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { CodedError } from '../bindings/CodedError';
 import type { Said } from '../bindings/Said';
 import { wordParams } from '../lib/labels';
+import { RECORDER_WORDS } from '../lib/recorder/words';
 
 function isCoded(error: unknown): error is CodedError {
   return (
@@ -78,10 +79,11 @@ const RUST_CODES = new Map(
 
 /**
  * A coded error or notice from Rust (Rust sends codes, never English) in English; '' for an unknown code. Its values
- * are worded as labels' are (`wordParams`: a time as a clock, a nested code by its own words).
+ * are worded as labels' are (`wordParams`: a time as a clock, a nested code by its own words). A recorder note that
+ * would offer what Klipolo doesn't have is said in Klipolo's words (`RECORDER_WORDS`).
  */
 export function codedMessage(error: CodedError): string {
-  const message = APP_CODES[error.code] ?? RUST_CODES.get(error.code);
+  const message = APP_CODES[error.code] ?? RECORDER_WORDS[error.code] ?? RUST_CODES.get(error.code);
   return message === undefined ? '' : i18n._(error.code, wordParams(error.params), { message });
 }
 

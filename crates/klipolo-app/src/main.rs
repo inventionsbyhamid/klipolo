@@ -10,6 +10,7 @@ mod media_cache;
 mod media_jobs;
 mod pack;
 mod project;
+mod recorder;
 mod state;
 mod view;
 
@@ -18,6 +19,7 @@ use std::sync::Arc;
 use klipolo_engine::render::fonts::{self, FontDirs};
 use klipolo_engine::render::mode::RenderMode;
 use klipolo_engine::render::warm::Warmup;
+use tauri::webview::PageLoadEvent;
 use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 
 use crate::mcp::McpState;
@@ -43,6 +45,12 @@ fn main() {
         log::install_worker();
         std::process::exit(klipolo_engine::media::proxy::worker::main(&args[2..]));
     }
+    // The recorder runs the same way: `--record-worker <take folder> [--resume]` records a take and
+    // `--record-worker --probe <file>` measures the encoders, before Tauri and any window. It logs to the take's
+    // folder (or stderr), and outlives the app.
+    if args.get(1).map(String::as_str) == Some("--record-worker") {
+        std::process::exit(klipolo_capture::worker::main(&args));
+    }
     log::install();
     // The engine's fonts, once: the bundled folder in the app's resources (or the repository's in a dev build).
     if let Err(e) = fonts::configure(FontDirs {
@@ -55,9 +63,21 @@ fn main() {
     let warm = Warmup::start(RenderMode::Interactive);
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // A page that loads again (reloaded, or after its process ended) leaves no preview running.
+        .on_page_load(|webview, page| {
+            if webview.label() == "main" && page.event() == PageLoadEvent::Started {
+                recorder::page_loads(webview.app_handle());
+            }
+        })
         .setup(move |app| {
+            // First, before the page loads: the window's colour is the saved theme's.
+            commands::appearance::at_launch(app.handle());
             let cache = app.path().app_cache_dir().ok();
             app.manage(EngineState::new(Some(warm), cache));
+            // The library's favorites and recently used items, for every project, in the app's config folder.
+            app.manage(commands::library::LibraryMarksState::new(
+                app.path().app_config_dir().ok(),
+            ));
             let projects = ProjectSessionState::default();
             // Klipolo's pack where this install has it; a project's pack files point here as it opens.
             projects.set_pack(
@@ -78,6 +98,8 @@ fn main() {
             app.manage(klipolo_app::captions::CaptionsCache::default());
             commands::captions::follow_speech(app.handle(), &projects);
             app.manage(projects);
+            // Screen recording: off in a test run (`KLIPOLO_TEST`), where it makes no backend and launches no worker.
+            app.manage(recorder::RecorderState::new(app.handle()));
             // How Klipolo pays for Meta's models (the Keychain), and this Mac's id with the relay (app support).
             let support = app.path().data_dir().ok().map(|dir| dir.join("Klipolo"));
             let credentials = commands::settings::load(support.as_deref());
@@ -170,6 +192,7 @@ fn main() {
             project::project_reveal,
             project::projects_recent,
             media::media_import,
+            commands::appearance::appearance_set,
             commands::settings::settings_get,
             commands::settings::settings_set_key,
             commands::settings::settings_set_code,
@@ -191,6 +214,7 @@ fn main() {
             view::editor_view,
             media_cache::media_peaks_info,
             media_cache::media_peaks,
+            media_cache::media_channel_peaks,
             media_cache::media_thumbs,
             commands::media::media_add_music,
             commands::media::media_add_sound,
@@ -201,6 +225,9 @@ fn main() {
             commands::media::media_picture,
             commands::media::media_speech_ranges,
             commands::media::library_pack,
+            commands::library::library_marks,
+            commands::library::library_set_favorite,
+            commands::library::library_mark_used,
             commands::fonts::fonts_bundled,
             commands::fonts::fonts_face,
             commands::captions::captions_pages,
@@ -213,6 +240,17 @@ fn main() {
             commands::export::export_open,
             commands::export::export_files,
             commands::export::export_pick_folder,
+            recorder::commands::recorder_setup,
+            recorder::commands::recorder_arm,
+            recorder::commands::recorder_send,
+            recorder::commands::recorder_stop_running,
+            recorder::commands::recorder_allow_screen,
+            recorder::commands::recorder_reopen,
+            recorder::commands::recorder_back_from_reopen,
+            recorder::commands::recorder_open_privacy,
+            recorder::commands::recorder_previews,
+            recorder::commands::recorder_previews_off,
+            recorder::commands::recorder_preview_ack,
             media_jobs::commands::media_jobs_list,
             media_jobs::commands::media_jobs_pause,
             media_jobs::commands::media_jobs_resume,
@@ -224,7 +262,17 @@ fn main() {
         .expect("Klipolo could not start");
     app.run(|app, event| {
         // Quitting while an export runs asks first.
-        commands::export::guard_quit(app, &event);
+        let asks = commands::export::guard_quit(app, &event);
+        // Quitting during a take stops it and waits (30 s at most) for it to land in its project.
+        let waits = recorder::guard_quit(app, &event);
+        // A take still armed at exit is disarmed: no worker outlives Klipolo waiting with its global key.
+        recorder::release_on_exit(app, &event);
+        // The Record dialog's previews stop when the window goes behind, hides or minimises, and none outlives Klipolo.
+        recorder::follow_window(app, &event);
+        // Reopen Klipolo's exit, once it goes ahead (neither guard held it), starts the waiter that opens Klipolo again
+        // when this one has gone. One a guard held leaves nothing armed. Any exit remembers a Screen Recording refused
+        // while the person chose what to record, for macOS's own Quit & Reopen.
+        recorder::relaunch_on_exit(app, &event, asks || waits);
         match event {
             RunEvent::Exit => {
                 // Other apps' access ends with the app: the server stops and its connection file goes.
@@ -235,6 +283,11 @@ fn main() {
                 // made keeps its finished segments: its worker sees the app go and is made on at the next launch.
                 commands::export::on_exit(app);
             }
+            // The system's appearance changed: the window's colour follows it while the theme is System.
+            RunEvent::WindowEvent {
+                event: WindowEvent::ThemeChanged(system),
+                ..
+            } => commands::appearance::system_changed(app, system),
             // Back in front: a source exported again elsewhere meanwhile must not keep showing its old editing copy.
             RunEvent::WindowEvent {
                 event: WindowEvent::Focused(true),

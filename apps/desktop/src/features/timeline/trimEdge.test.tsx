@@ -57,7 +57,7 @@ beforeEach(() => {
 describe("a trim shows its edge's frame", () => {
   it("a main clip's end trim shows its new last frame each frame, then the playhead's on release", async () => {
     renderWithProviders(<Timeline />);
-    const a = block(/^screen\.mp4/);
+    const a = block(/^Recording 1/);
     // 40 px/s at 30 fps: a ends at 20 s; −40 px ends it at 19 s, whose last frame starts a frame earlier.
     press(edge(a, 'end'), 799);
     move(a, 759);
@@ -114,7 +114,7 @@ describe("a trim shows its edge's frame", () => {
 
   it("Escape shows the playhead's frame again and commits nothing", async () => {
     renderWithProviders(<Timeline />);
-    const a = block(/^screen\.mp4/);
+    const a = block(/^Recording 1/);
     press(edge(a, 'end'), 799);
     move(a, 759);
     await shows(18_966_667);
@@ -139,7 +139,7 @@ describe("a trim shows its edge's frame", () => {
 
   it("a trim taken back to where it began shows the playhead's frame again on release", async () => {
     renderWithProviders(<Timeline />);
-    const a = block(/^screen\.mp4/);
+    const a = block(/^Recording 1/);
     press(edge(a, 'end'), 799);
     move(a, 759);
     await shows(18_966_667);
@@ -157,7 +157,7 @@ describe("a trim shows its edge's frame", () => {
     const off = usePlayback.subscribe((s, prev) => {
       if (s.playheadUs !== prev.playheadUs || s.playing !== prev.playing) moved.push(s.playheadUs);
     });
-    const a = block(/^screen\.mp4/);
+    const a = block(/^Recording 1/);
     press(edge(a, 'end'), 799);
     for (const x of [759, 719, 679]) {
       move(a, x);
@@ -188,7 +188,7 @@ describe("a trim shows its edge's frame", () => {
   it("while playing, the picture stays playback's: a trim never seeks", async () => {
     usePlayback.setState({ playing: true });
     renderWithProviders(<Timeline />);
-    const a = block(/^screen\.mp4/);
+    const a = block(/^Recording 1/);
     press(edge(a, 'end'), 799);
     move(a, 759);
     await frames();
@@ -203,7 +203,7 @@ describe("a trim shows its edge's frame", () => {
 describe('a trim ended from elsewhere goes back to the playhead', () => {
   it('a change from elsewhere merged mid-trim', async () => {
     renderWithProviders(<Timeline />);
-    const a = block(/^screen\.mp4/);
+    const a = block(/^Recording 1/);
     press(edge(a, 'end'), 799);
     move(a, 759);
     await shows(18_966_667);
@@ -220,7 +220,7 @@ describe('a trim ended from elsewhere goes back to the playhead', () => {
 
   it('a zoom mid-trim', async () => {
     renderWithProviders(<Timeline />);
-    const a = block(/^screen\.mp4/);
+    const a = block(/^Recording 1/);
     press(edge(a, 'end'), 799);
     move(a, 759);
     await shows(18_966_667);
@@ -233,7 +233,7 @@ describe('a trim ended from elsewhere goes back to the playhead', () => {
 
   it('the pointer capture lost mid-trim', async () => {
     renderWithProviders(<Timeline />);
-    const a = block(/^screen\.mp4/);
+    const a = block(/^Recording 1/);
     press(edge(a, 'end'), 799);
     move(a, 759);
     await shows(18_966_667);
@@ -268,7 +268,7 @@ describe('playback started mid-trim', () => {
         <Timecode durationUs={30_000_000} className="timecode" />
       </>,
     );
-    const a = block(/^screen\.mp4/);
+    const a = block(/^Recording 1/);
     press(edge(a, 'end'), 799);
     move(a, 759);
     nextFrame(); // the trim's frame: its dry run and its edge go out at the next one
@@ -291,7 +291,7 @@ describe('playback started mid-trim', () => {
 
   it('Space ends the edge display: paused again, the trim shows its edge once more', async () => {
     renderWithProviders(<Timeline />);
-    const a = block(/^screen\.mp4/);
+    const a = block(/^Recording 1/);
     press(edge(a, 'end'), 799);
     move(a, 759);
     nextFrame();

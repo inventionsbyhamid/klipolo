@@ -14,6 +14,9 @@ const { useUi } = await import('../../state/ui');
 const { Timeline } = await import('./Timeline');
 const { usToPx } = await import('./scale');
 const { tickStep } = await import('./ruler/ticks');
+const { landedToast } = await import('../../state/recorder');
+const { useToasts } = await import('../../state/toasts');
+const { takeImport } = await import('../../test/recorderBridge');
 
 beforeEach(() => {
   useProject.setState({ snapshot: fixtureSnapshot(), pending: 0 });
@@ -39,12 +42,23 @@ describe('timeline', () => {
 
   it('draws clips proportional to their duration', () => {
     renderWithProviders(<Timeline />);
-    const clip = screen.getByRole('button', { name: /^screen\.mp4/ });
+    const clip = screen.getByRole('button', { name: /^Recording 1/ });
     expect(clip).toHaveStyle({ width: '800px', left: '0px' });
     expect(screen.getByRole('button', { name: /^broll\.mp4/ })).toHaveStyle({
       left: '800px',
       width: '400px',
     });
+  });
+
+  it('a_recording_clip_is_named_as_its_toast_names_it', () => {
+    renderWithProviders(<Timeline />);
+    // The first clip plays the project's first recording: its block says so, never its screen file's name.
+    expect(screen.getByRole('button', { name: /^Recording 1/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /screen\.mp4/ })).toBeNull();
+    // As the toast that said it landed.
+    useToasts.setState({ toasts: [] });
+    landedToast(takeImport(useProject.getState().snapshot!, 'a', { recordingId: 'rec' }));
+    expect(useToasts.getState().toasts.map((t) => t.text)).toEqual(['Added Recording 1, 0:20.']);
   });
 
   it("selects and seeks when a layer is clicked, past a title's fade-in so the paused preview shows it", async () => {
@@ -94,7 +108,7 @@ describe('timeline', () => {
   it('keeps the playhead when the clicked clip is already under it, so S splits there', async () => {
     usePlayback.setState({ playheadUs: 5_000_000 });
     renderWithProviders(<Timeline />);
-    await userEvent.click(screen.getByRole('button', { name: /^screen\.mp4/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^Recording 1/ }));
     expect(useSelection.getState().selectedId).toBe('a');
     expect(usePlayback.getState().playheadUs).toBe(5_000_000);
   });

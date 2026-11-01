@@ -92,6 +92,59 @@ fn a_clip_override_mutes_one_source_only_there() {
     assert_eq!(paths.iter().filter(|p| p.contains("mic")).count(), 2);
 }
 
+/// A clip's own volume and mute of one recorded sound, as the clip card's Sounds sends them, change that sound in that
+/// clip alone: the other clip, and the clip's other sound, play as before.
+#[test]
+fn a_clip_s_own_volume_and_mute_of_one_source_change_only_that_clip() {
+    let mut p = common::recording_project(&[
+        ("mic", SourceRole::Mic, 0, 60.0, 0.0),
+        ("computer-sound", SourceRole::SystemAudio, 0, 60.0, 0.0),
+    ]);
+    common::split_at(&mut p, 30.0);
+    let second = p.timeline.main[1].id.clone();
+    let own = |mix: SourceMix| {
+        klipolo_model::apply_ops(
+            &p,
+            &[Op::SetClipSourceMix {
+                clip_id: second.clone(),
+                source_id: "mic".into(),
+                mix: Some(mix),
+            }],
+        )
+        .unwrap()
+    };
+    let plan = |p: &Project| -> Vec<(String, i64, f64)> {
+        audio_plan(p, &Registry::builtin(), Arc::default())
+            .sources
+            .iter()
+            .map(|s| (s.path.clone(), s.start_us, s.gain))
+            .collect()
+    };
+    let before = plan(&p);
+    let here = |(path, start, _): &(String, i64, f64)| {
+        path.contains("mic") && *start >= support::secs(30.0)
+    };
+    assert_eq!(before.iter().filter(|s| here(s)).count(), 1);
+    let quieter = plan(&own(SourceMix {
+        volume: 0.5,
+        ..SourceMix::default()
+    }));
+    assert_eq!(quieter.len(), before.len());
+    for (was, now) in before.iter().zip(&quieter) {
+        if here(was) {
+            assert!((now.2 - was.2 * 0.5).abs() < 1e-9, "{was:?} -> {now:?}");
+        } else {
+            assert_eq!(now, was);
+        }
+    }
+    let muted = plan(&own(SourceMix {
+        muted: true,
+        ..SourceMix::default()
+    }));
+    let rest: Vec<_> = before.iter().filter(|s| !here(s)).cloned().collect();
+    assert_eq!(muted, rest, "only that clip's mic goes quiet");
+}
+
 #[test]
 fn a_klipolo_recording_needs_no_editing_copy() {
     let facts = common::facts(1920, 1080, 60, "hevc", 1_000_000);

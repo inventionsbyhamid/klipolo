@@ -25,6 +25,12 @@ export interface ProjectStore {
    */
   load: (snapshot: Snapshot) => Promise<boolean>;
   /**
+   * A project Rust opened by itself in place of the page's (a take landed in the project it was armed in, opened again,
+   * or in a new one made for it from the start screen; or the same project opened again): every edit made in the one
+   * shown goes in first, as for any switch, then it shows from its start. False when it couldn't be shown.
+   */
+  switchToOpened: (snapshot: Snapshot) => Promise<boolean>;
+  /**
    * One undo step. `label` is its message id and `params` the values it shows (`'effect.add.undo'`, `{ effect: … }`):
    * history keeps them, never words, and the Undo item words them. `built`: where
    * `ops` were built (`captureBase`), when that was before this call (a held burst); else now. `quietMoved`: a refusal

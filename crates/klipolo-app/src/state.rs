@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use klipolo_engine::audio::pcm::PcmStore;
-use klipolo_engine::media::thumbs;
+use klipolo_engine::media::{Hold, ThumbStore, thumbs};
 use klipolo_engine::render::warm::Warmup;
 use klipolo_engine::session::EngineSlot;
 
@@ -19,6 +19,15 @@ pub struct EngineState {
     /// The decoded sound cache (`CacheDirs::audio`), one for the app: the preview plays from it and analysis reads its
     /// levels, so a file is decoded once. None without a cache folder.
     pub(crate) sounds: Option<Arc<PcmStore>>,
+    /// The engine's background media work and whether a take holds it (`hold_for_recording`).
+    media: Mutex<MediaHold>,
+}
+
+/// The running engine's thumbnail store (its scans and the activity pass) and whether a take holds it.
+#[derive(Default)]
+struct MediaHold {
+    thumbs: Option<Arc<ThumbStore>>,
+    recording: bool,
 }
 
 impl EngineState {
@@ -30,6 +39,33 @@ impl EngineState {
                 .as_deref()
                 .map(|dir| PcmStore::new(CacheDirs::in_folder(dir).audio)),
             cache_dir,
+            media: Mutex::default(),
+        }
+    }
+
+    /// The engine that starts works with `thumbs`: held at once when a take holds background media work.
+    pub(crate) fn set_thumbs(&self, thumbs: Option<Arc<ThumbStore>>) {
+        let mut media = self.media.lock().unwrap_or_else(PoisonError::into_inner);
+        if media.recording
+            && let Some(thumbs) = &thumbs
+        {
+            thumbs.pause(Hold::Recording);
+        }
+        media.thumbs = thumbs;
+    }
+
+    /// A take is the recorder's (`held`), from arming until it has landed: the engine's background media work
+    /// (thumbnail scans and the activity pass) waits meanwhile (`Hold::Recording`), keeping its place, so it never
+    /// competes with the take.
+    pub(crate) fn hold_for_recording(&self, held: bool) {
+        let mut media = self.media.lock().unwrap_or_else(PoisonError::into_inner);
+        media.recording = held;
+        if let Some(thumbs) = &media.thumbs {
+            if held {
+                thumbs.pause(Hold::Recording);
+            } else {
+                thumbs.resume(Hold::Recording);
+            }
         }
     }
 

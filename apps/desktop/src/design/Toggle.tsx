@@ -4,7 +4,8 @@ import { cn } from './cn';
 
 /**
  * A toggle for a setting that applies at once: `role="switch"`, named by its label (`id` and a `<label
- * htmlFor>`, or `aria-label`). Off is a raised track with a soft knob; on is paper with a navy knob.
+ * htmlFor>`, or `aria-label`). A click on it or its label, or Space, flips it. Off is a raised track with a soft knob;
+ * on is paper with an on-paper knob.
  */
 export function Toggle({ className, ...props }: ComponentProps<typeof Switch.Root>) {
   return (
