@@ -27,13 +27,16 @@ use std::sync::Arc;
 use klipolo_analysis::providers::meta_chat::MetaChat;
 use klipolo_chat::tools::LayerRef;
 use klipolo_chat::{
-    AnalysisState, Audience, ChatError, Inputs, Library, LibraryItem, MediaKind, PlanOut, SceneLog,
-    SpeakerTurn, ToolCall, Turn, View, build_context, plan,
+    AnalysisState, Audience, ChatError, CursorTakes, Inputs, Library, LibraryItem, MediaKind,
+    PlanOut, SceneLog, SpeakerTurn, ToolCall, Turn, View, build_context, plan,
 };
+use klipolo_cursor::Press;
+use klipolo_cursor::timeline::TakeFacts;
 use klipolo_meta::{MetaClient, SecretString};
 use klipolo_model::Project;
 use klipolo_model::load_project;
-use klipolo_model::project::Asset;
+use klipolo_model::project::{Asset, Recording};
+use klipolo_model::query::video_duration;
 use klipolo_model::speech::{LEVEL_WINDOW_US, Levels, Speech, Transcript, WordKind};
 use klipolo_model::time::{RangeUs, Us};
 use serde::Deserialize;
@@ -62,7 +65,48 @@ struct EvalSet {
     /// The person's own files in the library.
     #[serde(default)]
     library: Vec<OwnFile>,
+    /// Each recording's clicks, by recording id: `[seconds on its clock, x, y]` (x and y shares of the frame), as its
+    /// cursor file would give them, for `autoZoom`. None knows no click.
+    #[serde(default)]
+    clicks: HashMap<String, Vec<[f64; 3]>>,
     cases: Vec<Case>,
+}
+
+/// The set's clicks, as the app reads a take's from its cursor file.
+#[derive(Debug)]
+struct Clicks(HashMap<String, Arc<TakeFacts>>);
+
+impl CursorTakes for Clicks {
+    fn facts(&self, recording: &Recording) -> Option<Arc<TakeFacts>> {
+        self.0.get(&recording.id).cloned()
+    }
+}
+
+impl Clicks {
+    fn of(set: &HashMap<String, Vec<[f64; 3]>>) -> Self {
+        let presses = |clicks: &Vec<[f64; 3]>| {
+            (clicks.iter())
+                .map(|&[at, x, y]| Press {
+                    down: secs_to_us(at),
+                    up: secs_to_us(at) + 80_000,
+                    btn: 0,
+                    x: x as f32,
+                    y: y as f32,
+                })
+                .collect()
+        };
+        Self(
+            (set.iter())
+                .map(|(id, clicks)| {
+                    let facts = TakeFacts {
+                        presses: presses(clicks),
+                        ..TakeFacts::default()
+                    };
+                    (id.clone(), Arc::new(facts))
+                })
+                .collect(),
+        )
+    }
 }
 
 /// A file of the person's in the library, made up: a name, what it is, and how long it plays.
@@ -123,6 +167,9 @@ struct Case {
 #[derive(Deserialize)]
 struct Expect {
     calls: Vec<ExpectedCall>,
+    /// The calls listed are each in the answer, and others may be too: a plan, as a short's, that may take more.
+    #[serde(default)]
+    partial: bool,
     #[serde(default)]
     outcome: Outcome,
 }
@@ -143,6 +190,9 @@ struct Outcome {
     asked: Option<bool>,
     undo: Option<bool>,
     jobs: Option<bool>,
+    /// How long the video is once the proposal is applied, in seconds: `{min, max}`.
+    #[serde(default, rename = "keptSec")]
+    kept_sec: Option<Value>,
 }
 
 struct Args {
@@ -373,7 +423,8 @@ fn run(args: &Args) -> Result<bool, String> {
             scenes: fx.scenes.clone(),
             analysis: HashMap::from([(fx.asset.clone(), AnalysisState::Done)]),
             time_again: HashSet::new(),
-            cursor: None,
+            cursor: (!set.clicks.is_empty())
+                .then(|| Arc::new(Clicks::of(&set.clicks)) as Arc<dyn CursorTakes>),
             library: library.clone(),
         };
         let planned = runtime.block_on(plan(
@@ -385,7 +436,7 @@ fn run(args: &Args) -> Result<bool, String> {
             project,
         ));
         let (verdict, spent, calls_made) = match &planned {
-            Ok(out) => (judge(case, out), out.usage_usd, out.answers.len()),
+            Ok(out) => (judge(case, out, project), out.usage_usd, out.answers.len()),
             Err(e) => (Err(failed(e)), e.usage_usd, e.model_calls),
         };
         cost += spent;
@@ -409,6 +460,9 @@ fn run(args: &Args) -> Result<bool, String> {
             Ok(_) => {}
         }
         if let Ok(out) = &planned {
+            if case.expect.iter().any(|e| e.partial) {
+                println!("     plan: {}", plan_line(project, out));
+            }
             println!("     reply: {}", out.reply);
         }
     }
@@ -447,7 +501,7 @@ fn shown_answers(out: &PlanOut) -> String {
 }
 
 /// The first of the case's alternatives that `out` matches, by index, else why none does.
-fn judge(case: &Case, out: &PlanOut) -> Result<usize, String> {
+fn judge(case: &Case, out: &PlanOut, project: &Project) -> Result<usize, String> {
     let refused: Vec<&str> = (out.compiled.refusals.iter())
         .filter(|r| r.audience == Audience::Model)
         .map(|r| r.reason.as_str())
@@ -469,13 +523,21 @@ fn judge(case: &Case, out: &PlanOut) -> Result<usize, String> {
     }
     let mut why = Vec::new();
     for (k, expect) in case.expect.iter().enumerate() {
-        if !candidates.iter().any(|c| calls_match(&expect.calls, c)) {
+        if !candidates
+            .iter()
+            .any(|c| calls_match(&expect.calls, c, expect.partial))
+        {
             // Said against the calls compiled last: the first answer's, or the refusal round's.
             let last = candidates.last().map(Vec::as_slice).unwrap_or_default();
-            why.push(format!("#{k}: {}", mismatch(&expect.calls, last)));
+            let why_not = if expect.partial {
+                missing(&expect.calls, last)
+            } else {
+                mismatch(&expect.calls, last)
+            };
+            why.push(format!("#{k}: {why_not}"));
             continue;
         }
-        match outcome_fails(&expect.outcome, out) {
+        match outcome_fails(&expect.outcome, out, project) {
             None => return Ok(k),
             Some(flag) => why.push(format!("#{k}: {flag}")),
         }
@@ -483,9 +545,53 @@ fn judge(case: &Case, out: &PlanOut) -> Result<usize, String> {
     Err(why.join("; "))
 }
 
-/// The first outcome flag `out` doesn't meet.
-fn outcome_fails(o: &Outcome, out: &PlanOut) -> Option<String> {
+/// What a plan came to: the calls applied at once, those proposed, the jobs for a runner, the calls refused, and the
+/// video's length once the proposal is applied.
+fn plan_line(project: &Project, out: &PlanOut) -> String {
     let c = &out.compiled;
+    let refused: HashSet<usize> = c.refusals.iter().map(|r| r.call_index).collect();
+    let applied: Vec<&str> = (out.calls.iter().enumerate())
+        .filter(|(i, _)| !refused.contains(i) && !c.proposed_calls.contains(i))
+        .map(|(_, call)| call.name())
+        .collect();
+    let proposed: Vec<&str> = (c.proposed_calls.iter())
+        .filter_map(|&i| out.calls.get(i).map(ToolCall::name))
+        .collect();
+    format!(
+        "applied {} | proposed {} | {} jobs (pictures to draw, follow, blur) | {} refused | {:.1} s once applied",
+        applied.join(", "),
+        if proposed.is_empty() {
+            "nothing".to_owned()
+        } else {
+            proposed.join(", ")
+        },
+        c.jobs.len(),
+        refused.len(),
+        s(kept_us(project, out)),
+    )
+}
+
+/// The video's length once the additions and the proposal are applied (or the project's, when nothing compiled).
+fn kept_us(project: &Project, out: &PlanOut) -> Us {
+    let c = &out.compiled;
+    match (&c.proposal, &c.additions) {
+        (Some(p), _) => video_duration(&p.review.after.timeline),
+        (None, Some(tx)) => {
+            klipolo_model::apply_ops(project, &tx.ops).map_or(0, |p| video_duration(&p.timeline))
+        }
+        (None, None) => video_duration(&project.timeline),
+    }
+}
+
+/// The first outcome flag `out` doesn't meet.
+fn outcome_fails(o: &Outcome, out: &PlanOut, project: &Project) -> Option<String> {
+    let c = &out.compiled;
+    if let Some(rule) = &o.kept_sec {
+        let kept = s(kept_us(project, out));
+        if !value_matches(rule, &json!(kept)) {
+            return Some(format!("the video is {kept:.1} s once applied, not {rule}"));
+        }
+    }
     let flags = [
         ("applied", o.applied, c.additions.is_some()),
         ("proposed", o.proposed, c.proposal.is_some()),
@@ -498,8 +604,9 @@ fn outcome_fails(o: &Outcome, out: &PlanOut) -> Option<String> {
         .map(|(name, want, _)| format!("{name} should be {}", want.unwrap_or_default()))
 }
 
-/// Whether `actual` holds exactly the tools `expected` names (in any order), each with arguments that match.
-fn calls_match(expected: &[ExpectedCall], actual: &[(String, Value)]) -> bool {
+/// Whether `actual` holds exactly the tools `expected` names (in any order), each with arguments that match; with
+/// `partial`, those and maybe others.
+fn calls_match(expected: &[ExpectedCall], actual: &[(String, Value)], partial: bool) -> bool {
     fn assign(expected: &[ExpectedCall], actual: &[(String, Value)], used: &mut [bool]) -> bool {
         let Some((first, rest)) = expected.split_first() else {
             return true;
@@ -520,10 +627,28 @@ fn calls_match(expected: &[ExpectedCall], actual: &[(String, Value)]) -> bool {
         }
         false
     }
-    expected.len() == actual.len() && assign(expected, actual, &mut vec![false; actual.len()])
+    (partial || expected.len() == actual.len())
+        && assign(expected, actual, &mut vec![false; actual.len()])
 }
 
 /// Why `actual` doesn't match `expected`: other tools, or the first argument of a tool that doesn't fit.
+/// Why a plan's `actual` calls lack what `expected` lists: the tools it has none of, else `mismatch`'s first argument
+/// that doesn't fit.
+fn missing(expected: &[ExpectedCall], actual: &[(String, Value)]) -> String {
+    let absent: Vec<&str> = (expected.iter())
+        .map(|e| e.name.as_str())
+        .filter(|name| !actual.iter().any(|(n, _)| n == name))
+        .collect();
+    if !absent.is_empty() {
+        return format!("no {}", absent.join(" and no "));
+    }
+    let named: Vec<(String, Value)> = (actual.iter())
+        .filter(|(n, _)| expected.iter().any(|e| e.name == *n))
+        .cloned()
+        .collect();
+    mismatch(expected, &named)
+}
+
 fn mismatch(expected: &[ExpectedCall], actual: &[(String, Value)]) -> String {
     let mut want: Vec<&str> = expected.iter().map(|c| c.name.as_str()).collect();
     let mut got: Vec<&str> = actual.iter().map(|(name, _)| name.as_str()).collect();
@@ -848,22 +973,27 @@ mod tests {
             ("removeSilences", json!({"minPauseSec": 1})),
             ("setFormat", json!({"format": "square", "keepOthers": true})),
         ]);
-        assert!(calls_match(&want, &both));
+        assert!(calls_match(&want, &both, false));
         // An extra call, a missing one, or a wrong argument fails.
         let mut extra = both.clone();
         extra.push(("followSubject".into(), json!({"description": "speaker"})));
-        assert!(!calls_match(&want, &extra));
-        assert!(!calls_match(&want, &both[..1]));
+        assert!(!calls_match(&want, &extra, false));
+        assert!(!calls_match(&want, &both[..1], false));
         let wrong = got(&[
             ("removeSilences", json!({"minPauseSec": 2})),
             ("setFormat", json!({"format": "square"})),
         ]);
-        assert!(!calls_match(&want, &wrong));
+        assert!(!calls_match(&want, &wrong, false));
         // A name alone matches any arguments.
         assert!(calls_match(
             &[expected("askUser", json!({}))],
-            &got(&[("askUser", json!({"question": "Which part?"}))])
+            &got(&[("askUser", json!({"question": "Which part?"}))]),
+            false
         ));
+        // A plan may hold more than it lists, never less.
+        assert!(calls_match(&want, &extra, true));
+        assert!(!calls_match(&want, &extra[1..], true));
+        assert_eq!(missing(&want, &extra[1..]), "no removeSilences");
     }
 
     #[test]
@@ -918,8 +1048,13 @@ mod tests {
             ("addSound", json!({"name": "whoosh", "atSec": [12.8, 23.0]})),
             (
                 "addText",
-                json!({"text": "Day 1", "preset": "title", "atSec": 0.0, "durationSec": 3.0}),
+                json!({"text": "Day 1", "preset": "title", "atSec": 0.0, "durationSec": 3.0, "animation": "pop"}),
             ),
+            (
+                "animate",
+                json!({"layer": "last", "enter": "fromLeft", "exit": null, "emphasis": "wiggle", "sound": "Pop"}),
+            ),
+            ("autoZoom", json!({"on": true, "scale": 1.5})),
             (
                 "addImage",
                 json!({"file": "logo", "size": "small", "position": "top-right", "atSec": null, "durationSec": null}),
