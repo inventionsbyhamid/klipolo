@@ -165,6 +165,27 @@ describe("a group's edits", () => {
     expect(selected()).toEqual(['second']);
   });
 
+  it('the arrows nudge the group a frame, ⇧ a second, and the playhead stays', async () => {
+    useSelection.getState().selectMany(['title', 'second']);
+    renderWithProviders(<Editor />);
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    await frames();
+    expect(bridge.apply).toHaveBeenLastCalledWith({
+      label: 'timeline.group.move',
+      params: { count: 2 },
+      ops: [
+        { type: 'moveItem', id: 'second', trackId: null, startUs: 6 * S + 33_333 },
+        { type: 'moveItem', id: 'title', trackId: null, startUs: S + 33_333 },
+      ],
+    });
+    fireEvent.keyDown(window, { key: 'ArrowLeft', shiftKey: true });
+    await frames();
+    expect(bridge.apply).toHaveBeenLastCalledWith(
+      expect.objectContaining({ ops: [expect.objectContaining({ id: 'title', startUs: 0 }), expect.anything()] }),
+    );
+    expect(usePlayback.getState().playheadUs).toBe(0);
+  });
+
   it("the group's card mutes every sound of it in one step", async () => {
     useSelection.getState().selectMany(['a', 'song']);
     renderWithProviders(<Editor />);

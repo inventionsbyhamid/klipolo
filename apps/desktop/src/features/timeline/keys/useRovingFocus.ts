@@ -10,7 +10,7 @@ import type { Project } from '../../../bindings/Project';
 import { findItem, videoDurationUs } from '../../../lib/timeline';
 import { usePlayback } from '../../../state/playback';
 import { useProject } from '../../../state/project';
-import { useSelection } from '../../../state/selection';
+import { groupOf, useSelection } from '../../../state/selection';
 import { useTimelineFocus } from '../../../state/timelineFocus';
 import { keyboardMenuOpen, openBlockMenu } from '../blocks/BlockMenu';
 import { pickBlock } from '../drag/blockPress';
@@ -196,6 +196,9 @@ export function useRovingFocus(
       return moveFocusTo(now, next);
     }
     if (!el || !id) return;
+    // With several blocks selected, ← and → nudge them (the window's shortcut), and focus stays where it is.
+    const sideways = e.key === 'ArrowLeft' || e.key === 'ArrowRight';
+    if (sideways && groupOf(useSelection.getState())) return;
     if (MOVES.has(e.key) && !e.shiftKey) {
       // The window's shortcuts (a frame, an edit point, the start or end) don't also run.
       e.preventDefault();
