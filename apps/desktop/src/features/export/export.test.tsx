@@ -26,6 +26,7 @@ const planned = vi.hoisted(
       folder: 'Movies / Klipolo',
       slowMaster: true,
       canSaveCaptions: false,
+      maximumAsH264: false,
     }),
 );
 vi.mock('../../bridge/exporter', () => ({
@@ -48,6 +49,7 @@ const { commitLatest } = await import('../../state/commit');
 const { useAnalysis } = await import('../../state/analysis');
 const { ExportButton } = await import('./ExportButton');
 const { ExportDialog } = await import('./ExportDialog');
+const { roughly } = await import('./presets');
 
 const landscape = {
   format: 'landscape' as const,
@@ -128,7 +130,7 @@ describe('export dialog', () => {
     expect(vertical).not.toBeChecked();
     await userEvent.click(vertical);
     expect(vertical).toBeChecked();
-    expect(await screen.findByText('2 videos, about 280 MB')).toBeInTheDocument();
+    expect(await screen.findByText('2 videos, about 280 MB. Takes less than a minute.')).toBeInTheDocument();
     expect(exporter.plan).toHaveBeenLastCalledWith(['landscape', 'portrait'], 'high');
     expect(screen.getByRole('button', { name: 'Export 2 videos' })).toBeInTheDocument();
     await userEvent.click(within(formats).getByRole('checkbox', { name: /^16:9/ }));
@@ -169,9 +171,9 @@ describe('export dialog', () => {
     renderExport();
     await userEvent.click(screen.getByRole('button', { name: 'Export' }));
     expect(screen.getByRole('radio', { name: 'High' })).toBeChecked();
-    expect(await screen.findByText('1 video, about 140 MB')).toBeInTheDocument();
+    expect(await screen.findByText('1 video, about 140 MB. Takes less than a minute.')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('radio', { name: 'Smaller file' }));
-    expect(await screen.findByText('1 video, about 80 MB')).toBeInTheDocument();
+    expect(await screen.findByText('1 video, about 80 MB. Takes less than a minute.')).toBeInTheDocument();
     expect(exporter.plan).toHaveBeenLastCalledWith(['landscape'], 'standard');
     await userEvent.click(screen.getByRole('button', { name: 'Export 1 video' }));
     expect(exporter.start).toHaveBeenCalledWith(['landscape'], 'standard', expect.any(Function));
@@ -224,7 +226,7 @@ describe('export dialog', () => {
   it('offers a captions file beside a 16:9 video once words are heard, remembers it and sends it', async () => {
     renderExport();
     await userEvent.click(screen.getByRole('button', { name: 'Export' }));
-    await screen.findByText('1 video, about 140 MB');
+    await screen.findByText('1 video, about 140 MB. Takes less than a minute.');
     expect(screen.queryByRole('switch', { name: 'Also save captions as a file' })).toBeNull();
     // A clip's words come in while the dialog is open: it plans again and offers the file.
     vi.mocked(exporter.plan).mockImplementation(withWords as typeof exporter.plan);
@@ -256,7 +258,7 @@ describe('export dialog', () => {
     useExport.setState({ captionFile: { save: true, kind: 'srt' } });
     renderExport();
     await userEvent.click(screen.getByRole('button', { name: 'Export' }));
-    await screen.findByText('1 video, about 140 MB');
+    await screen.findByText('1 video, about 140 MB. Takes less than a minute.');
     expect(screen.queryByRole('switch', { name: 'Also save captions as a file' })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Export 1 video' }));
     expect(exporter.start).toHaveBeenCalledWith(['landscape'], 'high', expect.any(Function));
@@ -351,6 +353,50 @@ describe('export dialog', () => {
     );
   });
 
+  it('says how long the export takes on this computer, in minutes or hours', async () => {
+    const lasting = (seconds: number) => async (formats: string[], quality: string) => ({
+      ...(await planned(formats, quality)),
+      seconds,
+    });
+    vi.mocked(exporter.plan).mockImplementation(lasting(240) as typeof exporter.plan);
+    renderExport();
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    expect(await screen.findByText('1 video, about 140 MB. Takes about 4 minutes.')).toBeInTheDocument();
+    vi.mocked(exporter.plan).mockImplementation(lasting(7_200) as typeof exporter.plan);
+    await userEvent.click(screen.getByRole('radio', { name: 'Master' }));
+    expect(await screen.findByText('1 video, about 140 MB. Takes about 2 hours.')).toBeInTheDocument();
+    expect(roughly(70)).toBe('about a minute');
+    expect(roughly(3_600)).toBe('about 60 minutes');
+    expect(roughly(5_400)).toBe('about 2 hours');
+  });
+
+  it('says when Maximum saves H.264 because this Mac has no 10-bit HEVC encoder', async () => {
+    const h264 = async (formats: string[], quality: string) => ({
+      ...(await planned(formats, quality)),
+      maximumAsH264: quality === 'maximum',
+    });
+    vi.mocked(exporter.plan).mockImplementation(h264 as typeof exporter.plan);
+    renderExport();
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Maximum' }));
+    expect(
+      await screen.findByText(
+        'Near-lossless HEVC for archiving. This Mac can’t encode 10-bit HEVC, so Maximum saves H.264 at a higher bitrate.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('Export pressed before the first plan arrives still sends the kept captions file', async () => {
+    vi.mocked(exporter.plan).mockImplementation(() => new Promise(() => {}));
+    useExport.setState({ captionFile: { save: true, kind: 'vtt' } });
+    renderExport();
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Export 1 video' }));
+    expect(exporter.start).toHaveBeenCalledWith(['landscape'], 'high', expect.any(Function), {
+      captionFile: 'vtt',
+    });
+  });
+
   it('Change picks the folder the files go to, and the dialog says it', async () => {
     renderExport();
     await userEvent.click(screen.getByRole('button', { name: 'Export' }));
@@ -363,6 +409,7 @@ describe('export dialog', () => {
         folder: 'Desktop / Clips',
         slowMaster: false,
         canSaveCaptions: false,
+        maximumAsH264: false,
       }),
     );
     await userEvent.click(screen.getByRole('button', { name: 'Change folder' }));
