@@ -48,9 +48,8 @@ async fn a_failed_audit_draw_never_poisons_the_next() {
     assert_eq!(h.device().take_fault(), None);
 }
 
-/// Two audit draws of one draft at once never share its objects: while the first is held at its readback
-/// (submitted, its map requested), the second makes its own, and both answer. The hold makes the overlap certain
-///.
+/// Two audit draws of one draft at once never share its objects: while the first is held at its readback (submitted,
+/// its map requested), the second makes its own, and both answer. The hold makes the overlap certain.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU (lavapipe in CI)"]
 async fn two_audit_draws_at_once_never_share_their_objects() {
