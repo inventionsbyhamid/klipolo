@@ -237,7 +237,7 @@
             "type": "string"
           },
           "durationSec": {
-            "description": "0.1 to 5 s. Null for 0.5 s, or the length it has.",
+            "description": "0.1 to 5 s. Null: 0.5 s (or the longest that fits), or the length it has.",
             "type": [
               "number",
               "null"

@@ -1502,11 +1502,49 @@ fn an_apps_speed_up_with_music_to_the_end_applies_as_the_card_does() {
             ..Default::default()
         },
     };
-    let card =
-        klipolo_model::media::music::apply_with_music_refit(&before, vec![by_hand.clone()]).unwrap();
+    let card = klipolo_model::media::music::apply_with_music_refit(&before, vec![by_hand.clone()])
+        .unwrap();
     assert!(card.ops.len() > 1, "the music is refitted");
     assert_eq!(host.project(), card.project);
     let s = host.state();
     let (_, tx) = s.applied.last().expect("a batch");
-    assert_eq!(tx.ops, [by_hand], "the app's own edit; the host fits the music");
+    assert_eq!(
+        tx.ops,
+        [by_hand],
+        "the app's own edit; the host fits the music"
+    );
+}
+
+#[test]
+fn an_apps_speed_that_leaves_a_transition_no_room_is_proposed_and_says_why() {
+    let host = FakeHost::two_clips();
+    // c1 plays the file to 0.08 s before its end, joined to c2 by a 0.16 s dissolve: at 2x no transition fits there.
+    host.change_project(|p| {
+        p.timeline.main[0].source_out_us = p.assets[0].duration_us - 80_000;
+        p.timeline.main[0].transition_out = Some(klipolo_model::timeline::Transition {
+            effect: klipolo_model::contrib::builtin::TRANSITION_DISSOLVE.into(),
+            duration_us: 160_000,
+            params: Default::default(),
+        });
+        p.requires
+            .insert(klipolo_model::transitions::FEATURE.to_owned());
+    });
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    let revision = host.revision();
+    let result = agent.call("setClip", json!({"clip": "c1", "speed": 2}));
+    assert_eq!(outcome(&result), "proposed", "{result}");
+    assert_eq!(
+        text(&result),
+        format!(
+            "{} At that speed a transition no longer fits, so the change waits for Apply.",
+            fill(PROPOSED_NO_FOOTAGE, &[("tools", "setClip")])
+        )
+    );
+    assert_eq!(
+        host.revision(),
+        revision,
+        "nothing changes until the person applies it"
+    );
 }

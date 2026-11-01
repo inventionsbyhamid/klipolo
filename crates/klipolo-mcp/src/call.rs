@@ -25,9 +25,10 @@
 //! undo: no path here cuts footage.
 //!
 //! A result's text says what was done, with chat's own notes on it (a new speed that shortens a transition, as the clip
-//! card says it), what was proposed and what wasn't done. A result is one text and `structuredContent`: `{"outcome": "done" | "proposed" | "shown" | "started" | "refused",
-//! "revision"?, "proposalId"?, "removedSec"?}`, the outcome what changed most (a proposal, then the project, then a
-//! job started). `isError` is true exactly when nothing was done; when part was, the text says what wasn't.
+//! card says it), what was proposed and what wasn't done. A result is one text and `structuredContent`: `{"outcome":
+//! "done" | "proposed" | "shown" | "started" | "refused", "revision"?, "proposalId"?, "removedSec"?}`, the outcome what
+//! changed most (a proposal, then the project, then a job started). `isError` is true exactly when nothing was done;
+//! when part was, the text says what wasn't.
 
 use klipolo_chat::{
     ANALYZE_FIRST, Audience, Compiled, FunctionCall, Job, Moment, ROUGH_FILLERS,
@@ -286,6 +287,8 @@ fn edit(
                 } else {
                     fill(words::PROPOSED_NO_FOOTAGE, &[("tools", &tools)])
                 });
+                // Why a change the app asked for waits: a speed that leaves a transition no room.
+                said.extend(out.waits.iter().cloned());
                 // Remembered only while the slot holds this proposal: another session of the app may have put its own
                 // in its place since, and that one's calls are what its next call joins. The calls were made on the
                 // snapshot's clips, even when they wait on top of additions now.
