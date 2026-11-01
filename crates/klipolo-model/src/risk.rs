@@ -46,6 +46,10 @@ pub fn op_risk(op: &Op) -> OpRisk {
         | Op::RemoveAsset { .. }
         | Op::RemoveLut { .. }
         | Op::TrimClip { .. }
+        // Each hides footage the clip showed, as a trim does (the length stays).
+        | Op::Roll { .. }
+        | Op::Slip { .. }
+        | Op::Slide { .. }
         | Op::TrimItem { .. }
         | Op::RemoveEffect { .. }
         | Op::RemoveMarker { .. } => OpRisk::Removal,
@@ -434,7 +438,9 @@ fn lost_formats(
                     }
                     _ => false,
                 };
-                camera || lost(c.framing.contains_key(f), now.framing.contains_key(f))
+                camera
+                    || lost(c.framing.contains_key(f), now.framing.contains_key(f))
+                    || lost(c.fill_focus.contains_key(f), now.fill_focus.contains_key(f))
             });
             let captions_lost = lost(
                 before.captions.place.contains_key(f),

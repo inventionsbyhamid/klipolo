@@ -11,18 +11,21 @@ description = "Clip analysis: the 16 kHz mono WAV Meta's speech models take, its
 futures = "0.3"
 # Chat's provider-neutral `LanguageModel`, which `providers::meta_chat` implements for Meta (a pure crate: no vendor).
 klipolo-chat = { path = "../klipolo-chat" }
-# The chat eval's made-up clicks, as a take's cursor facts (`klipolo-chat-eval`).
+# The follower the cursor's vertical crop moves with (`smooth::step`), which the speaker's path moves with too (pure),
+# and the chat eval's made-up clicks, as a take's cursor facts (`klipolo-chat-eval`).
 klipolo-cursor = { path = "../klipolo-cursor" }
 # Sound decode (`audio::decode::{probe, decode}`: 48 kHz f32, streamed), every frame of a video as a small grey picture
 # (`media::luma_frames`, for the cut finder) and the scene log's small copy (`media::small_copy`); no FFmpeg calls of our
 # own.
 klipolo-engine = { path = "../klipolo-engine" }
-# The Meta adapters (`providers::meta`, `meta_chat`, `meta_images`) only: nothing else here sees a Meta type.
+# The Meta adapters (`providers::meta`, `meta_chat`, `meta_images`, `meta_sam`) only: nothing else sees a Meta type.
 klipolo-meta = { path = "../klipolo-meta" }
 # `Us`, `RangeUs`, and the `Transcript` of `Word`s the captions read.
 klipolo-model = { path = "../klipolo-model" }
 # Atomic writes for the WAV and the cache's JSON (`durable::write_atomic`).
 klipolo-platform = { path = "../klipolo-platform" }
+# SAM's request and its frame lines read into boxes, for the Meta adapter's `SubjectTracker` only (`providers::meta_sam`).
+klipolo-sam = { path = "../klipolo-sam" }
 # One list of filler sounds per language (`timing::fillers`).
 klipolo-speech-wire = { path = "../klipolo-speech-wire" }
 serde = { version = "1", features = ["derive"] }
@@ -33,6 +36,8 @@ thiserror = "2"
 # Reading the WAV off the async threads (`spawn_blocking`) and the dev CLI's one-thread runtime (`rt`), waiting out a
 # busy answer (`time`), one device's slots for the Meta adapter (`sync`).
 tokio = { version = "1", features = ["rt", "sync", "time"] }
+# A paid SAM answer's lines that didn't read, in the log (`providers::meta_sam`).
+tracing = "0.1"
 
 [dev-dependencies]
 tempfile = "3"

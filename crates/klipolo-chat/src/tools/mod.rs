@@ -686,7 +686,7 @@ const TOOLS: &[Tool] = &[
     },
     Tool {
         name: "followSubject",
-        description: "Keep the crop on one person or thing as it moves, for portrait or square.",
+        description: "Keep the vertical and square crops on one person or thing. For a short or the speaker, use person.",
         parameters: || {
             vec![(
                 "description",

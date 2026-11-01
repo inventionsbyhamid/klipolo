@@ -1,6 +1,7 @@
 //! Applying ops. `apply_ops` is the only public entry point and is all-or-nothing.
 
 mod detach;
+mod edit_points;
 mod effect_ops;
 pub mod generator_pieces;
 mod item_ops;
@@ -242,6 +243,10 @@ fn apply_one(p: &mut Project, op: &Op, places: &mut Places) -> Result<Touched> {
             edge,
             source_us,
         } => main(main_ops::trim_clip(p, id, *edge, *source_us, places)),
+        // The clips' in and out points: every anchor may resolve elsewhere.
+        Op::Roll { clip_id, by_us } => main(edit_points::roll(p, clip_id, *by_us, places)),
+        Op::Slip { clip_id, by_us } => main(edit_points::slip(p, clip_id, *by_us, places)),
+        Op::Slide { clip_id, by_us } => main(edit_points::slide(p, clip_id, *by_us, places)),
         Op::Split { at_us } => main(main_ops::split(p, *at_us)),
         Op::ReverseClip { clip_id, copy } => {
             main(main_ops::reverse_clip(p, clip_id, copy.as_ref(), places))

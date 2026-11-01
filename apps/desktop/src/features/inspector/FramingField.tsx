@@ -11,6 +11,7 @@ import { useProject } from '../../state/project';
 import { BackgroundField } from './BackgroundField';
 import { framingPatch } from './clipOps';
 import { Field } from './fields';
+import { FocusField, focusChoice } from './FocusField';
 import { ToolSlider } from './ToolSlider';
 import { useClipFraming } from './useClipFraming';
 
@@ -22,9 +23,10 @@ const WHOLE = 0.999;
 
 /**
  * A main clip's framing in the format shown: Fit or Fill as Rust frames it (`useClipFraming`: its own, else the
- * model's default), and while Fill crops from a focus of its own (not following the cursor), the Fill focus: which part
- * of the video stays in view (0.5 is the centre), one row whose slider moves the way Rust says Fill crops there
- * (`fillCrop`): across for a video wider than the frame, down for a taller one, none when it fits. Each change is one
+ * model's default), and while Fill crops from a focus of its own (not following the cursor), its Focus (`FocusField`:
+ * the speaker, Fixed or Centre) and, for Fixed, the Fill focus: which part of the video stays in view (0.5 is the
+ * centre), one row whose slider moves the way Rust says Fill crops there (`fillCrop`): across for a video wider than
+ * the frame, down for a taller one, none when it fits. Each change is one
  * undo step built at its turn on the clip's framing as the project has it then, so another format's change still on
  * its way stays; without a framing of its own in this format, Rust's. A mode change keeps the rest, follow too (Fit
  * ignores it; Fill follows again). A focus drag is dry-run in the preview and commits once on release. While Fit shows
@@ -79,6 +81,9 @@ export function FramingField({ clip, format }: { clip: Clip; format: FormatKind 
         />
       </Field>
       {framing?.mode === 'fill' && !framing.follow && axis && (
+        <FocusField clip={clip} format={format} canFollow={rust?.speaker ?? false} />
+      )}
+      {framing?.mode === 'fill' && !framing.follow && axis && focusChoice(clip, format) === 'fixed' && (
         <Field
           label={t({ id: 'clip.focus', message: 'Fill focus', comment: 'Which part of a filled video stays in view' })}
         >

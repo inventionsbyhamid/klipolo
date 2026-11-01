@@ -86,6 +86,11 @@ export const CHAT_LABELS: Record<string, MessageDescriptor> = {
     message: 'Add the title {title}',
     comment: 'Undo history entry: a title card with these words added',
   }),
+  'chat.followSubject': msg({
+    id: 'chat.followSubject',
+    message: 'Follow the {description}',
+    comment: 'Undo history entry: the vertical or square crop keeps a person or thing in frame, e.g. "Follow the person"',
+  }),
   'chat.makeSticker': msg({
     id: 'chat.makeSticker',
     message: 'Add the {prompt} sticker',

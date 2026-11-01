@@ -52,6 +52,7 @@ use klipolo_model::timeline::ClipSource;
 use klipolo_model::{Project, Transaction};
 
 use super::describe::{describe, seconds};
+use super::follow;
 use super::inputs::{gather, inputs_for};
 use super::jobs;
 use super::pictures::{ChatPicture, ChatPictureDrawn, PictureAsk, Pictures};
@@ -61,6 +62,7 @@ use super::reply::{
 };
 use super::sources::{Findings, Models, Readiness};
 use super::spend::{ChatSpend, SpendCounter};
+use crate::speaker::Speaker;
 
 /// The exchanges kept for the model: the planner's own `KEPT_TURNS`.
 pub const KEPT_EXCHANGES: usize = klipolo_chat::KEPT_TURNS;
@@ -122,6 +124,8 @@ pub struct ChatSession {
     talk: Mutex<Talk>,
     pictures: Pictures,
     spend: SpendCounter,
+    /// Follows the speaker for `followSubject` (`follow`); none says it is coming, as before.
+    speaker: Mutex<Option<Arc<Speaker>>>,
 }
 
 /// The conversation with the open project.
@@ -447,7 +451,19 @@ impl ChatSession {
             talk: Mutex::default(),
             pictures: Pictures::default(),
             spend: SpendCounter::default(),
+            speaker: Mutex::new(None),
         }
+    }
+
+    /// `followSubject` (and a new vertical or square version of camera footage) follows through `speaker`: the app's,
+    /// so its spend is counted once.
+    pub fn set_speaker(&self, speaker: Arc<Speaker>) {
+        *lock(&self.speaker) = Some(speaker);
+    }
+
+    /// The speaker following `followSubject` uses (other apps' too), if there is one.
+    pub fn speaker(&self) -> Option<Arc<Speaker>> {
+        lock(&self.speaker).clone()
     }
 
     /// What chat has cost this session.
@@ -501,7 +517,7 @@ impl ChatSession {
                 self.projects.pack(),
             );
             let out = keep_only(&now.project, &inputs, request.keep_only.clone());
-            return Ok(self.land(&request.id, &text, &now, &inputs, out));
+            return Ok(self.land(&request.id, &text, &now, &inputs, out, Vec::new()));
         }
 
         let model = match self.models.ready().await {
@@ -541,9 +557,14 @@ impl ChatSession {
                 tracing::info!(kind = ?error.kind, detail = %error.detail, "chat: the message failed");
                 ChatOutcome::Failed(ChatFailure::from(&error))
             }
-            Ok(out) => {
+            Ok(mut out) => {
                 self.spend.message(out.usage_usd, out.answers.len());
-                self.land(&request.id, &text, &now, &inputs, out)
+                let speaker = lock(&self.speaker).clone();
+                let follows = follow::follow_jobs(speaker.as_deref(), &now, &mut out).await;
+                if !follows.note.is_empty() {
+                    out.note = format!("{} {}", out.note, follows.note).trim().to_owned();
+                }
+                self.land(&request.id, &text, &now, &inputs, out, follows.said)
             }
         })
     }
@@ -679,6 +700,7 @@ impl ChatSession {
         now: &ProjectNow,
         inputs: &Inputs,
         mut out: PlanOut,
+        follows: Vec<String>,
     ) -> ChatOutcome {
         let mut landed = self.commit(now, inputs, &out);
         let mut jobs = jobs::start(&out.compiled);
@@ -696,7 +718,12 @@ impl ChatSession {
         if !same_project && landed.lost.is_none() && !committed {
             landed.lost = Some(MOVED);
         }
-        let mut notes: Vec<String> = Vec::new();
+        // What the follows did or offer, said once the edits they ride on land.
+        let mut notes: Vec<String> = if landed.lost.is_none() {
+            follows
+        } else {
+            Vec::new()
+        };
         let mut moments_note = None;
         let stale = landed.lost.is_some() || moved || landed.undone.is_some();
         if !out.compiled.moments.is_empty() && stale {

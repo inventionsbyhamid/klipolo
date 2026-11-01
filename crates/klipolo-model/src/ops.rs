@@ -6,6 +6,7 @@ use ts_rs::TS;
 use crate::coded::ErrorParam;
 use crate::crop::Crop;
 use crate::cursor_style::CursorStyle;
+use crate::fill_focus::FillFocus;
 use crate::ids::Id;
 use crate::layout::Layout;
 use crate::params::ParamValue;
@@ -107,6 +108,24 @@ pub enum Op {
         id: Id,
         edge: Edge,
         source_us: Us,
+    },
+    /// Roll the cut after main-track clip `clip_id` by `by_us` of timeline, later when positive: the clip's out point and
+    /// the next clip's in point move together, so nothing after the cut moves and the video keeps its length.
+    Roll {
+        clip_id: Id,
+        by_us: Us,
+    },
+    /// Slip a main-track clip's footage by `by_us` of timeline, later footage when positive: its in and out points move
+    /// together through its source, and its place and length stay.
+    Slip {
+        clip_id: Id,
+        by_us: Us,
+    },
+    /// Slide a main-track clip `by_us` of timeline, later when positive, between the clips either side, which trim to
+    /// make room: the one before ends later and the one after starts later. The clip and the video keep their length.
+    Slide {
+        clip_id: Id,
+        by_us: Us,
     },
     /// Split the main-track clip playing at `at_us` into two.
     Split {
@@ -345,6 +364,10 @@ pub struct ClipPatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub framing: Option<BTreeMap<FormatKind, Framing>>,
+    /// Replaces every format's Fill focus (`Clip::fill_focus`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub fill_focus: Option<BTreeMap<FormatKind, FillFocus>>,
     /// The footage's crop; a crop of nothing (`Crop::NONE`) takes it off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -496,6 +519,9 @@ impl Op {
             Op::InsertClip { .. } => "insertClip",
             Op::MoveClip { .. } => "moveClip",
             Op::TrimClip { .. } => "trimClip",
+            Op::Roll { .. } => "roll",
+            Op::Slip { .. } => "slip",
+            Op::Slide { .. } => "slide",
             Op::Split { .. } => "split",
             Op::FreezeFrame { .. } => "freezeFrame",
             Op::ReverseClip { .. } => "reverseClip",

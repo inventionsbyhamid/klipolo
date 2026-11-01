@@ -16,6 +16,7 @@
 
 mod cursor;
 mod describe;
+pub mod follow;
 mod inputs;
 mod jobs;
 mod media_jobs;

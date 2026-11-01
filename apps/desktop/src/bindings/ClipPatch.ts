@@ -2,6 +2,7 @@
 import type { CameraLayout } from "./CameraLayout";
 import type { Crop } from "./Crop";
 import type { EffectInstance } from "./EffectInstance";
+import type { FillFocus } from "./FillFocus";
 import type { FormatKind } from "./FormatKind";
 import type { Framing } from "./Framing";
 import type { Look } from "./Look";
@@ -10,6 +11,10 @@ import type { Look } from "./Look";
  * Clip fields to change. Unset fields are left alone and omitted from JSON.
  */
 export type ClipPatch = { speed?: number, volume?: number, muted?: boolean, fadeInUs?: number, fadeOutUs?: number, look?: Look, camera?: CameraLayout, framing?: { [key in FormatKind]?: Framing }, 
+/**
+ * Replaces every format's Fill focus (`Clip::fill_focus`).
+ */
+fillFocus?: { [key in FormatKind]?: FillFocus }, 
 /**
  * The footage's crop; a crop of nothing (`Crop::NONE`) takes it off.
  */

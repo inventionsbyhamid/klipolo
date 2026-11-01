@@ -6,6 +6,7 @@ import { formatTime } from '../../../player/time';
 import { useProject } from '../../../state/project';
 import { useRange, type TimeRange } from '../../../state/range';
 import { useSelection } from '../../../state/selection';
+import { blocksTouching, type ScreenBox } from '../drag/registry';
 import { useUi } from '../../../state/ui';
 import { RULER_PX } from '../layout';
 import { pxToUs, usToPx } from '../scale';
@@ -35,28 +36,71 @@ export function rangeDragJustEnded(): boolean {
   return was;
 }
 
+/** The box a lane drag draws (a fixed element over the page, made once and kept). */
+let boxEl: HTMLElement | null = null;
+function showBox(box: ScreenBox | null) {
+  if (box === null) {
+    if (boxEl) boxEl.style.display = 'none';
+    return;
+  }
+  if (!boxEl || !boxEl.isConnected) {
+    boxEl = document.createElement('div');
+    boxEl.className = 'tl-box';
+    boxEl.setAttribute('aria-hidden', 'true');
+    document.body.append(boxEl);
+  }
+  Object.assign(boxEl.style, {
+    display: 'block',
+    left: `${box.left}px`,
+    top: `${box.top}px`,
+    width: `${box.right - box.left}px`,
+    height: `${box.bottom - box.top}px`,
+  });
+}
+
 /**
  * A press on empty lane space or the ruler, at `e` over `lane` (an element whose left edge is the video's start): once
  * the pointer has moved 3 px it selects the time from the press to the pointer, and the block
  * selection goes (one selection at a time). A press that doesn't move leaves things as they are: its click seeks.
+ *
+ * On the lanes (`box`), the drag draws a box from the press to the pointer: while it touches clips or layers it
+ * selects them (and no time); touching none, it selects the time as before.
  */
-export function startRangeDrag(e: ReactPointerEvent<HTMLElement>, lane: HTMLElement) {
+export function startRangeDrag(e: ReactPointerEvent<HTMLElement>, lane: HTMLElement, box = false) {
   if (e.button !== 0) return;
   const el = e.currentTarget;
   const pointerId = e.pointerId;
   const fromX = e.clientX;
+  const fromY = e.clientY;
   const laneLeft = lane.getBoundingClientRect().left;
   const fromUs = timeAt(fromX, laneLeft);
   let moving = false;
   dragged = false;
   const move = (ev: PointerEvent) => {
     if (ev.pointerId !== pointerId) return;
-    if (!moving && Math.abs(ev.clientX - fromX) < DRAG_PX) return;
+    const far = Math.max(Math.abs(ev.clientX - fromX), box ? Math.abs(ev.clientY - fromY) : 0);
+    if (!moving && far < DRAG_PX) return;
     if (!moving) {
       // Captured once it is a drag, never at the press: a press that doesn't move is a click, which seeks.
       moving = true;
       capture(el, pointerId);
       useSelection.getState().select(null);
+    }
+    if (box) {
+      const drawn = {
+        left: Math.min(fromX, ev.clientX),
+        right: Math.max(fromX, ev.clientX),
+        top: Math.min(fromY, ev.clientY),
+        bottom: Math.max(fromY, ev.clientY),
+      };
+      showBox(drawn);
+      const touched = blocksTouching(drawn);
+      if (touched.length > 0) {
+        useRange.getState().clear();
+        useSelection.getState().selectMany(touched);
+        return;
+      }
+      if (useSelection.getState().selectedId !== null) useSelection.getState().select(null);
     }
     useRange.getState().select(fromUs, timeAt(ev.clientX, laneLeft));
   };
@@ -79,6 +123,7 @@ function followPointer(move: (e: PointerEvent) => void, end: (e: PointerEvent) =
   window.addEventListener('pointerup', end);
   window.addEventListener('pointercancel', end);
   stop = () => {
+    showBox(null);
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', end);
     window.removeEventListener('pointercancel', end);

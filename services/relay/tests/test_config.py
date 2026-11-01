@@ -11,6 +11,7 @@ def test_defaults_match_the_documented_caps():
     assert settings.db_path == Path("data/relay.db")
     assert settings.device_cap_usd == 2.00
     assert settings.global_cap_usd == 40.00
+    assert settings.sam_daily_cap_usd == 5.00
     assert settings.align_minutes_per_device_per_day == 120
     assert settings.align_concurrency == 2
     assert settings.align_threads == 3
@@ -20,6 +21,7 @@ def test_defaults_match_the_documented_caps():
         "muse-spark-1.2",
         "muse-voice-transcribe-1.0",
         "muse-image-1.0",
+        "sam-3.1",
     }
 
 

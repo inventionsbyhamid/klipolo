@@ -2,9 +2,9 @@
 
 META_API_KEY is held for the proxy and is never logged or shown in repr.
 ALLOWED_MODELS is the comma-separated list of Meta models the proxy forwards
-(Spark 1.3 and 1.2, Voice Transcribe and Muse Image by default); SAM is off
-unless listed. Models the relay never forwards (Muse Wonder, the
-*-contributor tiers) stay refused even when listed.
+(Spark 1.3 and 1.2, Voice Transcribe, Muse Image and SAM 3.1 by default).
+Models the relay never forwards (Muse Wonder, the *-contributor tiers) stay
+refused even when listed.
 """
 
 import math
@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-DEFAULT_ALLOWED_MODELS = "muse-spark-1.3,muse-spark-1.2,muse-voice-transcribe-1.0,muse-image-1.0"
+DEFAULT_ALLOWED_MODELS = "muse-spark-1.3,muse-spark-1.2,muse-voice-transcribe-1.0,muse-image-1.0,sam-3.1"
 
 
 @dataclass(frozen=True)
@@ -26,6 +26,10 @@ class Settings:
     align_threads: int
     meta_api_key: str = field(default="", repr=False)
     allowed_models: frozenset[str] = frozenset(DEFAULT_ALLOWED_MODELS.split(","))
+    # SAM's own cap on what it may cost in a day (UTC), across every device.
+    sam_daily_cap_usd: float = 5.0
+    # Where SAM's uploads and copies are made: on the data volume, beside the database, never word timing's /tmp.
+    sam_work_dir: Path = Path("./data/sam-work")
     # Load the alignment model at startup instead of on the first request.
     align_warmup: bool = False
 
@@ -60,6 +64,8 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         db_path=Path(env.get("RELAY_DB_PATH", "./data/relay.db")),
         device_cap_usd=_number(env, "DEVICE_CAP_USD", "2.00", float, 0),
         global_cap_usd=_number(env, "GLOBAL_CAP_USD", "40.00", float, 0),
+        sam_daily_cap_usd=_number(env, "SAM_DAILY_CAP_USD", "5.00", float, 0),
+        sam_work_dir=Path(env.get("SAM_WORK_DIR", "") or Path(env.get("RELAY_DB_PATH", "./data/relay.db")).parent / "sam-work"),
         align_minutes_per_device_per_day=_number(
             env, "ALIGN_MINUTES_PER_DEVICE_PER_DAY", "120", float, 0
         ),

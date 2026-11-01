@@ -27,7 +27,7 @@ def test_connect_creates_the_planned_tables(conn):
         "align_seconds_day",
         "align_day",
     ]
-    assert columns(conn, "codes") == ["code", "active", "note"]
+    assert columns(conn, "codes") == ["code", "active", "note", "sam_off"]
     assert columns(conn, "ledger") == [
         "id",
         "device_id",
