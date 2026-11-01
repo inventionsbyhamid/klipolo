@@ -32,8 +32,8 @@ objc2 = "0.6"
 # The Dock icon's menu (`dock`): the app's NSApplication delegate, NSMenu and NSMenuItem (the version wry, tao and the
 # engine already build); NSWorkspace's notification centre hears the wake from sleep (`power::on_wake`). The eyedropper
 # (`screen_color`): NSColorSampler and the colour it answers, in sRGB (`objc2-core-foundation` gives
-# NSColor its component getters).
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSMenu", "NSMenuItem", "NSResponder", "NSWorkspace", "objc2-core-foundation", "NSColor", "NSColorSampler", "NSColorSpace", "block2"] }
+# NSColor its component getters). The share sheet (`share`): NSSharingServicePicker, shown beside a place in an NSView.
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSMenu", "NSMenuItem", "NSResponder", "NSWorkspace", "objc2-core-foundation", "NSColor", "NSColorSampler", "NSColorSpace", "block2", "NSSharingService", "NSView"] }
 # NSArray, NSDictionary and NSValue read IOPowerSources' battery (toll-free bridged); NSFileManager, NSURL and NSError
 # move a folder to the Trash; NSNotification, NSOperation and block2 observe the wake with a block.
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSDictionary", "NSEnumerator", "NSError", "NSFileManager", "NSGeometry", "NSNotification", "NSOperation", "NSProcessInfo", "NSString", "NSURL", "NSValue", "block2"] }
