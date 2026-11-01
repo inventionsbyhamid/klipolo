@@ -16,7 +16,7 @@ use serde_json::{Value, json};
 
 use super::args::{Args, kind};
 use super::error::{Problem, ToolError};
-use super::schema::{Word, boolean, nullable_boolean, nullable_words, string, words};
+use super::schema::{Word, boolean, nullable_boolean, nullable_words, words};
 use super::{FORMATS, Tool, ToolCall};
 
 /// The volumes a recorded sound takes, in percent of how it was recorded: the model's 0 to 200 %.
@@ -283,8 +283,8 @@ fn clips(what: &str) -> (&'static str, Value) {
         "clips",
         json!({
             "type": ["array", "null"],
-            "items": string("A clip ref (c2) or a run (c3-c41)."),
-            "description": format!("Null for every clip {what}."),
+            "items": {"type": "string"},
+            "description": format!("Clip refs. Null for every clip {what}."),
         }),
     )
 }
@@ -295,7 +295,7 @@ fn sound(rest: Vec<(&'static str, Value)>) -> Vec<(&'static str, Value)> {
         "source",
         words(
             &SOUNDS,
-            "computerSound is the computer's (system) sound; videoSound the camera's own sound.",
+            "computerSound: the system sound. videoSound: the camera's own.",
         ),
     )];
     out.extend(rest);
@@ -303,32 +303,23 @@ fn sound(rest: Vec<(&'static str, Value)>) -> Vec<(&'static str, Value)> {
         "which",
         json!({
             "type": ["string", "null"],
-            "description": "2 for mic 2, when a recording has several. Null for all.",
+            "description": "2 for mic 2. Null for all.",
         }),
     ));
-    out.push(clips("with that sound"));
+    out.push(clips("with it"));
     out
 }
 
 pub(super) const SET_CAMERA_MODE: Tool = Tool {
     name: "setCameraMode",
-    description: "Show a recording's camera as a bubble over the screen or split under the screen, or hide it.",
+    description: "Show a recording's camera as a bubble, split under the screen, or hidden.",
     parameters: || {
         vec![
             clips("with a camera"),
-            (
-                "mode",
-                words(
-                    &CAMERA_MODES,
-                    "splitBottom puts it under the screen, for vertical.",
-                ),
-            ),
+            ("mode", words(&CAMERA_MODES, "splitBottom is for vertical.")),
             (
                 "format",
-                nullable_words(
-                    &FORMATS,
-                    "Only this format. Null for every format, but splitBottom is for portrait.",
-                ),
+                nullable_words(&FORMATS, "Only this format. Null for all."),
             ),
         ]
     },
@@ -343,28 +334,25 @@ pub(super) const SET_CAMERA_MODE: Tool = Tool {
 
 pub(super) const ADJUST_CAMERA: Tool = Tool {
     name: "adjustCamera",
-    description: "Move, resize or restyle a recording's camera bubble. Null leaves a setting as it is.",
+    description: "Move, resize or restyle a recording's camera bubble. Null keeps a setting.",
     parameters: || {
         vec![
             clips("with a camera"),
             ("position", nullable_words(&ANCHORS, "Where in the frame.")),
             (
                 "size",
-                nullable_words(&BUBBLE_SIZES, "medium is the usual size."),
+                nullable_words(&BUBBLE_SIZES, "medium is the usual."),
             ),
             (
                 "sizeStep",
-                nullable_words(&SIZE_STEPS, "One step bigger or smaller than now."),
+                nullable_words(&SIZE_STEPS, "One step from now."),
             ),
             ("shape", nullable_words(&CAMERA_SHAPES, "Its shape.")),
-            ("border", nullable_boolean("True shows a border.")),
-            ("mirror", nullable_boolean("True shows it as in a mirror.")),
+            ("border", nullable_boolean("A border or none.")),
+            ("mirror", nullable_boolean("Flipped as in a mirror.")),
             (
                 "format",
-                nullable_words(
-                    &FORMATS,
-                    "Place and size it in this format only. Null for every format.",
-                ),
+                nullable_words(&FORMATS, "Only this format. Null for all."),
             ),
         ]
     },
@@ -386,7 +374,7 @@ pub(super) const ADJUST_CAMERA: Tool = Tool {
 
 pub(super) const DETACH_CAMERA: Tool = Tool {
     name: "detachCamera",
-    description: "Make a recording's camera a layer of its own, to move, trim and cut apart from the screen.",
+    description: "Make a recording's camera a layer of its own, to move and cut apart.",
     parameters: || vec![clips("with a camera")],
     read: |a| {
         Ok(ToolCall::DetachCamera {
@@ -417,7 +405,7 @@ pub(super) const SET_SOURCE_VOLUME: Tool = Tool {
             "volume",
             json!({
                 "type": "number",
-                "description": "Percent of how it was recorded, 0 to 200. 100 is as recorded, 50 half as loud.",
+                "description": "0 to 200 percent. 100 is as recorded.",
             }),
         )])
     },
@@ -433,7 +421,7 @@ pub(super) const SET_SOURCE_VOLUME: Tool = Tool {
 
 pub(super) const SEPARATE_SOUND: Tool = Tool {
     name: "separateSound",
-    description: "Put one recorded sound on a track of its own, to trim and cut apart from the video.",
+    description: "Put one recorded sound on a track of its own, to cut apart.",
     parameters: || sound(Vec::new()),
     read: |a| {
         Ok(ToolCall::SeparateSound {

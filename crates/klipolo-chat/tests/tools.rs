@@ -1312,5 +1312,5 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
     assert!(prompt_tokens <= 900, "prompt {prompt_tokens} tokens");
-    assert!(tools_tokens <= 3_900, "tools {tools_tokens} tokens");
+    assert!(tools_tokens <= 3_700, "tools {tools_tokens} tokens");
 }
