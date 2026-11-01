@@ -114,23 +114,22 @@ pub(super) fn named(
     Ok(Some(out))
 }
 
-/// A recording's name, as Klipolo gives it wherever it shows: "Recording 2" for the project's second.
-pub(super) fn recording_name(p: &Project, id: &str) -> String {
-    (p.recordings.iter().position(|r| r.id == id)).map_or_else(
-        || "A recording".to_owned(),
-        |n| format!("Recording {}", n + 1),
-    )
+/// A recording's name, as Klipolo gives it wherever it shows (the clip lines, the person's sentences): "Recording 2"
+/// for the project's second; None for one the project lacks.
+pub(crate) fn recording_name(p: &Project, id: &str) -> Option<String> {
+    (p.recordings.iter().position(|r| r.id == id)).map(|n| format!("Recording {}", n + 1))
 }
 
-/// The name of the recording that clip `clip_id` of `p` plays.
+/// The name of the recording that clip `clip_id` of `p` plays, for a sentence that starts with it.
 pub(super) fn clip_recording(p: &Project, clip_id: &str) -> String {
     let source = (p.timeline.main.iter())
         .find(|clip| clip.id == clip_id)
         .map(|clip| &clip.source);
     match source {
         Some(ClipSource::Recording { id }) => recording_name(p, id),
-        _ => "A recording".to_owned(),
+        _ => None,
     }
+    .unwrap_or_else(|| "A recording".to_owned())
 }
 
 /// `f`, when the video has that format; else the person is told to add it first.

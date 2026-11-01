@@ -20,7 +20,9 @@ use std::collections::HashSet;
 
 use klipolo_model::Project;
 use klipolo_model::coded::ErrorParam;
+use klipolo_model::coded::{CodedError, english};
 use klipolo_model::ids::Id;
+use klipolo_model::messages::MESSAGES;
 use klipolo_model::ops::{Op, SourcePatch};
 use klipolo_model::project::{Recording, RecordingSource, SourceMix, SourceRole};
 use klipolo_model::query::{clip_starts, makes_sound};
@@ -35,8 +37,6 @@ use crate::tools::recorded::SOUNDS;
 /// Said when separating the camera's own sound, which stays with its picture.
 pub const VIDEO_SOUND_STAYS: &str =
     "The camera's sound stays with its picture. You can mute it or change its volume instead.";
-/// Said when every clip asked for is sped up: separated sound plays at normal speed only.
-pub const DETACH_SPEED: &str = "Set the clip back to normal speed before separating its sound.";
 
 /// Whether `s` is a source of `sound`'s kind: its role, or for the camera's sound, a picture source whose files carry
 /// sound (`query::makes_sound`).
@@ -456,7 +456,8 @@ pub(super) fn separate(
     let name = sound.name();
     if ops.is_empty() {
         return Err(to_person(if !sped_up.is_empty() {
-            DETACH_SPEED.to_owned()
+            // The model's own sentence: separated sound plays at normal speed only.
+            english(&[MESSAGES], &CodedError::new("model.source.detachSpeed"))
         } else if already {
             format!("The {name} is already on its own track there.")
         } else if !any {

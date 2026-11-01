@@ -216,6 +216,11 @@ pub fn shape_word(shape: CameraShape) -> &'static str {
     shape.word()
 }
 
+/// The model's word for a format ("portrait").
+pub fn format_word(format: FormatKind) -> &'static str {
+    format.word()
+}
+
 /// The model's word for a place in the frame ("topLeft").
 pub fn anchor_word(anchor: Anchor) -> &'static str {
     anchor.word()

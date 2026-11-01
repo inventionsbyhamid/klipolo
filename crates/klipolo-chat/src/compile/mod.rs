@@ -69,6 +69,7 @@ use crate::tools::{Moment, PictureSize, Position, ToolCall};
 pub(crate) use cameras::every_camera;
 use map::Map;
 pub use media::{sticker_ops, sticker_placement};
+pub(crate) use recorded::recording_name;
 pub(crate) use sources::{OwnTrack, kind_of};
 use trim::Trim;
 

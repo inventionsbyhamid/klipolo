@@ -24,9 +24,9 @@ use klipolo_model::ids::Id;
 use klipolo_model::time::Us;
 use klipolo_model::timeline::{CameraMode, Clip, ClipSource};
 
-use crate::compile::{OwnTrack, every_camera, kind_of};
+use crate::compile::{self, OwnTrack, every_camera, kind_of};
 use crate::tools::Sound;
-use crate::tools::recorded::{anchor_word, mode_word, shape_word};
+use crate::tools::recorded::{anchor_word, format_word, mode_word, shape_word};
 
 /// How a clip's camera shows, as the compiler finds it.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -189,17 +189,5 @@ impl<'p> Recordings<'p> {
 
 /// "Recording 2" for `p`'s second recording.
 pub(super) fn recording_name(p: &Project, id: &str) -> String {
-    (p.recordings.iter().position(|r| r.id == id)).map_or_else(
-        || "missing recording".to_owned(),
-        |n| format!("Recording {}", n + 1),
-    )
-}
-
-fn format_word(f: klipolo_model::project::FormatKind) -> &'static str {
-    use klipolo_model::project::FormatKind;
-    match f {
-        FormatKind::Landscape => "landscape",
-        FormatKind::Portrait => "portrait",
-        FormatKind::Square => "square",
-    }
+    compile::recording_name(p, id).unwrap_or_else(|| "missing recording".to_owned())
 }
