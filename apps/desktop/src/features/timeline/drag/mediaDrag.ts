@@ -1,3 +1,4 @@
+import { t } from '@lingui/core/macro';
 import type { Asset } from '../../../bindings/Asset';
 import { cn } from '../../../design/cn';
 import { IMAGE_US } from '../../../lib/placement';
@@ -9,8 +10,12 @@ import { DRAG_SLOP_PX, type PointerLike } from './session';
 /** The ghost sits this far below and right of the pointer, so it never hides where the drop goes. */
 const GHOST_OFFSET_PX = 12;
 
+/** Where a drag may land: wherever its kind goes, or (a whole recording) on the Video lane only. */
+export type MediaLanes = 'any' | 'main';
+
 interface MediaDrag {
   asset: Asset;
+  lanes: MediaLanes;
   pointerId: number;
   origin: { x: number; y: number };
   last: { x: number; y: number };
@@ -31,13 +36,19 @@ const lengthOf = (asset: Asset) => (asset.kind === 'image' ? IMAGE_US : asset.du
  * A media panel row's press (a pointer gesture, not HTML5 drag and drop, so it never fights Tauri's file drops). Past
  * 3 px the row's name follows the pointer in a pill, and each frame shows where it would land (`DropIndicator`, and in
  * expanded mode the new-track zone of its kind); near the lanes' left or right edge they scroll. Let go over
- * the timeline, `onDrop` gets that target: only a row that takes the media's kind is one. Escape, a cancelled pointer
- * or a lost capture puts it down with nothing added.
+ * the timeline, `onDrop` gets that target: only a row that takes the media's kind is one, and with `lanes` 'main' (a
+ * whole recording) only the Video lane. Escape, a cancelled pointer or a lost capture puts it down with nothing added.
  */
-export function beginMediaDrag(e: PointerLike, asset: Asset, onDrop: (target: DropTarget) => void) {
+export function beginMediaDrag(
+  e: PointerLike,
+  asset: Asset,
+  onDrop: (target: DropTarget) => void,
+  lanes: MediaLanes = 'any',
+) {
   cancelMediaDrag();
   drag = {
     asset,
+    lanes,
     pointerId: e.pointerId,
     origin: { x: e.clientX, y: e.clientY },
     last: { x: e.clientX, y: e.clientY },
@@ -72,8 +83,8 @@ function lift(d: MediaDrag) {
   ghost.textContent = d.asset.name;
   document.body.append(ghost);
   d.ghost = ghost;
-  // A picture's or a sound's new-track zone opens (every track showing), as for a dragged layer.
-  useDragState.setState({ itemKind: d.asset.kind === 'audio' ? 'audio' : 'overlay' });
+  // A picture's or a sound's new-track zone opens (every track showing), as for a dragged layer; a recording takes none.
+  if (d.lanes === 'any') useDragState.setState({ itemKind: d.asset.kind === 'audio' ? 'audio' : 'overlay' });
   // The lanes scrolled under a still pointer: where it would land changes in the same frame.
   d.stopScroll = dropAutoscroll(
     () => d.last,
@@ -90,16 +101,32 @@ function draw() {
   const d = drag;
   if (!d?.ghost) return;
   d.ghost.style.transform = `translate(${d.last.x + GHOST_OFFSET_PX}px, ${d.last.y + GHOST_OFFSET_PX}px)`;
-  setDropIndicator(dropTargetAt(d.last.x, d.last.y, d.asset.kind), lengthOf(d.asset));
+  setDropIndicator(targetAt(d, d.last.x, d.last.y), lengthOf(d.asset));
+}
+
+/** Where `d` would land at this point: what its kind lands on, kept only on the Video lane for `lanes` 'main'. */
+function targetAt(d: MediaDrag, x: number, y: number): DropTarget | null {
+  const target = dropTargetAt(x, y, d.asset.kind);
+  return d.lanes === 'any' || target?.lane === 'main' ? target : null;
+}
+
+/** Why `d` let go at this point goes nowhere, over a lane that won't take it: which lane does. */
+function refusalAt(d: MediaDrag, x: number, y: number): string | null {
+  const said = dropRefusal(x, y, d.asset.kind);
+  if (d.lanes === 'any') return said;
+  // Over Overlays (which take its kind) or a lane that takes no video: a whole recording goes on the Video lane only.
+  return said !== null || dropTargetAt(x, y, d.asset.kind) !== null
+    ? t({ id: 'drop.refused.recording', message: 'Recordings go on the Video lane.' })
+    : null;
 }
 
 function onUp(e: PointerEvent) {
   const d = drag;
   if (!d || e.pointerId !== d.pointerId) return;
   // Where it is let go, not where the last frame drew it.
-  const target = d.ghost ? dropTargetAt(e.clientX, e.clientY, d.asset.kind) : null;
+  const target = d.ghost ? targetAt(d, e.clientX, e.clientY) : null;
   // Let go over a lane that won't take it: which lane does.
-  const refused = d.ghost && !target ? dropRefusal(e.clientX, e.clientY, d.asset.kind) : null;
+  const refused = d.ghost && !target ? refusalAt(d, e.clientX, e.clientY) : null;
   end();
   if (target) d.onDrop(target);
   else if (refused) toast.info(refused);
