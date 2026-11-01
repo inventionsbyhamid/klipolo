@@ -1250,7 +1250,7 @@ async fn effects_on_a_turned_phone_video_run_upright() {
         "a warm upright frame made GPU objects"
     );
 
-    // Run as stored, not upright (the test hook), the bottom setting leaves the circle in the middle
+    // Run as stored (the test hook), the bottom setting leaves the circle in the middle
     // (y 78.75–281.25), red at (320, 100): what the checks above rule out.
     let mut once = async |p: Arc<Project>, format, size, upright: bool| {
         headless.set_upright(upright);
@@ -1683,9 +1683,9 @@ async fn a_text_overflowing_its_box_past_the_ceiling_is_not_laid_out_every_frame
     );
 }
 
-/// An export keeps the old text ceiling (`EXPORT_TEXT_BYTES`, 256 MiB). A 4K frame
-/// of two huge filled boxes (about 64 MiB each) and a paragraph block exports sharp and says nothing; the preview's
-/// ceiling (`MAX_TEXT_BYTES`, 96 MiB) softens the second huge box and says so.
+/// An export keeps the old text ceiling (`EXPORT_TEXT_BYTES`, 256 MiB). A 4K frame of two huge filled boxes (about 64
+/// MiB each) and a paragraph block exports sharp and says nothing; the preview's ceiling (`MAX_TEXT_BYTES`, 96 MiB)
+/// softens the second huge box and says so.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU"]
 async fn a_4k_export_keeps_the_old_text_ceiling_where_the_preview_softens() {
@@ -1791,7 +1791,7 @@ async fn a_huge_text_wholly_off_the_frame_is_laid_out_once() {
     assert_eq!(layouts, [1, 0, 0], "laid out once, then kept");
 }
 
-/// A person's title whose id is "captions" under the captions is laid out once, and an
+/// A person's title whose id is "captions" under the captions is laid out once, and an unchanged frame lays nothing
 /// out; the captions are their own layer (the caption renderer), never a text texture.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU"]
