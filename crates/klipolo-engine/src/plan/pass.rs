@@ -1,5 +1,5 @@
-//! A shader pass as the plan hands it to the effect stage (moved from `layers.rs`): the shader, its settings packed in
-//! WGSL's uniform layout, and what its `kl` reads that the plan decides.
+//! A shader pass as the plan hands it to the effect stage: the shader, its settings packed in WGSL's uniform layout,
+//! and what its `kl` reads that the plan decides.
 
 use std::fmt;
 use std::sync::Arc;

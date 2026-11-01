@@ -1,5 +1,5 @@
-//! How caption words and pages move: an entrance's opacity, scale and rise from its
-//! fixed easings, a page's seeded tilt, and colour mixes. Pure and allocation-free (`frame`'s helpers).
+//! How caption words and pages move: an entrance's opacity, scale and rise from fixed easings, a page's seeded tilt,
+//! and colour mixes. Pure and allocation-free (`frame`'s helpers).
 
 use klipolo_model::captions::style::Move;
 use klipolo_model::motion::Ease;

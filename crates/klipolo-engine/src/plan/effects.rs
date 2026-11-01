@@ -249,7 +249,7 @@ pub fn seed_of(layer_id: &str, effect_id: &str) -> u32 {
 }
 
 /// Packs `values` into `shader`'s `Params`, each as it draws (`drawn`, the one reading the envelope's clamp and the
-/// verified store share: N-m5): a missing or unusable value takes the schema's default; numbers are clamped to their
+/// verified store share): a missing or unusable value takes the schema's default; numbers are clamped to their
 /// range, angles become radians, a choice becomes its option's index and a colour straight RGBA 0–1.
 pub fn pack_params(shader: &ShaderEffect, values: &BTreeMap<String, ParamValue>) -> ParamBlock {
     let mut block = ParamBlock::zeroed(shader.layout.size);

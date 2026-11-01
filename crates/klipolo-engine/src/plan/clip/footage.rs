@@ -1,9 +1,9 @@
 //! A main clip's footage at an instant: the screen, the camera or the imported video, framed for the
-//! for the format (its effective framing: `klipolo_model::framing::effective_framing`), and a recording's camera bubble
-//! or split pane. A screen whose framing is Fill with `follow` crops where its take's follow path is at that instant
-//!: the path built from the raw cursor for that crop (`follow_crop_for`), found in the context's
-//! snapshot (`Follows`), or the Fill crop at its focus until it is built (preview only: export loads it first). Follow
-//! on a Fit framing is ignored: it follows the Fill crop.
+//! format (its effective framing: `klipolo_model::framing::effective_framing`), and a recording's camera bubble
+//! or split pane. A screen whose framing is Fill with `follow` crops where its take's follow path is at that instant:
+//! the path built from the raw cursor for that crop (`follow_crop_for`), found in the context's snapshot (`Follows`),
+//! or the Fill crop at its focus until it is built (preview only: export loads it first). Follow on a Fit framing is
+//! ignored: it follows the Fill crop.
 
 use std::sync::Arc;
 
@@ -165,8 +165,8 @@ pub(super) fn main_layers(
 }
 
 /// The y share where a portrait split's two halves meet at `at_us` (the screen above, the camera below), or None when
-/// the main clip there isn't split in `format`: the same rects `frame_plan` draws them in (the padded area's middle,
-/// D11). As there, the layout depends on the camera mode and whether the recording has a camera, never on whether its
+/// the main clip there isn't split in `format`: the same rects `frame_plan` draws them in (the padded area's middle).
+/// As there, the layout depends on the camera mode and whether the recording has a camera, never on whether its
 /// footage covers this instant. A caption style placed at the seam (Arcade) sits on it.
 pub fn split_seam(ctx: &PlanContext, at_us: Us, format: FormatKind) -> Option<f64> {
     if format != FormatKind::Portrait {
