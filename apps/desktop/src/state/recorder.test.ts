@@ -765,7 +765,7 @@ describe('the bridge', () => {
     await tauriRecorder.allowScreen();
     await tauriRecorder.reopen();
     await tauriRecorder.openPrivacy('camera');
-    const want: Previews = { thumbs: true, live: null, camera: 'cam', mic: null, ask: 'camera' };
+    const want: Previews = { thumbs: true, live: null, livePixels: null, camera: 'cam', mic: null, ask: 'camera' };
     await tauriRecorder.previews(want, () => undefined);
     await tauriRecorder.previewAck('live');
     await tauriRecorder.previewsOff();
