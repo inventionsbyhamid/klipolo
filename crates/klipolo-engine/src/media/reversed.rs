@@ -58,6 +58,9 @@ const BLOCK: usize = 4_096;
 const SEEK_MARGIN_US: Us = 1_000_000;
 /// How far past the range's end the first pass reads: B-frames shown in the range are decoded after frames past it.
 const REORDER_US: Us = 1_000_000;
+/// How far ahead of a window's first frame its seek asks for: more than any B-frame delay, so the keyframe it lands on
+/// is shown before that frame even where a demuxer seeks by decode time (the frames before it are skipped).
+const WINDOW_LEAD_US: Us = 250_000;
 /// The shares of the progress the first pass and the sound take; the frames written take the rest.
 const SCAN_SHARE: f64 = 0.05;
 const SOUND_SHARE: f64 = 0.05;
@@ -633,8 +636,10 @@ fn decode_window(
     cancel: &AtomicBool,
 ) -> Result<Vec<ffmpeg::frame::Video>, ReverseError> {
     let (first, last) = (wanted[0], wanted[wanted.len() - 1]);
-    // In AV_TIME_BASE (µs), as seeks are: the window's start on the container's clock; a keyframe at or before it.
-    let ts = first + (stream.start as f64 * f64::from(stream.tb) * 1e6).round() as i64;
+    // In AV_TIME_BASE (µs), as seeks are: just ahead of the window's start on the container's clock; a keyframe at or
+    // before it.
+    let ts =
+        first - WINDOW_LEAD_US + (stream.start as f64 * f64::from(stream.tb) * 1e6).round() as i64;
     if input.seek(ts, ..ts).is_err() {
         // It can't seek there: from the file's start.
         input.seek(0, ..0).map_err(|e| failed("seek", e))?;
