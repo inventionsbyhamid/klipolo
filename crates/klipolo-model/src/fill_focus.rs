@@ -71,6 +71,27 @@ impl FocusPath {
         Some((a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t))
     }
 
+    /// Just the keys source time `from` to `to` needs: from the last key at or before `from` to the first at or after
+    /// `to`, so it draws the same crop there. Its first key is never a cut (nothing comes before it).
+    pub fn trimmed(&self, from: Us, to: Us) -> FocusPath {
+        let first = self
+            .keys
+            .partition_point(|k| k.at_us <= from)
+            .saturating_sub(1);
+        let last = self
+            .keys
+            .partition_point(|k| k.at_us < to)
+            .min(self.keys.len().saturating_sub(1));
+        let mut keys = self
+            .keys
+            .get(first..=last)
+            .map_or_else(Vec::new, <[FocusKey]>::to_vec);
+        if let Some(k) = keys.first_mut() {
+            k.cut = false;
+        }
+        FocusPath { keys }
+    }
+
     /// Whether it may be saved: at most [`Self::MAX_KEYS`] keys, each later than the one before, inside the picture.
     pub fn is_valid(&self) -> bool {
         let inside = |v: f64| v.is_finite() && (0.0..=1.0).contains(&v);
@@ -80,6 +101,17 @@ impl FocusPath {
                 .keys
                 .iter()
                 .all(|k| k.at_us >= 0 && inside(k.x) && inside(k.y))
+    }
+}
+
+/// `clip`'s speaker paths kept to the footage it plays (`FocusPath::trimmed`): a piece of a split or a cut carries
+/// its own part, not the whole talk's.
+pub fn trim_to_clip(clip: &mut crate::timeline::Clip) {
+    let (from, to) = (clip.source_in_us, clip.source_out_us);
+    for focus in clip.fill_focus.values_mut() {
+        if let FillFocus::Speaker { path } = focus {
+            *path = path.trimmed(from, to);
+        }
     }
 }
 

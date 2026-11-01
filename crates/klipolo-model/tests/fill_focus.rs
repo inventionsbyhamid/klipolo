@@ -145,3 +145,58 @@ fn a_split_keeps_the_path_on_both_halves_in_source_time() {
     let x = path.centre_at(right.source_in_us).unwrap().0;
     assert!((x - (0.2 + 0.5 * 4.0 / 9.0)).abs() < 1e-9, "{x}");
 }
+
+/// A 10-minute talk followed from the card: a key every quarter second, the speaker always moving a little.
+fn followed_talk() -> Project {
+    let mut p = fixture();
+    let broll = p.assets.iter_mut().find(|a| a.id == "broll").unwrap();
+    broll.duration_us = secs(600.0);
+    let b = &mut p.timeline.main[1];
+    b.source_out_us = secs(600.0);
+    let keys = (0..2400)
+        .map(|i| {
+            key(
+                f64::from(i) * 0.25,
+                0.3 + 0.2 * (f64::from(i) / 40.0).sin().abs(),
+                0.5,
+            )
+        })
+        .collect();
+    b.fill_focus.insert(FormatKind::Portrait, speaker(keys));
+    p
+}
+
+#[test]
+fn split_pieces_keep_only_their_own_part_of_the_path() {
+    let p = followed_talk();
+    // Clip b plays from 20 s on the timeline: cut it into 80 pieces.
+    let splits: Vec<Op> = (1..80)
+        .map(|k| Op::Split {
+            at_us: secs(20.0 + 7.5 * f64::from(k)),
+        })
+        .collect();
+    let cut = apply_ops(&p, &splits).unwrap();
+    assert_eq!(cut.timeline.main.len(), 81);
+    let json = serde_json::to_string(&cut).unwrap();
+    assert!(json.len() < 1_000_000, "{} bytes", json.len());
+    // Each piece still draws the crop it did: its part of the path, from the key before its first frame.
+    let FillFocus::Speaker { path: whole } = &p.timeline.main[1].fill_focus[&FormatKind::Portrait]
+    else {
+        panic!()
+    };
+    for piece in &cut.timeline.main[1..] {
+        let FillFocus::Speaker { path } = &piece.fill_focus[&FormatKind::Portrait] else {
+            panic!()
+        };
+        assert!(path.keys.len() <= 32, "{}", path.keys.len());
+        assert!(!path.keys[0].cut);
+        for at in [
+            piece.source_in_us,
+            (piece.source_in_us + piece.source_out_us) / 2,
+            piece.source_out_us - 1,
+        ] {
+            let (a, b) = (path.centre_at(at).unwrap(), whole.centre_at(at).unwrap());
+            assert!((a.0 - b.0).abs() < 1e-9, "at {at}: {a:?} vs {b:?}");
+        }
+    }
+}

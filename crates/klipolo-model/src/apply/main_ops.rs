@@ -8,6 +8,7 @@
 //! saturates, so even a corrupt project only ever fails validation.
 
 use crate::error::{invalid, invalid_with, not_found, Result};
+use crate::fill_focus::trim_to_clip;
 use crate::ids::Id;
 use crate::messages::{code, msg};
 use crate::motion::{self, Motion};
@@ -100,6 +101,8 @@ pub(super) fn split(p: &mut Project, at_us: Us) -> Result<()> {
     second.fade_in_us = 0;
     clamp_fades(&mut first);
     clamp_fades(&mut second);
+    trim_to_clip(&mut first);
+    trim_to_clip(&mut second);
     // Content from the cut on (including the old end) now plays from the second piece.
     for item in p
         .timeline
@@ -574,6 +577,7 @@ fn cut_main(main: &mut Vec<Clip>, removed: &Ripple, ids: &mut IdPool) -> Origins
                 None
             };
             clamp_fades(&mut piece);
+            trim_to_clip(&mut piece);
             out.push(piece);
             origins.push((from, *part));
         }
