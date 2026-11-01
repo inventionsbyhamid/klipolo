@@ -6,10 +6,11 @@
 //! and folded runs, line shapes, pauses, the notes a long project gets and the clips still being analyzed, and that the
 //! quoted parts are never requests); the rules (only what the person asked for, null for what they left unsaid; times
 //! only from the context, its start and end, or the person; "this" is the selection and "here" the playhead; several
-//! calls in order; a new format joins the others unless the person asks for only it; ask when a removal's target is
-//! unclear; one noun phrase per blur; removals are proposals; media by name from the library, "the song", background
-//! music from the start, topic changes, Muse Image drawing a new picture, a title only in the person's words;
-//! `cannotDo` when nothing fits); and how to reply (one or two short plain sentences, no markdown, no em or en dashes).
+//! calls in order; a new format joins the others unless the person asks for only it; the clip tools, with the refs of
+//! clips, songs and video layers and all for every clip or cut; ask when a removal's target is unclear; one noun phrase
+//! per blur; removals are proposals; media by name from the library, "the song", background music from the start, topic
+//! changes, Muse Image drawing a new picture, a title only in the person's words; `cannotDo` when nothing fits); and
+//! how to reply (one or two short plain sentences, no markdown, no em or en dashes).
 //! What a tool's own schema says (a null time is the playhead, or the start for music, a title is the person's words, a
 //! plain title goes over the video with addText and only a title card asked for has Muse Image draw its background)
 //! isn't said again here.
@@ -47,6 +48,8 @@ mean the playhead. If there is no selection, ask which part.\n\
 - One request can need several tools: call each one, in the order asked.\n\
 - A project can export several formats. In setFormat, set keepOthers to true unless the person asks for only that \
 format (\"only vertical\", \"just square\", \"drop the landscape version\").\n\
+- setClip sets a clip's, song's (m1) or video layer's (v1) speed, volume, mute, or Fit or Fill; setTransition adds, \
+changes or removes the transition at a cut. Use all for every clip or cut.\n\
 - If it is unclear what to remove, or a request is too vague to act on, call askUser with one short question instead \
 of guessing.\n\
 - blurObjects and followSubject take one short noun phrase, like \"face\" or \"license plate\". For two kinds of \

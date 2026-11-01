@@ -1,20 +1,33 @@
 #!/usr/bin/env bash
-# The bundled pack's checks (Python 3 stdlib only): scripts/gen-library.py run twice into temporary folders writes the
-# same bytes both times, and the same bytes as assets/library, whose manifest lists each file's SHA-256; every sound is
-# 48 kHz 16-bit mono and under 3 s; every music bed is 16 to 30 s and loops at a zero crossing without a click (two
+# The bundled pack's checks (Python 3 stdlib only): scripts/gen-library.py run twice into temporary folders, with
+# different numbers of worker processes, writes the same bytes both times, and the same bytes as assets/library, whose
+# manifest lists each file's SHA-256; every item has a file, a name and 3 to 6 tags, and every file an item; every sound
+# is 48 kHz 16-bit mono and under 3 s; every music bed is 16 to 30 s and loops at a zero crossing without a click (two
 # copies back to back are as smooth at the join as anywhere else); every sticker is a 1024 x 1024 RGBA PNG with
-# transparent corners; the pack holds the 16 files listed below (8 sounds, 2 music beds, 6 stickers), CC0-1.0, and is
-# under 3 MB.
+# transparent corners; every background an RGB PNG sized for a 16:9 or 9:16 frame, each in both; the pack holds the
+# items listed below, CC0-1.0, and is under 10.5 MiB. Then scripts/check-library-sounds.py measures each sound and fails
+# on any out of bounds.
 #   scripts/gen-library.test.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-python3 -I scripts/gen-library.py --out "$tmp/a" >/dev/null
-python3 -I scripts/gen-library.py --out "$tmp/b" >/dev/null
+# Two runs at once, each a minute or two, by different numbers of processes; both must finish.
+python3 -I scripts/gen-library.py --out "$tmp/a" --workers 4 >/dev/null &
+a=$!
+python3 -I scripts/gen-library.py --out "$tmp/b" --workers 3 >/dev/null &
+b=$!
+ran=0
+wait "$a" || ran=1
+wait "$b" || ran=1
+if [ "$ran" != 0 ]; then
+  echo "FAIL  scripts/gen-library.py stopped with an error"
+  exit 1
+fi
 
-python3 -I - "$tmp/a" "$tmp/b" assets/library <<'PY'
+status=0
+python3 -I - "$tmp/a" "$tmp/b" assets/library <<'PY' || status=1
 import hashlib, json, pathlib, struct, sys, wave, zlib
 
 first, second, committed = (pathlib.Path(p) for p in sys.argv[1:4])
@@ -57,23 +70,49 @@ def _():
         assert got == i["sha256"], f"{i['id']}: sha256 {got}, manifest {i['sha256']}"
 
 
+@check("every_item_has_a_file_a_name_and_tags")
+def _():
+    c = files(committed)
+    for key in ("id", "name", "file"):
+        seen = [i[key] for i in items]
+        assert len(set(seen)) == len(seen), f"listed twice: {sorted({v for v in seen if seen.count(v) > 1})}"
+    for i in items:
+        assert i["file"] in c, f"{i['id']}: no file {i['file']}"
+        assert i["name"] and i["name"] == i["name"].strip(), f"{i['id']}: name {i['name']!r}"
+        tags = i["tags"]
+        assert 3 <= len(tags) <= 6, f"{i['id']}: {len(tags)} tags"
+        assert len(set(tags)) == len(tags), f"{i['id']}: a tag twice in {tags}"
+        assert all(t and t == t.strip().lower() for t in tags), f"{i['id']}: tags {tags}"
+    unlisted = sorted(set(c) - {i["file"] for i in items} - {"manifest.json", "LICENSE.txt"})
+    assert not unlisted, f"files no item lists: {unlisted}"
+
+
 @check("manifest_lists_the_pack")
 def _():
     want = {
-        "sound": ["whoosh", "swoosh", "pop", "click", "ding", "chime", "rise", "sparkle"],
-        "music": ["soft-ambient", "upbeat-loop"],
-        "sticker": ["heart", "star", "arrow", "circle", "check", "bubble"],
+        "sound": ["whoosh", "swoosh", "pop", "click", "ding", "chime", "rise", "sparkle",
+                  "impact", "bass-drop", "long-riser", "swipe-left", "swipe-right", "glitch", "record-scratch",
+                  "shutter", "typing", "notification", "success", "error", "pop-high", "bubbles", "boing", "drum-hit",
+                  "tick-tock"],
+        "music": ["soft-ambient", "upbeat-loop", "chill-beat", "energetic-loop"],
+        "sticker": ["heart", "star", "arrow", "circle", "check", "bubble",
+                    "arrow-curved", "arrow-pointer", "circle-drawn", "underline", "x-mark", "question", "exclamation",
+                    "number-1", "number-2", "number-3", "number-4", "number-5", "thought-bubble", "shout-bubble",
+                    "thumbs-up", "fire", "sparkles", "lightbulb", "new-tag", "subscribe", "cursor-hand",
+                    "sunset-16x9", "sunset-9x16", "soft-16x9", "soft-9x16", "night-16x9", "night-9x16", "paper-16x9",
+                    "paper-9x16"],
     }
     assert {k: [i["id"] for i in of(k)] for k in want} == want, [i["id"] for i in items]
-    assert len(items) == 16 and manifest["license"] == "CC0-1.0" and manifest["creator"] == "Klipolo"
+    assert len(items) == 64 and manifest["license"] == "CC0-1.0" and manifest["creator"] == "Klipolo"
     for i in items:
         assert i["license"] == "CC0-1.0", i["id"]
         assert i["name"] and not any(d in i["name"] for d in "–—"), i["id"]
-        assert i["file"].startswith(f"{i['category']}s/" if i["category"] != "music" else "music/"), i["file"]
+        folders = {"sound": ["sounds/"], "music": ["music/"], "sticker": ["stickers/", "backgrounds/"]}
+        assert any(i["file"].startswith(f) for f in folders[i["category"]]), i["file"]
         assert ("duration_ms" in i) == (i["category"] != "sticker"), i["id"]
         assert ("width" in i and "height" in i) == (i["category"] == "sticker"), i["id"]
     size = sum(len(v) for v in files(committed).values())
-    assert size < 3 * 1024 * 1024, f"the pack is {size} bytes"
+    assert size < 10.5 * 1024 * 1024, f"the pack is {size} bytes"
 
 
 def pcm(path):
@@ -114,7 +153,8 @@ def _():
         assert 8000 < peak < 32767, f"{i['id']}: peak {peak}"
 
 
-def rgba_rows(path):
+def png_chunks(path):
+    """A PNG's header (width, height, depth, colour type, compression, filter, interlace) and its pixel data."""
     data = path.read_bytes()
     assert data[:8] == b"\x89PNG\r\n\x1a\n", "not a PNG"
     pos, idat, header = 8, b"", None
@@ -126,6 +166,11 @@ def rgba_rows(path):
         elif kind == b"IDAT":
             idat += body
         pos += 12 + length
+    return header, idat
+
+
+def rgba_rows(path):
+    header, idat = png_chunks(path)
     w, h, depth, colour, _, _, interlace = header
     assert (depth, colour, interlace) == (8, 6, 0), f"8-bit RGBA, not interlaced: {header}"
     raw, stride, rows, prev = zlib.decompress(idat), w * 4, [], bytearray(w * 4)
@@ -149,7 +194,7 @@ def rgba_rows(path):
 
 @check("stickers_have_transparent_corners")
 def _():
-    for i in of("sticker"):
+    for i in [i for i in of("sticker") if i["file"].startswith("stickers/")]:
         w, h, rows = rgba_rows(committed / i["file"])
         assert (w, h) == (1024, 1024) == (i["width"], i["height"]), f"{i['id']}: {w} x {h}"
         for y0, x0 in [(0, 0), (0, w - 32), (h - 32, 0), (h - 32, w - 32)]:
@@ -160,5 +205,27 @@ def _():
         assert 0.05 < solid < 0.8, f"{i['id']}: {solid:.0%} of it is solid"
 
 
+@check("backgrounds_are_sized_for_16x9_and_9x16")
+def _():
+    shapes = {}
+    for i in [i for i in of("sticker") if i["file"].startswith("backgrounds/")]:
+        header, idat = png_chunks(committed / i["file"])
+        w, h, depth, colour, _, _, interlace = header
+        assert (w, h) in [(1920, 1080), (1080, 1920)] and (w, h) == (i["width"], i["height"]), f"{i['id']}: {w} x {h}"
+        assert (depth, colour, interlace) == (8, 2, 0), f"{i['id']}: 8-bit RGB with no alpha: {header}"
+        assert len(zlib.decompress(idat)) == h * (1 + 3 * w), f"{i['id']}: its pixel data isn't {w} x {h}"
+        ratio = "16:9" if w > h else "9:16"
+        name, said = i["name"].rsplit(" ", 1)
+        assert said == ratio and i["id"].endswith(ratio.replace(":", "x")) and ratio in i["tags"], i["id"]
+        shapes.setdefault(name, set()).add(ratio)
+        assert len(committed.joinpath(i["file"]).read_bytes()) < 800 * 1024, f"{i['id']} is over 800 KB"
+    assert len(shapes) == 4 and all(s == {"16:9", "9:16"} for s in shapes.values()), shapes
+
+
 sys.exit(1 if failed else 0)
 PY
+
+# Each sound measured (no one listens on the build machine): length, peak, level, DC, clipping and silence.
+echo
+python3 -I scripts/check-library-sounds.py assets/library || status=1
+exit "$status"

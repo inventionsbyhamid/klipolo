@@ -176,8 +176,10 @@
 
 /* ---------- Preview ---------- */
 
-/* 16:9 over the full width, on the darkest surface; the clip art until the live picture's first frame. */
+/* 16:9 over the full width, on the darkest surface; the clip art until the live picture's first frame. Dark in both
+   themes, as the video is: what is said over it (the Screen Recording step, the countdown) is dark too. */
 .record-preview {
+  color-scheme: dark;
   position: relative;
   display: grid;
   place-items: center;
@@ -227,8 +229,10 @@
   inset: 0;
 }
 
-/* The camera bubble: a 96 px circle over the preview's bottom right, 12 px in, under what is said in the box. */
+/* The camera bubble: a 96 px circle over the preview's bottom right, 12 px in, under what is said in the box. Dark in
+   both themes, as the preview is. */
 .record-bubble {
+  color-scheme: dark;
   position: absolute;
   right: var(--space-5);
   bottom: var(--space-5);

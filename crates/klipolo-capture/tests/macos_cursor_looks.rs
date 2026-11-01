@@ -55,7 +55,7 @@ fn no_current_cursor_is_unknown_for_five_seconds_then_the_arrow_and_a_seed_that_
         "the key changed, the seed didn't"
     );
     assert!(!seed.trusted() && seed.missed() == 1);
-    // It keeps counting once dropped, for the question.
+    // It keeps counting once dropped, so the take's log says how often the key changed with the same seed.
     assert!(!seed.look(false, false, Some(4), 5));
     assert_eq!((seed.missed(), seed.seen()), (2, 2));
     assert!(
