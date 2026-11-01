@@ -16,7 +16,7 @@ use crate::project::Project;
 use crate::validate::validate;
 
 mod snapshot;
-pub use snapshot::{Snapshot, SnapshotPatch};
+pub use snapshot::{ListedAs, Snapshot, SnapshotPatch};
 
 /// Most undo steps kept; the oldest is dropped first.
 pub const HISTORY_LIMIT: usize = 200;
