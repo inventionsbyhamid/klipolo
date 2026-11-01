@@ -1383,3 +1383,81 @@ fn chat_worded_refusals_are_said_for_apps() {
     }
     assert_eq!(host.state().counts.applies, 0);
 }
+
+/// A 2 s dissolve from c1 into c2, with c1 playing the file to 1 s before its end (1 s of footage after its out point,
+/// c2 13 s before its in point): at 2x c1's spare footage lasts 0.5 s, so the dissolve shortens to 1 s.
+fn with_dissolve(host: &FakeHost) {
+    host.change_project(|p| {
+        p.timeline.main[0].source_out_us = p.assets[0].duration_us - 1_000_000;
+        p.timeline.main[0].transition_out = Some(klipolo_model::timeline::Transition {
+            effect: klipolo_model::contrib::builtin::TRANSITION_DISSOLVE.into(),
+            duration_us: 2_000_000,
+            params: Default::default(),
+        });
+        p.requires
+            .insert(klipolo_model::transitions::FEATURE.to_owned());
+    });
+}
+
+#[test]
+fn an_apps_clip_and_transition_changes_are_the_cards_applied_at_once() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    let before = host.revision();
+    let set = json!({"after": "c1", "kind": "dissolve", "durationSec": null});
+    let result = agent.call("setTransition", set);
+    assert_eq!(outcome(&result), "done", "{result}");
+    assert_eq!(text(&result), fill(DONE, &[("tools", "setTransition")]));
+    assert_eq!(host.revision(), before + 1);
+    let added = host.project().timeline.main[0].transition_out.clone();
+    assert_eq!(added.map(|t| t.duration_us), Some(500_000));
+    // A speed that shortens a transition applies at once, as the card's does, and says so.
+    with_dissolve(&host);
+    agent.read();
+    let speed = json!({"clip": "c1", "speed": 2, "volume": null, "muted": null, "framing": null, "framingFormat": null});
+    let result = agent.call("setClip", speed);
+    assert_eq!(outcome(&result), "done", "{result}");
+    assert_eq!(
+        text(&result),
+        format!(
+            "{} A transition is shortened.",
+            fill(DONE, &[("tools", "setClip")])
+        )
+    );
+    let project = host.project();
+    assert_eq!(project.timeline.main[0].speed, 2.0);
+    assert_eq!(
+        project.timeline.main[0]
+            .transition_out
+            .as_ref()
+            .map(|t| t.duration_us),
+        Some(1_000_000)
+    );
+    {
+        let s = host.state();
+        let (client, tx) = s.applied.last().expect("a batch");
+        assert_eq!(
+            (client.as_str(), tx.label.as_str()),
+            ("Agent", "chat.setClip.note")
+        );
+    }
+    // A value the card doesn't offer is refused with the reason, and nothing changes.
+    let revision = host.revision();
+    let result = agent.call("setClip", json!({"clip": "c1", "speed": 3}));
+    assert_refused(
+        &result,
+        "setClip: speed must be one of 0.5, 0.75, 1, 1.25, 1.5, 2 or null, not 3.",
+    );
+    assert_eq!(host.revision(), revision);
+    // Taking the transitions away waits for the person, as every removal does.
+    let result = agent.call("setTransition", json!({"after": "all", "kind": "none"}));
+    assert_eq!(outcome(&result), "proposed", "{result}");
+    assert_eq!(
+        text(&result),
+        fill(PROPOSED_NO_FOOTAGE, &[("tools", "setTransition")])
+    );
+    assert_eq!(host.revision(), revision);
+    assert!(host.project().timeline.main[0].transition_out.is_some());
+}

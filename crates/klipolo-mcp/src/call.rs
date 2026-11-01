@@ -24,7 +24,8 @@
 //! The only commit is `Host::apply` of additions that `needs_review` passes, and the only other change the app's own
 //! undo: no path here cuts footage.
 //!
-//! A result is one text and `structuredContent`: `{"outcome": "done" | "proposed" | "shown" | "started" | "refused",
+//! A result's text says what was done, with chat's own notes on it (a new speed that shortens a transition, as the clip
+//! card says it), what was proposed and what wasn't done. A result is one text and `structuredContent`: `{"outcome": "done" | "proposed" | "shown" | "started" | "refused",
 //! "revision"?, "proposalId"?, "removedSec"?}`, the outcome what changed most (a proposal, then the project, then a
 //! job started). `isError` is true exactly when nothing was done; when part was, the text says what wasn't.
 
@@ -236,6 +237,8 @@ fn edit(
             words::DONE,
             &[("tools", &names(applied.map(|i| &calls[i])))],
         ));
+        // What the additions did beyond what was asked: a new speed that shortens a transition.
+        said.extend(out.notes.iter().cloned());
     }
 
     // The commit dropped no proposal of the app's: the person decided on it while this call ran (a Discard), and their
