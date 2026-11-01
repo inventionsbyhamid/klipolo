@@ -68,9 +68,12 @@ pub fn wants(project: &Project, playhead_us: Us) -> Vec<Want> {
     };
     let main = &project.timeline.main;
     for (clip, start) in main.iter().zip(clip_starts(main)) {
+        // A freeze frame wants its frame throughout (a recording's: where its range starts, at the frame unless trimmed).
+        let speed = if clip.is_freeze() { 0.0 } else { clip.speed };
         match &clip.source {
             ClipSource::Asset { id } => {
-                add(id, start, clip.duration_us(), clip.source_in_us, clip.speed)
+                let from = clip.freeze_at_us.unwrap_or(clip.source_in_us);
+                add(id, start, clip.duration_us(), from, speed)
             }
             // Each run of the recording's video sources where it plays inside the clip, at its own time.
             ClipSource::Recording { id } => {
@@ -81,13 +84,7 @@ pub fn wants(project: &Project, playhead_us: Us) -> Vec<Want> {
                     for run in &source.runs {
                         if let Some(span) = run_in_clip(clip, start, source, run) {
                             let length = span.end_us - span.start_us;
-                            add(
-                                &run.asset_id,
-                                span.start_us,
-                                length,
-                                span.run_in_us,
-                                clip.speed,
-                            );
+                            add(&run.asset_id, span.start_us, length, span.run_in_us, speed);
                         }
                     }
                 }

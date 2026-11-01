@@ -141,9 +141,9 @@ fn audible<'a>(p: &'a Project, id: &str) -> Option<&'a Asset> {
 /// run's drift-corrected `rate`; a gap between runs plays nothing, but where no sound source recorded anything a muted
 /// camera sound that fills gaps plays: `fill`), at the clip's volume with its fades (to silence). A transition
 /// crossfades the two clips' sound over its window instead: the outgoing clip plays on past its cut and fades out,
-/// the incoming one starts before it and fades in. Muted and silent clips add nothing. Then every audio item (at its
-/// volume, fades and effect) and every overlay video's own sound (at its speed and volume), unless the layer is
-/// muted. A muted track adds nothing, and neither does a hidden overlay track (audio tracks have no hide control).
+/// the incoming one starts before it and fades in. Muted and silent clips and freeze frames add nothing. Then every
+/// audio item (at its volume, fades and effect) and every overlay video's own sound (at its speed and volume), unless
+/// the layer is muted. A muted track adds nothing, and neither does a hidden overlay track (audio tracks have no hide control).
 /// While any track is soloed only soloed tracks add theirs, and mute still wins (`Solo::sounds`); the main track
 /// always plays. Export plans its sound here too, so what plays is what exports.
 ///
@@ -161,7 +161,8 @@ pub fn audio_plan(p: &Project, registry: &Registry, speech: Arc<[RangeUs]>) -> A
     let mut sources = Vec::new();
     let main = &p.timeline.main;
     for (i, (clip, start)) in main.iter().zip(clip_starts(main)).enumerate() {
-        if clip.muted || clip.volume <= 0.0 {
+        // A freeze frame is silent whatever its mute says: its range is only its length.
+        if clip.muted || clip.volume <= 0.0 || clip.is_freeze() {
             continue;
         }
         // A transition crossfades the two clips' sound over its window (equal power; it replaces the fades).
