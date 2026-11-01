@@ -56,6 +56,8 @@ fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
+            // First, before the page loads: the window's colour is the saved theme's.
+            commands::appearance::at_launch(app.handle());
             let cache = app.path().app_cache_dir().ok();
             app.manage(EngineState::new(Some(warm), cache));
             let projects = ProjectSessionState::default();
@@ -170,6 +172,7 @@ fn main() {
             project::project_reveal,
             project::projects_recent,
             media::media_import,
+            commands::appearance::appearance_set,
             commands::settings::settings_get,
             commands::settings::settings_set_key,
             commands::settings::settings_set_code,
@@ -235,6 +238,11 @@ fn main() {
                 // made keeps its finished segments: its worker sees the app go and is made on at the next launch.
                 commands::export::on_exit(app);
             }
+            // The system's appearance changed: the window's colour follows it while the theme is System.
+            RunEvent::WindowEvent {
+                event: WindowEvent::ThemeChanged(system),
+                ..
+            } => commands::appearance::system_changed(app, system),
             // Back in front: a source exported again elsewhere meanwhile must not keep showing its old editing copy.
             RunEvent::WindowEvent {
                 event: WindowEvent::Focused(true),
