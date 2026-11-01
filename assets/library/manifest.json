@@ -538,6 +538,364 @@
       ],
       "sha256": "c5df4c6ba721c096635451d122f0d7f5e6fbc4915c7ceb4aaa402ed9688594b4",
       "license": "CC0-1.0"
+    },
+    {
+      "id": "arrow-curved",
+      "name": "Curved arrow",
+      "category": "sticker",
+      "file": "stickers/arrow-curved.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "arrow",
+        "curved",
+        "point",
+        "look",
+        "blue"
+      ],
+      "sha256": "47cf6df6b743012bd04a6bc69dce81a9647eb66a0853987659c710bab1cbf8f4",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "arrow-pointer",
+      "name": "Pointer arrow",
+      "category": "sticker",
+      "file": "stickers/arrow-pointer.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "arrow",
+        "pointer",
+        "point",
+        "look here",
+        "red"
+      ],
+      "sha256": "455d3570059079d7adf40f5c72b3d60fb0a67db4e8130c018302564edf7e29cf",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "circle-drawn",
+      "name": "Drawn circle",
+      "category": "sticker",
+      "file": "stickers/circle-drawn.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "circle",
+        "highlight",
+        "look here",
+        "marker",
+        "red"
+      ],
+      "sha256": "b58a548bbd8ea5603072c516161082875f1e6db379638582a0e550989be834e0",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "underline",
+      "name": "Underline",
+      "category": "sticker",
+      "file": "stickers/underline.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "underline",
+        "highlight",
+        "marker",
+        "emphasis",
+        "gold"
+      ],
+      "sha256": "d1bf7866ff19ac7709e5645655db0189f295e8e4841e4c1314af8fabd22769e1",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "x-mark",
+      "name": "X mark",
+      "category": "sticker",
+      "file": "stickers/x-mark.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "x",
+        "cross",
+        "wrong",
+        "no",
+        "red"
+      ],
+      "sha256": "85e5c9f09255ace810d61ce36572795b7285e25546c36c779037178e409ca492",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "question",
+      "name": "Question mark",
+      "category": "sticker",
+      "file": "stickers/question.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "question",
+        "question mark",
+        "why",
+        "quiz",
+        "purple"
+      ],
+      "sha256": "28c870a37cd2a20fecaed83eea199d675ca157d07d011fca64311a33f9dd9f65",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "exclamation",
+      "name": "Exclamation mark",
+      "category": "sticker",
+      "file": "stickers/exclamation.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "exclamation",
+        "exclamation mark",
+        "wow",
+        "alert",
+        "important",
+        "red"
+      ],
+      "sha256": "7eb2ac2433de49f06dfae70215cd4c5adb77ee8e22ba8937eeceba46391ca1ce",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "number-1",
+      "name": "Number 1",
+      "category": "sticker",
+      "file": "stickers/number-1.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "number",
+        "1",
+        "one",
+        "step",
+        "first"
+      ],
+      "sha256": "954017488714cf92fdcc431a6f437212aae3fbdd3ed674be30a323d60fb01e20",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "number-2",
+      "name": "Number 2",
+      "category": "sticker",
+      "file": "stickers/number-2.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "number",
+        "2",
+        "two",
+        "step",
+        "second"
+      ],
+      "sha256": "f0f77060ee7d48c95572828eceb9bf40e3e8af478686da24031584e75a799ccc",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "number-3",
+      "name": "Number 3",
+      "category": "sticker",
+      "file": "stickers/number-3.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "number",
+        "3",
+        "three",
+        "step",
+        "third"
+      ],
+      "sha256": "0e156de437d0255b239c5b62683f4fab22e9295623d3b19c0b8e4526a26f2c2e",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "number-4",
+      "name": "Number 4",
+      "category": "sticker",
+      "file": "stickers/number-4.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "number",
+        "4",
+        "four",
+        "step",
+        "fourth"
+      ],
+      "sha256": "2c206869ed123b153f94723f93baa91d06cf123646ba6c8e612b1804f976e363",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "number-5",
+      "name": "Number 5",
+      "category": "sticker",
+      "file": "stickers/number-5.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "number",
+        "5",
+        "five",
+        "step",
+        "fifth"
+      ],
+      "sha256": "bbed8a244d0c66a0eb0733aaf5511d31f0ea053f2ebcc727043a60cbe18afb7a",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "thought-bubble",
+      "name": "Thought bubble",
+      "category": "sticker",
+      "file": "stickers/thought-bubble.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "thought",
+        "think",
+        "idea",
+        "cloud",
+        "white"
+      ],
+      "sha256": "ab4cecc8c14e935f98c5e6c10042924e98c80ee7801a80434e1f60df794bd403",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "shout-bubble",
+      "name": "Shout bubble",
+      "category": "sticker",
+      "file": "stickers/shout-bubble.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "shout",
+        "burst",
+        "wow",
+        "loud",
+        "comic"
+      ],
+      "sha256": "4fdf8a5c02d7c6e1d2716dd8ae9ef547619cbb21ea4505a82e4c6402a18c7298",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "thumbs-up",
+      "name": "Thumbs up",
+      "category": "sticker",
+      "file": "stickers/thumbs-up.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "thumbs up",
+        "like",
+        "yes",
+        "good",
+        "approve"
+      ],
+      "sha256": "11ae19588d969baedf2d683879c0c774115a932082d22b2418f76bb69d84094e",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "fire",
+      "name": "Fire",
+      "category": "sticker",
+      "file": "stickers/fire.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "fire",
+        "flame",
+        "hot",
+        "trending",
+        "lit"
+      ],
+      "sha256": "391e5a9fe6d89b9b2ae1f39a359db413fe330a9b9b169151bd35b7ee5bd9bbd4",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "sparkles",
+      "name": "Sparkles",
+      "category": "sticker",
+      "file": "stickers/sparkles.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "sparkles",
+        "shine",
+        "magic",
+        "new",
+        "gold"
+      ],
+      "sha256": "72e26a146b7b159e8df2be4ca4087eafd68e03766630d4295cb01f044208f55d",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "lightbulb",
+      "name": "Lightbulb",
+      "category": "sticker",
+      "file": "stickers/lightbulb.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "lightbulb",
+        "idea",
+        "tip",
+        "think",
+        "smart"
+      ],
+      "sha256": "93b3794624a63e579ebf5492f22552061305521f3e6235feb0e5a565c7542045",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "new-tag",
+      "name": "New tag",
+      "category": "sticker",
+      "file": "stickers/new-tag.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "new",
+        "tag",
+        "label",
+        "launch",
+        "red"
+      ],
+      "sha256": "e8359d2675d4932cb16a47567fffc8c328089a88dcbc94d121a7a6b0d79bcfc7",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "subscribe",
+      "name": "Subscribe button",
+      "category": "sticker",
+      "file": "stickers/subscribe.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "subscribe",
+        "button",
+        "follow",
+        "channel",
+        "call to action"
+      ],
+      "sha256": "d5ee072491618b81328e6cf28311d197218ccd8f8f91928e62ee33298bb270f8",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "cursor-hand",
+      "name": "Cursor hand",
+      "category": "sticker",
+      "file": "stickers/cursor-hand.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "cursor",
+        "hand",
+        "click",
+        "pointer",
+        "tap"
+      ],
+      "sha256": "aa8025b0b989abc9e20e9bd586ba4e183a7da2a0fdfbff0099f77c16a8fe5b5d",
+      "license": "CC0-1.0"
     }
   ]
 }

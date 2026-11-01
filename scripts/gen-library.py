@@ -816,11 +816,17 @@ def png_bytes(pixel, reach):
         for x in range(lo, hi):
             raw.extend(pixel(x + 0.5 - SIZE / 2, y + 0.5 - SIZE / 2))
         raw.extend(bytes((SIZE - hi) * 4))
+    return png_file(SIZE, SIZE, 6, raw)
+
+
+def png_file(width, height, colour, raw):
+    """A PNG of `raw` (each row its filter byte, then its pixels), 8 bits a channel, of PNG colour type `colour` (2 RGB,
+    6 RGBA), at zlib level 9."""
 
     def chunk(kind, data):
         return struct.pack("!I", len(data)) + kind + data + struct.pack("!I", zlib.crc32(kind + data) & 0xFFFFFFFF)
 
-    header = struct.pack("!2I5B", SIZE, SIZE, 8, 6, 0, 0, 0)
+    header = struct.pack("!2I5B", width, height, 8, colour, 0, 0, 0)
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(bytes(raw), 9)) + chunk(
         b"IEND", b"")
 
@@ -857,6 +863,448 @@ def hex_rgb(h):
 def sticker(shape, colour):
     """`shape` filled with `colour`, in a white border."""
     return png_bytes(layered(shape, [(BORDER, WHITE), (0.0, hex_rgb(colour))]), 470)
+
+
+# ----------------------------------------------------------------------------------------------- more stickers
+#
+# Drawn as layers from the bottom up: a shape, the distance from it its edge is at, and a colour painted over what is
+# under it. A shape is a signed distance (negative inside) that never changes faster than the point it is measured at
+# moves, so a square of pixels whose middle is far enough from every layer's edge is one colour throughout and is
+# painted at once; only the squares an edge crosses are worked out pixel by pixel.
+
+RED = hex_rgb("#FF3B30")
+BLUE = hex_rgb("#4C8DFF")
+GOLD = hex_rgb("#FFC21A")
+HILITE = hex_rgb("#FFD02E")
+ORANGE = hex_rgb("#FF6A1F")
+PURPLE = hex_rgb("#8B5CF6")
+GREY = hex_rgb("#9AA5B8")
+OUTLINE = 18.0  # the navy outline inside a white shape's border, in pixels
+
+
+class Shape:
+    def near(self, x, y, reach):
+        """The shape as seen from points within `reach` of (x, y): the same distances, sometimes with less to work out."""
+        return self
+
+
+class Circle(Shape):
+    def __init__(self, cx, cy, r):
+        self.cx, self.cy, self.r = cx, cy, r
+
+    def __call__(self, x, y):
+        return length(x - self.cx, y - self.cy) - self.r
+
+
+class Box(Shape):
+    """A box `2 hw` x `2 hh` around (cx, cy), its corners rounded by `r`."""
+
+    def __init__(self, cx, cy, hw, hh, r):
+        self.cx, self.cy, self.hw, self.hh, self.r = cx, cy, hw - r, hh - r, r
+
+    def __call__(self, x, y):
+        qx, qy = abs(x - self.cx) - self.hw, abs(y - self.cy) - self.hh
+        return length(max(qx, 0.0), max(qy, 0.0)) + min(max(qx, qy), 0.0) - self.r
+
+
+class Taper(Shape):
+    """A round-ended line from a (radius ra) to b (radius rb), its sides straight."""
+
+    def __init__(self, ax, ay, ra, bx, by, rb):
+        h = length(bx - ax, by - ay)
+        self.ax, self.ay, self.ux, self.uy, self.h, self.ra, self.rb = ax, ay, (bx - ax) / h, (by - ay) / h, h, ra, rb
+        self.b = (ra - rb) / h
+        self.a = math.sqrt(1.0 - self.b * self.b)
+
+    def __call__(self, x, y):
+        wx, wy = x - self.ax, y - self.ay
+        qx, qy = abs(wx * self.uy - wy * self.ux), wx * self.ux + wy * self.uy
+        k = -self.b * qx + self.a * qy
+        if k < 0.0:
+            return length(qx, qy) - self.ra
+        if k > self.a * self.h:
+            return length(qx, qy - self.h) - self.rb
+        return qx * self.a + qy * self.b - self.ra
+
+
+class Polygon(Shape):
+    def __init__(self, points, rounding=0.0):
+        self.points, self.rounding = points, rounding
+
+    def __call__(self, x, y):
+        return polygon(x, y, self.points) - self.rounding
+
+
+def nearest(segments, x, y):
+    """The distance from (x, y) to the nearest of `segments` (ax, ay, ex, ey, 1 / |e|^2)."""
+    best = 1e30
+    for ax, ay, ex, ey, inv in segments:
+        wx, wy = x - ax, y - ay
+        h = (wx * ex + wy * ey) * inv
+        h = 0.0 if h < 0.0 else 1.0 if h > 1.0 else h
+        dx, dy = wx - ex * h, wy - ey * h
+        d = dx * dx + dy * dy
+        if d < best:
+            best = d
+    return math.sqrt(best)
+
+
+class Strokes(Shape):
+    """Round-ended lines `width` px wide along polylines (lists of points; one point alone is a dot)."""
+
+    def __init__(self, lines, width, segments=None):
+        self.half = width / 2
+        if segments is None:
+            segments = []
+            for line in lines:
+                points = line if len(line) > 1 else line * 2
+                for (ax, ay), (bx, by) in zip(points, points[1:]):
+                    ex, ey = bx - ax, by - ay
+                    segments.append((ax, ay, ex, ey, 1.0 / (ex * ex + ey * ey) if ex or ey else 0.0))
+        self.segments = segments
+
+    def __call__(self, x, y):
+        return nearest(self.segments, x, y) - self.half
+
+    def near(self, x, y, reach):
+        far = [nearest([s], x, y) for s in self.segments]
+        least = min(far)
+        return Strokes(None, 2 * self.half, [s for s, d in zip(self.segments, far) if d <= least + 2 * reach + 0.01])
+
+
+class Union(Shape):
+    """Every part together; with `k`, blended into each other over k px where they meet."""
+
+    def __init__(self, *parts, k=0.0):
+        self.parts, self.k = parts, k
+
+    def __call__(self, x, y):
+        if not self.k:
+            return min(p(x, y) for p in self.parts)
+        d = None
+        for p in self.parts:  # a polynomial smooth minimum, a part at a time
+            v = p(x, y)
+            if d is None:
+                d = v
+            else:
+                h = max(self.k - abs(d - v), 0.0) / self.k
+                d = min(d, v) - h * h * self.k / 4
+        return d
+
+    def near(self, x, y, reach):
+        if self.k:  # blended, every part counts
+            return Union(*[p.near(x, y, reach) for p in self.parts], k=self.k)
+        values = [p(x, y) for p in self.parts]
+        least = min(values)
+        kept = [p.near(x, y, reach) for p, v in zip(self.parts, values) if v <= least + 2 * reach + 0.01]
+        return kept[0] if len(kept) == 1 else Union(*kept)
+
+
+class Smooth(Shape):
+    """Two shapes blended into each other over `k` px where they meet (a polynomial smooth minimum)."""
+
+    def __init__(self, a, b, k):
+        self.a, self.b, self.k = a, b, k
+
+    def __call__(self, x, y):
+        a, b = self.a(x, y), self.b(x, y)
+        h = max(self.k - abs(a - b), 0.0) / self.k
+        return min(a, b) - h * h * self.k / 4
+
+    def near(self, x, y, reach):
+        a, b = self.a(x, y), self.b(x, y)
+        if a > b + 2 * reach + self.k + 0.01:
+            return self.b.near(x, y, reach)
+        if b > a + 2 * reach + self.k + 0.01:
+            return self.a.near(x, y, reach)
+        return Smooth(self.a.near(x, y, reach), self.b.near(x, y, reach), self.k)
+
+
+class Within(Shape):
+    """Where every part overlaps (the largest of their distances)."""
+
+    def __init__(self, *parts):
+        self.parts = parts
+
+    def __call__(self, x, y):
+        return max(p(x, y) for p in self.parts)
+
+
+class Outside(Shape):
+    """Everything but `shape`."""
+
+    def __init__(self, shape):
+        self.shape = shape
+
+    def __call__(self, x, y):
+        return -self.shape(x, y)
+
+
+class Grown(Shape):
+    """`shape` grown by `by` px all round (or shrunk, for less than 0)."""
+
+    def __init__(self, shape, by):
+        self.shape, self.by = shape, by
+
+    def __call__(self, x, y):
+        return self.shape(x, y) - self.by
+
+    def near(self, x, y, reach):
+        return Grown(self.shape.near(x, y, reach), self.by)
+
+
+class Turned(Shape):
+    """`shape` turned by `degrees` (clockwise on the canvas) about the canvas's middle."""
+
+    def __init__(self, shape, degrees, cs=None):
+        self.shape = shape
+        self.c, self.s = cs if cs else (cos(degrees * PI / 180), sin(degrees * PI / 180))
+
+    def __call__(self, x, y):
+        return self.shape(self.c * x + self.s * y, -self.s * x + self.c * y)
+
+    def near(self, x, y, reach):
+        return Turned(self.shape.near(self.c * x + self.s * y, -self.s * x + self.c * y, reach), 0, (self.c, self.s))
+
+
+def painted(layers):
+    """A 1024 x 1024 RGBA PNG of `layers`, (shape, edge, colour) from the bottom up: each colour painted over what is
+    under it where the shape's distance is under the edge, antialiased over a pixel. Worked out in squares of 64 px,
+    split in four down to 2 px wherever one isn't one colour throughout."""
+    shapes = []
+    for shape, _, _ in layers:
+        if all(shape is not s for s in shapes):
+            shapes.append(shape)
+    order = [(next(k for k, s in enumerate(shapes) if s is shape), edge, colour) for shape, edge, colour in layers]
+    canvas = bytearray(SIZE * SIZE * 4)
+
+    def colour_of(d):
+        r = g = b = a = 0.0
+        for k, edge, (cr, cg, cb) in order:
+            c = cover(d[k], edge)
+            if c > 0.0:
+                r, g, b, a = cr * c + r * (1 - c), cg * c + g * (1 - c), cb * c + b * (1 - c), c + a * (1 - c)
+        if a <= 0.0:
+            return b"\0\0\0\0"
+        return bytes([int(round(clamp(v / a, 0.0, 255.0))) for v in (r, g, b)] + [int(round(a * 255))])
+
+    def square(x0, y0, size, given):
+        cx, cy = x0 + size / 2 - SIZE / 2, y0 + size / 2 - SIZE / 2
+        reach = (size - 1) / 2 * SQRT2 + 1e-6
+        local = [s.near(cx, cy, reach) for s in given]
+        d = [f(cx, cy) for f in local]
+        if all(d[k] - reach >= edge + 0.5 or d[k] + reach <= edge - 0.5 for k, edge, _ in order):
+            row = colour_of(d) * size
+            for y in range(y0, y0 + size):
+                at = (y * SIZE + x0) * 4
+                canvas[at:at + size * 4] = row
+        elif size > 2:
+            half = size // 2
+            for dy in (0, half):
+                for dx in (0, half):
+                    square(x0 + dx, y0 + dy, half, local)
+        else:
+            for y in range(y0, y0 + size):
+                for x in range(x0, x0 + size):
+                    px, py = x + 0.5 - SIZE / 2, y + 0.5 - SIZE / 2
+                    at = (y * SIZE + x) * 4
+                    canvas[at:at + 4] = colour_of([f(px, py) for f in local])
+
+    for y0 in range(0, SIZE, 64):
+        for x0 in range(0, SIZE, 64):
+            square(x0, y0, 64, shapes)
+    raw = bytearray()
+    for y in range(SIZE):
+        raw.append(0)
+        raw.extend(canvas[y * SIZE * 4:(y + 1) * SIZE * 4])
+    return png_file(SIZE, SIZE, 6, raw)
+
+
+def bordered(shape, colour):
+    """A sticker's layers: `shape` filled with `colour`, in a white border."""
+    return [(shape, BORDER, WHITE), (shape, 0.0, colour)]
+
+
+def outlined(shape, colour):
+    """A sticker's layers: `shape` filled with `colour` inside a navy outline, in a white border."""
+    return [(shape, BORDER, WHITE), (shape, 0.0, NAVY), (shape, -OUTLINE, colour)]
+
+
+def arc(cx, cy, rx, ry, start, end, step=6.0):
+    """Points along an ellipse from `start` to `end` degrees (counterclockwise, y up, when `end` is the larger)."""
+    n = max(1, int(abs(end - start) / step + 0.5))
+    return [(cx + rx * cos((start + (end - start) * k / n) * PI / 180),
+             cy + ry * sin((start + (end - start) * k / n) * PI / 180)) for k in range(n + 1)]
+
+
+# Klipolo's stroke letters: each a width and its lines, in units of the capital height (0 at the baseline, y up).
+GLYPHS = {
+    "1": (0.36, [[(0.0, 0.78), (0.3, 1.0), (0.3, 0.0)]]),
+    "2": (0.6, [arc(0.29, 0.71, 0.27, 0.29, 165, -35) + [(0.02, 0.0), (0.6, 0.0)]]),
+    "3": (0.58, [arc(0.28, 0.76, 0.25, 0.23, 155, -90) + arc(0.28, 0.27, 0.3, 0.26, 90, -155)]),
+    "4": (0.62, [[(0.46, 0.0), (0.46, 1.0), (0.0, 0.32), (0.62, 0.32)]]),
+    "5": (0.6, [[(0.54, 1.0), (0.11, 1.0), (0.07, 0.542)] + arc(0.3, 0.33, 0.3, 0.33, 140, -150)]),
+    "?": (0.58, [arc(0.29, 0.72, 0.28, 0.27, 165, -60) + [(0.29, 0.38), (0.29, 0.28)], [(0.29, 0.0)]]),
+    "!": (0.0, [[(0.0, 1.0), (0.0, 0.3)], [(0.0, 0.0)]]),
+    "B": (0.57, [[(0.3, 0.53), (0.0, 0.53), (0.0, 1.0), (0.28, 1.0)] + arc(0.28, 0.765, 0.24, 0.235, 90, -90),
+                 [(0.0, 0.53), (0.0, 0.0), (0.3, 0.0)] + arc(0.3, 0.265, 0.27, 0.265, -90, 90)]),
+    "C": (0.6, [arc(0.34, 0.5, 0.34, 0.5, 50, 310)]),
+    "E": (0.5, [[(0.5, 1.0), (0.0, 1.0), (0.0, 0.0), (0.5, 0.0)], [(0.0, 0.5), (0.42, 0.5)]]),
+    "I": (0.0, [[(0.0, 0.0), (0.0, 1.0)]]),
+    "N": (0.62, [[(0.0, 0.0), (0.0, 1.0), (0.62, 0.0), (0.62, 1.0)]]),
+    "R": (0.56, [[(0.0, 0.0), (0.0, 1.0), (0.28, 1.0)] + arc(0.28, 0.75, 0.25, 0.25, 90, -90) + [(0.0, 0.5)],
+                 [(0.24, 0.5), (0.56, 0.0)]]),
+    "S": (0.6, [arc(0.3, 0.75, 0.28, 0.25, 20, 270) + arc(0.3, 0.25, 0.3, 0.25, 90, -160)[1:]]),
+    "U": (0.6, [[(0.0, 1.0), (0.0, 0.32)] + arc(0.3, 0.32, 0.3, 0.32, 180, 360) + [(0.6, 1.0)]]),
+    "W": (0.84, [[(0.0, 1.0), (0.21, 0.0), (0.42, 0.72), (0.63, 0.0), (0.84, 1.0)]]),
+}
+
+
+def text(word, cx, cy, cap, width):
+    """`word` in Klipolo's stroke letters, `cap` px tall in lines `width` px wide, centred on (cx, cy)."""
+    gap = 0.22 + width / cap  # between letters, past their round ends
+    total = sum(GLYPHS[c][0] for c in word) + gap * (len(word) - 1)
+    x, lines = cx - total * cap / 2, []
+    for c in word:
+        w, glyph = GLYPHS[c]
+        lines += [[(x + u * cap, cy + (0.5 - v) * cap) for u, v in line] for line in glyph]
+        x += (w + gap) * cap
+    return Strokes(lines, width)
+
+
+def screen(points):
+    """Points given y up as the canvas has them, y down."""
+    return [(x, -y) for x, y in points]
+
+
+def arrow_head(tip_x, tip_y, dx, dy, length_, width_):
+    """A triangle pointing along (dx, dy) to the tip, `length_` long and `width_` across its base."""
+    n = length(dx, dy)
+    ux, uy = dx / n, dy / n
+    bx, by = tip_x - ux * length_, tip_y - uy * length_
+    return [(tip_x, tip_y), (bx + uy * width_ / 2, by - ux * width_ / 2), (bx - uy * width_ / 2, by + ux * width_ / 2)]
+
+
+def sparkle_star(cx, cy, r):
+    """A four-point sparkle: a square's middle less the four circles round its corners, its points rounded."""
+    parts = [Box(cx, cy, r, r, 0.0)] + [Outside(Circle(cx + sx * r, cy + sy * r, r)) for sx in (-1, 1) for sy in (-1, 1)]
+    return Grown(Within(*parts), 14.0)
+
+
+def curved_arrow():
+    """A thick blue arrow arcing over from the bottom left to point down at the right."""
+    line = screen(arc(-10.0, -120.0, 320.0, 320.0, 200, 32))
+    (ax, ay), (bx, by) = line[-2], line[-1]
+    ux, uy = (bx - ax) / length(bx - ax, by - ay), (by - ay) / length(bx - ax, by - ay)
+    head = Polygon(arrow_head(bx + 120.0 * ux, by + 120.0 * uy, ux, uy, 150.0, 250.0), 16.0)
+    return bordered(Union(Strokes([line], 100.0), head), BLUE)
+
+
+def pointer_arrow():
+    """A red arrow pointing down to the left, as at something in the video."""
+    shaft = Strokes([[(330.0, -330.0), (-150.0, 150.0)]], 90.0)
+    return bordered(Union(shaft, Polygon(arrow_head(-350.0, 350.0, -1.0, 1.0, 270.0, 300.0), 16.0)), RED)
+
+
+def drawn_circle():
+    """A red loop as if drawn round something with a marker: a little more than once round, not quite closing."""
+    loop = []
+    for k in range(73):
+        s = k / 72
+        a = (100 + 400 * s) * PI / 180
+        loop.append(((390 - 34 * s) * cos(a) + 10 - 22 * s, -(290 - 26 * s) * sin(a) + 14 * s))
+    return bordered(Turned(Strokes([loop], 56.0), -8.0), RED)
+
+
+def underline():
+    """A gold marker stroke, slightly curved, to underline words."""
+    swash = [(-420 + 840 * k / 24, 70 - 150 * k / 24 + 260 * (k / 24 - 0.5) ** 2) for k in range(25)]
+    return bordered(Strokes([swash], 76.0), GOLD)
+
+
+def x_mark():
+    """A red cross."""
+    return bordered(Strokes([[(-250.0, -250.0), (250.0, 250.0)], [(250.0, -250.0), (-250.0, 250.0)]], 130.0), RED)
+
+
+def number(n):
+    """A yellow badge with a navy number."""
+    return bordered(Circle(0.0, 0.0, 400.0), HILITE) + [(text(n, 0.0, 0.0, 440.0, 96.0), 0.0, NAVY)]
+
+
+def thought_bubble():
+    """A white cloud in a navy outline, with two small puffs trailing from its bottom left."""
+    puffs = [(0.0, -150.0, 190.0), (-230.0, -60.0, 160.0), (230.0, -60.0, 165.0), (-150.0, 90.0, 150.0),
+             (130.0, 100.0, 160.0), (0.0, -20.0, 200.0), (-250.0, 280.0, 58.0), (-345.0, 385.0, 36.0)]
+    return outlined(Union(*[Circle(x, y, r) for x, y, r in puffs]), WHITE)
+
+
+def shout_bubble():
+    """A gold burst of 14 spikes in a navy outline, for a shout or a wow."""
+    burst = []
+    for k in range(28):
+        a = k / 28 * 2 * PI + 0.1
+        r = (440.0 if k % 4 == 0 else 405.0) if k % 2 == 0 else 290.0
+        burst.append((r * cos(a), 0.82 * r * sin(a)))
+    return outlined(Polygon(burst, 8.0), GOLD)
+
+
+def thumbs_up():
+    """A gold fist with its thumb up, in a navy outline, from a blue cuff."""
+    hand = Smooth(Box(70.0, 140.0, 190.0, 195.0, 80.0), Taper(-60.0, -10.0, 80.0, -10.0, -360.0, 62.0), 50.0)
+    cuff = Box(-250.0, 140.0, 90.0, 225.0, 28.0)
+    fingers = Strokes([[(120.0, y), (260.0, y)] for y in (40.0, 135.0, 230.0)], 16.0)
+    return ([(Union(hand, cuff), BORDER, WHITE)] + outlined(cuff, BLUE)[1:] + outlined(hand, GOLD)[1:]
+            + [(fingers, 0.0, NAVY)])
+
+
+def fire():
+    """An orange flame of three tongues round a gold core."""
+    flame = Union(Circle(0.0, 170.0, 260.0), Taper(0.0, 170.0, 240.0, 40.0, -440.0, 10.0),
+                  Taper(-60.0, 120.0, 190.0, -270.0, -210.0, 10.0), Taper(60.0, 120.0, 190.0, 260.0, -130.0, 10.0),
+                  k=60.0)
+    core = Union(Circle(0.0, 240.0, 150.0), Taper(0.0, 240.0, 140.0, 20.0, -110.0, 6.0), k=40.0)
+    return bordered(flame, ORANGE) + [(core, 0.0, GOLD)]
+
+
+def sparkles():
+    """Three gold four-point sparkles, one large and two small."""
+    stars = Union(sparkle_star(-80.0, 70.0, 330.0), sparkle_star(250.0, -250.0, 160.0),
+                  sparkle_star(270.0, 260.0, 110.0))
+    return bordered(stars, GOLD)
+
+
+def lightbulb():
+    """A gold bulb in a navy outline on a grey screw base, with five short rays above it."""
+    rays = Strokes([[(290.0 * cos(a * PI / 180), -60.0 - 290.0 * sin(a * PI / 180)),
+                     (360.0 * cos(a * PI / 180), -60.0 - 360.0 * sin(a * PI / 180))] for a in (10, 50, 90, 130, 170)],
+                   46.0)
+    glass = Smooth(Circle(0.0, -60.0, 230.0), Taper(0.0, 20.0, 180.0, 0.0, 250.0, 120.0), 40.0)
+    base = Box(0.0, 320.0, 125.0, 80.0, 30.0)
+    threads = Strokes([[(-110.0, y), (110.0, y)] for y in (295.0, 345.0)], 14.0)
+    return (bordered(rays, GOLD) + [(Union(glass, base), BORDER, WHITE)] + outlined(base, GREY)[1:]
+            + outlined(glass, GOLD)[1:] + [(threads, 0.0, NAVY)])
+
+
+def new_tag():
+    """A red tag tilted up a little, with NEW in white."""
+    tag, word = Turned(Box(0.0, 0.0, 400.0, 170.0, 60.0), -8.0), Turned(text("NEW", 0.0, 0.0, 190.0, 44.0), -8.0)
+    return bordered(tag, RED) + [(word, 0.0, WHITE)]
+
+
+def subscribe():
+    """A red pill with SUBSCRIBE in white: plain words, no one's logo."""
+    return bordered(Box(0.0, 0.0, 460.0, 130.0, 130.0), RED) + [(text("SUBSCRIBE", 0.0, 0.0, 96.0, 24.0), 0.0, WHITE)]
+
+
+def cursor_hand():
+    """A white pointing hand in a navy outline, as a cursor over a link: the index finger up, the others folded."""
+    hand = Union(Strokes([[(-60.0, -380.0), (-60.0, 0.0)]], 110.0),
+                 Strokes([[(40.0, -90.0), (40.0, 40.0)], [(140.0, -60.0), (140.0, 60.0)]], 100.0),
+                 Strokes([[(235.0, -30.0), (235.0, 70.0)]], 95.0),
+                 Box(70.0, 170.0, 220.0, 170.0, 110.0), Taper(-140.0, 130.0, 60.0, -270.0, -10.0, 50.0), k=24.0)
+    creases = Strokes([[(90.0, -40.0), (90.0, 80.0)], [(190.0, -10.0), (190.0, 90.0)]], 14.0)
+    return outlined(hand, WHITE) + [(creases, 0.0, NAVY)]
 
 
 # ---------------------------------------------------------------------------------------------------------- the pack
@@ -906,6 +1354,32 @@ STICKERS = [
     ("check", "Check", ["check", "tick", "done", "yes", "green"], check, "#22C55E"),
 ]
 
+DRAWN = [  # drawn as layers (`painted`), after the speech bubble
+    ("arrow-curved", "Curved arrow", ["arrow", "curved", "point", "look", "blue"], curved_arrow),
+    ("arrow-pointer", "Pointer arrow", ["arrow", "pointer", "point", "look here", "red"], pointer_arrow),
+    ("circle-drawn", "Drawn circle", ["circle", "highlight", "look here", "marker", "red"], drawn_circle),
+    ("underline", "Underline", ["underline", "highlight", "marker", "emphasis", "gold"], underline),
+    ("x-mark", "X mark", ["x", "cross", "wrong", "no", "red"], x_mark),
+    ("question", "Question mark", ["question", "question mark", "why", "quiz", "purple"],
+     lambda: bordered(text("?", 0.0, 0.0, 760.0, 130.0), PURPLE)),
+    ("exclamation", "Exclamation mark", ["exclamation", "exclamation mark", "wow", "alert", "important", "red"],
+     lambda: bordered(text("!", 0.0, 0.0, 760.0, 140.0), RED)),
+    ("number-1", "Number 1", ["number", "1", "one", "step", "first"], lambda: number("1")),
+    ("number-2", "Number 2", ["number", "2", "two", "step", "second"], lambda: number("2")),
+    ("number-3", "Number 3", ["number", "3", "three", "step", "third"], lambda: number("3")),
+    ("number-4", "Number 4", ["number", "4", "four", "step", "fourth"], lambda: number("4")),
+    ("number-5", "Number 5", ["number", "5", "five", "step", "fifth"], lambda: number("5")),
+    ("thought-bubble", "Thought bubble", ["thought", "think", "idea", "cloud", "white"], thought_bubble),
+    ("shout-bubble", "Shout bubble", ["shout", "burst", "wow", "loud", "comic"], shout_bubble),
+    ("thumbs-up", "Thumbs up", ["thumbs up", "like", "yes", "good", "approve"], thumbs_up),
+    ("fire", "Fire", ["fire", "flame", "hot", "trending", "lit"], fire),
+    ("sparkles", "Sparkles", ["sparkles", "shine", "magic", "new", "gold"], sparkles),
+    ("lightbulb", "Lightbulb", ["lightbulb", "idea", "tip", "think", "smart"], lightbulb),
+    ("new-tag", "New tag", ["new", "tag", "label", "launch", "red"], new_tag),
+    ("subscribe", "Subscribe button", ["subscribe", "button", "follow", "channel", "call to action"], subscribe),
+    ("cursor-hand", "Cursor hand", ["cursor", "hand", "click", "pointer", "tap"], cursor_hand),
+]
+
 LICENSE = """Klipolo pack: sound effects, music beds and stickers made from code by scripts/gen-library.py.
 No recordings, samples or outside media were used.
 
@@ -937,6 +1411,8 @@ def build():
     speech = png_bytes(layered(bubble, [(BORDER, WHITE), (0.0, NAVY), (-18.0, WHITE)]), 470)
     item("bubble", "Speech bubble", "sticker", "stickers/bubble.png", speech,
          ["speech", "talk", "say", "quote", "white"], width=SIZE, height=SIZE)
+    for id_, name, tags, draw in DRAWN:
+        item(id_, name, "sticker", f"stickers/{id_}.png", painted(draw()), tags, width=SIZE, height=SIZE)
 
     manifest = dict(version=1, id="klipolo-pack", name="Klipolo pack", license="CC0-1.0", creator="Klipolo",
                     items=items)
