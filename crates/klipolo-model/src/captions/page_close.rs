@@ -1,4 +1,4 @@
-//! Closing a page (its keyword, its final period, the earliest it may end) and finishing a format's pages (spec
+//! Closing a page (its keyword, its final period, the earliest it may end) and finishing a format's pages:
 //! `PageBuilder`'s other half.
 
 use super::keywords::{Keyword, KEYWORD_GAP_US};
