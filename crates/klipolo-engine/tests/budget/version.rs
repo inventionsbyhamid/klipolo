@@ -1,5 +1,5 @@
-//! A verdict's meaning is pinned to `MEASURE_VERSION`. Changing the classes' table, the
-//! classes, the memory rules or the measurement fails here until this is re-pinned, so nobody changes them without
+//! A verdict's meaning is pinned to `MEASURE_VERSION`. Changing the classes' table, the classes, the memory rules or
+//! the measurement fails here until this is re-pinned, so nobody changes them without
 //! deciding whether the verdicts already stored still hold. The renderer's own cost can't be pinned this way: a change
 //! to what it draws is on the release checklist.
 
@@ -9,9 +9,9 @@ use sha2::{Digest, Sha256};
 use super::*;
 
 /// What the version below was pinned against: the SHA-256 of these sources, each named and NUL-separated.
-/// Re-pinned at version 7: the batched, fenced timing (version 6 on its branch) merged
-/// with the scene measurement (`run/covered.rs` reads a draft's facts through `DraftLayer::facts`;
-/// `Meter::scene_cpu` reports a scene's CPU time), which re-pinned without a version on its own branch.
+/// Version 7 pins batched, fenced timing (version 6) together with the scene measurement (`run/covered.rs` reads a
+/// draft's facts through `DraftLayer::facts()`; `Meter::scene_cpu` reports a scene's CPU time), which needed no version
+/// of its own.
 /// Re-pinned for the crates' rename to `klipolo-*` without a version: only names changed, so no stored verdict can.
 const PINNED: &str = "6c5c9cdc87332103b98a0bccd87169b5d7a672c81738bc67e746fac68ae86b0a";
 
@@ -75,8 +75,8 @@ fn the_measurement_version_is_pinned_to_the_table_and_the_sources() {
             "run/covered.rs",
             include_str!("../../src/make/measure/run/covered.rs"),
         ),
-        // The baselines, fenced timing in batches, the run's state, the batches' record and the
-        // worker's meter that times them.
+        // The baselines, fenced timing in batches, the run's state, the batches' record and the worker's meter that
+        // times them.
         (
             "run/baseline.rs",
             include_str!("../../src/make/measure/run/baseline.rs"),
