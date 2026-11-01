@@ -178,6 +178,7 @@ fn main() {
             engine::engine_set_editing,
             project::project_create,
             project::project_open,
+            project::project_duplicate,
             project::project_close,
             project::project_apply,
             project::project_undo,
