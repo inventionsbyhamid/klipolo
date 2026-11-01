@@ -98,9 +98,11 @@ export function Library() {
       {collapsed && (
         <div className="library-rail">
           <div className="rail-actions">
+            {/* WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable. */}
             <button
               ref={rail}
               type="button"
+              tabIndex={0}
               className="icon-btn"
               aria-label={t({ id: 'library.open', message: 'Open library' })}
               title={t({ id: 'library.open.tip', message: 'Open library (Command B)' })}
@@ -115,6 +117,7 @@ export function Library() {
             </button>
             <button
               type="button"
+              tabIndex={0}
               className="icon-btn"
               aria-label={t({ id: 'library.addFiles', message: 'Add files' })}
               title={t({ id: 'library.addFiles.tip', message: 'Add files (Command O)' })}
@@ -148,7 +151,10 @@ export function Library() {
             {viewTab('captions', captionsLabel)}
             {viewTab('looks', looksLabel)}
           </div>
+          {/* WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable. */}
           <button
+            type="button"
+            tabIndex={0}
             className="icon-btn"
             aria-label={t({ id: 'library.addFiles', message: 'Add files' })}
             title={t({ id: 'library.addFiles.tip', message: 'Add files (Command O)' })}
@@ -158,6 +164,7 @@ export function Library() {
           </button>
           <button
             type="button"
+            tabIndex={0}
             className="icon-btn"
             aria-label={t({ id: 'library.record', message: 'Record your screen' })}
             title={t({ id: 'library.record.tip', message: 'Record your screen (Shift Command R)' })}
@@ -167,6 +174,7 @@ export function Library() {
           </button>
           <button
             type="button"
+            tabIndex={0}
             className="icon-btn"
             aria-label={t({ id: 'library.collapse', message: 'Collapse library' })}
             title={t({ id: 'library.collapse.tip', message: 'Collapse library (Command B)' })}

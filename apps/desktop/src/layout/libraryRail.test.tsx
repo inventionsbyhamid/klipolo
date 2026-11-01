@@ -67,6 +67,20 @@ describe('the library folded', () => {
     expect(screen.getByRole('tab', { name: 'Library' })).toHaveFocus();
   });
 
+  it('Tab goes from Open library to Add files to the first thumbnail, as WebKit keeps them (tabindex 0)', async () => {
+    renderWithProviders(<Library />);
+    act(() => useLibraryPanel.getState().setCollapsed(true));
+    const open = screen.getByRole('button', { name: 'Open library' });
+    const add = screen.getByRole('button', { name: 'Add files' });
+    const first = within(screen.getByRole('list', { name: 'Your clips' })).getAllByRole('button')[0];
+    for (const button of [open, add, first]) expect(button).toHaveAttribute('tabindex', '0');
+    act(() => open.focus());
+    await userEvent.tab();
+    expect(add).toHaveFocus();
+    await userEvent.tab();
+    expect(first).toHaveFocus();
+  });
+
   it('folded with the keyboard inside, it keeps the keyboard on its rail', () => {
     renderWithProviders(<Library />);
     act(() => screen.getByRole('tab', { name: 'Clips' }).focus());

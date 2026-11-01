@@ -129,4 +129,29 @@ describe('Record your screen', () => {
     await userEvent.click(record);
     expect(openRecorder).toHaveBeenCalledTimes(1);
   });
+
+  it('Tab reaches the head’s buttons and the empty preview’s in order, as WebKit keeps them (tabindex 0)', async () => {
+    const { unmount } = renderWithProviders(<Library />);
+    const head = ['Add files', 'Record your screen', 'Collapse library'].map((name) =>
+      screen.getByRole('button', { name }),
+    );
+    // WebKit leaves a plain button out of Tab order unless Full Keyboard Access is on.
+    for (const button of head) expect(button).toHaveAttribute('tabindex', '0');
+    act(() => head[0].focus());
+    await userEvent.tab();
+    expect(head[1]).toHaveFocus();
+    await userEvent.tab();
+    expect(head[2]).toHaveFocus();
+    unmount();
+    const snapshot = useProject.getState().snapshot!;
+    snapshot.project.timeline.main = [];
+    renderWithProviders(<Preview />);
+    const choose = screen.getByRole('button', { name: 'Choose files' });
+    const record = screen.getByRole('button', { name: 'Record your screen' });
+    expect(choose).toHaveAttribute('tabindex', '0');
+    expect(record).toHaveAttribute('tabindex', '0');
+    act(() => choose.focus());
+    await userEvent.tab();
+    expect(record).toHaveFocus();
+  });
 });
