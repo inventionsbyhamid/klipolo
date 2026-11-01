@@ -87,7 +87,8 @@ Analyze, and type a request in the chat.
 Klipolo is also an MCP server. In Settings, under Other apps, turn on **Let
 other apps edit with Klipolo**. AI agents and other MCP apps can then edit the
 open project with the tools chat uses. Additions apply at once, as one undo
-step. Cuts always wait for your Apply in the chat panel.
+step. A sticker or title card background waits for your Use, and cuts always
+wait for your Apply in the chat panel.
 
 **Copy config** puts the setup for an MCP app on the clipboard. It starts
 Klipolo's stdio bridge, `klipolo-app --mcp`. Klipolo listens on 127.0.0.1 only,
