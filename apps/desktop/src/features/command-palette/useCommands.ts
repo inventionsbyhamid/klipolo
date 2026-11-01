@@ -14,6 +14,7 @@ import { openRecent, useOpenRecent } from '../../state/recentProjects';
 import { transitionClipId, useSelection } from '../../state/selection';
 import { useUi } from '../../state/ui';
 import { switchFormat } from '../editor/formats';
+import { useEffectCommands } from '../inspector/useEffectCommands';
 import { importFiles } from '../media/useImportMedia';
 import { deleteBlock, deleteRange, removeTransition, useTimelineCommands } from '../timeline/commands';
 import { useSourceCommands } from '../timeline/useSourceCommands';
@@ -27,7 +28,7 @@ const FORMAT_KEYS: readonly FormatKind[] = ['landscape', 'portrait', 'square'];
  * Every editor action with its current label and availability. The keyboard shortcuts, the player bar and the
  * timeline's block menus run them, so all agree; each id is stable. Values that change every frame (the playhead) are
  * read when a command runs. The timeline's are in `useTimelineCommands`, a recording clip's sounds' in
- * `useSourceCommands`, the transport's in `useTransportCommands`.
+ * `useSourceCommands`, the transport's in `useTransportCommands`, the effect stacks' in `useEffectCommands`.
  *
  * Each hook builds its entries once per language and per what they read: a play, a selection or a view change rebuilds
  * only the entries that show it.
@@ -42,6 +43,7 @@ export function useCommands(): Command[] {
   const timeline = useTimelineCommands();
   const sounds = useSourceCommands();
   const transport = useTransportCommands();
+  const effects = useEffectCommands();
   const recent = useOpenRecent();
 
   // The project menu's Open recent, as commands: the same projects (once its list is read), opened the same way.
@@ -200,8 +202,9 @@ export function useCommands(): Command[] {
             ...recentCommands,
             ...timeline,
             ...sounds,
+            ...effects,
           ]
         : [],
-    [own, transport, recentCommands, timeline, sounds],
+    [own, transport, recentCommands, timeline, sounds, effects],
   );
 }
