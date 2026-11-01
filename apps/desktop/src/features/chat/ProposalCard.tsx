@@ -53,7 +53,7 @@ function useOtherRemovals(proposal: ChatProposal): string[] {
     out.push(
       t({
         id: 'chatPanel.proposal.items',
-        message: plural(r.items.length, { one: 'Removes # overlay.', other: 'Removes # overlays.' }),
+        message: plural(r.items.length, { one: 'Removes # layer.', other: 'Removes # layers.' }),
       }),
     );
   if (r.shortened.length > 0)
@@ -61,6 +61,17 @@ function useOtherRemovals(proposal: ChatProposal): string[] {
       t({
         id: 'chatPanel.proposal.shortened',
         message: plural(r.shortened.length, { one: 'Shortens # layer.', other: 'Shortens # layers.' }),
+      }),
+    );
+  // An end card or a closing sound placed after the video moves with its end.
+  if (r.moved.length > 0)
+    out.push(
+      t({
+        id: 'chatPanel.proposal.moved',
+        message: plural(r.moved.length, {
+          one: 'Moves # layer to the video’s new end.',
+          other: 'Moves # layers to the video’s new end.',
+        }),
       }),
     );
   if (r.assets.length > 0)

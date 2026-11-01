@@ -44,4 +44,9 @@ sounds: Array<string>,
  * Formats the batch drops together with work stored for them: a layout placed by hand for that format (a
  * layer's, the captions', a camera bubble's), or any other per-format setting that doesn't survive the change.
  */
-formats: Array<FormatKind>, };
+formats: Array<FormatKind>, 
+/**
+ * Free layers placed after the video's end (an end card, a closing sound) that a cut moved with it, so they stay
+ * right after it. Not a removal: never counted, so it never makes a batch one.
+ */
+moved: Array<string>, };

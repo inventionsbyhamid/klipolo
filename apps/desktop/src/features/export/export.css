@@ -238,6 +238,47 @@
   font-size: var(--text-md);
 }
 
+/* A label beside a choice with a line under it: level with the choice, not the pair. */
+.ex-opts dt.ex-dt-top {
+  align-self: start;
+  padding-top: var(--space-4);
+}
+
+/* Quality: the segmented choice, and under it what the picked one is for. */
+.ex-quality {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.ex-quality-note {
+  margin: 0;
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+}
+
+/* "Also save captions as a file": the switch and its label, then the file type on the right. */
+.ex-captions {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.ex-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.ex-switch label {
+  cursor: default;
+}
+
 .ex-path {
   display: inline-flex;
   align-items: center;
@@ -427,6 +468,13 @@
 .ex-art .ex-frame-square {
   width: 24px;
   height: 24px;
+}
+
+/* A captions file: the text glyph in soft ink where a video shows its frame. */
+.ex-art-captions .ico {
+  width: 20px;
+  height: 20px;
+  color: var(--color-ink-soft);
 }
 
 .ex-file-text {

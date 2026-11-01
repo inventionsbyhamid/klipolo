@@ -18,6 +18,7 @@ use klipolo_analysis::proxy::{ProxyChunk, ProxyInfo};
 use klipolo_analysis::scenes::{SceneItem, SceneLog};
 use klipolo_analysis::transcript::{ROUGH_WORDS, Timing, TranscriptOut, Turn, finish};
 use klipolo_app::analysis::chat::{scene_entries, speaker_turns};
+use klipolo_app::analysis::holds::SETTLE;
 use klipolo_app::analysis::media::{EngineMedia, Media};
 use klipolo_app::analysis::{
     AnalysisDone, AnalysisEvent, AnalysisFailed, AnalysisState, AnalysisStep, AnalysisStopped,
@@ -150,7 +151,9 @@ impl Media for FakeMedia {
         _src: &Path,
         out: &Path,
         _cancel: &AtomicBool,
+        between: &mut dyn FnMut(),
     ) -> Result<AudioInfo, AudioError> {
+        between();
         self.sounds.fetch_add(1, Ordering::SeqCst);
         std::fs::write(out, wav_of(&tone(self.seconds)))?;
         Ok(AudioInfo {
@@ -1123,9 +1126,15 @@ impl Watched {
 }
 
 impl Media for Watched {
-    fn sound(&self, src: &Path, out: &Path, cancel: &AtomicBool) -> Result<AudioInfo, AudioError> {
+    fn sound(
+        &self,
+        src: &Path,
+        out: &Path,
+        cancel: &AtomicBool,
+        between: &mut dyn FnMut(),
+    ) -> Result<AudioInfo, AudioError> {
         self.note();
-        self.inner.sound(src, out, cancel)
+        self.inner.sound(src, out, cancel, between)
     }
 
     fn levels(&self, src: &Path, cancel: &AtomicBool) -> Option<Levels> {
@@ -1202,6 +1211,88 @@ async fn whoever_waits_for_analysis_hears_when_it_decodes() {
         !decoding.load(Ordering::SeqCst),
         "off once analysis is done"
     );
+}
+
+/// Waits up to 5 s for `done`.
+async fn until(done: impl Fn() -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !done() {
+        assert!(Instant::now() < deadline, "timed out");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+}
+
+/// Playback and exports come first. An export holds every decode of a clip before it starts; once it ends while the
+/// video plays, the clip's sound decodes beside playback, but its small copy waits until playback has stopped for a
+/// moment (`SETTLE`); then the clip is analysed in full.
+#[tokio::test(flavor = "multi_thread")]
+async fn analysis_decoding_makes_way_for_playback_and_exports() {
+    let server = MockServer::start().await;
+    let media = FakeMedia::whole(SECONDS);
+    let h = harness(&server, key_store(), media.clone());
+    mount_speech(&server, "/v1", &h.aligns, Duration::ZERO).await;
+    mount_scenes(
+        &server,
+        "/v1",
+        ResponseTemplate::new(200).set_body_json(spark_answer()),
+    )
+    .await;
+    nothing_else(&server).await;
+    let clip = asset("talk", AssetKind::Video, &h.clip("talk.mp4", 9), SECONDS);
+    let holds = h.state.holds();
+    holds.set_exporting(true);
+
+    let started = h.state.start(&IMPORTED, std::slice::from_ref(&clip)).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let decoded =
+        || [&media.levels, &media.sounds, &media.copies].map(|n| n.load(Ordering::SeqCst));
+    assert_eq!(decoded(), [0, 0, 0], "an export holds every decode");
+
+    holds.set_playing(true);
+    holds.set_exporting(false);
+    until(|| media.sounds.load(Ordering::SeqCst) == 1).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(
+        media.copies.load(Ordering::SeqCst),
+        0,
+        "the sound decoded beside playback; the small copy waits while the video plays"
+    );
+
+    holds.set_playing(false);
+    let stopped = Instant::now();
+    started.finished().await;
+    assert_eq!(decoded(), [1, 1, 1]);
+    assert!(stopped.elapsed() >= SETTLE, "and a moment after it stops");
+    assert!(matches!(h.state.state_of("talk"), AssetState::Done { .. }));
+    server.verify().await;
+}
+
+/// Frames late during playback hold a clip's sound too, for the rest of that playback: it decodes once playback stops.
+#[tokio::test(flavor = "multi_thread")]
+async fn frames_late_during_playback_hold_the_sound_until_it_stops() {
+    let server = MockServer::start().await;
+    let media = FakeMedia::whole(SECONDS);
+    let h = harness(&server, key_store(), media.clone());
+    mount_speech(&server, "/v1", &h.aligns, Duration::ZERO).await;
+    nothing_else(&server).await;
+    let clip = asset("voice", AssetKind::Audio, &h.clip("voice.m4a", 11), SECONDS);
+    let holds = h.state.holds();
+    holds.set_playing(true);
+    holds.frames_late();
+
+    let started = h.state.start(&IMPORTED, std::slice::from_ref(&clip)).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(
+        media.levels.load(Ordering::SeqCst) + media.sounds.load(Ordering::SeqCst),
+        0,
+        "held while playback is behind"
+    );
+
+    holds.set_playing(false);
+    started.finished().await;
+    assert_eq!(media.sounds.load(Ordering::SeqCst), 1);
+    assert_eq!(h.state.state_of("voice"), timed());
+    server.verify().await;
 }
 
 /// With an access code every call goes through Klipolo's relay: a relay that can't answer is named as Klipolo's server,

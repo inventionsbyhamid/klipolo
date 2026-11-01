@@ -10,9 +10,11 @@ import { openProposal } from '../../state/chatMessages';
 import { useProject } from '../../state/project';
 import { useExport } from '../../state/export';
 import { useRange } from '../../state/range';
+import { openRecent, useOpenRecent } from '../../state/recentProjects';
 import { transitionClipId, useSelection } from '../../state/selection';
 import { useUi } from '../../state/ui';
 import { switchFormat } from '../editor/formats';
+import { useEffectCommands } from '../inspector/useEffectCommands';
 import { importFiles } from '../media/useImportMedia';
 import { deleteBlock, deleteRange, removeTransition, useTimelineCommands } from '../timeline/commands';
 import { useSourceCommands } from '../timeline/useSourceCommands';
@@ -27,7 +29,8 @@ const FORMAT_KEYS: readonly FormatKind[] = ['landscape', 'portrait', 'square'];
  * Every editor action with its current label and availability. The keyboard shortcuts, the player bar and the
  * timeline's block menus run them, so all agree; each id is stable. Values that change every frame (the playhead) are
  * read when a command runs. The timeline's are in `useTimelineCommands`, a recording clip's sounds' in
- * `useSourceCommands`, the transport's in `useTransportCommands`, the panels' in `usePanelCommands`.
+ * `useSourceCommands`, the transport's in `useTransportCommands`, the panels' in `usePanelCommands`, the effect
+ * stacks' in `useEffectCommands`.
  *
  * Each hook builds its entries once per language and per what they read: a play, a selection or a view change rebuilds
  * only the entries that show it.
@@ -43,6 +46,27 @@ export function useCommands(): Command[] {
   const sounds = useSourceCommands();
   const transport = useTransportCommands();
   const panels = usePanelCommands();
+  const effects = useEffectCommands();
+  const recent = useOpenRecent();
+
+  // The project menu's Open recent, as commands: the same projects (once its list is read), opened the same way.
+  const recentCommands = useMemo(
+    (): Command[] =>
+      recent.map((row, i) => ({
+        id: `open-recent-${i + 1}`,
+        action: 'openProject',
+        group: 'project',
+        label: t({
+          id: 'command.openRecent',
+          message: `Open ${row.name}`,
+          comment: 'Command: open a project opened lately, by its name',
+        }),
+        keywords: searchWords(t({ id: 'command.openRecent.keywords', message: 'open recent, switch project' })),
+        enabled: true,
+        run: () => void openRecent(row.path),
+      })),
+    [t, recent],
+  );
 
   const own = useMemo(() => {
     if (!snapshot) return null;
@@ -179,10 +203,12 @@ export function useCommands(): Command[] {
             ...own.view,
             ...panels,
             ...own.projectCommands,
+            ...recentCommands,
             ...timeline,
             ...sounds,
+            ...effects,
           ]
         : [],
-    [own, transport, panels, timeline, sounds],
+    [own, transport, panels, recentCommands, timeline, sounds, effects],
   );
 }
