@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The bundled pack's checks (Python 3 stdlib only): scripts/gen-library.py run twice into temporary folders writes the
-# same bytes both times, and the same bytes as assets/library, whose manifest lists each file's SHA-256; every sound is
+# same bytes both times, and the same bytes as assets/library, whose manifest lists each file's SHA-256; every item has a
+# file, a name and 3 to 6 tags, and every file an item; every sound is
 # 48 kHz 16-bit mono and under 3 s; every music bed is 16 to 30 s and loops at a zero crossing without a click (two
 # copies back to back are as smooth at the join as anywhere else); every sticker is a 1024 x 1024 RGBA PNG with
 # transparent corners; the pack holds the 16 files listed below (8 sounds, 2 music beds, 6 stickers), CC0-1.0, and is
@@ -60,6 +61,23 @@ def _():
     for i in items:
         got = hashlib.sha256(c[i["file"]]).hexdigest()
         assert got == i["sha256"], f"{i['id']}: sha256 {got}, manifest {i['sha256']}"
+
+
+@check("every_item_has_a_file_a_name_and_tags")
+def _():
+    c = files(committed)
+    for key in ("id", "name", "file"):
+        seen = [i[key] for i in items]
+        assert len(set(seen)) == len(seen), f"listed twice: {sorted({v for v in seen if seen.count(v) > 1})}"
+    for i in items:
+        assert i["file"] in c, f"{i['id']}: no file {i['file']}"
+        assert i["name"] and i["name"] == i["name"].strip(), f"{i['id']}: name {i['name']!r}"
+        tags = i["tags"]
+        assert 3 <= len(tags) <= 6, f"{i['id']}: {len(tags)} tags"
+        assert len(set(tags)) == len(tags), f"{i['id']}: a tag twice in {tags}"
+        assert all(t and t == t.strip().lower() for t in tags), f"{i['id']}: tags {tags}"
+    unlisted = sorted(set(c) - {i["file"] for i in items} - {"manifest.json", "LICENSE.txt"})
+    assert not unlisted, f"files no item lists: {unlisted}"
 
 
 @check("manifest_lists_the_pack")
