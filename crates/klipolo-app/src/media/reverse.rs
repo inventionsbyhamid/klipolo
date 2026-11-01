@@ -134,6 +134,21 @@ fn sweep(folder: &Path) {
     }
 }
 
+/// Deletes reversed copy `path` that the page didn't use (its clip went or changed, the project changed, or the edit
+/// was refused), and says whether it did. Only a `.mov` in a `<stem> Media/Reversed` folder goes, and never one that
+/// `project` (the open one) plays.
+pub fn discard_unused(project: Option<&Project>, path: &Path) -> bool {
+    let folder = path.parent();
+    let in_reversed = folder.is_some_and(|f| f.file_name().is_some_and(|n| n == "Reversed"))
+        && folder
+            .and_then(Path::parent)
+            .and_then(Path::file_name)
+            .is_some_and(|n| n.to_string_lossy().ends_with(" Media"));
+    let movie = path.extension().is_some_and(|e| e == "mov");
+    let used = project.is_some_and(|p| p.assets.iter().any(|a| Path::new(&a.path) == path));
+    in_reversed && movie && !used && fs::remove_file(path).is_ok()
+}
+
 /// Writes clip `clip_id` of `project` (saved as `project_file`) backward, as the module says, telling `progress` 0 to 1.
 pub fn make(
     project: &Project,
@@ -329,5 +344,30 @@ mod tests {
         );
         // Nothing was written for either.
         assert!(!made_folder(&file, "Reversed").exists());
+    }
+
+    /// A copy the page didn't use (its clip went, the project changed, the edit was refused) is deleted, but only a
+    /// reversed copy, and never one the open project plays.
+    #[test]
+    fn only_an_unused_reversed_copy_is_thrown_away() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = made_folder(&dir.path().join("Trip.klipolo"), "Reversed");
+        fs::create_dir_all(&folder).unwrap();
+        let unused = folder.join("broll reversed.mov");
+        let used = folder.join("broll reversed 2.mov");
+        let elsewhere = dir.path().join("broll reversed.mov");
+        for f in [&unused, &used, &elsewhere] {
+            fs::write(f, b"x").unwrap();
+        }
+        let mut p = project("/media/broll.mp4");
+        let mut copy = p.assets[0].clone();
+        copy.id = "copy".into();
+        copy.path = used.to_string_lossy().into_owned();
+        p.assets.push(copy);
+        assert!(discard_unused(Some(&p), &unused));
+        assert!(!unused.exists());
+        assert!(!discard_unused(Some(&p), &used));
+        assert!(!discard_unused(None, &elsewhere));
+        assert!(used.exists() && elsewhere.exists());
     }
 }
