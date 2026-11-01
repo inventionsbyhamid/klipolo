@@ -5,7 +5,8 @@
 //! (`proxy`), which also refill the filmstrip from a full decode. Every cache is named by `key::stem`. Also a
 //! recording's cursor data, which Auto zooms follow (`cursor`), and where its screen changed (`activity`, after the
 //! thumbnails). For clip analysis: a small H.264 and AAC copy of part of a clip for a model to
-//! watch (`small_copy`), and every frame of a file as a small grey picture (`luma_frames`).
+//! watch (`small_copy`), and every frame of a file as a small grey picture (`luma_frames`). For a reversed clip: its
+//! footage written backward as a file of its own (`reversed`).
 
 pub mod activity;
 pub mod cursor;
@@ -16,6 +17,7 @@ pub mod keyframes;
 pub mod luma_frames;
 pub mod open;
 pub mod proxy;
+pub mod reversed;
 pub mod scan;
 pub mod small_copy;
 pub mod sprite;

@@ -1,0 +1,635 @@
+//! A stretch of a video played backward, as a file of its own (a reversed clip's footage): the picture of `range` of a
+//! source written last frame first, and its sound backward too, so the preview and every export play it forward like
+//! any file. Nothing decodes backward while it plays.
+//!
+//! - **Times:** the copy runs on the source's file clock turned around: its time `t` is the source's `range.end - t`.
+//!   Source frame `j`, on screen over `[p_j, p_j+1)`, is on screen in the copy over `[end - p_j+1, end - p_j)`, so a
+//!   variable frame rate keeps every frame's length. The frame on screen at `range.start` (it may start before it) is
+//!   the copy's last.
+//! - **Picture:** read twice. A pass over the packets alone (nothing decoded) finds every frame's time; then the range
+//!   is decoded window by window from its end, each window from the keyframe before it, at most `Reverse::buffer_bytes`
+//!   of upright NV12 pictures held at once, and written newest first. The source's size and quarter turn are kept, the
+//!   picture turned upright (`small_copy::turn_nv12`), so the copy needs no turn of its own. Encoded by the platform's
+//!   H.264 encoder (VideoToolbox) at `Reverse::video_bps`; where there is none (Linux, for now) as ProRes 422 HQ.
+//! - **Sound:** the range's sound (the engine's decode, 48 kHz, its first two channels) held whole and written last
+//!   sample first as AAC, placed by the source's `audio_lead_us` as the preview plays it. Past `MAX_SOUND_SECONDS`, or
+//!   for a source without sound, the copy has none.
+//! - **Writing:** a temporary file beside `out`, renamed into place once whole and removed on failure or stop. `cancel`
+//!   is checked between packets and frames; `progress` hears 0 to 1 as frames are written.
+
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
+
+use ffmpeg::format::Pixel;
+use ffmpeg::format::context::Output;
+use ffmpeg::format::sample::{Sample, Type as SampleType};
+use ffmpeg::format::stream::Disposition;
+use ffmpeg::software::scaling;
+use ffmpeg::{ChannelLayout, Rational};
+use klipolo_model::time::{RangeUs, Us};
+
+use super::scan::{next_packet, set_discards};
+use super::small_copy::{open_decoder, take_software, turn_nv12, write_packet};
+use crate::audio::decode;
+use crate::audio::mix::RATE;
+use crate::export::codecs::{builder, encoder_name};
+use crate::export::quality::VideoCodec;
+use crate::platform::encode::{Backend, CodecRole, candidates};
+use crate::render::probe::{MediaKind, probe_media, stream_start};
+use crate::vendor::cap::enc_ffmpeg::aac::AACEncoder;
+use crate::vendor::cap::enc_ffmpeg::h264::H264Encoder;
+use crate::vendor::cap::media_info::{AudioInfo, VideoInfo};
+
+/// The longest range whose sound is reversed too: its 48 kHz stereo samples are held whole (about 230 MB for this).
+pub const MAX_SOUND_SECONDS: i64 = 600;
+/// Seconds between keyframes in the copy, so it scrubs well.
+const GOP_SECONDS: f64 = 1.0;
+/// Sound handed to the encoder at a time.
+const BLOCK: usize = 4_096;
+
+/// What to reverse and how.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Reverse {
+    /// The part of the source, on its file clock.
+    pub range: RangeUs,
+    /// The picture's average bitrate (bits a second; ProRes ignores it).
+    pub video_bps: u32,
+    /// The sound's bitrate; 0 leaves the sound out.
+    pub audio_bps: u32,
+    /// The software decoder's frame threads at most; 0 lets FFmpeg choose.
+    pub threads: usize,
+    /// The decoded pictures held at once, at most (one window's).
+    pub buffer_bytes: usize,
+}
+
+/// What a copy holds.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ReversedInfo {
+    /// Upright, as the source is shown.
+    pub width: u32,
+    pub height: u32,
+    /// The source's average frame rate.
+    pub fps: f64,
+    pub frames: u64,
+    /// The copy's length: the range's, from its first frame on.
+    pub duration_us: Us,
+    pub has_audio: bool,
+    pub bytes: u64,
+}
+
+/// Why no copy was made. The messages name no file.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ReverseError {
+    #[error("the file has no video")]
+    NoVideo,
+    #[error("this computer has no video encoder for it")]
+    NoEncoder,
+    #[error("stopped")]
+    Stopped,
+    #[error("{0}")]
+    Failed(String),
+}
+
+fn failed(what: &str, e: impl std::fmt::Display) -> ReverseError {
+    ReverseError::Failed(format!("{what}: {e}"))
+}
+
+/// Writes `spec.range` of `src` backward to `out` (a QuickTime movie), as the module says. Blocking.
+pub fn write(
+    src: &Path,
+    out: &Path,
+    spec: &Reverse,
+    cancel: &AtomicBool,
+    progress: &mut dyn FnMut(f64),
+) -> Result<ReversedInfo, ReverseError> {
+    let _ = ffmpeg::init();
+    if spec.range.end <= spec.range.start || spec.range.start < 0 {
+        return Err(ReverseError::Failed("an empty range".into()));
+    }
+    let tmp = partial_path(out);
+    let written = write_to(src, &tmp, spec, cancel, progress).and_then(|info| {
+        std::fs::rename(&tmp, out).map_err(|e| failed("rename", e))?;
+        Ok(info)
+    });
+    if written.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    written
+}
+
+/// `<out>.partial.mov`: the same container, so the muxer is the same.
+fn partial_path(out: &Path) -> PathBuf {
+    let mut name = out.file_name().unwrap_or_default().to_os_string();
+    name.push(".partial.mov");
+    out.with_file_name(name)
+}
+
+/// The codec the copy is written in: H.264 where this computer has an encoder for it, else ProRes.
+fn codec() -> Option<VideoCodec> {
+    [VideoCodec::H264High, VideoCodec::ProRes422Hq]
+        .into_iter()
+        .find(|&c| encoder_name(c).is_some())
+}
+
+/// The source's picture frames over the range, by time on the file clock: `starts[j]` is frame `j`'s, ascending, the
+/// first the frame on screen at the range's start; `end` is where the last stops showing (the range's end, or the
+/// file's last frame's end before it).
+struct Frames {
+    starts: Vec<Us>,
+    end: Us,
+}
+
+impl Frames {
+    /// Where frame `j` stops showing.
+    fn end_of(&self, j: usize) -> Us {
+        self.starts.get(j + 1).copied().unwrap_or(self.end)
+    }
+}
+
+/// The video stream's index, time base and start, and its decoder's parameters.
+struct Stream {
+    index: usize,
+    tb: Rational,
+    start: i64,
+    params: ffmpeg::codec::Parameters,
+}
+
+fn video_stream(input: &ffmpeg::format::context::Input) -> Result<Stream, ReverseError> {
+    let stream = input
+        .streams()
+        .best(ffmpeg::media::Type::Video)
+        .filter(|s| !s.disposition().contains(Disposition::ATTACHED_PIC))
+        .ok_or(ReverseError::NoVideo)?;
+    Ok(Stream {
+        index: stream.index(),
+        tb: stream.time_base(),
+        start: stream_start(&stream),
+        params: stream.parameters(),
+    })
+}
+
+/// A timestamp of the stream as µs on the file clock.
+fn us_of(stream: &Stream, ts: i64) -> Us {
+    ((ts - stream.start) as f64 * f64::from(stream.tb) * 1e6).round() as Us
+}
+
+/// The first pass: every picture packet's time, nothing decoded, kept for the range (`Frames`).
+fn frame_times(
+    src: &Path,
+    range: RangeUs,
+    fps: f64,
+    cancel: &AtomicBool,
+) -> Result<Frames, ReverseError> {
+    let mut input = super::open::input(src).map_err(|e| failed("open", e))?;
+    let stream = video_stream(&input)?;
+    set_discards(&mut input, Some(stream.index), None);
+    let mut times = Vec::new();
+    while let Some((index, packet)) = next_packet(&mut input).map_err(|e| failed("read", e))? {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(ReverseError::Stopped);
+        }
+        if index != stream.index {
+            continue;
+        }
+        if let Some(pts) = packet.pts() {
+            times.push(us_of(&stream, pts));
+        }
+    }
+    times.sort_unstable();
+    times.dedup();
+    // The frame on screen at the range's start, then every one that starts inside it.
+    let first = times
+        .partition_point(|&t| t <= range.start)
+        .saturating_sub(1);
+    let starts: Vec<Us> = times[first..]
+        .iter()
+        .copied()
+        .take_while(|&t| t < range.end)
+        .collect();
+    let Some(&last) = starts.last() else {
+        return Err(ReverseError::Failed("no picture in this range".into()));
+    };
+    let frame_us = if fps > 0.0 {
+        (1e6 / fps).round() as Us
+    } else {
+        33_333
+    };
+    // Past the file's last frame nothing shows: the copy ends there.
+    let end = match times.get(first + starts.len()) {
+        Some(_) => range.end,
+        None => range.end.min(last + frame_us),
+    };
+    Ok(Frames { starts, end })
+}
+
+/// Everything a run holds while it writes.
+struct Writer {
+    output: Output,
+    video: H264Encoder,
+    video_tb: Rational,
+    encoder_tb: Rational,
+    /// One frame at the source's average rate, in the encoder's time base: a packet's length when the encoder gives
+    /// none (`put`).
+    frame_ticks: i64,
+    /// The reversed sound, interleaved (2 channels), and how many frames of it are written.
+    sound: Option<(AACEncoder, Vec<f32>, usize)>,
+    frames: u64,
+}
+
+/// One picture packet into the movie (`small_copy::write_packet`), `ticks` long when the encoder said nothing: the
+/// QuickTime muxer's edit list ends where the last packet does, so a last packet of no length would never be shown.
+fn put(
+    packet: &mut ffmpeg::Packet,
+    output: &mut Output,
+    (from, to): (Rational, Rational),
+    ticks: i64,
+) -> Result<(), ffmpeg::Error> {
+    if packet.duration() <= 0 {
+        packet.set_duration(ticks);
+    }
+    write_packet(packet, output, from, to)
+}
+
+fn write_to(
+    src: &Path,
+    tmp: &Path,
+    spec: &Reverse,
+    cancel: &AtomicBool,
+    progress: &mut dyn FnMut(f64),
+) -> Result<ReversedInfo, ReverseError> {
+    let probe = probe_media(src).map_err(|e| failed("probe", e))?;
+    if probe.kind != MediaKind::Video {
+        return Err(ReverseError::NoVideo);
+    }
+    let codec = codec().ok_or(ReverseError::NoEncoder)?;
+    let even = |x: u32| (x / 2 * 2).max(2);
+    let (width, height) = (even(probe.width), even(probe.height));
+    let rotation = probe.rotation % 360;
+    let stored = if rotation % 180 == 90 {
+        (height, width)
+    } else {
+        (width, height)
+    };
+    let fps = if probe.fps > 0.0 { probe.fps } else { 30.0 };
+    let frames = frame_times(src, spec.range, fps, cancel)?;
+    let (from, end) = (frames.starts[0].max(spec.range.start), frames.end);
+
+    let mut output = ffmpeg::format::output_as(tmp, "mov").map_err(|e| failed("create", e))?;
+    let info = VideoInfo {
+        pixel_format: Pixel::NV12,
+        width,
+        height,
+        time_base: Rational(1, 1_000_000),
+        frame_rate: Rational::from(fps),
+    };
+    let hardware = candidates(CodecRole::H264)
+        .first()
+        .is_some_and(|c| c.backend == Backend::VideoToolbox && codec == VideoCodec::H264High);
+    let build = |software: bool, output: &mut Output| {
+        let mut b = builder(info, codec)
+            .ok_or(ReverseError::NoEncoder)?
+            .with_gop(((fps * GOP_SECONDS).round() as u32).max(1))
+            .with_software_only(software);
+        if codec == VideoCodec::H264High {
+            b = b.with_bitrate(spec.video_bps);
+        }
+        b.build(output).map_err(|e| failed("encoder", e))
+    };
+    let video = match build(false, &mut output) {
+        Ok(encoder) => encoder,
+        // A Mac without a media engine for this size: VideoToolbox's software encoder.
+        Err(_) if hardware => build(true, &mut output)?,
+        Err(e) => return Err(e),
+    };
+    let sound = reversed_sound(src, &probe, spec, (from, end), cancel)?;
+    let sound = match sound {
+        Some(samples) => {
+            let info = AudioInfo::new_raw(Sample::F32(SampleType::Packed), RATE, 2);
+            let encoder = AACEncoder::init(info, spec.audio_bps as usize, &mut output)
+                .map_err(|e| failed("sound encoder", e))?;
+            Some((encoder, samples, 0))
+        }
+        None => None,
+    };
+    output.write_header().map_err(|e| failed("header", e))?;
+    let video_tb = output
+        .stream(0)
+        .map(|s| s.time_base())
+        .unwrap_or(Rational(1, 90_000));
+    let encoder_tb = video.time_base();
+    let mut writer = Writer {
+        output,
+        video,
+        video_tb,
+        encoder_tb,
+        frame_ticks: ((f64::from(encoder_tb.invert()) / fps).round() as i64).max(1),
+        sound,
+        frames: 0,
+    };
+    writer.pictures(src, &frames, stored, rotation, spec, cancel, progress)?;
+    writer.finish(end - from)?;
+    let bytes = std::fs::metadata(tmp).map_err(|e| failed("size", e))?.len();
+    Ok(ReversedInfo {
+        width,
+        height,
+        fps,
+        frames: writer.frames,
+        duration_us: end - from,
+        has_audio: writer.sound.is_some(),
+        bytes,
+    })
+}
+
+/// The sound of `[from, end)` on the file clock (48 kHz, two channels, interleaved), last frame first: what the copy
+/// plays from its 0. None without sound, with `audio_bps` 0, or past `MAX_SOUND_SECONDS`.
+fn reversed_sound(
+    src: &Path,
+    probe: &crate::render::probe::MediaInfo,
+    spec: &Reverse,
+    (from, end): (Us, Us),
+    cancel: &AtomicBool,
+) -> Result<Option<Vec<f32>>, ReverseError> {
+    if !probe.has_audio || spec.audio_bps == 0 || end - from > MAX_SOUND_SECONDS * 1_000_000 {
+        return Ok(None);
+    }
+    let Ok(sound) = decode::probe(src) else {
+        return Ok(None);
+    };
+    let channels = usize::from(sound.channels.max(1));
+    let frame_of = |us: Us| (i128::from(us) * i128::from(RATE) / 1_000_000) as i64;
+    // Sound time = file time − lead: where the range's sound is in the sound's own frames.
+    let (first, until) = (
+        frame_of(from - probe.audio_lead_us),
+        frame_of(end - probe.audio_lead_us),
+    );
+    let total = (until - first).max(0) as usize;
+    let mut out = vec![0.0f32; total * 2];
+    if until > 0 {
+        let start = first.max(0) as u64;
+        let mut emit = |at: u64, samples: &[f32]| -> Result<bool, String> {
+            if cancel.load(Ordering::Relaxed) {
+                return Err("stopped".into());
+            }
+            for (k, frame) in samples.chunks_exact(channels).enumerate() {
+                let i = at as i64 + k as i64 - first;
+                if i < 0 {
+                    continue;
+                }
+                if i as usize >= total {
+                    return Ok(false);
+                }
+                let (l, r) = (frame[0], frame[channels.min(2) - 1]);
+                out[i as usize * 2] = l;
+                out[i as usize * 2 + 1] = r;
+            }
+            Ok(true)
+        };
+        let decoded = match decode::decode(src, start, Some(until as u64), &mut emit) {
+            Err(decode::DecodeError::CantSeek) => {
+                decode::decode(src, 0, Some(until as u64), &mut emit)
+            }
+            other => other,
+        };
+        if cancel.load(Ordering::Relaxed) {
+            return Err(ReverseError::Stopped);
+        }
+        if let Err(e) = decoded {
+            tracing::warn!(?e, "reversed copy: its sound couldn't be read; it has none");
+            return Ok(None);
+        }
+    }
+    // Last frame first: reverse the frames, keeping each frame's two channels in order.
+    let mut frames: Vec<[f32; 2]> = out.chunks_exact(2).map(|f| [f[0], f[1]]).collect();
+    frames.reverse();
+    Ok(Some(frames.into_iter().flatten().collect()))
+}
+
+impl Writer {
+    /// Decodes the range window by window from its end and writes each window's frames newest first.
+    #[allow(clippy::too_many_arguments)]
+    fn pictures(
+        &mut self,
+        src: &Path,
+        frames: &Frames,
+        stored: (u32, u32),
+        rotation: u16,
+        spec: &Reverse,
+        cancel: &AtomicBool,
+        progress: &mut dyn FnMut(f64),
+    ) -> Result<(), ReverseError> {
+        let mut input = super::open::input(src).map_err(|e| failed("open", e))?;
+        let stream = video_stream(&input)?;
+        set_discards(&mut input, Some(stream.index), None);
+        let (mut decoder, _) = open_decoder(&stream.params, stream.tb, false, spec.threads)
+            .map_err(|e| failed("decoder", e))?;
+        let (w, h) = stored;
+        let frame_bytes = (w as usize * h as usize * 3 / 2).max(1);
+        let per_window = (spec.buffer_bytes / frame_bytes).max(1);
+        let count = frames.starts.len();
+        let mut scaler: Option<(scaling::Context, (Pixel, u32, u32))> = None;
+        let mut hi = count;
+        while hi > 0 {
+            let lo = hi.saturating_sub(per_window);
+            let wanted = &frames.starts[lo..hi];
+            let window = decode_window(
+                &mut input,
+                &mut decoder,
+                &stream,
+                wanted,
+                (stored, rotation),
+                &mut scaler,
+                cancel,
+            )?;
+            for (k, picture) in window.into_iter().enumerate().rev() {
+                if cancel.load(Ordering::Relaxed) {
+                    return Err(ReverseError::Stopped);
+                }
+                let j = lo + k;
+                let at = frames.end - frames.end_of(j);
+                self.frame(picture, at)?;
+                progress(self.frames as f64 / count as f64);
+            }
+            hi = lo;
+        }
+        Ok(())
+    }
+
+    /// Encodes `picture` at `at` (µs from the copy's 0), the sound first, up to its time.
+    fn frame(&mut self, mut picture: ffmpeg::frame::Video, at: Us) -> Result<(), ReverseError> {
+        self.sound_until(at)?;
+        let pts = (at as f64 * f64::from(self.encoder_tb.invert()) / 1e6).round() as i64;
+        let (output, video_tb, encoder_tb) = (&mut self.output, self.video_tb, self.encoder_tb);
+        let ticks = self.frame_ticks;
+        self.video
+            .encode_to(&mut picture, pts, false, &mut |packet| {
+                put(packet, output, (encoder_tb, video_tb), ticks)
+            })
+            .map_err(|e| failed("encode", e))?;
+        self.frames += 1;
+        Ok(())
+    }
+
+    /// Encodes the sound up to `at` (µs from the copy's 0).
+    fn sound_until(&mut self, at: Us) -> Result<(), ReverseError> {
+        let Some((encoder, samples, written)) = &mut self.sound else {
+            return Ok(());
+        };
+        let want =
+            ((at.max(0) as u64 * u64::from(RATE) / 1_000_000) as usize).min(samples.len() / 2);
+        while *written < want {
+            let n = (want - *written).min(BLOCK);
+            let mut frame = ffmpeg::frame::Audio::new(
+                Sample::F32(SampleType::Packed),
+                n,
+                ChannelLayout::STEREO,
+            );
+            frame.set_rate(RATE);
+            frame.set_pts(Some(*written as i64));
+            let block = &samples[*written * 2..(*written + n) * 2];
+            frame.data_mut(0)[..n * 8].copy_from_slice(bytemuck::cast_slice(block));
+            encoder
+                .send_frame(frame, Duration::MAX, &mut self.output)
+                .map_err(|e| failed("encode sound", e))?;
+            *written += n;
+        }
+        Ok(())
+    }
+
+    /// The rest of the sound (`length` µs in all), both encoders' last packets and the movie's index.
+    fn finish(&mut self, length: Us) -> Result<(), ReverseError> {
+        self.sound_until(length)?;
+        let (output, video_tb, encoder_tb) = (&mut self.output, self.video_tb, self.encoder_tb);
+        let ticks = self.frame_ticks;
+        self.video
+            .flush_to(&mut |packet| put(packet, output, (encoder_tb, video_tb), ticks))
+            .map_err(|e| failed("finish picture", e))?;
+        if let Some((encoder, _, _)) = &mut self.sound {
+            encoder
+                .flush(&mut self.output)
+                .map_err(|e| failed("finish sound", e))?;
+        }
+        self.output
+            .write_trailer()
+            .map_err(|e| failed("finish file", e))
+    }
+}
+
+/// The frames starting at `wanted` (ascending, on the file clock), decoded from the keyframe before the first and made
+/// upright NV12 of the shown size, in order. A frame the decoder never gives (a damaged stretch) takes the one before
+/// it, or the next, so the copy keeps its length.
+fn decode_window(
+    input: &mut ffmpeg::format::context::Input,
+    decoder: &mut ffmpeg::decoder::Video,
+    stream: &Stream,
+    wanted: &[Us],
+    ((w, h), rotation): ((u32, u32), u16),
+    scaler: &mut Option<(scaling::Context, (Pixel, u32, u32))>,
+    cancel: &AtomicBool,
+) -> Result<Vec<ffmpeg::frame::Video>, ReverseError> {
+    let (first, last) = (wanted[0], wanted[wanted.len() - 1]);
+    // In AV_TIME_BASE (µs), as seeks are: the window's start on the container's clock; a keyframe at or before it.
+    let ts = first + (stream.start as f64 * f64::from(stream.tb) * 1e6).round() as i64;
+    if input.seek(ts, ..ts).is_err() {
+        // It can't seek there: from the file's start.
+        input.seek(0, ..0).map_err(|e| failed("seek", e))?;
+    }
+    decoder.flush();
+    let mut got: Vec<Option<ffmpeg::frame::Video>> = (0..wanted.len()).map(|_| None).collect();
+    let mut frame = ffmpeg::frame::Video::empty();
+    let mut flushed = false;
+    'read: loop {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(ReverseError::Stopped);
+        }
+        if !flushed {
+            match next_packet(input).map_err(|e| failed("read", e))? {
+                Some((index, packet)) if index == stream.index => {
+                    // A packet the decoder refuses (damaged) is passed over.
+                    let _ = decoder.send_packet(&packet);
+                }
+                Some(_) => continue,
+                None => {
+                    let _ = decoder.send_eof();
+                    flushed = true;
+                }
+            }
+        }
+        loop {
+            match decoder.receive_frame(&mut frame) {
+                Ok(()) => {}
+                Err(ffmpeg::Error::Other { errno }) if errno == ffmpeg::error::EAGAIN => {
+                    if flushed {
+                        break 'read;
+                    }
+                    break;
+                }
+                Err(_) if flushed => break 'read,
+                Err(ffmpeg::Error::Eof) => break 'read,
+                Err(e) => return Err(failed("decode", e)),
+            }
+            let Some(pts) = frame.timestamp().or_else(|| frame.pts()) else {
+                continue;
+            };
+            let at = us_of(stream, pts);
+            if at > last {
+                break 'read;
+            }
+            if let Ok(k) = wanted.binary_search(&at) {
+                let software = take_software(&mut frame);
+                got[k] = Some(upright(&software, (w, h), rotation, scaler)?);
+            }
+        }
+    }
+    // Damaged stretches: the frame before, else the next one decoded.
+    let mut out = Vec::with_capacity(got.len());
+    let mut before: Option<usize> = None;
+    for k in 0..got.len() {
+        if got[k].is_some() {
+            before = Some(k);
+        }
+        let take = before.or_else(|| (k..got.len()).find(|&n| got[n].is_some()));
+        let Some(n) = take else {
+            return Err(ReverseError::Failed(
+                "no picture could be decoded here".into(),
+            ));
+        };
+        out.push(got[n].as_ref().expect("found above").clone());
+    }
+    Ok(out)
+}
+
+/// `frame` as NV12 of its stored size `(w, h)` (the shown size turned back), then turned `rotation` degrees upright.
+fn upright(
+    frame: &ffmpeg::frame::Video,
+    (w, h): (u32, u32),
+    rotation: u16,
+    scaler: &mut Option<(scaling::Context, (Pixel, u32, u32))>,
+) -> Result<ffmpeg::frame::Video, ReverseError> {
+    let key = (frame.format(), frame.width(), frame.height());
+    if scaler.as_ref().is_none_or(|(_, made)| *made != key) {
+        let context = scaling::Context::get(
+            key.0,
+            key.1,
+            key.2,
+            Pixel::NV12,
+            w,
+            h,
+            scaling::Flags::BILINEAR,
+        )
+        .map_err(|e| failed("scaler", e))?;
+        *scaler = Some((context, key));
+    }
+    let (context, _) = scaler.as_mut().expect("made above");
+    let mut stored = ffmpeg::frame::Video::new(Pixel::NV12, w, h);
+    context
+        .run(frame, &mut stored)
+        .map_err(|e| failed("scale", e))?;
+    if rotation == 0 {
+        return Ok(stored);
+    }
+    let (tw, th) = if rotation % 180 == 90 { (h, w) } else { (w, h) };
+    let mut turned = ffmpeg::frame::Video::new(Pixel::NV12, tw, th);
+    turn_nv12(&stored, &mut turned, rotation);
+    Ok(turned)
+}
