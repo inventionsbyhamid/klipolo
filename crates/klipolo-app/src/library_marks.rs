@@ -1,8 +1,10 @@
 //! What the person marked in the library, for every project: the items they starred (favorites) and when they last
 //! added each to a timeline from the library (recently used). Kept in `library.json` in the app's config folder,
 //! `{ "<key>": { "favorite": true, "usedMs": 1761955200000 } }`, each item by what names it in every project:
-//! `pack:<item id>` for Klipolo's pack, `file:<path>` for a person's own file. A file that is missing, unreadable or not
-//! what Klipolo writes reads as no marks. A favorite stays until its star is taken off, even when its file has moved.
+//! `pack:<item id>` for Klipolo's pack, `file:<path>` for a person's own file. A file that is missing or not marks as
+//! Klipolo writes them reads as no marks, and the next change starts it over; one that can't be read, or is larger than
+//! Klipolo writes, is shown as no marks but never written over: a change says why it can't be made. A favorite stays
+//! until its star is taken off, even when its file has moved.
 
 use std::collections::BTreeMap;
 use std::io;
@@ -40,14 +42,32 @@ const MOST_BYTES: u64 = 8 * 1024 * 1024;
 
 /// The marks saved in `dir`; none when there are none Klipolo can read.
 pub fn load(dir: &Path) -> Marks {
-    let read = std::fs::File::open(dir.join(FILE)).and_then(|file| {
-        let mut bytes = Vec::new();
-        io::Read::read_to_end(&mut io::Read::take(file, MOST_BYTES), &mut bytes)?;
-        Ok(bytes)
-    });
-    read.ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        .unwrap_or_default()
+    read(dir).unwrap_or_else(|error| {
+        tracing::warn!(%error, "the library's marks couldn't be read");
+        Marks::new()
+    })
+}
+
+/// The marks saved in `dir`: none when there is no file, or when it isn't marks as Klipolo writes them (a change then
+/// starts it over). An error when the file can't be read or is larger than Klipolo writes, so no change writes over it.
+fn read(dir: &Path) -> io::Result<Marks> {
+    let file = match std::fs::File::open(dir.join(FILE)) {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Marks::new()),
+        Err(error) => return Err(error),
+    };
+    let mut bytes = Vec::new();
+    io::Read::read_to_end(&mut io::Read::take(file, MOST_BYTES + 1), &mut bytes)?;
+    if bytes.len() as u64 > MOST_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "the library's marks are larger than Klipolo writes",
+        ));
+    }
+    Ok(serde_json::from_slice(&bytes).unwrap_or_else(|error| {
+        tracing::warn!(%error, "the library's marks don't read as marks; they start over");
+        Marks::new()
+    }))
 }
 
 /// Stars item `key` (`on`) or takes its star off, saved in `dir`; the marks as they are then.
@@ -68,8 +88,9 @@ fn is_key(key: &str) -> bool {
             .any(|kind| key.strip_prefix(kind).is_some_and(|rest| !rest.is_empty()))
 }
 
-/// Item `key`'s mark changed by `f` and saved in `dir` (made when needed), whole or not at all. A mark left with no star
-/// and no use goes; past `MOST_MARKS`, the oldest uses that aren't favorites go too.
+/// Item `key`'s mark changed by `f` and saved in `dir` (made when needed), whole or not at all; nothing when the marks
+/// there can't be read (`read`). A mark left with no star and no use goes; past `MOST_MARKS`, the oldest uses that
+/// aren't favorites go too.
 fn change(dir: &Path, key: &str, f: impl FnOnce(&mut Mark)) -> io::Result<Marks> {
     if !is_key(key) {
         return Err(io::Error::new(
@@ -77,7 +98,7 @@ fn change(dir: &Path, key: &str, f: impl FnOnce(&mut Mark)) -> io::Result<Marks>
             "only a pack item or a file can be marked",
         ));
     }
-    let mut marks = load(dir);
+    let mut marks = read(dir)?;
     let mark = marks.entry(key.to_owned()).or_default();
     f(mark);
     if *mark == Mark::default() {
@@ -181,6 +202,33 @@ mod tests {
         std::fs::write(dir.path().join(FILE), b"not json").unwrap();
         let marks = set_favorite(dir.path(), "pack:pop", true).unwrap();
         assert_eq!(marks, Marks::from([("pack:pop".into(), on(true, 0))]));
+    }
+
+    /// A file Klipolo can't read, or one larger than it writes, is left as it is: a change says so and writes nothing,
+    /// so no star in it is lost.
+    #[cfg(unix)]
+    #[test]
+    fn a_file_that_cant_be_read_is_never_written_over() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(FILE);
+        // Larger than Klipolo writes: a star, then more than `MOST_BYTES` of spaces before the end.
+        let mut big = br#"{"pack:pop": {"favorite": true}"#.to_vec();
+        big.resize(big.len() + MOST_BYTES as usize, b' ');
+        big.push(b'}');
+        std::fs::write(&path, &big).unwrap();
+        assert!(set_favorite(dir.path(), "pack:ding", true).is_err());
+        assert!(mark_used(dir.path(), "pack:ding", 1).is_err());
+        assert!(std::fs::read(&path).unwrap() == big);
+        // Not allowed to read it (as anyone but root).
+        std::fs::write(&path, br#"{"pack:pop": {"favorite": true}}"#).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).unwrap();
+        if std::fs::read(&path).is_err() {
+            assert!(set_favorite(dir.path(), "pack:ding", true).is_err());
+            assert!(load(dir.path()).is_empty());
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+            assert_eq!(load(dir.path())["pack:pop"], on(true, 0));
+        }
     }
 
     /// Past `MOST_MARKS`, the items used longest ago that aren't favorites are let go; favorites stay.
