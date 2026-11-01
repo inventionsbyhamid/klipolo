@@ -1488,7 +1488,7 @@
   padding: 1px;
   border-radius: var(--radius-xs);
   background: var(--color-paper);
-  color: var(--color-navy);
+  color: var(--color-on-paper);
   pointer-events: none;
 }
 
@@ -2136,7 +2136,7 @@
   padding: 0 var(--space-2);
   border-radius: var(--radius-xs);
   background: var(--color-paper);
-  color: var(--color-navy);
+  color: var(--color-on-paper);
   font-size: var(--text-2xs);
   font-weight: var(--weight-strong);
   line-height: 1;
