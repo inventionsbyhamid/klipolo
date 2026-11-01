@@ -943,14 +943,14 @@
                   "type": "number"
                 },
                 "ease": {
-                  "description": "Into it.",
+                  "description": "linear, in, out, inOut, spring, spring 0.4 (bounce to 0.9), cubic x1 y1 x2 y2.",
                   "type": [
                     "string",
                     "null"
                   ]
                 },
                 "property": {
-                  "description": "What moves.",
+                  "description": "x, y: frame shares; rotation: degrees.",
                   "enum": [
                     "x",
                     "y",
@@ -983,7 +983,7 @@
             "type": "string"
           },
           "presets": {
-            "description": "enter, exit or loop and a preset; a semicolon between.",
+            "description": "Such as \"enter slide left 0.5s spring; exit fade; loop float 1.5 2s\".",
             "type": [
               "string",
               "null"
@@ -1003,7 +1003,7 @@
       "annotations": {
         "readOnlyHint": false
       },
-      "description": "Words come in by letter, word or line, each from the values set.",
+      "description": "Words come in by letter, word or line. Keys: by (letter, word, line); where each unit starts: y (px below), scale, opacity, rotation, blur (px); sec, stagger (s between units), ease, order (start, end, center, random), exit (true: they leave the same way).",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1050,7 +1050,7 @@
       "annotations": {
         "readOnlyHint": false
       },
-      "description": "Set a layer's or clip's card fields by key. Unset keys keep.",
+      "description": "A layer's or clip's card fields. Keys: box (\"x y w h\", frame shares from the top left), rotation, opacity, corners (0 to 0.5), blend (normal, multiply, screen, add, overlay), order (forward, back); video layers: crop (\"l t r b\" or none), fill; clips and music: fadeIn, fadeOut (s); music: duck.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1097,12 +1097,59 @@
       "annotations": {
         "readOnlyHint": false
       },
-      "description": "Add, change, move or remove one effect on a clip or layer.",
+      "description": "Style words on screen. Keys: look (clean, boldOutline, highlight, box, pop) first, then font, size (px at 1080p), color, highlight and outline (#hex or none), outlineWidth (thin, medium, thick), shadow, align, bold, italic.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "layer": {
+            "description": "last, or a ref.",
+            "type": "string"
+          },
+          "set": {
+            "description": "Keys to set.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "description": "A key.",
+                  "type": "string"
+                },
+                "value": {
+                  "description": "Its value.",
+                  "type": [
+                    "number",
+                    "string",
+                    "boolean"
+                  ]
+                }
+              },
+              "required": [
+                "key",
+                "value"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "layer",
+          "set"
+        ],
+        "type": "object"
+      },
+      "name": "styleText"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Add, change, move or remove one effect on a clip or layer. Keys: its settings, at (its place from 0), remove (true).",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
           "name": {
-            "description": "An effect or look.",
+            "description": "An effect, or a clip's look.",
             "type": "string"
           },
           "set": {
