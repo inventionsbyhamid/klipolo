@@ -73,6 +73,8 @@ ffmpeg = { package = "ffmpeg-next", version = "=9.0.0", default-features = false
 libc = "0.2"
 # The recorder's tests: the fake backend (no device, no prompt) beside the real one the app builds.
 klipolo-capture = { path = "../klipolo-capture", features = ["real-capture", "synthetic"] }
+# The Google Fonts downloads' tests: a local server stands in for Google's hosts, so nothing reaches Google.
+klipolo-fonts = { path = "../klipolo-fonts", features = ["test-hosts"] }
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "test-util"] }
 # Meta and the relay, mocked for the credentials tests.
