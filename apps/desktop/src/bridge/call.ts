@@ -37,6 +37,7 @@ const APP_CODES: Record<string, string> = {
   'exports.refused.notRunning': "That export isn't running.",
   'exports.refused.otherProject': 'The running export is of {project}, not this project.',
   'exports.revealGone': "That video isn't there any more.",
+  'exports.shareFailed': "Klipolo couldn't open the share menu. Show the video in Finder and share it from there.",
   'exports.diskFull': 'The disk is full. Free up space, then try again.',
   'exports.encoderBusy':
     'The video encoder is busy. Another app may be using it, like a screen recorder or a video call.',
