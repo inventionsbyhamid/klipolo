@@ -3,7 +3,8 @@
 # same bytes both times, and the same bytes as assets/library, whose manifest lists each file's SHA-256; every sound is
 # 48 kHz 16-bit mono and under 3 s; every music bed is 16 to 30 s and loops at a zero crossing without a click (two
 # copies back to back are as smooth at the join as anywhere else); every sticker is a 1024 x 1024 RGBA PNG with
-# transparent corners; the pack is the one the plan lists, CC0-1.0, and under 3 MB.
+# transparent corners; the pack holds the 16 files listed below (8 sounds, 2 music beds, 6 stickers), CC0-1.0, and is
+# under 3 MB.
 #   scripts/gen-library.test.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."

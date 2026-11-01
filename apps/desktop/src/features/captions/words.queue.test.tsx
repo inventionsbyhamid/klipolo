@@ -29,8 +29,8 @@ import {
 import { CaptionWords } from './CaptionWords';
 
 /**
- * Hides and fixes made while "Updating…" shows: kept, and sent once the words
- * settle when nothing else changed, or dropped and said; never lost silently.
+ * Hides and fixes made while "Updating…" shows: kept, and sent once the words settle when nothing else changed, or
+ * dropped and said; never lost silently.
  */
 
 beforeEach(async () => {
