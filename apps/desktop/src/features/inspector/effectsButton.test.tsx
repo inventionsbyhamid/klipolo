@@ -22,6 +22,9 @@ vi.mock('../../bridge/fonts', () => ({
   fonts: {
     bundled: vi.fn(() => Promise.resolve([{ family: 'Inter', weight: 400, italic: false }])),
     face: vi.fn(() => Promise.reject(new Error('no faces in tests'))),
+    faceOf: vi.fn(() => Promise.reject(new Error('no faces in tests'))),
+    row: vi.fn(() => Promise.resolve(null)),
+    google: vi.fn(() => Promise.resolve({ enabled: true, consented: false })),
   },
 }));
 const { bridge } = await import('../../bridge/commands');
