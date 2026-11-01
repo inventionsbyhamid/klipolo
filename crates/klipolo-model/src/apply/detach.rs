@@ -233,10 +233,10 @@ fn edge_fades(main: &[Clip], i: usize) -> (Us, Us) {
 
 /// A sound source's layers: its file as the clip played it, drifting as its run does. The clip played the source at
 /// `clip.volume × mix.volume`, and not at all when either was muted (the audio plan), so the layer takes that gain
-/// (within the model's 200 %) and mute, its mix's audio effects, all of them, in order, with their settings and
-/// whether each is on, and the channel it plays centred from: nothing heard changes. A layer that reaches one of the clip's edges takes the clip's fade there
-/// (`fades`) as its own, kept within the layer's length; a run that starts or ends inside the clip has
-/// none at that end, as in the audio plan.
+/// (within the model's 200 %) and mute, its mix's audio effects, all of them, in order, with their settings and whether
+/// each is on, and the channel it plays centred from: nothing heard changes. A layer that reaches one of the clip's
+/// edges takes the clip's fade there (`fades`) as its own (sync must hold), kept within the layer's length; a run that
+/// starts or ends inside the clip has none at that end, as in the audio plan.
 fn sound_layers(
     p: &Project,
     clip: &Clip,

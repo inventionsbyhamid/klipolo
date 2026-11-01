@@ -24,12 +24,11 @@ pub(super) fn rename(p: &mut Project, name: &str) -> Result<()> {
     Ok(())
 }
 
-/// Replace the settings. When the primary format changes, every layout is re-expressed in the new
-/// primary's coordinates and the old primary keeps its exact rect as an override.
-/// A layer's overrides for formats that are no longer listed stay in the file, as the camera's modes and a clip's
-/// framing do: a format listed again finds its layers where they were placed (a title's 9:16 place, a template that
-/// fills the frame). Caption places for formats no longer listed are dropped. The caption style never changes with the
-/// formats.
+/// Replace the settings. When the primary format changes, every layout is re-expressed in the new primary's coordinates
+/// and the old primary keeps its exact rect as an override. A layer's overrides for formats that are no longer listed
+/// stay in the file, as the camera's modes and a clip's framing do: a format listed again finds its layers where they
+/// were placed (a title's 9:16 place, a template that fills the frame). Caption places for formats no longer listed are
+/// dropped. The caption style never changes with the formats.
 pub(super) fn set_settings(p: &mut Project, settings: &Settings) -> Result<()> {
     let (old, new) = (p.settings.primary_format, settings.primary_format);
     let formats = settings.formats.as_slice();
@@ -113,10 +112,9 @@ pub(super) fn fix_words(
     Ok(())
 }
 
-/// `look` over each of `ranges` of `asset_id`'s own time, replacing the looks there; an empty look only clears.
-/// One pass over the file's looks (`looks::set_word_looks`): O(log looks + window +
-/// ranges × log ranges), and one copy of the shared list per batch. At least one range, each valid, and no more
-/// ranges than a project holds looks.
+/// `look` over each of `ranges` of `asset_id`'s own time, replacing the looks there; an empty look only clears. One
+/// pass over the file's looks (`looks::set_word_looks`): O(log looks + window + ranges × log ranges), and one copy of
+/// the shared list per batch. At least one range, each valid, and no more ranges than a project holds looks.
 pub(super) fn set_word_look(
     p: &mut Project,
     asset_id: &str,
