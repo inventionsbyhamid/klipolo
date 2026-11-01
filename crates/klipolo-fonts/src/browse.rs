@@ -112,9 +112,10 @@ fn list<'a>(index: &'a FontIndex, ask: &BrowseAsk) -> Vec<(Section, Hit<'a>)> {
     let project = pinned(&ask.project);
     let recent = pinned(&ask.recent);
     let tag = |s: Section, hits: Vec<Hit<'a>>| hits.into_iter().map(move |h| (s, h));
-    tag(Section::Project, project)
+    // The 12 bundled families first: the menu opens on them, then the project's and the recent picks.
+    tag(Section::Bundled, bundled)
+        .chain(tag(Section::Project, project))
         .chain(tag(Section::Recent, recent))
-        .chain(tag(Section::Bundled, bundled))
         .chain(tag(Section::Installed, installed))
         .chain(tag(Section::Google, google))
         .collect()
