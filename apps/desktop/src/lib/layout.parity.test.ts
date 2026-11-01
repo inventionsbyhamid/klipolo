@@ -5,6 +5,7 @@ import type { Crop } from '../bindings/Crop';
 import type { FormatKind } from '../bindings/FormatKind';
 import type { Item } from '../bindings/Item';
 import type { Layout } from '../bindings/Layout';
+import { cameraLayoutFor } from './defaults';
 import {
   cameraRect,
   containRect,
@@ -44,6 +45,7 @@ interface Fixture {
   fullFrame: Layout;
   portraitClear: BoxN;
   titleText: { primary: FormatKind; layout: Layout }[];
+  cameraDefaults: { primary: FormatKind; camera: CameraLayout }[];
 }
 const fixture = parity as unknown as Fixture;
 
@@ -113,5 +115,10 @@ describe('layout parity with the engine', () => {
       expect(Object.keys(overrides).sort()).toEqual(Object.keys(rustOverrides).sort());
       for (const [format, box] of Object.entries(rustOverrides)) same(overrides[format as FormatKind]!, box!);
     }
+  });
+
+  it('starts a recording’s clip with the camera Rust lands a take with, in every main format', () => {
+    expect(fixture.cameraDefaults.length).toBe(3);
+    for (const c of fixture.cameraDefaults) expect(cameraLayoutFor(c.primary)).toEqual(c.camera);
   });
 });
