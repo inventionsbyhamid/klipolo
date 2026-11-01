@@ -18,8 +18,9 @@ const percent = (v: number) => `${Math.round(v * 100)}%`;
  * (Blurred video, the clip's own picture blurred and dimmed behind it, the usual look for wide video in a vertical
  * frame; Black; Color; Gradient; Picture, one of the project's images, offered while it has one), its colours or
  * picture, and Padding (an inset round the video on every edge, 0 to 40 % of the frame's shorter side). It is the
- * project's one background, behind every clip. Each change is one undo step built at its turn on the background as the
- * project has it then (`backgroundOps`); a padding drag is dry-run in the preview and commits once on release.
+ * project's one background, behind every clip, and a line under it says so. Each change is one undo step built at its
+ * turn on the background as the project has it then (`backgroundOps`); a padding drag is dry-run in the preview and
+ * commits once on release.
  */
 export function BackgroundField() {
   const { t } = useLingui();
@@ -64,6 +65,13 @@ export function BackgroundField() {
           onPick={(kind) => set('background.kind.undo', (now) => kindPatch(now, kind, firstImage))}
         />
       </Field>
+      <p className="field-note">
+        {t({
+          id: 'background.everyClip',
+          message: 'Behind every clip.',
+          comment: 'The background is the project’s one background, shown behind every clip',
+        })}
+      </p>
       {background.kind === 'solid' && (
         <Field label={t({ id: 'background.color.short', message: 'Color', comment: 'The background color field' })}>
           <Swatches

@@ -83,6 +83,8 @@ describe("the clip card's background", () => {
     renderWithProviders(<Inspector format="landscape" />);
     await screen.findByRole('radio', { name: 'Fit', checked: true });
     expect(screen.getByRole('button', { name: 'Background: Black' })).toBeInTheDocument();
+    // It is the project's one background, not this clip's.
+    expect(screen.getByText('Behind every clip.')).toBeInTheDocument();
     expect(screen.getByRole('slider', { name: 'Padding' })).toHaveAttribute('aria-valuetext', '0%');
     useSelection.setState({ selectedId: 'b' });
     await screen.findByRole('radio', { name: 'Fill', checked: true });
