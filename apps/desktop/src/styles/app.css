@@ -235,7 +235,7 @@
 /* aria-disabled: inert but still focusable, so its tooltip can say why; drawn as disabled. */
 .btn:disabled,
 .btn[aria-disabled="true"] {
-  background: #1e2642;
+  background: var(--color-off);
   color: var(--color-ink-disabled);
 }
 
@@ -615,6 +615,7 @@
 }
 
 .frame.is-socket {
+  /* The video: black in both themes. */
   background: #000;
 }
 
@@ -687,7 +688,7 @@
   border-radius: 50%;
   background: var(--color-paper);
   color: var(--color-navy);
-  box-shadow: 0 6px 18px rgb(0 0 0 / 0.5);
+  box-shadow: 0 6px 18px var(--color-shade);
 }
 
 .drop-title {
@@ -1819,7 +1820,7 @@
 
 .play:not(:disabled):hover {
   transform: scale(var(--hover-scale));
-  background: #ffffff;
+  background: var(--color-paper-hover);
 }
 
 .play:not(:disabled):active {
@@ -1827,7 +1828,7 @@
 }
 
 .play:disabled {
-  background: #2b3352;
+  background: var(--color-off);
   color: var(--color-ink-disabled);
 }
 
@@ -1896,7 +1897,7 @@
   margin-left: -7px;
   border-radius: 50%;
   background: var(--color-paper);
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.5);
+  box-shadow: 0 2px 6px var(--color-shade);
 }
 
 /* ---------- Chat ---------- */
@@ -1986,7 +1987,7 @@
   height: 36px;
   flex: none;
   border-radius: 50%;
-  background: #232b48;
+  background: var(--color-off);
   color: var(--color-ink-disabled);
 }
 
@@ -2676,7 +2677,7 @@
   height: 14px;
   border-radius: 50%;
   background: var(--color-paper);
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.5);
+  box-shadow: 0 2px 6px var(--color-shade);
 }
 
 .slider-thumb:focus-visible {
@@ -2704,7 +2705,7 @@
   padding: 0;
   border-radius: 50%;
   background: var(--c);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.2);
+  box-shadow: inset 0 0 0 1px var(--color-swatch-edge);
 }
 
 .swatch[aria-checked="true"] {

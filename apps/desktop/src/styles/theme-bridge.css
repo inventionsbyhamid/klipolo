@@ -6,7 +6,7 @@
   --color-canvas: var(--color-night);
   --color-panel: var(--color-bay);
   --color-raised: var(--color-bay-raised);
-  --color-sunken: rgb(7 10 20 / 0.45);
+  --color-sunken: color-mix(in srgb, var(--color-night) 45%, transparent);
   --color-fg: var(--color-ink);
   --color-fg-muted: var(--color-ink-soft);
   --color-fg-subtle: var(--color-ink-faint);
@@ -22,7 +22,7 @@
   --color-layer-text: var(--color-lane-overlay);
   --color-layer-image: var(--color-lane-overlay);
   --color-layer-audio: var(--color-lane-music);
-  /* The same names as Klipolo's tokens (`.bg-line` is #252E4C). */
+  /* The same names as Klipolo's tokens (`.bg-line` is the hairline colour). */
   --color-line: var(--color-line);
   --color-scrim: var(--color-scrim);
   --shadow-popover: var(--shadow-1);
