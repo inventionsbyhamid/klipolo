@@ -1,7 +1,7 @@
 //! The page pins a kind of recorded sound's mix ops (a sound lane's Mute and Volume, the Centre switch, Fill gaps) to the
-//! ops chat's source tools compile to, in `apps/desktop/src/features/timeline/keys/source-mix-parity.json`. The Rust
-//! test that writes the file lands with those tools; until then this one holds the file to the model: each of its
-//! projects loads, and every case's ops apply to its project as one batch.
+//! ops chat's source tools compile to, in `apps/desktop/src/features/timeline/keys/source-mix-parity.json`, which
+//! `klipolo-chat`'s `source_mix_parity` test writes. This one holds the file to the model: each of its projects loads,
+//! and every case's ops apply to its project as one batch.
 
 use std::path::PathBuf;
 

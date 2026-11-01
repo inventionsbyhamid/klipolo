@@ -101,18 +101,22 @@ impl ProjectSessionState {
         });
     }
 
-    /// The open project's assets with these ids that analysis is for (`analysed::analysed_assets`: the files a
-    /// main-track clip plays), in the order given. Ids it doesn't have, and music, sounds and pictures on layers or
-    /// never placed, are left out: they would be paid for and never used.
-    pub(crate) fn analysed_assets(&self, ids: &[String]) -> Vec<klipolo_model::project::Asset> {
+    /// The open project (shared, not copied: analysis asks it which files are a recording's) and its assets with these
+    /// ids that analysis is for (`analysed::analysed_assets`: the files a main-track clip plays), in the order given.
+    /// Ids it doesn't have, and music, sounds and pictures on layers or never placed, are left out: they would be paid
+    /// for and never used. None with no project open.
+    pub(crate) fn analysed_assets(
+        &self,
+        ids: &[String],
+    ) -> Option<(Arc<Project>, Vec<klipolo_model::project::Asset>)> {
         let open = self.open.lock().unwrap_or_else(PoisonError::into_inner);
-        let Some(open) = open.as_ref() else {
-            return Vec::new();
-        };
-        let analysed = klipolo_model::analysed::analysed_assets(open.document.project());
-        ids.iter()
+        let project = open.as_ref()?.document.shared();
+        let analysed = klipolo_model::analysed::analysed_assets(&project);
+        let assets = ids
+            .iter()
             .filter_map(|id| analysed.iter().find(|a| &a.id == id).map(|a| (*a).clone()))
-            .collect()
+            .collect();
+        Some((project, assets))
     }
 
     /// The engine's side of the feed.
@@ -330,11 +334,15 @@ mod tests {
         ]
         .map(String::from)
         .to_vec();
-        let ids: Vec<String> = state
-            .analysed_assets(&asked)
-            .into_iter()
-            .map(|a| a.id)
-            .collect();
+        let (project, assets) = state.analysed_assets(&asked).unwrap();
+        let ids: Vec<String> = assets.into_iter().map(|a| a.id).collect();
         assert_eq!(ids, ["talk"]);
+        assert!(project.asset("my-song").is_some(), "the open project");
+        assert!(
+            ProjectSessionState::default()
+                .analysed_assets(&asked)
+                .is_none(),
+            "none with no project open"
+        );
     }
 }
