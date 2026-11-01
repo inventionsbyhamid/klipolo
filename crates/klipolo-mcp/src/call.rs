@@ -29,8 +29,9 @@
 //! job started). `isError` is true exactly when nothing was done; when part was, the text says what wasn't.
 
 use klipolo_chat::{
-    ANALYZE_FIRST, Audience, Compiled, FunctionCall, Job, Moment, ROUGH_FILLERS, Refusal,
-    STILL_LISTENING, STILL_WATCHING, ToolCall, compile_for_app, timeline_key,
+    ANALYZE_FIRST, Audience, Compiled, FunctionCall, Job, Moment, ROUGH_FILLERS,
+    ROUGH_FILLERS_STAY, Refusal, STILL_LISTENING, STILL_WATCHING, ToolCall, compile_for_app,
+    timeline_key,
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
@@ -453,7 +454,7 @@ fn reason(r: &Refusal) -> String {
         ANALYZE_FIRST => Some(words::NOT_ANALYZED),
         STILL_LISTENING => Some(words::LISTENING),
         STILL_WATCHING => Some(words::WATCHING),
-        ROUGH_FILLERS => Some(words::ROUGH_WORDS),
+        ROUGH_FILLERS | ROUGH_FILLERS_STAY => Some(words::ROUGH_WORDS),
         _ => None,
     };
     if r.audience == Audience::Person
