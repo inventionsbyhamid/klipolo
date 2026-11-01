@@ -258,6 +258,8 @@ mod tests {
             volume: 1.0,
             muted: false,
             mirror: false,
+            fill: false,
+            crop: None,
             tie: None,
         };
         let mut p = Project::new("Solo");

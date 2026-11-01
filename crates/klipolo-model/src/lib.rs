@@ -6,6 +6,7 @@ pub mod captions;
 pub mod clip_settings;
 pub mod coded;
 pub mod contrib;
+pub mod crop;
 pub mod cursor_style;
 pub mod ease_names;
 pub mod error;

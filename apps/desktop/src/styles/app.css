@@ -2961,6 +2961,15 @@
   }
 }
 
+/* The Crop row opens its edges' sliders: its chevron turns while they show. */
+.crop-toggle .ico {
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.crop-toggle[aria-expanded="true"] .ico {
+  transform: rotate(180deg);
+}
+
 /* An effect's or generator's setting: its control, and Reset beside it once it differs from its default. */
 .param-control {
   display: grid;

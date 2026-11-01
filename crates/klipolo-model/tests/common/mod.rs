@@ -223,6 +223,8 @@ pub fn video_item(id: &str, start: f64, duration: f64, source_in: f64) -> Item {
             volume: 1.0,
             muted: false,
             mirror: false,
+            fill: false,
+            crop: None,
             tie: None,
         },
         effects: Vec::new(),

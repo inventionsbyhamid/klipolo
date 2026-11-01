@@ -279,6 +279,8 @@ fn audio_items_and_video_layers_join_the_mix() {
             volume: 0.8,
             muted: false,
             mirror: false,
+            fill: false,
+            crop: None,
             tie: None,
         },
         effects: Vec::new(),
@@ -842,6 +844,8 @@ fn solo_picks_the_sound_and_mute_still_wins() {
         volume: 1.0,
         muted: false,
         mirror: false,
+        fill: false,
+        crop: None,
         tie: None,
     };
     let mut p = project();
@@ -1033,6 +1037,8 @@ fn the_preview_and_export_make_the_same_gain_decision() {
             volume: 0.7,
             muted: false,
             mirror: false,
+            fill: false,
+            crop: None,
             tie: None,
         },
     );
@@ -1322,6 +1328,8 @@ fn ops_that_cant_change_the_sound_skip_the_replan() {
         volume: 0.8,
         muted: false,
         mirror: false,
+        fill: false,
+        crop: None,
         tie: None,
     };
     let mut image = item(
@@ -1606,6 +1614,8 @@ fn ops_that_cant_change_the_sound_skip_the_replan() {
                         volume: 1.0,
                         muted: false,
                         mirror: false,
+                        fill: false,
+                        crop: None,
                         tie: None,
                     }),
                     ..ItemPatch::default()

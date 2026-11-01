@@ -1273,6 +1273,8 @@ fn a_video_layer_gets_its_copy_and_plays_from_it() {
             volume: 1.0,
             muted: true,
             mirror: false,
+            fill: false,
+            crop: None,
             tie: None,
         },
         effects: Vec::new(),
