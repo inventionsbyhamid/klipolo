@@ -51,7 +51,7 @@ const fn choice(ffmpeg_name: &'static str, backend: Backend, hardware: bool) -> 
 }
 
 /// Extra options for work nobody is waiting for (editing copies): VideoToolbox's `power_efficient=1` (Apple's offline
-/// transcoding guidance). Windows (W) and Linux (L) add their low-power hints with their encoders. None elsewhere.
+/// transcoding guidance). Windows and Linux add their low-power hints with their encoders. None elsewhere.
 pub fn background_options(choice: &EncoderChoice) -> &'static [(&'static str, &'static str)] {
     match choice.backend {
         Backend::VideoToolbox => &[("power_efficient", "1")],

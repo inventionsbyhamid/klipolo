@@ -48,8 +48,8 @@ pub fn allocs() -> (u64, u64) {
 
 // ---------------------------------------------------------------------------------------------------------------
 // proc_pid_rusage (RUSAGE_INFO_V4): footprint, CPU time. macOS only (libproc): the harness measures the Mac, and
-// elsewhere a process has no reading yet (W: GetProcessMemoryInfo and GetProcessTimes; L: /proc/<pid>/status and
-// stat), so the CPU and footprint columns read zero there.
+// elsewhere a process has no reading yet (Windows: GetProcessMemoryInfo and GetProcessTimes; Linux: /proc/<pid>/status
+// and stat), so the CPU and footprint columns read zero there.
 
 #[cfg(target_os = "macos")]
 #[repr(C)]

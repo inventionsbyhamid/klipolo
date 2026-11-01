@@ -128,7 +128,7 @@ fn notes(p: &Placed, m: &Module, e: &Summary, probed: &[Probed]) -> Vec<Diagnost
                 ),
             );
             let d = if e.whole_params {
-                // Review m-d: a whole copy of `params` makes every setting it reaches count.
+                // A whole copy of `params` makes every setting it reaches count.
                 d.hint(format!("Read `params.{key}` (and each setting you need) where you use it, instead of copying `params` or passing it to a function: then only the settings that decide work are probed."))
             } else {
                 d.hint(format!("Nothing to change. To keep it out of the probes, choose with `select()`, `mix()` or `step()` instead of an `if` (or an early `return`) on a value this {} reaches.", if what.is_empty() { "setting" } else { what }))
