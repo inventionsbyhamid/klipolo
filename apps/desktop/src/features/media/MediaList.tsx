@@ -176,8 +176,9 @@ function useSettledMarks(tab: LibraryTab, query: string) {
  * the project's videos; Music and Sounds the sounds (by how they play, else by length) and the pack's beds and effects;
  * Images a 3-column grid of your pictures, those made with Muse Image, and the pack's stickers. Drag any row onto the
  * lane it belongs to; the "+" adds it at the playhead. `query` (the panel's search) keeps the items it finds, best
- * first (`search.ts`); in each list, favorites come first, then what the library added most recently (`marks.ts`).
- * The order follows the marks once the person has left the list (`useSettledMarks`).
+ * first (`search.ts`); in each list, favorites come first, then what the library added most recently (`marks.ts`),
+ * which also decide between equal matches. The order follows the marks once the person has left the list
+ * (`useSettledMarks`).
  */
 export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
   const { t } = useLingui();
@@ -205,7 +206,7 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
   const builtIn = t({ id: 'library.builtIn', message: 'Built in' });
   const free = t({ id: 'library.builtIn.free', message: 'Free to use' });
   const found = <T,>(items: T[], about: (item: T) => Searchable, keyOf: (item: T) => string) =>
-    marked(searchLibrary(items, query, about), keyOf, order.marks);
+    searchLibrary(marked(items, keyOf, order.marks), query, about);
   const ofPack = (category: PackItem['category']) =>
     found(
       pack.filter((item) => item.category === category),

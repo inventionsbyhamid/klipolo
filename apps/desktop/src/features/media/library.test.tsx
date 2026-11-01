@@ -560,4 +560,20 @@ describe('the Library', () => {
     await waitFor(() => expect(library.place).toHaveBeenCalledWith([{ type: 'pack', id: 'whoosh' }], 4_000_000, { type: 'auto' }));
     moves.disconnect();
   });
+
+  it('while searching, a better match ranks over a favorite; favorites only break ties', async () => {
+    useUi.setState({ libraryTab: 'sounds' });
+    vi.mocked(library.pack).mockResolvedValueOnce([
+      ...PACK,
+      { id: 'thud', name: 'Thud', category: 'sound', durationUs: 300_000, width: 0, height: 0, tags: ['thud', 'low'] },
+    ]);
+    vi.mocked(library.marks).mockResolvedValueOnce({ 'pack:thud': { favorite: true, usedMs: 0 } });
+    renderWithProviders(<Library />);
+    const panel = screen.getByRole('tabpanel');
+    await screen.findByText('Thud');
+    await waitFor(() => expect(listed(within(panel).getByRole('list', { name: /^Built in/ }))[0]).toBe('Thud'));
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search sounds' }), 'impact');
+    // Impact by its name, Thud by a related word.
+    expect(listed(within(panel).getByRole('list', { name: /^Built in/ }))).toEqual(['Impact', 'Thud']);
+  });
 });
