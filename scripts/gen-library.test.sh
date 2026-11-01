@@ -90,7 +90,9 @@ def _():
         "sticker": ["heart", "star", "arrow", "circle", "check", "bubble",
                     "arrow-curved", "arrow-pointer", "circle-drawn", "underline", "x-mark", "question", "exclamation",
                     "number-1", "number-2", "number-3", "number-4", "number-5", "thought-bubble", "shout-bubble",
-                    "thumbs-up", "fire", "sparkles", "lightbulb", "new-tag", "subscribe", "cursor-hand"],
+                    "thumbs-up", "fire", "sparkles", "lightbulb", "new-tag", "subscribe", "cursor-hand",
+                    "sunset-16x9", "sunset-9x16", "soft-16x9", "soft-9x16", "night-16x9", "night-9x16", "paper-16x9",
+                    "paper-9x16"],
     }
     assert {k: [i["id"] for i in of(k)] for k in want} == want, [i["id"] for i in items]
     assert len(items) == 62 and manifest["license"] == "CC0-1.0" and manifest["creator"] == "Klipolo"
