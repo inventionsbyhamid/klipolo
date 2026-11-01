@@ -1,6 +1,6 @@
-//! While playing, an edit keeps the takes and follow paths as they were, so a path the loader built
-//! mid-play never swaps in at the edit; the pause takes it. Both ways an edit reaches the session: a committed revision
-//! (`on_feed`) and a preview's dry run (`refresh`).
+//! While playing, an edit keeps the takes and follow paths as they were, so a path the loader built mid-play never
+//! swaps in at the edit; the pause takes it. Both ways an edit reaches the session: a committed revision (`on_feed`)
+//! and a preview's dry run (`refresh`).
 
 use std::time::Duration;
 
