@@ -1,11 +1,10 @@
 //! The recorder's live view's picture for the view that shows it: a pure rule, so the Linux CI runs test it.
-//! - **Small** (the recorder's inline view, `None`): today's picture and cost, the target fitted to 640 × 640, 10 frames
-//!   a second.
-//! - **Large and Full screen** (the view's own size in device pixels): the target fitted inside the view, never above
-//!   its own pixels (the display's size) nor 1080p (1920 × 1080, turned to the view's shape), at 15 to 30 frames a
-//!   second within this computer's pixels a second (`big_pixel_rate`): each JPEG costs by its
-//!   pixels, so the rate bounds a big view's cost whatever its size. Where 15 frames a second would pass it, the picture
-//!   gets smaller instead.
+//! - **Small** (`None`: no view size was given): the target fitted to 640 × 640, 10 frames a second.
+//! - **Big** (the view's own size in device pixels, as the Record dialog's preview box gives it): the target fitted
+//!   inside the view, never above its own pixels (the display's size) nor 1080p (1920 × 1080, turned to the view's
+//!   shape), at 15 to 30 frames a second within this computer's pixels a second (`big_pixel_rate`): each JPEG costs by
+//!   its pixels, so the rate bounds a big view's cost whatever its size. Where 15 frames a second would pass it, the
+//!   picture gets smaller instead.
 //!   - Apple silicon (and anything not an Intel Mac): 1080p at 15 (`BIG_PIXEL_RATE`): 1080p gets 15, a 16:10 display's
 //!     1728 × 1080 16, 1280 × 800 or less 30.
 //!   - An Intel Mac, whose JPEGs are made on its CPU: about 720p at 15 (`INTEL_MAC_PIXEL_RATE`): a 16:10 display's

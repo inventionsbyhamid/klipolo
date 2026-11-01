@@ -9,10 +9,10 @@
 //! reminder, not a request Klipolo makes).
 //!
 //! **The stream:** scaled by ScreenCaptureKit itself (never captured full size) to the picture `live_view_size` gives
-//! for the view that shows it: in the recorder's small view, 640 × 640 in the target's shape at 10 frames a second; in
-//! its Large and Full screen views, the view's own pixels within 1080p at up to 30. A queue of 3, BGRA in
-//! sRGB, no cursor, no sound. Each `Complete` frame the pacer takes (`pace::PreviewPacer` at the picture's rate)
-//! becomes a JPEG through Core Image (`jpeg`), offered with `try_send`: dropped, never waited for. Nothing is written.
+//! for the view that shows it: in the small view, 640 × 640 in the target's shape at 10 frames a second; in a big view
+//! (the Record dialog's preview box), the view's own pixels within 1080p at up to 30. A queue of 3, BGRA in sRGB, no
+//! cursor, no sound. Each `Complete` frame the pacer takes (`pace::PreviewPacer` at the picture's rate) becomes a JPEG
+//! through Core Image (`jpeg`), offered with `try_send`: dropped, never waited for. Nothing is written.
 //!
 //! **A new view size** (`resize`) is applied to the running stream (`updateConfiguration:`), never by opening another:
 //! a smaller picture's lower rate at once, a bigger one's higher rate once the stream has taken it. One the stream
