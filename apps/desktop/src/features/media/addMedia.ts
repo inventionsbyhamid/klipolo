@@ -95,7 +95,10 @@ export function addMedia(
 
 /**
  * The camera a new clip of `recording` plays its camera with: as the video's latest clip of it does (the person's
- * bubble and mirror), else as a take lands (`cameraLayoutFor`); none for a take without a camera.
+ * bubble and mirror), else as a take lands (`cameraLayoutFor`); none for a take without a camera. With no clip of the
+ * take left on the video the camera is mirrored, as by default: the take's own "Mirror my camera" is kept only in its
+ * folder, which the project doesn't hold, so a take recorded unmirrored comes back mirrored (its card's Mirror turns it
+ * back).
  */
 function recordingCamera(project: Project, recording: Recording): CameraLayout | null {
   const main = project.timeline.main;
