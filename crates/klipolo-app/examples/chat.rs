@@ -64,6 +64,7 @@ async fn run() -> Result<(), String> {
     std::fs::create_dir_all(&args.folder).map_err(|e| format!("{}: {e}", args.folder.display()))?;
     let (credentials, paying) = credentials(&args.folder)?;
     let asset = asset(&args.clip)?;
+    let made = project_of(asset.clone());
     println!("paying with: {paying}");
     println!("cache: {}", args.folder.display());
 
@@ -78,13 +79,13 @@ async fn run() -> Result<(), String> {
         Arc::new(|_| {}),
         Arc::new(|_| {}),
     );
-    let estimate = analysis.estimate(std::slice::from_ref(&asset)).await;
+    let estimate = analysis.estimate(&made, std::slice::from_ref(&asset)).await;
     println!(
         "analysis: ${:.4} to pay, {} cached",
         estimate.usd,
         estimate.cached.len()
     );
-    let started = analysis.start(std::slice::from_ref(&asset)).await;
+    let started = analysis.start(&made, std::slice::from_ref(&asset)).await;
     if let Some(reason) = &started.refused {
         return Err(format!("the analysis didn't start: {reason}"));
     }
@@ -98,8 +99,7 @@ async fn run() -> Result<(), String> {
     );
 
     let project = Arc::new(
-        MemoryProjects::open(project_of(asset), args.folder.join("chat.klipolo"))
-            .map_err(|e| e.to_string())?,
+        MemoryProjects::open(made, args.folder.join("chat.klipolo")).map_err(|e| e.to_string())?,
     );
     let chat = ChatSession::new(
         project.clone(),
