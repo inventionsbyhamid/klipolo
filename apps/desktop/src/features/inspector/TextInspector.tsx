@@ -9,6 +9,7 @@ import { useBundledFamilies } from '../../lib/fonts';
 import { scaledStyle } from '../../lib/textLook';
 import { itemOp } from '../../lib/ops';
 import { AnimationField, PositionField, TimingField } from './common';
+import { EffectsButton } from './EffectsButton';
 import { Field, Select, Swatches, type Swatch } from './fields';
 import { backdropOf, backdropStyle, type Backdrop } from './inspectorOps';
 import { commitLatest, contentNow } from '../../state/latest';
@@ -53,7 +54,7 @@ export function textSwatches(t: (d: { id: string; message: string }) => string):
 
 /**
  * A text layer's fields: its words, Font (the 12 bundled families), Size, Color, Background (None, Box, 
- * Shadow), Position, Animation and Timing. Each change is one undo step, built at its turn from the title as the
+ * Shadow), Effects, Position, Animation and Timing. Each change is one undo step, built at its turn from the title as the
  * project has it then (`contentNow`), so a change on its way (words just finished on the canvas) is kept.
  */
 export function TextInspector({
@@ -129,6 +130,7 @@ export function TextInspector({
           onChange={(backdrop) => setStyle('text.background.undo', (now) => backdropStyle(now, backdrop))}
         />
       </Field>
+      <EffectsButton target={{ type: 'item', id: item.id }} effects={item.effects} />
       <PositionField item={item} format={format} primary={primary} />
       <AnimationField item={item} typewriter />
       <TimingField item={item} />

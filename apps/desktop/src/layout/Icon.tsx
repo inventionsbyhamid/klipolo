@@ -85,6 +85,13 @@ const PATHS = {
   ),
   plus: <path d="M12 5v14M5 12h14" />,
   'chev-down': <path d="m6 9 6 6 6-6" />,
+  'chev-right': <path d="m9 6 6 6-6 6" />,
+  sparkle: (
+    <>
+      <path d="M11 4c.7 4.4 3.6 7.3 8 8-4.4.7-7.3 3.6-8 8-.7-4.4-3.6-7.3-8-8 4.4-.7 7.3-3.6 8-8z" />
+      <path d="M19 2.5v4M17 4.5h4" />
+    </>
+  ),
   film: (
     <>
       <rect x="3.5" y="5" width="17" height="14" rx="2" />
