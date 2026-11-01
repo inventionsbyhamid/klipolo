@@ -463,7 +463,7 @@ fn the_camera_follows_the_new_primary() {
     );
 }
 
-// --- Cleanups ---
+// --- Batch failures, ids and settings ---
 
 #[test]
 fn mid_batch_failure_leaves_input_unchanged() {

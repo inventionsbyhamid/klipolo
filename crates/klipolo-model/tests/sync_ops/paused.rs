@@ -13,8 +13,8 @@ use klipolo_model::{load_project, Project};
 use super::common::{self, secs};
 use super::{run, synced};
 
-/// The interview synced with its mic paused at 290 s of its own file (200 s on the clock) for 7 s: the mic's first run
-/// plays 90–290 s of the file from 0:00, its second the rest (290–700 s) from 207 s; c1 and c2 converted.
+/// The imported interview synced with its mic paused at 290 s of its own file (200 s on the clock) for 7 s: the mic's
+/// first run plays 90–290 s of the file from 0:00, its second the rest (290–700 s) from 207 s; c1 and c2 converted.
 fn paused() -> Project {
     let mut r = synced();
     r.sources[1].runs = vec![

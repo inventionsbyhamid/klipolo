@@ -1,5 +1,5 @@
-//! Caption pages over the person's fixes and across formats (the cue tests, against Clean, whose
-//! pages behave as the old cues did for short phrases).
+//! Caption pages over the person's fixes and across formats (against Clean, whose pages behave as single cues do for
+//! short phrases).
 
 use klipolo_model::apply_ops;
 use klipolo_model::captions::looks::{Look, WordLook};

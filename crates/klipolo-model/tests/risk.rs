@@ -243,8 +243,8 @@ fn a_review_applies_once_and_agrees_with_the_risk() {
 #[test]
 fn the_op_schema_lists_every_op_and_tags_match_the_json() {
     let tags = op_tags();
-    // The first 34, then `fixWords`, then five recording ops in place of `detachCamera`, then
-    // `setWordLook`, then `setCursorStyle`, then `useRecording` and `addRecordingSource`.
+    // The first 34, then `fixWords`, then five recording ops in place of `detachCamera`, then `setWordLook`, then
+    // `setCursorStyle`, then `useRecording` and `addRecordingSource`.
     assert_eq!(tags.len(), 34 + 1 + 4 + 1 + 1 + 2, "{tags:?}");
     for op in [
         Op::Split { at_us: 0 },
@@ -273,7 +273,7 @@ fn a_words_look_is_additive() {
     assert_eq!(klipolo_model::ops::op_risk(&op), OpRisk::Additive);
 }
 
-/// C7 where a piece takes over what its original had: a split layer's second piece holds the rest, and a split
+/// Where a piece takes over what its original had: a split layer's second piece holds the rest, and a split
 /// clip's second piece carries its transition. Nothing is listed, as nothing is judged removed.
 #[test]
 fn split_pieces_keep_what_their_original_had() {

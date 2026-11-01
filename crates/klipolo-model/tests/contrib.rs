@@ -375,7 +375,7 @@ fn public_shapes_are_frozen() {
         profile_id: Some("profile".into()),
     });
     // The cursor layer: the take's cursor file, burned in from 9 s by the fallback (shape only: game takes keep no
-    // keep no separate cursor).
+    // separate cursor).
     rec.cursor = Some(RecordingCursor {
         path: "/media/rec.cursor".into(),
         capture: CursorCapture::BurnedFrom { at_us: 9_000_000 },

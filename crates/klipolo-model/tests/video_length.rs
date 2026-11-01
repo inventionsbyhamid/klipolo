@@ -70,7 +70,7 @@ fn five_seconds() -> Project {
 
 #[test]
 fn a_project_of_only_layers_lasts_until_its_last_layer_ends() {
-    // A user's case: a new empty project, a Waves layer 0–10 s and a text 0–10 s.
+    // A new empty project with a Waves layer 0–10 s and a text 0–10 s.
     let mut doc = Document::new(Project::new("Canvas")).unwrap();
     assert_eq!(length(doc.project()), 0);
     doc.apply(&add(waves("bg", 0.0, 10.0))).unwrap();

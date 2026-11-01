@@ -1,5 +1,4 @@
-//! Caption pages: each style's paging rules, keywords, the person's looks and the
-//! style's casing.
+//! Caption pages: each style's paging rules, keywords, the person's looks and the style's casing.
 
 use klipolo_model::captions::looks::{Look, WordLook};
 use klipolo_model::captions::pages::{captions, Keyword, Pages};
@@ -346,12 +345,12 @@ const JOIN_PAIRS: [[&str; 2]; 26] = [
     ["the", "cat"],
 ];
 
-/// The fixture "Fix the words" is checked against (`src/features/captions/wordFix.parity.test.ts`
+/// The fixture "Fix the words" is checked against (`src/features/captions/wordFix.parity.test.ts`), like
 /// `caption-place-parity.json`: the scripts written without spaces (`joins_unspaced`, as its runs over
 /// every code point), and pairs of words paged in Clean, Boxed and Bold with what each shows and whether the second is
 /// drawn right after the first (no space before it in the pages' text). So a fix's edges are judged as the captions
 /// draw them, in every style. And the table the app reads (`apps/desktop/src/lib/caption-edge-kept.json`): the
-/// The characters a style that shows only `?` and `!` keeps at a word's edge (`edge_kept`, through
+/// characters a style that shows only `?` and `!` keeps at a word's edge (`edge_kept`, through
 /// `shown`), as runs over every code point, from Rust's own Unicode tables, so "Fix the words" trims as the captions do
 /// whatever Unicode the webview knows (and no copy of the rule can drift). Rewrite both with `KLIPOLO_UPDATE_PARITY=1`.
 #[test]

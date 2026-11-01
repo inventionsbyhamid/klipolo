@@ -1,6 +1,6 @@
-//! One `SetWordLook` over many ranges: chat's `styleCaptionWords`, MCP's
-//! `setCaptionWordLook` and the word list style every word that takes one look with one op, applied in one pass over
-//! the file's looks, never one op and one shift of the list per word.
+//! One `SetWordLook` over many ranges: chat's `styleCaptionWords`, MCP's `setCaptionWordLook` and the word list style
+//! every word that takes one look with one op, applied in one pass over the file's looks, never one op and one shift of
+//! the list per word.
 
 use klipolo_model::captions::looks::{Look, LookIndex, WordLook};
 use klipolo_model::ops::Op;
@@ -178,7 +178,7 @@ fn every_point_reads_the_ops_look_inside_its_ranges_and_the_old_one_outside() {
     }
 }
 
-/// Real scale (release, `--ignored`; its time goes in the task report): "hide the ums" on a two-hour take, 5,000 words
+/// Real scale (release, `--ignored`; it prints its time): "hide the ums" on a two-hour take, 5,000 words
 /// over a list at the cap's 15,000 looks, as one op.
 #[test]
 #[ignore = "real scale: run in release with --ignored"]

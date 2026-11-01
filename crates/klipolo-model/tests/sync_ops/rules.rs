@@ -1,4 +1,4 @@
-//! `useRecording` moves an anchor exactly when it resolves to the clip it converts
+//! Sync's rules: `useRecording` moves an anchor exactly when it resolves to the clip it converts
 //! and refuses a clip whose stretch of its file isn't inside the run's; a re-time refuses a picture source, the
 //! recording's clock.
 

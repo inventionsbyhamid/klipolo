@@ -1,6 +1,6 @@
-//! Its own binary, with a per-thread counting allocator: once warm, evaluating a scene's frame allocates nothing
-//! (performance first), and a scene past every runtime cap
-//! evaluates within its caps, allocation-free, counting what it is past for the renderer's diagnostics.
+//! Its own binary, with a per-thread counting allocator: once warm, evaluating a scene's frame allocates nothing, and a
+//! scene past every runtime cap evaluates within its caps, allocation-free, counting what it is past for the renderer's
+//! diagnostics.
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
@@ -40,8 +40,8 @@ fn eval_allocates_nothing_once_warm() {
     assert_eq!(ALLOCS.with(Cell::get) - before, 0);
 }
 
-/// Past every runtime cap at once: 1,500 repeated rects (1,000 drawn), a burst of 100,000 particles (500 written),
-/// four 600-character texts (500 a node, 2,000 a scene), a 40-letter split text blurred whole (12 blurred units) and six
+/// Past every runtime cap at once: 1,500 repeated rects (1,000 drawn), a burst of 100,000 particles (500 written), four
+/// 600-character texts (500 a node, 2,000 a scene), a 40-letter split text blurred whole (12 blurred units) and six
 /// half-transparent groups (4 drawn offscreen). The evaluator builds and writes within its caps, allocates nothing once
 /// warm, and counts what the renderer must degrade.
 #[test]

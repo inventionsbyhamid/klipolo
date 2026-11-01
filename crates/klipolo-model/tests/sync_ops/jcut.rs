@@ -25,8 +25,8 @@ fn from(item: &Item) -> i64 {
     }
 }
 
-/// The interview synced with c2 at normal speed, the mic separated on c1 and c2, and a J cut at 1:29: c1's sound ends a
-/// second early and c2's starts a second early, under c1.
+/// The imported interview synced with c2 at normal speed, the mic separated on c1 and c2, and a J cut at 1:29: c1's
+/// sound ends a second early and c2's starts a second early, under c1.
 fn j_cut() -> Project {
     let mut p = common::imported();
     p.timeline.main[1].speed = 1.0;
