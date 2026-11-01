@@ -56,6 +56,13 @@ export function MotionField({ item }: { item: Item }) {
     rotation: t({ id: 'motion.rotation', message: 'Rotation' }),
     opacity: t({ id: 'motion.opacity', message: 'Opacity' }),
   };
+  // The same names inside a sentence: "Add position key".
+  const nouns: Record<MotionProperty, string> = {
+    position: t({ id: 'motion.position.noun', message: 'position', comment: 'Inside “Add position key”' }),
+    scale: t({ id: 'motion.scale.noun', message: 'scale', comment: 'Inside “Add scale key”' }),
+    rotation: t({ id: 'motion.rotation.noun', message: 'rotation', comment: 'Inside “Add rotation key”' }),
+    opacity: t({ id: 'motion.opacity.noun', message: 'opacity', comment: 'Inside “Add opacity key”' }),
+  };
   const eases: { value: EaseChoice; label: string }[] = [
     { value: 'linear', label: t({ id: 'motion.ease.linear', message: 'Linear' }) },
     { value: 'easeIn', label: t({ id: 'motion.ease.in', message: 'Ease in' }) },
@@ -81,13 +88,14 @@ export function MotionField({ item }: { item: Item }) {
                   .find((k) => k !== undefined);
           const choice = easeChoice(key?.ease);
           const name = names[prop];
+          const noun = nouns[prop];
           return (
             <div key={prop} className="motion-row" data-property={prop}>
               <span className="motion-name">{name}</span>
               <IconButton
                 className="icon-btn-sm"
                 icon={ChevronLeft}
-                label={t({ id: 'motion.previous', message: `Previous ${name} key`, comment: '{name} is Position, Scale…' })}
+                label={t({ id: 'motion.previous', message: `Previous ${noun} key`, comment: '{noun} is position, scale…' })}
                 disabled={before === null}
                 onClick={() => before !== null && seek(before)}
               />
@@ -96,8 +104,8 @@ export function MotionField({ item }: { item: Item }) {
                 icon={<Diamond size={14} strokeWidth={2} aria-hidden fill={here !== undefined ? 'currentColor' : 'none'} />}
                 label={
                   here !== undefined
-                    ? t({ id: 'motion.key.remove', message: `Remove ${name} key`, comment: '{name} is Position, Scale…' })
-                    : t({ id: 'motion.key.add', message: `Add ${name} key`, comment: '{name} is Position, Scale…' })
+                    ? t({ id: 'motion.key.remove', message: `Remove ${noun} key`, comment: '{noun} is position, scale…' })
+                    : t({ id: 'motion.key.add', message: `Add ${noun} key`, comment: '{noun} is position, scale…' })
                 }
                 active={here !== undefined}
                 disabled={!inside}
@@ -106,7 +114,7 @@ export function MotionField({ item }: { item: Item }) {
               <IconButton
                 className="icon-btn-sm"
                 icon={ChevronRight}
-                label={t({ id: 'motion.next', message: `Next ${name} key`, comment: '{name} is Position, Scale…' })}
+                label={t({ id: 'motion.next', message: `Next ${noun} key`, comment: '{noun} is position, scale…' })}
                 disabled={after === null}
                 onClick={() => after !== null && seek(after)}
               />

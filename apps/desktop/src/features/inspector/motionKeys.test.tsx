@@ -61,7 +61,7 @@ describe('Motion keys in the card', () => {
   it('a key button adds a key at the playhead holding the value there, and keeps the enter and exit', async () => {
     title();
     renderWithProviders(<Inspector format="landscape" />);
-    await userEvent.click(screen.getByRole('button', { name: 'Add Position key' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add position key' }));
     expect(apply).toHaveBeenCalledTimes(1);
     const [label, , params] = apply.mock.calls[0];
     expect(label).toBe('keys.add.undo');
@@ -82,7 +82,7 @@ describe('Motion keys in the card', () => {
     expect(layoutOf(apply.mock.calls[0]).motion?.keys?.scale[1].ease).toEqual({
       spring: { stiffness: 100, damping: 10, mass: 1 },
     });
-    await userEvent.click(screen.getByRole('button', { name: 'Remove Scale key' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove scale key' }));
     expect(apply.mock.calls[1][0]).toBe('keys.remove.undo');
     expect(layoutOf(apply.mock.calls[1]).motion?.keys?.scale).toEqual([key(0, 1)]);
   });
@@ -110,17 +110,17 @@ describe('Motion keys in the card', () => {
     item.layout.motion = undefined;
     useProject.setState({ snapshot, pending: 0, apply });
     renderWithProviders(<Inspector format="landscape" />);
-    expect(screen.getByRole('button', { name: 'Add Scale key' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Add Rotation key' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add scale key' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add rotation key' })).toBeNull();
   });
 
   it('the keys before and after the playhead put the playhead on them', async () => {
     title({ opacity: [key(0.5, 1), key(2.5, 0)] });
     renderWithProviders(<Inspector format="landscape" />);
-    expect(screen.getByRole('button', { name: 'Previous Opacity key' })).toBeEnabled();
-    await userEvent.click(screen.getByRole('button', { name: 'Next Opacity key' }));
+    expect(screen.getByRole('button', { name: 'Previous opacity key' })).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Next opacity key' }));
     expect(usePlayback.getState().playheadUs).toBe(3.5 * S);
-    expect(screen.getByRole('button', { name: 'Next Opacity key' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Next opacity key' })).toBeDisabled();
   });
 });
 
