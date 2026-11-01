@@ -1,5 +1,5 @@
 //! The one export slot (a single export runs at a time) and what the run on it has reported: its job, the files it
-//! put in place, and whether it has ended. A start waits briefly for a run that is winding down.
+//! put in place, and whether it has ended. Start and Resume wait briefly for a run that is winding down.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -12,8 +12,8 @@ use tokio::sync::watch;
 
 #[derive(Default)]
 pub struct ExportState {
-    /// Taken from the moment Export is pressed, so Cancel works while the latest edits are saved, until the run has
-    /// ended (a cancelled run's files are gone by then, so a new batch can't reuse their names).
+    /// Taken from the moment Export (or Resume) is pressed, so Cancel works while the latest edits are saved, until the
+    /// run has ended (a cancelled run's files are gone by then, so a new batch can't reuse their names).
     running: Mutex<Option<Slot>>,
     /// The files the last batch put in place, by index: Open and Show in Finder accept only these.
     files: Mutex<Vec<PathBuf>>,
@@ -33,11 +33,12 @@ pub type Busy = Arc<dyn Fn(bool) + Send + Sync>;
 struct Slot {
     /// `true` stops the run and deletes its job (Cancel export). Dropped when the slot is released.
     stop: watch::Sender<bool>,
-    /// The job, once the run has one (written by a start, `set_job`, or `ExportEvent::Started`).
+    /// The job, once the run has one (the job resumed, one written by a start, `set_job`, or `ExportEvent::Started`):
+    /// Quit pauses it.
     job: Option<String>,
-    /// The job's folder, once written (`set_job_dir`): quitting deletes it on the spot (`cleanup::clear_on_quit`).
-    job_dir: Option<PathBuf>,
-    /// The run has said how it ended (failed, finished or stopped) and is letting go of the slot.
+    /// A pause was asked of it: it stops at its next part, and a Resume of the same job waits for that.
+    pausing: bool,
+    /// The run has said how it ended (paused, failed, finished or stopped) and is letting go of the slot.
     ended: bool,
     /// The project it exports (id, name), once known: a Cancel that doesn't name the job acts only on the open
     /// project's export.
@@ -48,7 +49,8 @@ struct Slot {
 pub(super) const BUSY: &str = "exports.refused.busy";
 /// The job named isn't the one running (or none is).
 const NOT_RUNNING: &str = "exports.refused.notRunning";
-/// How long a start waits for a run that has just said how it ended.
+/// How long Start or Resume waits for a run that is winding down: one that has just said how it ended, or (Resume) the
+/// same job finishing its current part after a pause.
 const WIND_DOWN: Duration = Duration::from_secs(30);
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -80,22 +82,17 @@ impl ExportState {
         }
     }
 
-    /// The run's job, as soon as it is written.
+    /// The run's job, as soon as it is written: Quit then pauses it, even in the moment before its run starts
+    /// (`pause_for_quit`), rather than stopping it.
     pub fn set_job(&self, job: String) {
         if let Some(slot) = lock(&self.running).as_mut() {
             slot.job = Some(job);
         }
     }
 
-    /// The run's job folder, as soon as it is written.
-    pub fn set_job_dir(&self, dir: PathBuf) {
-        if let Some(slot) = lock(&self.running).as_mut() {
-            slot.job_dir = Some(dir);
-        }
-    }
-
-    /// Takes the one export slot; the receiver hears Cancel. The last batch's files are forgotten.
-    pub fn reserve(&self) -> Result<watch::Receiver<bool>, Said> {
+    /// Takes the one export slot for `job` (the job a Resume continues; None for a new export); the receiver hears
+    /// Cancel. The last batch's files are forgotten.
+    pub fn reserve(&self, job: Option<String>) -> Result<watch::Receiver<bool>, Said> {
         let mut running = lock(&self.running);
         if running.is_some() {
             return Err(Said::code(BUSY));
@@ -103,8 +100,8 @@ impl ExportState {
         let (stop, cancel) = watch::channel(false);
         *running = Some(Slot {
             stop,
-            job: None,
-            job_dir: None,
+            job,
+            pausing: false,
             ended: false,
             project: None,
         });
@@ -114,14 +111,17 @@ impl ExportState {
         Ok(cancel)
     }
 
-    /// `reserve`, after waiting (briefly) for a run that has just said how it ended, so Try again pressed the moment a
-    /// failure lands doesn't meet "An export is already running.". Another running export still does.
-    pub async fn take_slot(&self) -> Result<watch::Receiver<bool>, Said> {
+    /// `reserve`, after waiting (briefly) for a run that is winding down, so Try again or Resume pressed the moment a
+    /// failure or a pause lands, or Resume on a job still pausing (`job`), doesn't meet "An export is already
+    /// running.". Another running export still does.
+    pub async fn take_slot(&self, job: Option<String>) -> Result<watch::Receiver<bool>, Said> {
         let ending = {
             let running = lock(&self.running);
             match running.as_ref() {
                 None => None,
-                Some(slot) if slot.ended => Some(slot.stop.subscribe()),
+                Some(slot) if slot.ended || (slot.pausing && job.is_some() && slot.job == job) => {
+                    Some(slot.stop.subscribe())
+                }
                 Some(_) => return Err(Said::code(BUSY)),
             }
         };
@@ -130,12 +130,17 @@ impl ExportState {
             let released = async { while ending.changed().await.is_ok() {} };
             let _ = tokio::time::timeout(WIND_DOWN, released).await;
         }
-        self.reserve()
+        self.reserve(job)
     }
 
     pub fn release(&self) {
         let released = lock(&self.running).take();
-        if released.is_some() {
+        if let Some(slot) = released {
+            // A pause Quit queued for a run that never started goes with its slot: a later Resume of that job in this
+            // process runs as asked.
+            if let Some(job) = &slot.job {
+                klipolo_engine::export::runner::forget_pause(job);
+            }
             self.tell_busy(false);
         }
     }
@@ -166,17 +171,40 @@ impl ExportState {
         Ok(())
     }
 
-    /// Quit's stop: the run is stopped, as Cancel does. None when nothing runs; else its job and folder as far as they
-    /// are written, and a receiver that hears the slot released.
-    pub fn stop_for_quit(&self) -> Option<Stopped> {
+    /// Pauses the running job `job` (Pause on its row): it stops at its next part, keeping every finished part. Refused
+    /// (`exports.refused.notRunning`) when it isn't running.
+    pub fn pause(&self, job: &str) -> Result<(), Said> {
+        if !klipolo_engine::export::runner::pause(job) {
+            return Err(Said::code(NOT_RUNNING));
+        }
+        self.pausing(job);
+        Ok(())
+    }
+
+    /// The slot's run, when it is `job`'s, was asked to pause.
+    fn pausing(&self, job: &str) {
+        if let Some(slot) = lock(&self.running).as_mut()
+            && slot.job.as_deref() == Some(job)
+        {
+            slot.pausing = true;
+        }
+    }
+
+    /// Quit's pause: the run's job is paused (`runner::pause_when_it_runs`), so its finished parts are kept and it
+    /// lists as resumable next time; an export with no job written yet (still saving its latest changes) is stopped, as
+    /// nothing of it is finished. None when nothing runs; else a receiver that hears the slot released.
+    pub fn pause_for_quit(&self) -> Option<watch::Receiver<bool>> {
         let running = lock(&self.running);
         running.as_ref().map(|slot| {
-            let _ = slot.stop.send(true);
-            Stopped {
-                job: slot.job.clone(),
-                dir: slot.job_dir.clone(),
-                released: slot.stop.subscribe(),
+            match &slot.job {
+                Some(job) => {
+                    klipolo_engine::export::runner::pause_when_it_runs(job);
+                }
+                None => {
+                    let _ = slot.stop.send(true);
+                }
             }
+            slot.stop.subscribe()
         })
     }
 
@@ -245,13 +273,6 @@ impl ExportState {
     }
 }
 
-/// A run Quit stopped: its job and folder (when written), and what hears its slot released.
-pub struct Stopped {
-    pub job: Option<String>,
-    pub dir: Option<PathBuf>,
-    pub released: watch::Receiver<bool>,
-}
-
 /// Lets go of the slot when dropped. The run's task holds one, so a panic in it (the runner, an event's `emit`) still
 /// releases the slot; `release` is idempotent.
 pub struct Releases<'a>(pub &'a ExportState);
@@ -271,7 +292,7 @@ mod tests {
     #[test]
     fn a_stop_without_a_job_never_stops_another_projects_export() {
         let state = ExportState::default();
-        let stop = state.reserve().unwrap();
+        let stop = state.reserve(None).unwrap();
         assert!(state.is_running());
         state.set_project("a".into(), "Launch".into());
         let refused = state.cancel_for(None, Some("b")).unwrap_err();
@@ -298,7 +319,7 @@ mod tests {
         assert!(!state.is_running());
         // Still saving (no job yet), its project recorded as it took the slot. A Cancel from another project is
         // refused; its own project's Cancel stops it.
-        let stop = state.reserve().unwrap();
+        let stop = state.reserve(None).unwrap();
         state.set_project("a".into(), "Launch".into());
         assert!(state.cancel_for(None, Some("b")).is_err());
         assert!(!*stop.borrow());
@@ -313,23 +334,23 @@ mod tests {
     #[test]
     fn a_run_that_panics_still_releases_the_slot() {
         let state = ExportState::default();
-        let _stop = state.reserve().unwrap();
+        let _stop = state.reserve(None).unwrap();
         let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _slot = Releases(&state);
             panic!("the export's run panicked");
         }));
         assert!(run.is_err());
         assert!(!state.is_running());
-        assert!(state.reserve().is_ok());
+        assert!(state.reserve(None).is_ok());
     }
 
     #[test]
     fn a_start_waits_for_a_run_winding_down_but_not_for_another_export() {
         runtime().block_on(async {
             let state = std::sync::Arc::new(ExportState::default());
-            state.reserve().unwrap();
+            state.reserve(None).unwrap();
             // Another export is running: no wait.
-            assert_eq!(state.take_slot().await.unwrap_err(), Said::code(BUSY));
+            assert_eq!(state.take_slot(None).await.unwrap_err(), Said::code(BUSY));
             // A run that has said how it ended: the start waits for the slot, then takes it.
             state.record(&ExportEvent::Failed {
                 message: Said::code("exports.diskFull"),
@@ -339,9 +360,57 @@ mod tests {
                 tokio::time::sleep(Duration::from_millis(50)).await;
                 ending.release();
             });
-            state.take_slot().await.unwrap();
+            state.take_slot(None).await.unwrap();
             assert!(state.is_running());
         });
+    }
+
+    /// Resume pressed on a job still pausing (its run finishing its current part) waits for it; the same job still
+    /// running (Resume pressed twice at once, or from two places) and another job's export are refused at once, as busy.
+    #[test]
+    fn resume_waits_for_its_own_job_pausing_but_never_runs_one_twice() {
+        runtime().block_on(async {
+            let state = std::sync::Arc::new(ExportState::default());
+            state.reserve(Some("a".into())).unwrap();
+            assert_eq!(
+                state.take_slot(Some("b".into())).await.unwrap_err(),
+                Said::code(BUSY),
+                "another job's export runs"
+            );
+            assert_eq!(
+                state.take_slot(Some("a".into())).await.unwrap_err(),
+                Said::code(BUSY),
+                "the same job runs already"
+            );
+            state.pausing("a");
+            let ending = state.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                ending.release();
+            });
+            state.take_slot(Some("a".into())).await.unwrap();
+            assert!(state.is_running(), "the same job, once it let go");
+        });
+    }
+
+    /// Quit pauses the run on the slot: one with a job is paused (its finished parts kept, resumable next time), even
+    /// in the moment before its run starts; one still saving its latest changes has nothing finished, so it is stopped.
+    /// The receiver hears the slot released.
+    #[test]
+    fn quit_pauses_a_run_with_a_job_and_stops_one_still_saving() {
+        let state = ExportState::default();
+        assert!(state.pause_for_quit().is_none(), "nothing runs");
+        let stop = state.reserve(None).unwrap();
+        let mut released = state.pause_for_quit().expect("it runs");
+        assert!(*stop.borrow(), "no job yet: stopped");
+        state.release();
+        assert!(released.has_changed().is_err(), "released");
+        let job = "0b9e6f3c-6d2a-4f3e-9c1b-2a7d5e8f9a10";
+        let stop = state.reserve(Some(job.into())).unwrap();
+        assert!(state.pause_for_quit().is_some());
+        assert!(!*stop.borrow(), "a job is paused, never stopped");
+        // The pause waits for the job's run; the slot let go first, it goes with it (`release`).
+        state.release();
     }
 
     /// Editing copies (and the thumbnail scans they hold) hear the slot taken and released, each hook once, though the
@@ -356,7 +425,7 @@ mod tests {
                 heard.lock().unwrap().push((who, busy))
             }));
         }
-        let _stop = state.reserve().unwrap();
+        let _stop = state.reserve(None).unwrap();
         state.release();
         state.release();
         assert_eq!(
@@ -374,7 +443,7 @@ mod tests {
     #[test]
     fn only_the_last_batchs_files_are_known() {
         let state = ExportState::default();
-        let _stop = state.reserve().unwrap();
+        let _stop = state.reserve(None).unwrap();
         state.record(&ExportEvent::FileReady {
             index: 1,
             path: "/m/Demo 9x16.mp4".into(),
@@ -384,7 +453,7 @@ mod tests {
         assert_eq!(state.files(), [PathBuf::from("/m/Demo 9x16.mp4")]);
         state.record(&ExportEvent::Finished { notes: None });
         state.release();
-        let _stop = state.reserve().unwrap();
+        let _stop = state.reserve(None).unwrap();
         assert_eq!(state.file(1), None);
     }
 
