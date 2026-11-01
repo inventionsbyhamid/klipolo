@@ -488,7 +488,7 @@ fn a_speed_that_leaves_a_transition_no_room_waits_for_the_person_and_says_why() 
     assert_eq!(out.notes, Vec::<String>::new());
     assert_eq!(
         out.waits,
-        ["At that speed a transition no longer fits, so the change waits for you."]
+        ["At that speed a transition no longer fits, so the change waits for Apply."]
     );
 }
 
@@ -743,6 +743,11 @@ fn every_cut_takes_one_where_it_has_room() {
         out.additions.unwrap().params.unwrap()["count"],
         ErrorParam::from(2usize)
     );
+    // Said, never left out quietly.
+    assert_eq!(
+        out.notes,
+        ["1 cut has no spare footage for a transition, so it has none."]
+    );
     // Where none has room, the person is told.
     let mut bare = clips();
     bare.timeline.main = vec![clip("a", "talk", 0.0, 60.0), clip("d", "broll", 0.0, 12.0)];
@@ -917,4 +922,49 @@ fn a_speed_up_cuts_the_music_at_the_new_end_as_the_card_does_and_says_which_ops_
         ..Default::default()
     };
     assert!(!edit.needs_review(Some(&p)));
+}
+
+#[test]
+fn a_length_alone_is_the_cards_length_and_every_cut_is_refused_past_ones_room() {
+    let p = with_dissolve(1.0);
+    // Only the length: labelled as the card's Length.
+    let out = run(
+        &p,
+        &[("setTransition", set_transition("c2", "dissolve", json!(1)))],
+    );
+    let (ops, _, _) = applied(&p, &out);
+    assert_eq!(ops, [set_transition_op("b", Some(dissolve(1.0)))]);
+    assert_eq!(
+        out.additions.unwrap().params.unwrap()["change"],
+        ErrorParam::from("length")
+    );
+    // Every cut asked for 3 s: the cut after c2 has room for 2 s, so the whole call is refused, naming it.
+    let out = run(
+        &p,
+        &[("setTransition", set_transition("all", "dissolve", json!(3)))],
+    );
+    assert_eq!(
+        model_refusal(&out),
+        "setTransition: the cut after c2 has room for at most 2.0 s."
+    );
+    assert_eq!(out.additions, None);
+}
+
+#[test]
+fn a_new_kind_keeps_a_short_transition_where_a_new_one_would_not_fit() {
+    // A 0.11 s dissolve with just that much room: at 24 fps no whole number of frames from 0.1 s fits, yet the card's
+    // Type changes its kind and keeps its length.
+    let mut p = with_dissolve(0.055);
+    p.settings.fps = 24;
+    let out = run(
+        &p,
+        &[("setTransition", set_transition("c2", "push", json!(null)))],
+    );
+    let (ops, _, _) = applied(&p, &out);
+    let push = Transition {
+        effect: builtin::TRANSITION_PUSH.into(),
+        duration_us: secs(0.11),
+        params: Default::default(),
+    };
+    assert_eq!(ops, [set_transition_op("b", Some(push))]);
 }

@@ -514,6 +514,10 @@ fn done(call: &ToolCall) -> Option<&'static str> {
         ToolCall::SetCaptions { .. } => "The captions are changed.",
         ToolCall::FixCaptionWords { .. } => "The words are fixed.",
         ToolCall::SplitAt { .. } => "The clip is split.",
+        ToolCall::SetClip {
+            clip: crate::tools::ClipRef::All,
+            ..
+        } => "The clips are changed.",
         ToolCall::SetClip { .. } => "The clip is changed.",
         ToolCall::SetTransition { .. } => "The transitions are changed.",
         ToolCall::TrimClip { .. } => "The clip is longer.",

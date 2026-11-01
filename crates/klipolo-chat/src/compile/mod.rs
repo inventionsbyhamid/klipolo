@@ -496,6 +496,8 @@ impl Compiler<'_> {
                 waiting.push((i, Removal::Moved(call)));
                 continue;
             }
+            // `setTransition`'s sentence on the cuts with no room, said once its edit is in.
+            let mut skipped: Option<String> = None;
             let addition = match call {
                 ToolCall::Undo => continue,
                 ToolCall::AskUser { question } => {
@@ -561,9 +563,21 @@ impl Compiler<'_> {
                 | ToolCall::SetFormat { .. }
                 | ToolCall::SetCaptions { .. }
                 | ToolCall::FixCaptionWords { .. }
-                | ToolCall::SetClip { .. }
-                | ToolCall::SetTransition { .. } => {
+                | ToolCall::SetClip { .. } => {
                     (self.addition(&adding.work, call), Removal::Moved(call))
+                }
+                ToolCall::SetTransition {
+                    after,
+                    kind,
+                    duration_us,
+                } => {
+                    let edit =
+                        clips::set_transition(self, &adding.work, after, *kind, *duration_us);
+                    let edit = edit.map(|(edit, said)| {
+                        skipped = said;
+                        edit
+                    });
+                    (edit, Removal::Moved(call))
                 }
             };
             let (edit, if_it_removes) = addition;
@@ -582,6 +596,9 @@ impl Compiler<'_> {
                         && let Some(refit) = clips::note_refit(&adding.done, &mut tried)
                     {
                         notes.push((i, refit.said()));
+                    }
+                    if let Some(said) = skipped.take().filter(|_| tried.after.is_some()) {
+                        notes.push((i, said));
                     }
                     adding.keep(tried, i);
                 }
@@ -774,7 +791,9 @@ impl Compiler<'_> {
                 after,
                 kind,
                 duration_us,
-            } => clips::set_transition(self, work, after, *kind, *duration_us),
+            } => {
+                clips::set_transition(self, work, after, *kind, *duration_us).map(|(edit, _)| edit)
+            }
             other => Err(to_model(format!("{}: not an addition.", other.name()))),
         }
     }

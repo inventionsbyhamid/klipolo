@@ -92,7 +92,7 @@ describe("chat's clip changes", () => {
         reply(
           r.id,
           'Here is what I would remove. Apply it or discard it. ' +
-            'At that speed a transition no longer fits, so the change waits for you.',
+            'At that speed a transition no longer fits, so the change waits for Apply.',
           { proposal: p },
         ),
       apply: () => ({ change: changed(4, undo), undo }),
@@ -101,7 +101,7 @@ describe("chat's clip changes", () => {
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'speed up the middle part 2x{Enter}');
     expect(
-      await screen.findByText(/At that speed a transition no longer fits, so the change waits for you\.$/),
+      await screen.findByText(/At that speed a transition no longer fits, so the change waits for Apply\.$/),
     ).toBeInTheDocument();
     const card = screen.getByRole('group', { name: 'Remove 1 transition' });
     // Nothing is cut: the card says what goes, never a length.

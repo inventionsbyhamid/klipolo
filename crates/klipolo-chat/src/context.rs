@@ -67,6 +67,7 @@ use klipolo_model::timeline::{Clip, ClipSource};
 use serde::{Deserialize, Serialize};
 
 use crate::library::{Library, LibraryItem, MediaKind};
+use crate::tools::TransitionKind;
 
 /// The most the context may take of the model's input, in tokens (`estimate_tokens`).
 pub const MAX_CONTEXT_TOKENS: usize = 12_000;
@@ -821,9 +822,8 @@ fn clip_line(out: &mut String, p: &Project, i: usize, start: Us, brief: Brief) {
     if let Some(t) = &clip.transition_out
         && i + 1 < p.timeline.main.len()
     {
-        let kind = (t.effect.as_str())
-            .strip_prefix("klipolo.builtin/transition.")
-            .unwrap_or("transition");
+        // In the tool's own words; another transition (a plugin's) is just a transition.
+        let kind = TransitionKind::of(t.effect.as_str()).map_or("transition", TransitionKind::key);
         notes.push(format!(
             "{kind} {} s into {}",
             secs(t.duration_us),

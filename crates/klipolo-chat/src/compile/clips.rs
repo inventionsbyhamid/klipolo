@@ -10,12 +10,13 @@
 //!   that fits), a new kind starts from its own defaults as the transition card's Type does (its length kept), a length
 //!   goes on the frame grid within the cut's room as the card's Length does (`transitions::transition_length_us`), and
 //!   none takes it away as Remove does. Each cut is fitted beside the transitions the cuts before it were just given,
-//!   as the model checks a batch's ops in order.
+//!   as the model checks a batch's ops in order. With every cut asked for, a cut with no spare footage is left as it
+//!   is, and the reply says how many were.
 //!
 //! Undo labels: `chat.setClip {clip, change}` (`change` one of speed, volume, mute, unmute, fit, fill, or several), and
 //! `chat.setClip.note` with the page's own note (`timeline.refit {removed, shortened}`) when a speed refits
 //! transitions, as the card's `speed.undo.note` does; `chat.setTransition {after, change, count}` (`change` one of add,
-//! change, remove).
+//! change, length, remove).
 
 use std::collections::BTreeMap;
 
@@ -227,7 +228,8 @@ impl Refit {
     }
 
     /// The note in Klipolo's words, as the page's `refitNote` says it in English: "A transition is shortened.", "2
-    /// transitions are removed and one is shortened."
+    /// transitions are removed and one is shortened." Keep it in step with the page's `timeline.refit` message
+    /// (`apps/desktop/src/lib/labelTable.ts`), which words the same counts in the undo label.
     pub(super) fn said(self) -> String {
         let removed = match self.removed {
             1 => "A transition is removed".to_owned(),
@@ -242,13 +244,19 @@ impl Refit {
         }
     }
 
-    /// Said when the change waits for the person because a transition no longer fits.
+    /// Said when the change waits for the person because a transition no longer fits, with any it shortens: to the
+    /// person in chat, and to another app beside its proposal.
     pub(super) fn waits(self) -> String {
         let fits = match self.removed {
             1 => "a transition no longer fits".to_owned(),
             n => format!("{n} transitions no longer fit"),
         };
-        format!("At that speed {fits}, so the change waits for you.")
+        let shorter = match self.shortened {
+            0 => String::new(),
+            1 => " and one gets shorter".to_owned(),
+            n => format!(" and {n} get shorter"),
+        };
+        format!("At that speed {fits}{shorter}, so the change waits for Apply.")
     }
 }
 
@@ -280,7 +288,9 @@ fn transition_at(
 ) -> Result<Option<Transition>, Room> {
     let fps = p.settings.fps;
     let max = max_transition_us(p, i);
-    if transition_length_us(MIN_TRANSITION_US, max, fps) == 0 {
+    // One already there keeps its length through a new kind, as the card's Type keeps it: no room is needed.
+    let kept = now.is_some() && asked.is_none();
+    if !kept && transition_length_us(MIN_TRANSITION_US, max, fps) == 0 {
         return Err(Room::None);
     }
     let length = match asked {
@@ -321,16 +331,14 @@ pub(super) fn set_transition(
     after: &ClipRef,
     kind: Option<TransitionKind>,
     asked: Option<Us>,
-) -> Result<Edit, Refused> {
+) -> Result<(Edit, Option<String>), Refused> {
     let main = &work.timeline.main;
     let cuts: Vec<usize> = match after {
         ClipRef::All => (0..main.len().saturating_sub(1)).collect(),
         ClipRef::One(short) => {
-            // The cut after the piece that holds the clip's end.
+            // The cut after its last piece.
             let pieces = named(c, work, "setTransition", after)?;
-            let last = (pieces.iter().copied())
-                .max_by_key(|&i| main[i].source_out_us)
-                .unwrap_or_default();
+            let last = pieces.iter().copied().max().unwrap_or_default();
             if last + 1 >= main.len() {
                 return Err(to_model(format!(
                     "setTransition: {short} is the last clip, so no cut follows it."
@@ -343,7 +351,7 @@ pub(super) fn set_transition(
     // Each cut fitted beside the transitions the ones before it get, as the model checks the ops in order.
     let mut scratch = work.clone();
     let mut ops = Vec::new();
-    let (mut added, mut changed, mut removed, mut no_room) = (0usize, 0usize, 0usize, 0usize);
+    let (mut added, mut changed, mut lengths, mut removed, mut no_room) = (0usize, 0, 0, 0, 0);
     for i in cuts {
         let now = scratch.timeline.main[i].transition_out.clone();
         let next = match kind {
@@ -364,6 +372,10 @@ pub(super) fn set_transition(
         match (&now, &next) {
             (_, None) => removed += 1,
             (None, Some(_)) => added += 1,
+            // Only its length: the card's Length.
+            (Some(was), Some(is)) if was.effect == is.effect && was.params == is.params => {
+                lengths += 1
+            }
             (Some(_), Some(_)) => changed += 1,
         }
         scratch.timeline.main[i].transition_out = next.clone();
@@ -389,22 +401,36 @@ pub(super) fn set_transition(
     }
     let change = if removed > 0 {
         "remove"
-    } else if changed == 0 {
+    } else if changed + lengths == 0 {
         "add"
+    } else if changed + added == 0 {
+        "length"
     } else {
         "change"
     };
-    Ok(Edit {
+    let edit = Edit {
         ops,
         label: label(
             "setTransition",
             vec![
                 ("after", ErrorParam::from(after.word())),
                 ("change", ErrorParam::from(change)),
-                ("count", ErrorParam::from(added + changed + removed)),
+                (
+                    "count",
+                    ErrorParam::from(added + changed + lengths + removed),
+                ),
             ],
         ),
-    })
+    };
+    // The cuts asked for that got none, said rather than left out quietly.
+    let skipped = match no_room {
+        0 => None,
+        1 => Some("1 cut has no spare footage for a transition, so it has none.".to_owned()),
+        n => Some(format!(
+            "{n} cuts have no spare footage for a transition, so they have none."
+        )),
+    };
+    Ok((edit, skipped))
 }
 
 /// Why the cut after the working copy's clip `i` can't take the length asked: at most `max` (floored to tenths, so the

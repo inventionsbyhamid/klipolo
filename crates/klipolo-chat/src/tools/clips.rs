@@ -50,6 +50,13 @@ pub enum TransitionKind {
 }
 
 impl TransitionKind {
+    /// The built-in transition `effect` is, if it is one of these.
+    pub fn of(effect: &str) -> Option<Self> {
+        [Self::Dissolve, Self::Dip, Self::Push, Self::Wipe]
+            .into_iter()
+            .find(|kind| kind.effect() == effect)
+    }
+
     /// The tool's word for it.
     pub fn key(self) -> &'static str {
         match self {
@@ -237,7 +244,9 @@ pub(super) const SET_TRANSITION: Tool = Tool {
             ),
             (
                 "durationSec",
-                nullable_number("0.1 to 5 s. Null for 0.5 s, or the length it has."),
+                nullable_number(
+                    "0.1 to 5 s. Null: 0.5 s (or the longest that fits), or the length it has.",
+                ),
             ),
         ]
     },

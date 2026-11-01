@@ -2658,7 +2658,7 @@ async fn a_speed_that_leaves_a_transition_no_room_waits_for_apply_then_undoes_as
     assert_eq!(
         r["text"],
         "Here is what I would remove. Apply it or discard it. At that speed a transition no longer fits, so the \
-         change waits for you."
+         change waits for Apply."
     );
     assert_eq!(r["proposal"]["title"], "Remove 1 transition");
     assert_eq!(
