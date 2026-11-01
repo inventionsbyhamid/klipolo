@@ -114,45 +114,8 @@
   font-stretch: var(--wdth-title);
 }
 
-.search {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
+.words-head .search {
   width: 148px;
-  height: 30px;
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-pill);
-  background: var(--color-bay-raised);
-  color: var(--color-ink-faint);
-  font-size: var(--text-sm);
-}
-
-.search:focus-within {
-  box-shadow: inset 0 0 0 2px var(--color-paper);
-}
-
-.search .ico {
-  flex: none;
-  width: 15px;
-  height: 15px;
-}
-
-.search input {
-  min-width: 0;
-  flex: 1;
-  border: 0;
-  background: transparent;
-  color: var(--color-ink);
-  font: inherit;
-  outline: none;
-}
-
-.search input::placeholder {
-  color: var(--color-ink-faint);
-}
-
-.search input::-webkit-search-cancel-button {
-  display: none;
 }
 
 .words-hint {
