@@ -102,6 +102,17 @@ describe('Motion keys in the card', () => {
     expect(rest.rect.y + y).toBeCloseTo(want.y, 9);
   });
 
+  it('an adjustment layer, which stays upright, has no Rotation row', () => {
+    const snapshot = title();
+    const item = snapshot.project.timeline.tracks[0].items[0];
+    item.content = { type: 'adjustment' };
+    item.layout.motion = undefined;
+    useProject.setState({ snapshot, pending: 0, apply });
+    renderWithProviders(<Inspector format="landscape" />);
+    expect(screen.getByRole('button', { name: 'Add Scale key' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add Rotation key' })).toBeNull();
+  });
+
   it('the keys before and after the playhead put the playhead on them', async () => {
     title({ opacity: [key(0.5, 1), key(2.5, 0)] });
     renderWithProviders(<Inspector format="landscape" />);

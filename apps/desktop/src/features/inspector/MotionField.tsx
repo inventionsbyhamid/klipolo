@@ -27,6 +27,8 @@ const PROPERTIES: MotionProperty[] = ['position', 'scale', 'rotation', 'opacity'
  * playhead; without them they set the layer as before.
  */
 export function MotionField({ item }: { item: Item }) {
+  // An adjustment layer's box stays upright (the engine draws it so): it has no Rotation.
+  const properties = item.content.type === 'adjustment' ? PROPERTIES.filter((p) => p !== 'rotation') : PROPERTIES;
   const { t } = useLingui();
   // The playhead in the layer's time; the row's buttons are off while it is outside the layer.
   const playheadUs = usePlayback((s) => s.playheadUs);
@@ -52,7 +54,7 @@ export function MotionField({ item }: { item: Item }) {
   return (
     <Field label={t({ id: 'motion.label', message: 'Motion', comment: 'Keys set by hand on a layer' })} stack>
       <div className="motion-rows">
-        {PROPERTIES.map((prop) => {
+        {properties.map((prop) => {
           const times = propertyTimes(motion, prop);
           const here = times.find((k) => Math.abs(k - tUs) <= slack);
           const before = previousKey(times, tUs, slack);
