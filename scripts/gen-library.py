@@ -317,7 +317,8 @@ def bass_drop():
     for i in range(n):
         t = i / SR
         phase += (34.0 + 126.0 * glide) / SR
-        env = min(1.0, i / (0.004 * SR)) * (1.0 if t < 1.6 else cos(PI / 2 * (t - 1.6) / 0.7) ** 2)
+        fall = 1.0 if t < 1.6 else cos(PI / 2 * (t - 1.6) / 0.7)
+        env = min(1.0, i / (0.004 * SR)) * fall * fall
         out.append(0.8 * soft(2.2 * osc(phase)) * env + 0.5 * noise() * click)
         glide *= glide_k
         click *= click_k
@@ -367,7 +368,8 @@ def glitch():
         if kind == 3 and last:
             cut = last[:]
         elif kind in (0, 3):
-            f = 180.0 + 1400.0 * unit(noise) ** 2
+            r = unit(noise)
+            f = 180.0 + 1400.0 * r * r
             cut = [0.5 if osc(f * j / SR) >= 0 else -0.5 for j in range(length)]
         elif kind == 1:
             hold, step, cut = 0.0, 1 + int(unit(noise) * 12), []
@@ -1218,7 +1220,7 @@ def drawn_circle():
 
 def underline():
     """A gold marker stroke, slightly curved, to underline words."""
-    swash = [(-420 + 840 * k / 24, 70 - 150 * k / 24 + 260 * (k / 24 - 0.5) ** 2) for k in range(25)]
+    swash = [(-420 + 840 * s, 70 - 150 * s + 260 * (s - 0.5) * (s - 0.5)) for s in (k / 24 for k in range(25))]
     return bordered(Strokes([swash], 76.0), GOLD)
 
 
