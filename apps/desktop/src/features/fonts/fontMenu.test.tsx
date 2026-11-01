@@ -8,6 +8,7 @@ import type { FontRow } from '../../bindings/FontRow';
 import { resetDownloadsForTests, useFonts } from '../../state/fonts';
 import { renderWithProviders } from '../../test/render';
 import { FontMenu } from './FontMenu';
+import { MissingFontBadge } from './MissingFontBadge';
 
 /*
  * The font menu: Rust's search and browse (the 12 bundled families first), weights a family has, a dry run on the
@@ -252,5 +253,28 @@ describe('the font menu', () => {
         'Google Fonts is off. Turn it on in Settings.',
       );
     });
+  });
+});
+
+describe('a font not on this Mac', () => {
+  const badge = (font: FontRef) =>
+    renderWithProviders(<MissingFontBadge font={font} weight={400} italic={false} />);
+
+  it('is named under the font menu, never silently; one that is here, bundled or installed, says nothing', async () => {
+    fake({ rows: [...base(), poppins] });
+    const { unmount } = badge({ family: 'Nowhere Sans', source: { type: 'installed' } });
+    expect(await screen.findByText('Missing font: Nowhere Sans')).toBeInTheDocument();
+    unmount();
+    // A Google font not downloaded on this Mac.
+    const google = badge({ family: 'Poppins', source: { type: 'google', version: 'v23' } });
+    expect(await screen.findByText('Missing font: Poppins')).toBeInTheDocument();
+    google.unmount();
+    const here = badge({ family: 'Avenir Next', source: { type: 'installed' } });
+    await act(async () => undefined);
+    expect(screen.queryByText(/Missing font/)).toBeNull();
+    here.unmount();
+    badge({ family: 'Inter', source: { type: 'bundled' } });
+    await act(async () => undefined);
+    expect(screen.queryByText(/Missing font/)).toBeNull();
   });
 });

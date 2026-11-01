@@ -20,6 +20,7 @@ import { clearPreview, dropPendingPreview, previewOps } from '../../state/livePr
 import { ColorField, type Swatch } from '../color/ColorField';
 import { useColorCommit } from '../color/useColorCommit';
 import { FontMenu } from '../fonts/FontMenu';
+import { MissingFontBadge } from '../fonts/MissingFontBadge';
 import { AnimationField, PositionField, TimingField } from './common';
 import { Field } from './fields';
 import { TextField } from './TextField';
@@ -121,23 +122,26 @@ export function TextInspector({
     <>
       <TextField key={content.text} id={item.id} content={content} locked={locked} />
       <Field label={t({ id: 'text.font', message: 'Font' })}>
-        <FontMenu
-          label={t({ id: 'text.font', message: 'Font' })}
-          value={style.font}
-          weight={style.weight}
-          italic={style.italic}
-          text={content.text}
-          // Arrow keys and a resting hover show a font on the title (a dry run); Escape puts it back.
-          onPreview={(font, weight, italic) =>
-            font ? previewOps(() => styleOps((now) => ({ ...now, font, weight, italic }))) : clearPreview()
-          }
-          onPick={(font, weight, italic) => {
-            // The pick is committed as the dry run showed it: the new revision replaces the dry run, no flicker.
-            dropPendingPreview();
-            useRecentFonts.getState().push(font);
-            setStyle('text.font.undo', (now) => ({ ...now, font, weight, italic }));
-          }}
-        />
+        <div className="font-field">
+          <FontMenu
+            label={t({ id: 'text.font', message: 'Font' })}
+            value={style.font}
+            weight={style.weight}
+            italic={style.italic}
+            text={content.text}
+            // Arrow keys and a resting hover show a font on the title (a dry run); Escape puts it back.
+            onPreview={(font, weight, italic) =>
+              font ? previewOps(() => styleOps((now) => ({ ...now, font, weight, italic }))) : clearPreview()
+            }
+            onPick={(font, weight, italic) => {
+              // The pick is committed as the dry run showed it: the new revision replaces the dry run, no flicker.
+              dropPendingPreview();
+              useRecentFonts.getState().push(font);
+              setStyle('text.font.undo', (now) => ({ ...now, font, weight, italic }));
+            }}
+          />
+          <MissingFontBadge font={style.font} weight={style.weight} italic={style.italic} />
+        </div>
       </Field>
       <Field label={sizeLabel}>
         <ToolSlider

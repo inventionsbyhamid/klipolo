@@ -294,3 +294,24 @@
   gap: var(--space-3);
   padding-top: var(--space-2);
 }
+
+/* A text's font that isn't on this Mac, named under its font menu. */
+.font-missing {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.font-missing svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--color-paper);
+}
+
+.font-missing span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

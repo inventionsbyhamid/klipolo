@@ -54,7 +54,12 @@ export function useFontSearch(query: string, filter: SearchFilter, on: boolean):
  * Rust (`fonts_row`), not a search. Asked again when the fonts change.
  */
 export function useFontRow(font: FontRef, weight: number, italic: boolean): FontRow | null {
-  const [row, setRow] = useState<FontRow | null>(null);
+  return useFontRowAnswer(font, weight, italic) ?? null;
+}
+
+/** `useFontRow`'s answer, undefined until Rust has given one (null: no such family here or at Google). */
+export function useFontRowAnswer(font: FontRef, weight: number, italic: boolean): FontRow | null | undefined {
+  const [answer, setAnswer] = useState<{ key: string; row: FontRow | null } | null>(null);
   const changes = useFontsChanges(true);
   const key = JSON.stringify([font, weight, italic]);
   const asked = useRef(0);
@@ -64,11 +69,12 @@ export function useFontRow(font: FontRef, weight: number, italic: boolean): Font
     fonts
       .row(f, w, i)
       .then((found) => {
-        if (ask === asked.current) setRow(found ?? null);
+        if (ask === asked.current) setAnswer({ key, row: found ?? null });
       })
       .catch(() => {
-        if (ask === asked.current) setRow(null);
+        if (ask === asked.current) setAnswer({ key, row: null });
       });
   }, [key, changes]);
-  return row;
+  // An answer for another font is none for this one: never a flash of the last font's row.
+  return answer && answer.key === key ? answer.row : undefined;
 }
