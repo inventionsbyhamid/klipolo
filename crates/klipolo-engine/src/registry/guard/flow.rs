@@ -84,7 +84,7 @@ pub(super) fn flow(cx: &Ctx, f: &Function, fi: &FunctionInfo) -> Flow {
         fi,
         calls: &c.calls,
     };
-    // Per local: the loops whose bodies store to it; per load of a local, those it's read after (review m-b: once).
+    // Per local: the loops whose bodies store to it; per load of a local, those it's read after (once).
     let mut stored_in: Vec<Vec<usize>> = vec![Vec::new(); f.local_variables.len()];
     for s in &c.stores {
         if let Target::Local(v) = s.target {

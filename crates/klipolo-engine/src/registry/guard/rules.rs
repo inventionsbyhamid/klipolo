@@ -1,7 +1,7 @@
 //! The module rules on naga's IR, before validation: the body declares no globals but `const`s, no bindings,
 //! entry points, overrides or atomics, no `kl` names; it has the kind's entry function; and it stays inside the size
-//! caps, including no array or struct type of more than `MAX_CONST_ELEMENTS` values anywhere in the module
-//! and none nested more than `MAX_NESTING` deep. Only items whose span starts inside the body are
+//! caps, including no array or struct type of more than `MAX_CONST_ELEMENTS` values anywhere in the module and none
+//! nested more than `MAX_NESTING` deep. Only items whose span starts inside the body are
 //! the author's: the prelude, `Params` and the host's entry aren't. Every rule is linear in the module, and at most
 //! `MAX_REPORTED` diagnostics are built.
 

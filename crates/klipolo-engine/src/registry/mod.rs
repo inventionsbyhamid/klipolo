@@ -1,6 +1,6 @@
 //! What contributions draw and sound like. The model's `Catalog` says what an id is; the
 //! registry says how the engine renders it: WGSL effects, generators and transitions on the effect ABI, look grades,
-//! motion presets and audio filter chains. Built-ins only for now; packs and shader plugins would go in the same tables.
+//! motion presets and audio filter chains. Built-ins, packs and shader plugins share the same tables.
 //! The shader presets are built-ins read from their data folders (`presets`).
 //! Pure data with no GPU code: `PlanContext` carries an `Arc<Registry>` into the pure `FramePlan`, and the export
 //! worker builds the same one.

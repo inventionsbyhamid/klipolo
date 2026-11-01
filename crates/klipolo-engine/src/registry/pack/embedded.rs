@@ -134,7 +134,7 @@ impl Embedded {
 }
 
 /// The names in `dir`, the operating system's litter and copies being written left out: the first `max`, and whether
-/// it holds more (the listing stops there, m19). A name that isn't Unicode comes back refused on its own.
+/// it holds more (the listing stops there). A name that isn't Unicode comes back refused on its own.
 fn listing(dir: &Dir, max: usize) -> std::io::Result<(Vec<Result<String, PackError>>, bool)> {
     let (names, more) = dir.names(max)?;
     let names = names

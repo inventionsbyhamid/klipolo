@@ -49,7 +49,7 @@ pub(super) struct Summary {
     /// It may `discard`, itself or through a call.
     pub may_discard: bool,
     /// The sources that reach a pointer handed to a helper, costly at both ends, each with one such helper (for
-    /// the Probe note, m5): one entry per source, sorted.
+    /// the Probe note): one entry per source, sorted.
     pub via_pointer: Vec<(Source, Handle<Function>)>,
     pub ret: Taint,
     /// What it stores through each pointer argument.

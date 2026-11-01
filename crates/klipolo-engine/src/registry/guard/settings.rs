@@ -4,7 +4,7 @@
 //! padding's setting. Reported in the definition's order.
 //!
 //! A colour or point setting has no ends, so one that is costly in any of these ways is marked `Probe`: it is
-//! measure it at the probe set. It is never refused for it. Each gets an Info
+//! measured at the probe set. It is never refused for it. Each gets an Info
 //! note per reason, at the line where it decides the most work (`Summary::at`), with a hint that fits its kind.
 
 use std::collections::HashMap;

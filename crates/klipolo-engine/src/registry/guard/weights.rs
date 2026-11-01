@@ -10,8 +10,8 @@
 //! - the hardened text's own loop guard: about 4 operations a trip that the facts, read before
 //!   hardening, don't count; at 4,096 trips about 16K a pixel, some 6.5 % of `MAX_OPS_PER_PIXEL`.
 //!
-//! Real numbers come from the [Mac] calibration (`tests/make_mac.rs`); the weights change only with a measurement that
-//! shows the margin no longer holds.
+//! Real numbers come from the calibration run by hand on a Mac after a Mac build (`tests/make_mac.rs`); the weights
+//! change only with a measurement that shows the margin no longer holds.
 
 use naga::valid::FunctionInfo;
 use naga::{ArraySize, BinaryOperator as B, Expression as E, Function, Module, TypeInner};

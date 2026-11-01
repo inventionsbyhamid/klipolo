@@ -1,8 +1,8 @@
-//! What a definition read from a folder must already be. Its names were cleaned when it was saved (m2:
-//! the loader checks and refuses, it never cleans silently), and its settings' text holds no hidden characters
-//!. And it is within the caps, refused plainly beside the padding's check: a table
-//! setting has 1 to 4 number columns and at most 50 rows, and its default rows fit both; a padding is finite, 0 or
-//! more, at most `MAX_PADDING_PX`, and grows with a number setting; every setting's condition names a real choice.
+//! What a definition read from a folder must already be. Its names were cleaned when it was saved (the loader checks
+//! and refuses, it never cleans silently), and its settings' text holds no hidden characters. And it is within the
+//! definition caps, refused plainly beside the padding's check: a table setting has 1 to 4 number columns and at most
+//! 50 rows, and its default rows fit both; a padding is finite, 0 or more, at most `MAX_PADDING_PX`, and grows with a
+//! number setting; every setting's condition names a real choice.
 
 use klipolo_model::contrib::{ContribDef, MAX_PADDING_PX};
 use klipolo_model::font::family_ok;
@@ -40,8 +40,8 @@ pub const MAX_KEY_CHARS: usize = 64;
 /// Whether the text of its settings an agent wrote (each key and label, a condition's key and values, a choice's
 /// options and default, a table's columns and default rows' labels, a font's default family) shows as written: no
 /// control, invisible, direction or line-separator character, as `text_safety::hidden` reads them, and a font family
-/// and a font family `family_ok`. They are refused, never cleaned: settings are in the key. A text
-/// setting's default is the person's content and may hold direction marks. Else the setting's key, quoted. The one
+/// `family_ok`. They are refused, never cleaned: settings are in the key. A text setting's default is the person's
+/// content and may hold direction marks. Else the setting's key, quoted. The one predicate for the loader and the Make
 /// tools, so create and save agree.
 pub fn setting_text_clean(def: &ContribDef) -> Result<(), String> {
     for spec in &def.params {

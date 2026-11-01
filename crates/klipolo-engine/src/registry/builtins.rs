@@ -102,7 +102,7 @@ const MOTION: [(&str, Preset); 13] = [
     ("spin", Preset::Spin),
 ];
 
-/// The filter chains, run live in the mixer with the speed change (`audio::stretch`).
+/// The audio effects' filter chains, run live in the mixer with the speed change (`audio::stretch`).
 const AUDIO: [(&str, &str); 3] = [
     (
         "voice",
