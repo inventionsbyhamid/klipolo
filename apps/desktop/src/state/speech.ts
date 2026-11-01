@@ -5,8 +5,8 @@ interface SpeechStore {
   /** Moves on when what was said changes (`speech-changed`): caption pages are asked for again. */
   pagesEpoch: number;
   /**
-   * The files whose words that change heard, timed again or took away, by asset id: an open chat proposal whose cuts
-   * stand on one of them is dropped.
+   * The files whose words the last change heard, timed again or took away, by asset id: an open chat proposal whose
+   * cuts stand on one of them is dropped.
    */
   wordsChanged: string[];
 }
