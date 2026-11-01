@@ -12,7 +12,8 @@ import { renderWithProviders } from '../../test/render';
 
 /*
  * Looks: colour presets for the video. The left panel's Looks view shows them as cards: picked, a look goes on the
- * selected clip, or on every clip while no clip is selected, as one labelled step.
+ * selected clip, or on every clip while no clip is selected, as one labelled step. The clip card names the clip's look,
+ * and its Look button opens the Looks view.
  */
 
 const apply = vi.fn<(label: string, ops: Op[], params?: LabelParams) => Promise<boolean>>(() =>
@@ -21,11 +22,23 @@ const apply = vi.fn<(label: string, ops: Op[], params?: LabelParams) => Promise<
 vi.mock('../../bridge/engine', () => ({
   engine: { preview: vi.fn(() => Promise.resolve()), previewClear: vi.fn(() => Promise.resolve()) },
 }));
+const fill = { mode: 'fill', focusX: 0.5, focusY: 0.5 } as const;
+const whole = { x: 0, y: 0, w: 1, h: 1 };
+vi.mock('../../bridge/framing', () => ({
+  clipFraming: vi.fn(() =>
+    Promise.resolve({
+      framing: { landscape: fill, portrait: fill, square: fill },
+      follows: false,
+      fillCrop: { landscape: whole, portrait: whole, square: whole },
+    }),
+  ),
+}));
 const { useProject } = await import('../../state/project');
 const { useSelection } = await import('../../state/selection');
 const { usePlayback } = await import('../../state/playback');
 const { useCaptionsView } = await import('../../state/captionsView');
 const { Library } = await import('../../layout/Library');
+const { Inspector } = await import('../inspector/Inspector');
 const { LooksPanel } = await import('./LooksPanel');
 
 const queued = expect.objectContaining({ projectId: 'project', revision: 3 });
@@ -176,3 +189,20 @@ describe('the left panel’s Looks tab', () => {
   });
 });
 
+describe('the clip card’s Look', () => {
+  it('names the clip’s look, and opens the Looks view', async () => {
+    useProject.setState({ snapshot: withClips({}, { look: look(WARM) }) });
+    useSelection.setState({ selectedId: 'b' });
+    renderWithProviders(<Inspector format="landscape" />);
+    const button = screen.getByRole('button', { name: 'Look: Warm' });
+    await userEvent.click(button);
+    expect(useCaptionsView.getState().view).toBe('looks');
+    expect(apply).not.toHaveBeenCalled();
+  });
+
+  it('a clip without a look reads None', () => {
+    useSelection.setState({ selectedId: 'b' });
+    renderWithProviders(<Inspector format="landscape" />);
+    expect(screen.getByRole('button', { name: 'Look: None' })).toBeInTheDocument();
+  });
+});
