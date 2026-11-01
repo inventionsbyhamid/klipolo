@@ -278,6 +278,15 @@ pub fn set_visible(state: &EngineState, visible: bool) {
     }
 }
 
+/// How loud the preview plays (the player bar's volume), 0 (silent) to 1: the person's listening level, never an
+/// export's. The page sends it again each time it attaches (nothing before the first attach).
+#[tauri::command]
+pub fn engine_set_volume(state: State<'_, EngineState>, volume: f32) {
+    if let Some(engine) = state.slot.running() {
+        engine.set_volume(volume);
+    }
+}
+
 /// Shows the frame at `at_us`. `seq` names the seek: frames carry it, and a seek older than the newest is ignored.
 #[tauri::command]
 pub fn engine_seek(state: State<'_, EngineState>, at_us: Us, seq: u32) {

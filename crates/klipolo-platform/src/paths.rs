@@ -9,10 +9,13 @@ const RESERVED: [&str; 22] = [
     "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
 ];
 
+/// The most characters `safe_file_name` keeps of a name.
+pub const FILE_NAME_MAX: usize = 100;
+
 /// A name (a project's, for an export) that is safe as a file name on every OS, so a name made on a Mac also works
 /// on Windows: `/ : < > " \ | ? *` become dashes; control characters go; no leading or trailing dots or spaces; at
-/// most 100 characters; a Windows device name (`CON`, `nul.txt`, `COM1`…) gets an underscore after it; an empty
-/// result becomes "Untitled video".
+/// most 100 characters (`FILE_NAME_MAX`); a Windows device name (`CON`, `nul.txt`, `COM1`…) gets an underscore after
+/// it; an empty result becomes "Untitled video".
 pub fn safe_file_name(name: &str) -> String {
     let cleaned: String = name
         .chars()
@@ -25,7 +28,7 @@ pub fn safe_file_name(name: &str) -> String {
     let capped: String = cleaned
         .trim_matches(|c: char| c == '.' || c.is_whitespace())
         .chars()
-        .take(100)
+        .take(FILE_NAME_MAX)
         .collect();
     let capped = capped.trim_end_matches(|c: char| c == '.' || c.is_whitespace());
     if capped.is_empty() {

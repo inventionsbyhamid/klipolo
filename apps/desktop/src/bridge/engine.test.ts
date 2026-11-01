@@ -69,6 +69,12 @@ describe('engine bridge', () => {
     ]);
   });
 
+  it('sets the listening volume', async () => {
+    invoke.mockResolvedValue(undefined);
+    await engine.setVolume(0.25);
+    expect(invoke.mock.calls).toEqual([['engine_set_volume', { volume: 0.25 }]]);
+  });
+
   it('dry-runs edits on a project revision and clears them', async () => {
     invoke.mockResolvedValue(undefined);
     await engine.preview('p', 4, [{ type: 'rename', name: 'X' }]);
