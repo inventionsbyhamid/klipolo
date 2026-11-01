@@ -21,8 +21,8 @@ use klipolo_mcp::host::{Applied, Host, HostError, OpenProposal, ProposalOutcome,
 use klipolo_mcp::limits::undo_shares;
 use klipolo_mcp::words::KLIPOLO_CHAT;
 use klipolo_model::history::{ByApp, HistoryLimits, Maker, Refused};
-use klipolo_model::speech::{Speech, Transcript};
 use klipolo_model::media::music::apply_with_music_refit;
+use klipolo_model::speech::{Speech, Transcript};
 use klipolo_model::{Document, Project, Transaction, load_project};
 
 const PROJECT: &str = include_str!("../../../klipolo-chat/tests/fixtures/project_two_clips.json");
