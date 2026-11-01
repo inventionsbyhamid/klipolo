@@ -2356,7 +2356,8 @@
 
 /* ---------- Inspector ---------- */
 
-/* What sits under the analysis banner: the frame, and the inspector docked at its right. */
+/* What sits under the analysis banner: the frame, and the inspector at its right. Selecting never resizes or moves the
+   frame: the card goes in the slot the stage keeps clear beside it (`data-card="slot"`), or floats over it ("over"). */
 .stage-main {
   position: relative;
   flex: 1;
@@ -2365,8 +2366,11 @@
   flex-direction: column;
 }
 
-.stage-body.has-inspector .screen {
-  margin-right: calc(var(--inspector-w) + var(--space-6));
+/* Over the frame: only as tall as its fields, and lifted off the video. */
+.screen[data-card="over"] ~ .inspector {
+  bottom: auto;
+  max-height: 100%;
+  box-shadow: var(--shadow-2);
 }
 
 .inspector {

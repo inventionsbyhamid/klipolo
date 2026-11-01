@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, type RefObject } from 'react';
 import type { EngineInfo } from '../../bindings/EngineInfo';
 import type { FormatKind } from '../../bindings/FormatKind';
 import { engine } from '../../bridge/engine';
@@ -14,17 +14,11 @@ import { useShownFormat } from '../editor/formats';
 import { clipIndexAt, mainIndex } from '../timeline/model/index';
 import { GizmoLayer } from './GizmoLayer';
 import { sceneStartUs } from './sceneStart';
+import { stageLayout } from './stageLayout';
 import { useSettledSize } from './useSettledSize';
 
 /** `--color-night` as 0xRRGGBB: the window shows it around the native layer for a frame or two while it resizes. */
 const NIGHT = 0x070a14;
-
-/** The largest box with the given aspect ratio that fits inside `container`. */
-export function fitBox(container: { width: number; height: number }, aspect: [number, number]) {
-  const ratio = aspect[0] / aspect[1];
-  const width = Math.max(0, Math.min(container.width, container.height * ratio));
-  return { width: Math.round(width), height: Math.round(width / ratio) };
-}
 
 /** Whether `fitBox` of a `width` x `height` container is `box`, with no allocation (it runs per resize callback). */
 function fitsAs(width: number, height: number, [w, h]: readonly [number, number], box: Size): boolean {
@@ -34,6 +28,13 @@ function fitsAs(width: number, height: number, [w, h]: readonly [number, number]
 }
 
 export { useShownFormat };
+
+/** The card's slot (CSS px): its width and the gap before it, from the design tokens. */
+function cardSlot(el: Element | null): number {
+  const style = el ? getComputedStyle(el) : null;
+  const px = (name: string, fallback: number) => parseFloat(style?.getPropertyValue(name) ?? '') || fallback;
+  return px('--inspector-w', 264) + px('--space-6', 16);
+}
 
 /**
  * Tells the engine what to render: the format, at the frame box's size in device pixels (within the engine's
@@ -129,6 +130,10 @@ function pressedOn(target: EventTarget, stage: Element, video: Element | null): 
  *
  * While its area resizes the video box follows in CSS, with no render, and the handles hide while the box's size
  * differs from the one drawn; it re-renders once, at the settled size (`useSettledSize`).
+ *
+ * Only the area and the format place the video, never the selection (`stageLayout`): the card that a selection shows
+ * goes in a slot kept clear at the area's right (`data-card="slot"`), or over the video (`"over"`), so selecting never
+ * resizes the video or the engine's drawable.
  */
 export function Stage() {
   const project = useProject((s) => s.snapshot!.project);
@@ -148,10 +153,12 @@ export function Stage() {
   const area = useSettledSize(areaRef, (on, width, height) =>
     handlesRef.current?.toggleAttribute(
       'data-settling',
-      on && !fitsAs(width, height, FORMAT_SIZE[format], canvas),
+      on && !fitsAs(width - pad, height, FORMAT_SIZE[format], canvas),
     ),
   );
-  const canvas = fitBox(area, FORMAT_SIZE[format]);
+  // The tokens change with the window's width, which changes the area too.
+  const slot = useMemo(() => cardSlot(areaRef.current), [area]);
+  const { card, pad, canvas } = stageLayout(area, FORMAT_SIZE[format], slot);
   useViewSync(videoRef, info, format);
   useNativeHole(videoRef, native);
   const note = status === 'unavailable' ? (message ?? "The preview isn't available right now.") : null;
@@ -160,6 +167,8 @@ export function Stage() {
       ref={areaRef}
       data-testid="stage-area"
       className="screen"
+      data-card={card}
+      style={pad > 0 ? { paddingRight: pad } : undefined}
       onPointerDown={(e) => {
         pressed.current = pressedOn(e.target, e.currentTarget, videoRef.current);
       }}

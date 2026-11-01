@@ -46,8 +46,8 @@ function DropZone({ over }: { over: boolean }) {
 }
 
 /**
- * Whether the card docks: `wanted`, except while a timeline press or drag, or a keyboard walk along the lanes, holds
- * the dock (`state/dockHold`); then what it was before, so the frame never changes size under the pointer or at every
+ * Whether the card shows: `wanted`, except while a timeline press or drag, or a keyboard walk along the lanes, holds
+ * the dock (`state/dockHold`); then what it was before, so the card doesn't come and go under the pointer or at every
  * bare cut. It follows `wanted` again once the hold ends.
  */
 function useSteadyDock(wanted: boolean): boolean {
@@ -60,9 +60,10 @@ function useSteadyDock(wanted: boolean): boolean {
 /**
  * The preview panel: the format pills, Add title, the safe area menu (9:16 only), Full screen (F; it
  * it works), and the engine's frames fitted to the panel in the chosen format with the layers there selectable and
- * editable (`Stage`), under the analysis banner; the inspector docks at the right under the banner while a main clip, a
- * transition or a layer it has fields for is selected, and the frame moves left for it (never mid-press or mid-walk on
- * the timeline: `useSteadyDock`). With no clip yet, the drop zone.
+ * editable (`Stage`), under the analysis banner; the inspector shows at the right under the banner while a main clip, a
+ * transition or a layer it has fields for is selected (never mid-press or mid-walk on the timeline: `useSteadyDock`).
+ * Selecting never resizes or moves the frame: the card goes in a slot of its own beside it, or over its right side when
+ * a slot would cost the frame too much of its size (`stageLayout`). With no clip yet, the drop zone.
  * `filesOver`: files from Finder are held over the window.
  */
 export function Preview({ filesOver = false }: { filesOver?: boolean }) {
@@ -104,7 +105,7 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
       </div>
       <div className={docked ? 'stage-body has-inspector' : 'stage-body'}>
         {hasVideo && <AnalysisBanner />}
-        {/* Under the banner: the frame, and the inspector docked at its right. */}
+        {/* Under the banner: the frame, and the inspector at its right (in the slot, or over the frame). */}
         <div className="stage-main">
           {hasVideo ? <Stage /> : <DropZone over={filesOver} />}
           {docked && <Inspector format={format} />}
