@@ -499,6 +499,40 @@ export const TABLE = {
     message: 'Remove {effect}',
     comment: 'Button and undo history entry; {effect} is an effect’s name, e.g. Blur',
   }),
+  // Keys set by hand: a layer's motion keys (`{property}` is position, scale, rotation or opacity) and volume keys.
+  'keys.add.undo': msg({
+    id: 'keys.add.undo',
+    message:
+      '{property, select, position {Add position key} scale {Add scale key} rotation {Add rotation key} opacity {Add opacity key} other {Add key}}',
+    comment: 'Undo history entry: a motion key added at the playhead',
+  }),
+  'keys.remove.undo': msg({
+    id: 'keys.remove.undo',
+    message:
+      '{property, select, position {Remove position key} scale {Remove scale key} rotation {Remove rotation key} opacity {Remove opacity key} other {Remove key}}',
+    comment: 'Undo history entry: a motion key taken away at the playhead',
+  }),
+  'keys.ease.undo': msg({ id: 'keys.ease.undo', message: 'Change key ease', comment: 'Undo history entry' }),
+  'keys.move.undo': msg({ id: 'keys.move.undo', message: 'Move key', comment: 'Undo history entry' }),
+  'keys.copy.undo': msg({ id: 'keys.copy.undo', message: 'Copy key', comment: 'Undo history entry' }),
+  'keys.delete.undo': msg({ id: 'keys.delete.undo', message: 'Delete key', comment: 'Undo history entry' }),
+  'keys.clear.undo': msg({ id: 'keys.clear.undo', message: 'Clear motion keys', comment: 'Undo history entry' }),
+  'volumeKeys.add.undo': msg({ id: 'volumeKeys.add.undo', message: 'Add volume key', comment: 'Undo history entry' }),
+  'volumeKeys.remove.undo': msg({
+    id: 'volumeKeys.remove.undo',
+    message: 'Remove volume key',
+    comment: 'Undo history entry',
+  }),
+  'volumeKeys.move.undo': msg({
+    id: 'volumeKeys.move.undo',
+    message: 'Move volume key',
+    comment: 'Undo history entry',
+  }),
+  'volumeKeys.clear.undo': msg({
+    id: 'volumeKeys.clear.undo',
+    message: 'Clear volume keys',
+    comment: 'Undo history entry',
+  }),
   // The canvas: `{layer}` is text, image, video or camera.
   'gizmo.move.undo': msg({
     id: 'gizmo.move.undo',
