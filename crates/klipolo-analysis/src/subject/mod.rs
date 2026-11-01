@@ -13,6 +13,8 @@
 //!   many stretches as cover it, and never paid for again. A failed or stopped request stores nothing; an answer cut off
 //!   part-way stores only the frames it holds, so asking again pays only for the rest.
 //! - **Times:** frame n of a stretch is at its start plus n / `fps` on the file's clock; the cuts are on that clock too.
+//! - **Who speaks** (`voices`): where two or more people don't all fit the crop, each voice of the file's transcript
+//!   is matched to one of them, so the path keeps whoever is speaking (`path`'s notes); `clips` puts it together.
 
 pub mod clips;
 pub mod path;
