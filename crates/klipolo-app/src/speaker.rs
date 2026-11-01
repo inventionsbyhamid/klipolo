@@ -26,7 +26,7 @@ use klipolo_analysis::subject::clips::{
     Footage, Speech, clip_people, follow_op_keeping, followable_formats, footage, speaker_path,
     voice_windows,
 };
-use klipolo_analysis::subject::voices::{self, Asking, VoiceTurn, Window};
+use klipolo_analysis::subject::voices::{self, Asking, MAX_WINDOWS, VoiceTurn, Window};
 use klipolo_analysis::subject::{self, Ask, FPS, PERSON, SubjectCopy, SubjectTrack};
 use klipolo_model::fill_focus::{FocusPath, Keep, Person, Voice};
 use klipolo_model::ids::Id;
@@ -738,7 +738,7 @@ fn files(targets: &[Target]) -> Vec<(String, Id)> {
     out
 }
 
-/// The windows of `file`'s clips among `targets` (`voice_windows`), each once.
+/// The windows of `file`'s clips among `targets` (`voice_windows`), each once, at most `MAX_WINDOWS` a voice.
 fn windows_of(
     p: &Project,
     targets: &[Target],
@@ -765,7 +765,14 @@ fn windows_of(
                 .then(a.range.start.cmp(&b.range.start)),
         )
     });
-    out
+    // At most `MAX_WINDOWS` a voice for the whole file, however many clips play it.
+    let mut kept: Vec<Window> = Vec::new();
+    for w in out {
+        if kept.iter().filter(|k| k.voice == w.voice).count() < MAX_WINDOWS {
+            kept.push(w);
+        }
+    }
+    kept
 }
 
 /// The analysis cache folder of the file at `path`; None when it can't be read.

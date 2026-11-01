@@ -522,6 +522,40 @@ async fn a_match_that_stops_partway_follows_the_main_person_and_says_so() {
     assert!(UNMATCHED.contains("main person") && !UNMATCHED.contains('\u{2014}'));
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn one_file_in_many_clips_asks_at_most_three_windows_a_voice_and_is_priced_once() {
+    let mut setup = setup(usize::MAX);
+    // Six clips of one file, 10 s each; Spark never says clearly, so every window would be asked.
+    let clip = setup.project.timeline.main[0].clone();
+    setup.project.timeline.main = (0..6)
+        .map(|i| {
+            let mut c = clip.clone();
+            c.id = format!("c{}", i + 1);
+            c.source_in_us = s(60.0 + 10.0 * f64::from(i));
+            c.source_out_us = c.source_in_us + s(10.0);
+            c
+        })
+        .collect();
+    setup.spark = Arc::new(FakeSpark {
+        unclear: true,
+        ..FakeSpark::default()
+    });
+    let speaker = speaker(&setup, true);
+    let p = &setup.project;
+    let all: Vec<String> = p.timeline.main.iter().map(|c| c.id.clone()).collect();
+    let estimate = speaker.estimate(p, &all, &[Portrait], "person").await;
+    assert!(
+        (estimate.usd - (ONE_MINUTE + 6.0 * SPARK)).abs() < 1e-9,
+        "{estimate:?}"
+    );
+    let followed = speaker
+        .follow(p, &all, &[Portrait], "person")
+        .await
+        .unwrap();
+    // A plays in four clips and B in two: three windows for A, two for B.
+    assert_eq!(setup.spark.asked.load(Ordering::SeqCst), 5);
+    assert!(followed.paid_usd <= estimate.usd + 1e-9);
+}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn the_card_keeps_from_the_tracking_alone_and_never_pays() {
