@@ -93,7 +93,7 @@ pub(super) async fn prepare<W: std::io::Write>(
         )
     });
     // What it draws besides the built-ins: exactly what the preview's snapshot ran when the job was made, assembled
-    // 11), assembled off the async threads.
+    // off the async threads.
     let registry = {
         let dir = handle.read(|j| j.dir.clone());
         tokio::task::spawn_blocking(move || super::contrib::job_registry(&dir))
@@ -168,8 +168,8 @@ pub(super) async fn prepare<W: std::io::Write>(
         alive(planned, out, control).await?
     };
     // A separate take whose cursor isn't held stops a run that draws it here, after its footage is checked and before
-    // anything is written, unless the person allowed it; then each is said. Only the parts left
-    // count: a run that only joins or renders the sound draws nothing, so it neither asks nor says it
+    // anything is written, unless the person allowed it; then each is said. Only the parts left count: a run that
+    // only joins or renders the sound draws nothing, so it neither asks nor says it, nor does one whose parts left
     // never draw that take.
     if render {
         if let Some(question) = loaded.question_in(&left, &done).filter(|_| !allow_missing) {

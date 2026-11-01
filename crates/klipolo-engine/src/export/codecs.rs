@@ -1,4 +1,4 @@
-//! Which encoder and pixel layout each D22 codec uses (VideoToolbox on a Mac; `platform::encode` lists each OS's
+//! Which encoder and pixel layout each export codec uses (VideoToolbox on a Mac; `platform::encode` lists each OS's
 //! encoders), and the probe that finds the encoders this computer has.
 
 use std::time::Duration;

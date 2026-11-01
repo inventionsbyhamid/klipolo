@@ -21,8 +21,8 @@ pub enum ErrorCode {
     DiskFull,
     /// A file's disk didn't answer within a minute: the job pauses with a message naming the file.
     NotAnswering,
-    /// A frame couldn't be drawn whole (an effect or text budget, a protection that couldn't run):
-    /// `message` is the coded reason (`exports.frame.*`, a `CodedError` as JSON), which the export shows
+    /// A frame couldn't be drawn whole (an effect or text budget, a protection that couldn't run): `message` is the
+    /// coded reason (`exports.frame.*`, a `CodedError` as JSON), which the export shows
     /// coded. Not retried: the same frame stops any run.
     Frame,
     Io,
@@ -70,9 +70,9 @@ pub enum WorkerLine {
     /// Still setting up (checking what earlier runs finished, decoding the sound): sent every few seconds, so the
     /// parent sees the worker is alive.
     Preparing,
-    /// Before the first frame, the screens' activity its plans read is being made ("Analysing the
-    /// screen…"): `done` of it (0–1, by length), sent as each minute is made and every few seconds meanwhile. Only a
-    /// run with a screen left to analyse sends it.
+    /// Before the first frame, the screens' activity its plans read is being made ("Analysing the screen…"): `done`
+    /// of it (0–1, by length), sent as each minute is made and every few seconds meanwhile. Only a run with a screen
+    /// left to analyse sends it.
     Analysing {
         done: f32,
     },
