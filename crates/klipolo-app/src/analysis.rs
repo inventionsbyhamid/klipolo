@@ -30,6 +30,7 @@
 mod calls;
 pub mod chat;
 mod decoding;
+pub mod holds;
 pub mod media;
 mod run;
 
