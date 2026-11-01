@@ -151,6 +151,13 @@ pub const MESSAGES: Messages = &[
     ("model.freeze.length", "A freeze frame must be between 10 ms and 10 minutes long."),
     ("model.freeze.separate", "A freeze frame has nothing to separate."),
     ("model.freeze.outside", "A freeze frame holds a frame outside its file."),
+    // `ReverseClip`, and what a reversed clip must hold.
+    ("model.reverse.freeze", "A freeze frame can't play backward."),
+    ("model.reverse.recording", "Only imported video clips can play backward."),
+    ("model.reverse.outside", "That reversed copy doesn't hold this clip's footage."),
+    ("model.reverse.noCopy", "This clip needs a reversed copy of its footage first."),
+    ("model.reverse.already", "This clip already plays backward. Reverse it again to play it forward."),
+    ("model.reverse.lost", "A reversed clip's own file is missing from the project."),
     ("model.settings.fps", "fps must be 24, 25, 30, 50 or 60."),
     ("model.settings.formatCount", "Pick between one and three formats."),
     ("model.settings.duplicateFormat", "Each format can only be added once."),

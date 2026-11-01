@@ -94,6 +94,7 @@ pub fn may_change_sound(p: &Project, op: &Op) -> bool {
         | Op::TrimClip { .. }
         | Op::Split { .. }
         | Op::FreezeFrame { .. }
+        | Op::ReverseClip { .. }
         | Op::DeleteRanges { .. }
         | Op::RemoveClip { .. }
         | Op::DetachSource { .. }

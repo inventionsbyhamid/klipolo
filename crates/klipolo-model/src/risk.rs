@@ -85,6 +85,7 @@ pub fn op_risk(op: &Op) -> OpRisk {
         | Op::MoveClip { .. }
         | Op::Split { .. }
         | Op::FreezeFrame { .. }
+        | Op::ReverseClip { .. }
         | Op::UpdateClip { .. }
         | Op::AddItem { .. }
         | Op::UpdateItem { .. }

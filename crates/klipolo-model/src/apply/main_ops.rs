@@ -12,13 +12,14 @@ use crate::ids::Id;
 use crate::messages::{code, msg};
 use crate::motion::{self, Motion};
 use crate::ops::{ClipPatch, Edge};
-use crate::project::Project;
+use crate::project::{AssetKind, Project};
 use crate::query::{anchor_at, clip_at, main_track_duration, MainIndex};
 use crate::time::{
     drifted, kept_parts, merge_ranges, scaled, unscaled, RangeUs, Ripple, Us, MIN_DURATION_US,
 };
 use crate::timeline::{
-    Attach, Clip, ClipSource, Item, ItemContent, Transition, FREEZE_FEATURE, MAX_FREEZE_US,
+    Attach, Clip, ClipSource, Item, ItemContent, ReverseCopy, Reversed, Transition, FREEZE_FEATURE,
+    MAX_FREEZE_US,
 };
 use crate::transitions::{max_transition_us, MIN_TRANSITION_US};
 
@@ -171,7 +172,79 @@ pub(super) fn freeze_frame(p: &mut Project, at_us: Us, duration_us: Us) -> Resul
     held.fade_in_us = 0;
     held.fade_out_us = 0;
     held.transition_out = None;
+    // It holds a frame of whatever it plays: there is nothing to turn back.
+    held.reversed = None;
     p.timeline.main.insert(index, held);
+    Ok(())
+}
+
+/// `ReverseClip` (see the op): imported clip `clip_id` plays backward from `copy` (its range `[in, out)` of the file
+/// becomes `[to - out, to - in)` of the copy), or, reversed already and with no copy, forward from its own file again
+/// (the same turn the other way). Layers anchored to the clip keep their offset into it, so none moves. Refused for a
+/// freeze frame, a recording clip, a copy that doesn't hold the clip's whole range, and a clip with nothing to turn.
+pub(super) fn reverse_clip(
+    p: &mut Project,
+    clip_id: &str,
+    copy: Option<&ReverseCopy>,
+    places: &mut Places,
+) -> Result<()> {
+    let i = clip_index(p, clip_id, places)?;
+    let clip = &p.timeline.main[i];
+    if clip.is_freeze() {
+        return Err(invalid(code!("model.reverse.freeze")));
+    }
+    let ClipSource::Asset { id: file } = &clip.source else {
+        return Err(invalid(code!("model.reverse.recording")));
+    };
+    let (source, reversed, to) = match (copy, &clip.reversed) {
+        // Backward from the copy.
+        (Some(c), None) => {
+            if !p
+                .asset(&c.asset_id)
+                .is_some_and(|a| a.kind == AssetKind::Video)
+            {
+                return Err(not_found("media", &c.asset_id));
+            }
+            let holds = c.from_us <= clip.source_in_us
+                && clip.source_out_us <= c.to_us
+                && c.from_us < c.to_us;
+            if !holds {
+                return Err(invalid(code!("model.reverse.outside")));
+            }
+            let back = Reversed {
+                of: file.clone(),
+                from_us: c.from_us,
+                to_us: c.to_us,
+            };
+            (c.asset_id.clone(), Some(back), c.to_us)
+        }
+        // Forward from its own file again.
+        (None, Some(r)) => (r.of.clone(), None, r.to_us),
+        (None, None) => return Err(invalid(code!("model.reverse.noCopy"))),
+        (Some(_), Some(_)) => return Err(invalid(code!("model.reverse.already"))),
+    };
+    let old_source = clip.source.clone();
+    let (old_in, old_out) = (clip.source_in_us, clip.source_out_us);
+    let (new_in, new_out) = (to.saturating_sub(old_out), to.saturating_sub(old_in));
+    let new_source = ClipSource::Asset { id: source };
+    for item in p
+        .timeline
+        .tracks
+        .iter_mut()
+        .flat_map(|t| t.items.iter_mut())
+    {
+        let Some(attach) = item.attach.as_mut() else {
+            continue;
+        };
+        if attach.clip_id == clip_id && attach.source == old_source {
+            attach.source = new_source.clone();
+            attach.source_us = new_in.saturating_add(attach.source_us.saturating_sub(old_in));
+        }
+    }
+    let c = &mut p.timeline.main[i];
+    c.source = new_source;
+    (c.source_in_us, c.source_out_us) = (new_in, new_out);
+    c.reversed = reversed;
     Ok(())
 }
 

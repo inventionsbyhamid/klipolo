@@ -15,7 +15,8 @@ use crate::project::{
 pub use crate::risk::{op_risk, OpRisk};
 use crate::time::{RangeUs, Us};
 use crate::timeline::{
-    CameraLayout, Clip, EffectInstance, Framing, Item, ItemContent, Look, TrackKind, Transition,
+    CameraLayout, Clip, EffectInstance, Framing, Item, ItemContent, Look, ReverseCopy, TrackKind,
+    Transition,
 };
 
 /// One atomic change request. Batches of ops form a [`Transaction`].
@@ -117,6 +118,13 @@ pub enum Op {
     FreezeFrame {
         at_us: Us,
         duration_us: Us,
+    },
+    /// Play imported clip `clip_id` backward from `copy`, its file's stretch written backward, over the same length: its
+    /// range turns around inside the copy (`Clip::reversed` keeps where it came from). With `copy` None, a reversed clip
+    /// plays forward from its own file again. Nothing moves: layers attached to it keep their place.
+    ReverseClip {
+        clip_id: Id,
+        copy: Option<ReverseCopy>,
     },
     /// Remove timeline ranges from the main track; gaps close and attached layers follow.
     DeleteRanges {
@@ -483,6 +491,7 @@ impl Op {
             Op::TrimClip { .. } => "trimClip",
             Op::Split { .. } => "split",
             Op::FreezeFrame { .. } => "freezeFrame",
+            Op::ReverseClip { .. } => "reverseClip",
             Op::DeleteRanges { .. } => "deleteRanges",
             Op::RemoveClip { .. } => "removeClip",
             Op::UpdateClip { .. } => "updateClip",

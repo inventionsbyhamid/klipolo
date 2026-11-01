@@ -243,6 +243,9 @@ fn apply_one(p: &mut Project, op: &Op, places: &mut Places) -> Result<Touched> {
             source_us,
         } => main(main_ops::trim_clip(p, id, *edge, *source_us, places)),
         Op::Split { at_us } => main(main_ops::split(p, *at_us)),
+        Op::ReverseClip { clip_id, copy } => {
+            main(main_ops::reverse_clip(p, clip_id, copy.as_ref(), places))
+        }
         Op::FreezeFrame { at_us, duration_us } => {
             main(main_ops::freeze_frame(p, *at_us, *duration_us))
         }

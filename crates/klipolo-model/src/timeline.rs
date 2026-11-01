@@ -282,6 +282,33 @@ pub struct Clip {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub freeze_at_us: Option<Us>,
+    /// The clip plays backward (`ReverseClip`): its source is a copy of this file's stretch written backward, and
+    /// Reverse again plays it forward from this file. Left out of the JSON while None.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub reversed: Option<Reversed>,
+}
+
+/// What a reversed clip's copy holds: imported file `of`'s `[from_us, to_us)` written backward, so the copy's time `t`
+/// is `of`'s `to_us - t`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Reversed {
+    pub of: Id,
+    pub from_us: Us,
+    pub to_us: Us,
+}
+
+/// A copy to play a clip backward from (`ReverseClip`): asset `asset_id`, the clip's file's `[from_us, to_us)` written
+/// backward.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ReverseCopy {
+    pub asset_id: Id,
+    pub from_us: Us,
+    pub to_us: Us,
 }
 
 impl Clip {
@@ -304,6 +331,7 @@ impl Clip {
             source_mix: BTreeMap::new(),
             cursor: None,
             freeze_at_us: None,
+            reversed: None,
         }
     }
 

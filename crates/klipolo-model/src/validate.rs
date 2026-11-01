@@ -509,6 +509,18 @@ fn validate_clip(p: &Project, c: &Clip) -> Result<()> {
             code!("model.clip.outsideSource"),
         )?,
     }
+    if let Some(r) = &c.reversed {
+        // Played forward again, it plays this file's stretch: the file must be there, and the stretch in it.
+        let of = p.asset(&r.of).filter(|a| a.kind == AssetKind::Video);
+        check(
+            of.is_some_and(|a| {
+                valid_time(r.from_us)
+                    && r.from_us < r.to_us
+                    && r.to_us <= a.duration_us.saturating_add(SOURCE_SLACK_US)
+            }),
+            code!("model.reverse.lost"),
+        )?;
+    }
     check(in_range(c.speed, 0.25, 4.0), code!("model.clip.speed"))?;
     check(in_range(c.volume, 0.0, 2.0), code!("model.clip.volume"))?;
     let duration = c.duration_us();
