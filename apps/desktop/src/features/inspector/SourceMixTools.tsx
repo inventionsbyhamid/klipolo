@@ -30,9 +30,8 @@ const icon = (Icon: typeof Volume2) => <Icon size={18} strokeWidth={1.8} aria-hi
  * A recording clip's Sounds, in its card: each sound it can be heard from (`soundSources`: a camera's own sound too,
  * where its files carry one), each with its mute and volume in this clip (the clip's own mix; off, with why, where the
  * sound plays from its own track in the clip), its Centre switch where it has two channels (every clip), a camera
- * sound's Fill gaps switch, and a recorded sound's sync against
- * the picture for the whole recording (`SourceSync`); then the camera's sync. Each change is one undo step. Each row
- * is `data-source-row` (its source's id).
+ * sound's Fill gaps switch, and a recorded sound's sync against the picture for the whole recording (`SourceSync`);
+ * then the camera's sync. Each change is one undo step. Each row is `data-source-row` (its source's id).
  */
 export function SourceMixTools({ clip, recording }: { clip: Clip; recording: Recording }) {
   const { t } = useLingui();
