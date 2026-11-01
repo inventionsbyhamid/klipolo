@@ -1242,7 +1242,7 @@ async fn analysis_decoding_makes_way_for_playback_and_exports() {
     let holds = h.state.holds();
     holds.set_exporting(true);
 
-    let started = h.state.start(std::slice::from_ref(&clip)).await;
+    let started = h.state.start(&IMPORTED, std::slice::from_ref(&clip)).await;
     tokio::time::sleep(Duration::from_millis(300)).await;
     let decoded =
         || [&media.levels, &media.sounds, &media.copies].map(|n| n.load(Ordering::SeqCst));
@@ -1280,7 +1280,7 @@ async fn frames_late_during_playback_hold_the_sound_until_it_stops() {
     holds.set_playing(true);
     holds.frames_late();
 
-    let started = h.state.start(std::slice::from_ref(&clip)).await;
+    let started = h.state.start(&IMPORTED, std::slice::from_ref(&clip)).await;
     tokio::time::sleep(Duration::from_millis(300)).await;
     assert_eq!(
         media.levels.load(Ordering::SeqCst) + media.sounds.load(Ordering::SeqCst),
