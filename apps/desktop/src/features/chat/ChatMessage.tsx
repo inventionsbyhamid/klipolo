@@ -2,6 +2,7 @@ import { useLingui } from '@lingui/react/macro';
 import { memo } from 'react';
 import { openSettings } from '../../ai/aiStatus';
 import { SpriteIcon } from '../../design/SpriteIcon';
+import { offerAgain, useSomeNotAnalysed } from '../../state/analysis';
 import { useChat, type Message } from '../../state/chat';
 import { wordLabel } from '../../lib/labels';
 import { appLine } from '../../state/chatApps';
@@ -21,7 +22,8 @@ const SETTINGS = new Set(['budget', 'refused', 'needsKey']);
  * network, a server error, this Mac not registered) or Open Settings (credit, a refused key or code); a message too
  * long for chat, one the AI declined (its words are back in the box to reword), or one whose times the project left (it
  * says to ask again), offers neither. The project is untouched. Another app's reply has no words of its own: "From
- * {client}" over it, then what it did, and the same chips and cards.
+ * {client}" over it, then what it did, and the same chips and cards. A reply that needed a clip analyzed offers Analyze
+ * under its words while some clip still isn't.
  */
 export const ChatMessage = memo(function ChatMessage({ message: m }: { message: Message }) {
   const { t } = useLingui();
@@ -64,6 +66,7 @@ export const ChatMessage = memo(function ChatMessage({ message: m }: { message: 
       {m.questions.map((q, i) => (
         <p key={`q${i}`}>{q}</p>
       ))}
+      {m.analyze && <AnalyzeOffer />}
       {m.applied?.changes && m.applied.changes.length > 1 && (
         <ul className="msg-changes" aria-label={t({ id: 'chatPanel.changes', message: 'Changes' })}>
           {m.applied.changes.map((c, i) => (
@@ -80,3 +83,17 @@ export const ChatMessage = memo(function ChatMessage({ message: m }: { message: 
     </div>
   );
 });
+
+/** Analyze, while some clip isn't analyzed: the analysis banner offers it again with its price, even after "Not now". */
+function AnalyzeOffer() {
+  const { t } = useLingui();
+  const offerable = useSomeNotAnalysed();
+  if (!offerable) return null;
+  return (
+    <div className="msg-row">
+      <button type="button" className="chip chip-outline" onClick={() => void offerAgain()}>
+        {t({ id: 'chatPanel.analyze', message: 'Analyze' })}
+      </button>
+    </div>
+  );
+}

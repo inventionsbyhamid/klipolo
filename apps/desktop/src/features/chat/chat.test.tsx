@@ -905,6 +905,28 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     expect(screen.getByRole('button', { name: 'Undo make it vertical, and 3 more' })).toBeInTheDocument();
   });
 
+  it('a reply that needs a clip analyzed offers Analyze, which shows the price before anything is spent', async () => {
+    const estimate = { usd: 0.04, seconds: 130, cached: [], clips: ['mic'], missing: [] };
+    backend({ analysis_estimate: () => estimate });
+    useAnalysis.setState({ states: {}, estimate: null, dismissed: ['mic'] });
+    const text = 'Made it vertical. Analyze this clip (mic.wav) first.';
+    chat({ reply: (r) => reply(r.id, text, { analyze: true }) });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'make a short{Enter}');
+    await userEvent.click(await screen.findByRole('button', { name: 'Analyze' }));
+    expect(calls.analysis_estimate).toHaveLength(1);
+    expect(useAnalysis.getState().dismissed).toEqual([]);
+    expect(useAnalysis.getState().estimate?.usd).toBe(0.04);
+  });
+
+  it('a reply that needs nothing analyzed offers no Analyze', async () => {
+    chat({ reply: (r) => reply(r.id, 'Made it vertical.') });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'make it vertical{Enter}');
+    await screen.findByText('Made it vertical.');
+    expect(screen.queryByRole('button', { name: 'Analyze' })).toBeNull();
+  });
+
   it('Apply waits behind a change still on its way, and is no undo step; the chip’s undo is one', async () => {
     const title = code('chat.removeFillers');
     const fake = chat({

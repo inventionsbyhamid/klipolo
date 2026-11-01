@@ -475,6 +475,7 @@ async fn additions_apply_at_once_as_one_undo_step_from_chat() {
         .collect();
     assert_eq!(changes, ["chat.setFormat", "chat.setCaptions"]);
     assert!(r["proposal"].is_null());
+    assert_eq!(r["analyze"], false, "every clip is analyzed");
     let p = chat.project.project();
     assert_eq!(p.settings.primary_format, FormatKind::Portrait);
     assert_eq!(chat.project.undo_steps(), 1, "one undo step");
@@ -773,6 +774,8 @@ async fn a_clip_not_analyzed_yet_is_named() {
     let r = reply(&chat.session.send(request("cut the ums")).await.unwrap());
     assert_eq!(r["text"], "Analyze this clip (talk.mov) first.");
     assert!(r["proposal"].is_null());
+    // The panel offers Analyze under it, with its price before anything is spent.
+    assert_eq!(r["analyze"], true);
 }
 
 #[tokio::test]
