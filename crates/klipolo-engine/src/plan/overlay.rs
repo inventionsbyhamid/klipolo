@@ -3,13 +3,16 @@
 
 mod parts;
 
+use klipolo_model::crop::{Crop, within};
 use klipolo_model::layout::{BoxN, Layout, resolve_rect};
 use klipolo_model::project::{Asset, AssetKind, FormatKind};
 use klipolo_model::time::{Us, unscaled};
 use klipolo_model::timeline::{Item, ItemContent, PieceTime, piece_time, seed_id};
 
 use super::effects::{self, Clock};
-use super::framing::{FULL, area_aspect, aspect_of, canvas, cover_rect, fit_rect, is_whole_frame};
+use super::framing::{
+    area_aspect, as_shown, aspect_of, canvas, cover_crop, cover_rect, fit_rect, is_whole_frame,
+};
 use super::generator;
 use super::layers::MissingContrib;
 use super::motion::{self, Moved};
@@ -95,20 +98,24 @@ pub fn overlay_layers(
                 source_in_us,
                 speed,
                 mirror,
+                fill,
+                crop,
                 ..
             } => {
                 let Some(asset) = p.asset(asset_id).filter(|a| a.kind == AssetKind::Video) else {
                     continue;
                 };
                 let time = source_in_us + unscaled(local_us, *speed);
-                let mv = moved(contain(rect, asset, format));
+                let (rest, shown) = video_rect(rect, asset, *fill, crop.unwrap_or_default(), format);
+                let mv = moved(rest);
                 blur_in(registry, &item.id, &mv, clock, &mut fx);
                 out.push(Layer::Video(VideoLayer {
                     role: VideoRole::Overlay,
                     id: s.str(&item.id),
                     source: super::clip::source_at(asset, time, &ctx.media, registry, s),
                     dest: mv.rect,
-                    crop: FULL,
+                    // As shown: on a mirrored layer "left" cuts the side the person sees.
+                    crop: as_shown(*mirror, shown),
                     rotation: l.rotation + mv.rotation,
                     opacity: l.opacity * mv.opacity,
                     radius: l.radius,
@@ -288,6 +295,26 @@ pub fn text_scale(layout: &Layout, primary: FormatKind, format: FormatKind) -> f
 pub fn contain(rect: BoxN, asset: &Asset, format: FormatKind) -> BoxN {
     let target = area_aspect(rect, format);
     fit_rect(rect, aspect_of(asset.width, asset.height, target), format)
+}
+
+/// Where a video layer of `asset` draws in its layout box `rect` in `format`, and which part of its picture it shows
+/// (picture-normalised, as shown): what `crop` leaves, contained in the box as `contain` places a picture, or covering
+/// the box from the centre when it `fill`s it. Its box is mirrored by `videoRect` in `apps/desktop/src/lib/layout.ts`
+/// (gizmo boxes) and pinned by `tests/parity.rs`.
+pub fn video_rect(
+    rect: BoxN,
+    asset: &Asset,
+    fill: bool,
+    crop: Crop,
+    format: FormatKind,
+) -> (BoxN, BoxN) {
+    let target = area_aspect(rect, format);
+    let aspect = crop.aspect_of(aspect_of(asset.width, asset.height, target));
+    if fill {
+        (rect, within(crop.kept(), cover_crop(aspect, target, 0.5, 0.5)))
+    } else {
+        (fit_rect(rect, aspect, format), crop.kept())
+    }
 }
 
 /// Where a picture layer of `asset` draws in its layout box `rect` in `format`: contained in its box (`contain`), except
