@@ -291,6 +291,35 @@ fn only_the_range_is_reversed() {
     assert_eq!(info.held, range);
 }
 
+/// A range from inside a frame: that frame, the copy's last, lasts only from the range's start to its own end, so the
+/// copy is exactly as long as the stretch it holds.
+#[test]
+fn a_copy_is_as_long_as_what_it_holds() {
+    let dir = tempfile::tempdir().unwrap();
+    let (src, out) = (dir.path().join("ramp.mov"), dir.path().join("part.mov"));
+    ramp(&src, false);
+    // Frame 6 (0.25 s to 0.2917 s) is on screen at 0.27 s.
+    let range = RangeUs {
+        start: 270_000,
+        end: 750_000,
+    };
+    let info = write(
+        &src,
+        &out,
+        &spec(range),
+        &AtomicBool::new(false),
+        &mut |_| {},
+    )
+    .unwrap();
+    assert_eq!(info.held, range);
+    let probe = klipolo_engine::render::probe::probe_media(&out).unwrap();
+    let length = (probe.duration * 1e6).round() as i64;
+    assert!(
+        (length - 480_000).abs() <= 1_000,
+        "the copy lasts {length} µs, not 480000"
+    );
+}
+
 #[test]
 fn its_sound_plays_backward_too() {
     let dir = tempfile::tempdir().unwrap();

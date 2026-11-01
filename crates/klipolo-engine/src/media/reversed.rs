@@ -296,21 +296,29 @@ struct Writer {
     /// One frame at the source's average rate, in the encoder's time base: a packet's length when the encoder gives
     /// none (`put`).
     frame_ticks: i64,
+    /// The copy's length (µs), where its last frame ends; then that frame's time and own length in the encoder's time
+    /// base once it is encoded (`put`): the frame on screen at the range's start lasts only from there, often less
+    /// than a frame.
+    length: Us,
+    last: Option<(i64, i64)>,
     /// The reversed sound, interleaved (2 channels), and how many frames of it are written.
     sound: Option<(AACEncoder, Vec<f32>, usize)>,
     frames: u64,
 }
 
-/// One picture packet into the movie (`small_copy::write_packet`), `ticks` long when the encoder said nothing: the
-/// QuickTime muxer's edit list ends where the last packet does, so a last packet of no length would never be shown.
+/// One picture packet into the movie (`small_copy::write_packet`): the copy's last frame its own length, any other
+/// `ticks` long when the encoder said nothing. The QuickTime muxer's edit list ends where the last packet does, so a
+/// last packet of no length would never be shown, and one too long would play past the range.
 fn put(
     packet: &mut ffmpeg::Packet,
     output: &mut Output,
     (from, to): (Rational, Rational),
-    ticks: i64,
+    (ticks, last): (i64, Option<(i64, i64)>),
 ) -> Result<(), ffmpeg::Error> {
-    if packet.duration() <= 0 {
-        packet.set_duration(ticks);
+    match last {
+        Some((pts, own)) if packet.pts() == Some(pts) => packet.set_duration(own),
+        _ if packet.duration() <= 0 => packet.set_duration(ticks),
+        _ => {}
     }
     write_packet(packet, output, from, to)
 }
@@ -423,11 +431,13 @@ fn write_to(
         video_tb,
         encoder_tb,
         frame_ticks: ((f64::from(encoder_tb.invert()) / fps).round() as i64).max(1),
+        length: end - from,
+        last: None,
         sound,
         frames: 0,
     };
     writer.pictures(src, &frames, shape, spec, cancel, progress)?;
-    writer.finish(end - from)?;
+    writer.finish()?;
     let bytes = std::fs::metadata(tmp).map_err(|e| failed("size", e))?.len();
     Ok(ReversedInfo {
         width,
@@ -553,7 +563,7 @@ impl Writer {
                 }
                 let j = lo + k;
                 let at = frames.end - frames.end_of(j);
-                self.frame(picture, at)?;
+                self.frame(picture, at, j == 0)?;
                 let done = self.frames as f64 / count as f64;
                 // Exactly 1 at the last frame, whatever the sum rounds to.
                 progress(match self.frames as usize == count {
@@ -566,12 +576,23 @@ impl Writer {
         Ok(())
     }
 
-    /// Encodes `picture` at `at` (µs from the copy's 0), the sound first, up to its time.
-    fn frame(&mut self, mut picture: ffmpeg::frame::Video, at: Us) -> Result<(), ReverseError> {
+    /// Encodes `picture` at `at` (µs from the copy's 0), the sound first, up to its time; the `last` frame lasts to the
+    /// copy's end.
+    fn frame(
+        &mut self,
+        mut picture: ffmpeg::frame::Video,
+        at: Us,
+        last: bool,
+    ) -> Result<(), ReverseError> {
         self.sound_until(at)?;
-        let pts = (at as f64 * f64::from(self.encoder_tb.invert()) / 1e6).round() as i64;
+        let pts = self.ticks(at);
+        if last {
+            // At least one tick of the movie's own clock, or the muxer would drop it.
+            let tick = (f64::from(self.video_tb) / f64::from(self.encoder_tb)).ceil() as i64;
+            self.last = Some((pts, (self.ticks(self.length) - pts).max(tick.max(1))));
+        }
         let (output, video_tb, encoder_tb) = (&mut self.output, self.video_tb, self.encoder_tb);
-        let ticks = self.frame_ticks;
+        let ticks = (self.frame_ticks, self.last);
         self.video
             .encode_to(&mut picture, pts, false, &mut |packet| {
                 put(packet, output, (encoder_tb, video_tb), ticks)
@@ -607,11 +628,16 @@ impl Writer {
         Ok(())
     }
 
-    /// The rest of the sound (`length` µs in all), both encoders' last packets and the movie's index.
-    fn finish(&mut self, length: Us) -> Result<(), ReverseError> {
-        self.sound_until(length)?;
+    /// `us` (from the copy's 0) in the encoder's time base.
+    fn ticks(&self, us: Us) -> i64 {
+        (us as f64 * f64::from(self.encoder_tb.invert()) / 1e6).round() as i64
+    }
+
+    /// The rest of the sound (to the copy's length), both encoders' last packets and the movie's index.
+    fn finish(&mut self) -> Result<(), ReverseError> {
+        self.sound_until(self.length)?;
         let (output, video_tb, encoder_tb) = (&mut self.output, self.video_tb, self.encoder_tb);
-        let ticks = self.frame_ticks;
+        let ticks = (self.frame_ticks, self.last);
         self.video
             .flush_to(&mut |packet| put(packet, output, (encoder_tb, video_tb), ticks))
             .map_err(|e| failed("finish picture", e))?;
