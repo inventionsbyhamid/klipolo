@@ -8,7 +8,7 @@ import { clipDurationUs, findItem, itemLabel, sourceLabel } from '../../../lib/t
 import { useUi } from '../../../state/ui';
 import { LAYER_MIN_PX } from '../layout';
 import { mainIndex } from '../model/index';
-import { attachedTo, freeLayers } from '../model/moveOps';
+import { attachedTo } from '../model/moveOps';
 import { refitNote, trimRefit } from '../model/refit';
 import { snapEdges, snapTargets } from '../model/snap';
 import { trimClip, trimItemEdge } from '../model/trim';
@@ -20,18 +20,6 @@ import { shiftBlock, sizeBlock } from './registry';
 type Trim = Extract<Gesture, { kind: 'trim' }>;
 
 const NONE: readonly string[] = [];
-
-/** The index of the first of sorted `values` at or after `at` (binary search). */
-function firstFrom(values: Float64Array, at: number): number {
-  let lo = 0;
-  let hi = values.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >>> 1;
-    if (values[mid] < at) lo = mid + 1;
-    else hi = mid;
-  }
-  return lo;
-}
 
 /** The start of the last frame before `us`: an edge's last frame, as playback shows it. */
 const frameBefore = (us: number, fps: number) => frameStartUs(frameIndexAt(us - 1, fps), fps);
@@ -100,8 +88,8 @@ function tell(s: Session, g: Trim, lengthUs: number, changeUs: number, note = ''
  * One frame of a trim: the pressed edge goes where the pointer is (`dtUs` from where it was pressed), on the frame
  * grid, snapping like a move, and held to the media and (a layer) its neighbours on the track by the pure builders
  * chat's tools use too. The block is drawn at its new size; a main clip's end trim slides the clips after it and
- * their attached layers, and the free layers after it when it shortens the clip (ids in `now`), as the model's ripple
- * will. Sets `s.ops`, `s.label`, `s.said` and the edge frame the preview shows (`s.edgeUs`). False: the block is gone.
+ * their attached layers (ids in `now`), as the model's ripple will. Sets `s.ops`, `s.label`, `s.said` and the edge
+ * frame the preview shows (`s.edgeUs`). False: the block is gone.
  *
  * An edge (a clip's or a layer's) never snaps back to where it began, as a moved layer never snaps to its own edges:
  * a trim of a few pixels stays a trim.
@@ -149,15 +137,6 @@ function trimClipFrame(
     for (let j = Math.max(first, i + 1); j < end; j++) {
       slide(main[j].id);
       for (const layer of attached.get(main[j].id) ?? NONE) slide(layer);
-    }
-    // A shorter clip slides the free layers after it back too (music aside); a longer one leaves them where they are.
-    if (deltaUs < 0) {
-      const free = freeLayers(project.timeline.tracks);
-      const toUs = visUs + 3 * s.viewUs;
-      for (let k = firstFrom(free.starts, Math.max(endUs, visUs - 2 * s.viewUs)); k < free.ids.length; k++) {
-        if (free.starts[k] >= toUs) break;
-        slide(free.ids[k]);
-      }
     }
   } else sizeBlock(g.clipId, left + px, width - px);
   s.view.showGuide(edge.guide !== null && from + deltaUs === edge.guide ? edge.guide : null);
