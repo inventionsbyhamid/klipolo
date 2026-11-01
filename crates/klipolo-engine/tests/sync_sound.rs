@@ -256,6 +256,8 @@ fn the_camera_sound_plays_with_its_own_lead() {
             volume: 1.0,
             muted: false,
             mirror: false,
+            fill: false,
+            crop: None,
             tie: None,
         },
         effects: Vec::new(),

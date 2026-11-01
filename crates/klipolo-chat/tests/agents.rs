@@ -11,7 +11,8 @@ use std::sync::Arc;
 
 use klipolo_chat::context::QUOTED_NOTE;
 use klipolo_chat::tools::{
-    BubbleChange, ClipRef, PictureSize, Position, Sound, TextPreset, TransitionKind,
+    BackgroundChoice, BubbleChange, ClipRef, PictureSize, Position, Sound, TextPreset,
+    TransitionKind,
 };
 use klipolo_chat::{
     ChatContext, FullTranscript, Library, LibraryItem, MediaKind, Moment, SceneLog, SpeakerTurn,
@@ -531,6 +532,15 @@ fn every_call() -> Vec<(ToolCall, bool)> {
             ToolCall::SetCaptions {
                 on: true,
                 style: Some(BuiltinCaptionStyle::Karaoke),
+            },
+            false,
+        ),
+        (
+            ToolCall::SetBackground {
+                kind: Some(BackgroundChoice::Blur),
+                color: None,
+                color_end: None,
+                padding: None,
             },
             false,
         ),

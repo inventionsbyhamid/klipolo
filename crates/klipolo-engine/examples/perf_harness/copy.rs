@@ -168,6 +168,8 @@ fn project(file: &str, facts: &SourceFacts, layer: bool) -> Project {
                 volume: 1.0,
                 muted: true,
                 mirror: false,
+                fill: false,
+                crop: None,
                 tie: None,
             },
             effects: Vec::new(),

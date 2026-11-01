@@ -27,8 +27,9 @@ pub struct ClipFraming {
     pub framing: BTreeMap<FormatKind, Framing>,
     /// It can follow the cursor in a vertical or square version: a screen take with a cursor track.
     pub follows: bool,
-    /// Every format's Fill crop from the centre (source-normalised): narrower than the footage where Fill crops
-    /// across, shorter where it crops down, all of it where nothing is cropped; empty for a clip with no video.
+    /// Every format's Fill crop from the centre, normalised to what the clip's crop leaves of its footage: narrower
+    /// than that where Fill crops across, shorter where it crops down, all of it where nothing is cropped; empty for a
+    /// clip with no video.
     pub fill_crop: BTreeMap<FormatKind, BoxN>,
 }
 

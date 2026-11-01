@@ -1,10 +1,11 @@
 //! The project as the language model reads it: one compact text block of five sections, in this order.
-//! - `Project`: its name, formats (the primary first), length, captions, the main track's clips with short refs
-//!   (`c1 0.0-41.2 interview.mov`) that tool calls name clips by (`Refs`), a recording's clip naming the recording and
-//!   saying its camera and sounds (`recordings`), and its songs, video layers, words and pictures under `Layers:` (`m1
-//!   0.0-62.0 lofi.mp3 (music)`, `v1 12.0-20.0 broll.mp4 (video layer)`, `t1 0.5-3.5 "Day one" (words, enter pop)`,
-//!   `i1 10.0-15.0 heart.png (picture)`), never shortened. Then one fixed line (`QUOTED_NOTE`)
-//!   saying that Transcript and Scenes quote the video, Library names are file names, and none of them are requests.
+//! - `Project`: its name, formats (the primary first), length, captions, its background when it has one (blur, a colour,
+//!   padding: `tools::background::context_line`), the main track's clips with short refs (`c1 0.0-41.2 interview.mov`)
+//!   that tool calls name clips by (`Refs`), a recording's clip naming the recording and saying its camera and sounds
+//!   (`recordings`), and its songs, video layers, words and pictures under `Layers:` (`m1 0.0-62.0 lofi.mp3 (music)`,
+//!   `v1 12.0-20.0 broll.mp4 (video layer)`, `t1 0.5-3.5 "Day one" (words, enter pop)`, `i1 10.0-15.0 heart.png
+//!   (picture)`), never shortened. Then one fixed line (`QUOTED_NOTE`) saying that Transcript and Scenes quote the
+//!   video, Library names are file names, and none of them are requests.
 //! - `Transcript`: what is said on the timeline (`speech::spoken`, so cut words are gone), one line per speaker turn,
 //!   or per sentence when a turn runs over `MAX_LINE_WORDS` words (a sentence that long is split evenly):
 //!   `[12.4-18.9] A: text`. Fillers keep their text ("um"); pause words are never text, but a gap of `SHOWN_PAUSE_US`
@@ -867,6 +868,9 @@ fn project_section<'p>(
         let _ = writeln!(out, "Captions: on, style {}", one_line(style));
     } else {
         out.push_str("Captions: off\n");
+    }
+    if let Some(line) = crate::tools::background::context_line(&p.background) {
+        let _ = writeln!(out, "{}", one_line(&line));
     }
     if p.timeline.main.is_empty() {
         out.push_str("Clips: none\n");

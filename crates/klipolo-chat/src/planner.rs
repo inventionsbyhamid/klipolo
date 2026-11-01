@@ -514,6 +514,7 @@ fn done(call: &ToolCall) -> Option<&'static str> {
         ToolCall::FollowSubject { .. } | ToolCall::BlurObjects { .. } => "Working on it.",
         ToolCall::SetFormat { .. } => "The format is changed.",
         ToolCall::SetCaptions { .. } => "The captions are changed.",
+        ToolCall::SetBackground { .. } => "The background is changed.",
         ToolCall::FixCaptionWords { .. } => "The words are fixed.",
         ToolCall::SplitAt { .. } => "The clip is split.",
         ToolCall::SetClip {
@@ -578,6 +579,7 @@ fn task(tool: &str) -> &'static str {
         "setTransition" => "change the transition",
         "setFormat" => "change the format",
         "setCaptions" => "change the captions",
+        "setBackground" => "change the background",
         "fixCaptionWords" => "fix the words",
         "findMoments" => "find those moments",
         "followSubject" => "follow the subject",
