@@ -468,8 +468,8 @@ impl AnalysisState {
     }
 
     /// `f(true)` when analysis starts decoding a clip on this Mac (its sound, its levels, its small copy), `f(false)`
-    /// once that step has ended: an editing copy under way pauses as the step starts (the two may overlap for about a
-    /// frame while it stops), and no copy starts until the step has ended.
+    /// once that step has ended: an editing copy under way pauses as the step starts (the two may overlap while it
+    /// stops, from a few milliseconds up to about a second), and no copy starts until the step has ended.
     pub fn on_decoding(&self, f: impl Fn(bool) + Send + Sync + 'static) {
         self.decoding.listen(Box::new(f));
     }
