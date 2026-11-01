@@ -1200,7 +1200,8 @@ impl Compiler<'_> {
         };
         let before = animated.remove(&j);
         let now = before.as_ref().and_then(|b| b.motion.clone());
-        let moved = motion::moved(now, keys, presets, length, false).map_err(to_model)?;
+        let moved =
+            motion::moved(now, keys, presets, length, motion::Shows::Other).map_err(to_model)?;
         animated.insert(
             j,
             Animated {

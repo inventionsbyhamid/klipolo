@@ -47,13 +47,20 @@ pub(super) fn animate_text(
     }
     let scene = text_motion::scene(&text, &style, m);
     if let Err(problems) = check_scene(&scene, Catalog::builtin()) {
-        let first = problems
-            .first()
-            .map_or("it doesn't check", |p| p.message.as_str());
-        return Err(to_model(format!(
-            "animateText: Klipolo can't draw this in time: {first} Ask for less: fewer units at once, a shorter time, \
-             or by word."
-        )));
+        // Too many units blurring at once is what costs too much to draw; anything else is said as the check says it.
+        let said = match problems.first() {
+            Some(p) if p.code == "scene.blurringUnits" => format!(
+                "too many units would blur at once for Klipolo to draw in time (at most {}). Use a longer stagger, a \
+                 shorter sec, less blur, or by word.",
+                klipolo_model::scene::SceneLimits::MAX_BLURRING_UNITS
+            ),
+            Some(p) if p.code.starts_with("scene.tooMany") => {
+                format!("Klipolo can't draw this in time: {}", p.message)
+            }
+            Some(p) => p.message.clone(),
+            None => "the words don't make a scene Klipolo draws.".to_owned(),
+        };
+        return Err(to_model(format!("animateText: {said}")));
     }
     let mut layout = item.layout.clone();
     if let Some(mut moves) = layout.motion.take() {

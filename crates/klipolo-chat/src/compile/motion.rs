@@ -25,24 +25,40 @@ use super::{Edit, Refused, label, to_model};
 use crate::context::secs;
 use crate::tools::{KeyIn, PresetIn, Property, Slot};
 
-/// `now` with `keys` and `presets`, for a layer `len_us` long that reads `text` when it is words: what `setMotion`
-/// leaves, or why it can't, for the model.
+/// What a layer shows, for the typewriter: words, animated words (which come in by their own units), or anything else.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Shows {
+    Words,
+    AnimatedWords,
+    Other,
+}
+
+/// `now` with `keys` and `presets`, for a layer `len_us` long that `shows`: what `setMotion` leaves, or why it can't,
+/// for the model.
 pub(crate) fn moved(
     now: Option<Motion>,
     keys: Option<&[KeyIn]>,
     presets: &[PresetIn],
     len_us: Us,
-    text: bool,
+    shows: Shows,
 ) -> Result<Option<Motion>, String> {
     let mut m = now.unwrap_or_default();
     if let Some(keys) = keys {
         m.keys = keyed(m.keys.take(), keys, len_us)?;
     }
-    for (i, p) in presets.iter().enumerate() {
-        if p.preset == Some("typewriter") && !text {
-            return Err(format!(
-                "setMotion: presets[{i}].name typewriter is for words. Use another preset for this layer."
-            ));
+    for p in presets {
+        match (p.preset, shows) {
+            (Some("typewriter"), Shows::Other) => {
+                return Err(
+                    "setMotion: presets: typewriter is for words. Use another preset for this layer.".to_owned(),
+                );
+            }
+            (Some("typewriter"), Shows::AnimatedWords) => {
+                return Err("setMotion: presets: animated words come in by their own units. Change how with \
+                            animateText."
+                    .to_owned());
+            }
+            _ => {}
         }
         let used = p.preset.map(|word| {
             let mut params = BTreeMap::new();
@@ -170,13 +186,21 @@ pub(super) fn set_motion(
     presets: &[PresetIn],
 ) -> Result<Edit, Refused> {
     let item = drawn(work, target, "setMotion")?;
-    let text = matches!(item.content, ItemContent::Text { .. });
+    let shows = match &item.content {
+        ItemContent::Text { .. } => Shows::Words,
+        ItemContent::Generator { source, .. }
+            if source.as_str() == klipolo_model::media::text_motion::SOURCE =>
+        {
+            Shows::AnimatedWords
+        }
+        _ => Shows::Other,
+    };
     let motion = moved(
         item.layout.motion.clone(),
         keys,
         presets,
         item.duration_us,
-        text,
+        shows,
     )
     .map_err(to_model)?;
     let mut layout = item.layout.clone();

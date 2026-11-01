@@ -434,7 +434,27 @@ fn presets_take_their_settings_length_and_ease_and_a_typewriter_is_for_words() {
     assert_eq!(looping.duration_us, secs(4.0));
     let typed = json!({"layer": "i1", "keys": null, "presets": "enter typewriter"});
     let out = run(&p, &[("setMotion", typed)]);
-    assert!(refused_to_model(&out, 0).contains("typewriter is for words"));
+    assert_eq!(
+        refused_to_model(&out, 0),
+        "setMotion: presets: typewriter is for words. Use another preset for this layer."
+    );
+    // Animated words are words, but they come in by their own units.
+    let animated = applied(
+        &p,
+        &run(
+            &p,
+            &[(
+                "animateText",
+                json!({"layer": "t1", "set": [{"key": "opacity", "value": 0}]}),
+            )],
+        ),
+    );
+    let typed = json!({"layer": "t1", "keys": null, "presets": "enter typewriter"});
+    let out = run(&animated, &[("setMotion", typed)]);
+    assert_eq!(
+        refused_to_model(&out, 0),
+        "setMotion: presets: animated words come in by their own units. Change how with animateText."
+    );
 }
 
 #[test]
@@ -607,7 +627,11 @@ fn words_klipolo_cant_draw_in_time_go_back_to_the_model_with_the_reason() {
     let mut many = blurred;
     many["layer"] = json!("t2");
     let out = run(&p, &[("animateText", many)]);
-    assert!(refused_to_model(&out, 0).starts_with("animateText: Klipolo can't draw this in time:"));
+    assert_eq!(
+        refused_to_model(&out, 0),
+        "animateText: too many units would blur at once for Klipolo to draw in time (at most 12). Use a longer stagger, \
+         a shorter sec, less blur, or by word."
+    );
     let picture = json!({"layer": "i1", "set": [{"key": "opacity", "value": 0}]});
     let out = run(&project(), &[("animateText", picture)]);
     assert!(refused_to_model(&out, 0).contains("is not words"));
