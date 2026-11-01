@@ -34,4 +34,11 @@ sourceMix?: { [key in string]: SourceMix },
 /**
  * This clip's own cursor style; none draws the project's (`Project::cursor_for`).
  */
-cursor?: CursorStyle, };
+cursor?: CursorStyle, 
+/**
+ * A freeze frame (`FreezeFrame`): the clip holds its source's frame at this source time for its whole length (a
+ * recording's every picture and its cursor as they were then) and plays no sound. Its source range only gives its
+ * length and the room its trims have, so it may run past the file, and it holds no footage: its sound, words and
+ * cursor path are nobody's. Left out of the JSON while None.
+ */
+freezeAtUs?: number, };
