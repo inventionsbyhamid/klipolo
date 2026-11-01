@@ -1440,7 +1440,7 @@ def thumbs_up():
     """A gold fist with its thumb up, in a navy outline, from a blue cuff."""
     hand = Smooth(Box(70.0, 140.0, 190.0, 195.0, 80.0), Taper(-60.0, -10.0, 80.0, -10.0, -360.0, 62.0), 50.0)
     cuff = Box(-250.0, 140.0, 90.0, 225.0, 28.0)
-    fingers = Strokes([[(120.0, y), (260.0, y)] for y in (40.0, 135.0, 230.0)], 16.0)
+    fingers = Strokes([[(120.0, y), (245.0, y)] for y in (40.0, 135.0, 230.0)], 16.0)
     return ([(Union(hand, cuff), BORDER, WHITE)] + outlined(cuff, BLUE)[1:] + outlined(hand, GOLD)[1:]
             + [(fingers, 0.0, NAVY)])
 
