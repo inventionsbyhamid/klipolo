@@ -169,12 +169,13 @@ function Dialog({ phase }: { phase: Exclude<RecorderPhase, 'recording' | 'saving
     else if (dialog && !dialog.contains(document.activeElement)) title.current?.focus();
   }, [phase]);
 
-  // From the Record press the keyboard is on Cancel, and on the start gate's first answer while it asks.
+  // From the Record press the keyboard is on Cancel, and on the start gate's first answer while it asks; while macOS
+  // asks over it, on Cancel again (the gate's question is hidden), and back on the answer once macOS's is answered.
   useEffect(() => {
     if (phase !== 'starting') return;
-    const target = asking ? '[data-gate="first"]' : '[data-take-cancel]';
+    const target = asking && !macosAsks ? '[data-gate="first"]' : '[data-take-cancel]';
     root.current?.querySelector<HTMLElement>(target)?.focus();
-  }, [phase, asking, gateKey]);
+  }, [phase, asking, gateKey, macosAsks]);
 
   // The countdown is announced once, by its first number (again once the start gate or macOS's question has been
   // answered).

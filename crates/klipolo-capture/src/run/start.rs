@@ -77,6 +77,7 @@ impl SessionCore {
                         missing: missing.clone(),
                     }));
                     c.asked = Some(missing);
+                    c.asked_aloud = true;
                 }
             }
             GateState::Waiting { .. } => {}
@@ -163,17 +164,34 @@ impl SessionCore {
         matches!(self.state, WorkerState::Starting | WorkerState::Countdown)
     }
 
+    /// Whether the countdown has run out with the gate open and nothing holding it, so the next input opens the gate:
+    /// the threads layer reads the system's alerts once more first, so one that came in the last moment still holds it.
+    pub fn gate_due(&self, now_ns: u64) -> bool {
+        let c = &self.countdown;
+        // Asked at every input: the cheap checks first.
+        if self.state != WorkerState::Countdown || c.alert || c.held_by.is_some() {
+            return false;
+        }
+        let total = u64::from(self.cfg.countdown_s) * 1_000_000_000;
+        let done = c.done_ns
+            + c.running_since
+                .map_or(0, |from| now_ns.saturating_sub(from));
+        done >= total && (self.gate.as_ref()).is_some_and(|g| g.poll(now_ns) == GateState::Open)
+    }
+
     /// Whether a system alert is on the screen now (`up`), as the threads layer reads it from the start until the gate
     /// (macOS's own question, such as the one a take's first stream can raise about the private window picker). While
-    /// one is up the countdown waits; once it goes the countdown starts again from the top, so the person has the whole
-    /// count after answering it and the question is never in the recording. Each change is said once
-    /// (`Event::SystemAlert`), and the HUD says why it waits. Any other time it changes nothing.
+    /// one is up the countdown waits, even one that ran out since the last input; once it goes the countdown starts
+    /// again from the top, so the person has the whole count after answering it and the question is never in the
+    /// recording. Each change is said once (`Event::SystemAlert`), with the gate's question as it now stands when one
+    /// was said, and the HUD says why it waits. Any other time it changes nothing.
     pub fn system_alert(&mut self, up: bool, now_ns: u64) -> Vec<Effect> {
         let mut fx = Vec::new();
-        self.advance(now_ns, &mut fx);
         if !self.watches_system_alerts() || self.countdown.alert == up {
+            self.advance(now_ns, &mut fx);
             return fx;
         }
+        // Before the countdown's step: one that ran out since the last input never opens the gate under the alert.
         self.countdown.alert = up;
         tracing::info!(up, state = ?self.state, "core: a system alert is on the screen (up) or went");
         if !up {
@@ -181,8 +199,16 @@ impl SessionCore {
             (c.done_ns, c.running_since) = (0, None);
         }
         // A countdown held or let go says so first (its number and the status; one still starting, once it begins), so
-        // the page has the count from the top by the time it hears the alert went.
+        // the page has the count from the top by the time it hears the alert went, and the question as it now stands
+        // (answered meanwhile, it goes).
         self.advance(now_ns, &mut fx);
+        let c = &self.countdown;
+        if !up && c.asked_aloud {
+            let missing = (c.held_by.clone().map(|id| vec![id]))
+                .or_else(|| c.asked.clone())
+                .unwrap_or_default();
+            fx.push(Effect::Emit(Event::Gate { missing }));
+        }
         fx.push(Effect::Emit(Event::SystemAlert { up }));
         fx
     }

@@ -1,5 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import type { FormatKind } from '../../bindings/FormatKind';
 import type { Item } from '../../bindings/Item';
 import type { TextAlign } from '../../bindings/TextAlign';
@@ -12,6 +12,7 @@ import { useEngine } from '../../state/engine';
 import { boxStyle } from './layerBox';
 import { wrapWidth } from './textBox';
 import { useTextEdit } from './textEdit';
+import { useDevicePixelRatio } from './useDevicePixelRatio';
 import { editKey } from './textEditKeys';
 import { TextEditorLook } from './TextEditorLook';
 
@@ -34,19 +35,6 @@ const JUSTIFY: Record<TextAlign, 'flex-start' | 'center' | 'flex-end'> = {
   center: 'center',
   right: 'flex-end',
 };
-
-/** The screen's device pixel ratio, followed as the window moves between screens. */
-function useDevicePixelRatio(): number {
-  const [dpr, setDpr] = useState(() => (typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1));
-  useEffect(() => {
-    if (typeof window.matchMedia !== 'function') return;
-    const query = window.matchMedia(`(resolution: ${dpr}dppx)`);
-    const update = () => setDpr(window.devicePixelRatio || 1);
-    query.addEventListener?.('change', update);
-    return () => query.removeEventListener?.('change', update);
-  }, [dpr]);
-  return dpr;
-}
 
 /** After Escape or Command Return, the layer's own box takes focus, so Return edits it again. */
 function focusLayer(id: string) {

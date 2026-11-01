@@ -623,6 +623,13 @@
               "null"
             ]
           },
+          "font": {
+            "description": "A font by name, e.g. Poppins; null: the preset's.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "preset": {
             "description": "title: big, at the top. lower-third: a name or label at the bottom left. plain: in the middle. caption: at the bottom.",
             "enum": [
@@ -642,7 +649,8 @@
           "text",
           "preset",
           "atSec",
-          "durationSec"
+          "durationSec",
+          "font"
         ],
         "type": "object"
       },

@@ -68,6 +68,7 @@ fn inputs(p: &Project) -> Inputs {
             .collect(),
         time_again: HashSet::new(),
         library: Library::default(),
+        fonts: Default::default(),
     }
 }
 

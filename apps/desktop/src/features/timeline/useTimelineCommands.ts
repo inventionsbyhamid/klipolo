@@ -17,6 +17,8 @@ import { nudge } from './keys/nudge';
 import { muteLabel } from '../preview';
 import { separateCamera, separateSound, stepTrack, toggleAttach, toggleSoundMute } from './keys/layerActions';
 import { reverseClip } from './keys/reverseActions';
+import { addMarkerAtPlayhead } from './keys/sourceActions';
+import { moveToNewTrack } from './keys/trackActions';
 import { freezeFrame, nothingToFreeze, split, trimToPlayhead } from './keys/timelineActions';
 import { clipIndexAt, mainIndex } from './model/index';
 import { useTimelineNavCommands } from './useTimelineNavCommands';
@@ -26,10 +28,10 @@ const NO_CLIPS: Clip[] = [];
 
 /**
  * The timeline's commands: split, freeze frame, reverse, trims to the playhead, nudges, the clipboard, track moves,
- * attaching, a sound or video layer's mute, Separate camera and an imported clip's Separate sound, plus
- * `useTransitionCommands`' (Add transition, ⌘T) and `useTimelineNavCommands`' (selection steps, edit points, zoom,
- * snapping). Each has a stable id, is `enabled` only when it can act on the selection, and runs the same code from its
- * shortcut, the player bar and the block menu. `useCommands` merges them.
+ * attaching, a sound or video layer's mute, Separate camera, an imported clip's Separate sound and Add marker (M, on a
+ * recording), plus `useTransitionCommands`' (Add transition, ⌘T) and `useTimelineNavCommands`' (selection steps, edit
+ * points, zoom, snapping). Each has a stable id, is `enabled` only when it can act on the selection, and runs the same
+ * code from its shortcut, the player bar and the block menu. `useCommands` merges them.
  */
 export function useTimelineCommands(): Command[] {
   const { t } = useLingui();
@@ -321,6 +323,35 @@ export function useTimelineCommands(): Command[] {
                   ? codedMessage({ code: 'reverse.busy', params: {} })
                   : undefined,
         run: () => reverseClip(id),
+      },
+      {
+        id: 'layer-new-track',
+        action: 'addTrack',
+        group: 'edit',
+        label: t({
+          id: 'command.layerNewTrack',
+          message: 'Move to a new track',
+          comment: 'A layer, onto a track of its own',
+        }),
+        enabled: layer !== null,
+        run: () => moveToNewTrack(id),
+      },
+      {
+        id: 'marker-add',
+        action: 'addMarker',
+        group: 'edit',
+        label: labelText('undo.marker.add'),
+        shortcut: 'M',
+        keywords: searchWords(
+          t({
+            id: 'command.markerAdd.keywords',
+            message: 'flag, bookmark, moment, highlight',
+            comment: 'Comma-separated search words for Add marker',
+          }),
+        ),
+        // On a recording: at the playhead, or it says why not (the playhead isn't over one).
+        enabled: main.some((c) => c.source.type === 'recording'),
+        run: addMarkerAtPlayhead,
       },
     ];
     return [...edits, ...transitions, ...nav];

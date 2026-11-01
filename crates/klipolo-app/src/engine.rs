@@ -375,6 +375,20 @@ pub async fn engine_pause(state: State<'_, EngineState>) -> Result<Us, Said> {
     Ok(state.slot.running().ok_or_else(not_ready)?.pause().await)
 }
 
+/// The socket presenter's measured time from a frame being sent to it arriving in the page (recent median, ms, while
+/// playing): frames are rendered that much ahead of the sound, so picture and sound line up.
+#[tauri::command]
+pub fn engine_present_delay(state: State<'_, EngineState>, ms: f64) {
+    present_delay(&state, ms);
+}
+
+/// `engine_present_delay`, for the running engine (nothing before the first attach).
+pub fn present_delay(state: &EngineState, ms: f64) {
+    if let Some(engine) = state.slot.running() {
+        engine.report_present_delay(ms);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex;
@@ -646,6 +660,39 @@ mod tests {
                 .any(|e| matches!(e, EngineEvent::State { playing: true, .. })),
             "nothing plays on"
         );
+    }
+
+    /// The socket page's measured delivery time reaches the running engine (before one runs it goes nowhere), and a
+    /// report that makes no sense leaves playback as it was.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_pages_present_delay_reaches_the_running_engine() {
+        let projects = opened(one_clip());
+        let state = EngineState::new(None, None);
+        present_delay(&state, 40.0);
+        attach(
+            &state,
+            || blank_engine(projects.subscribe()),
+            &Detached,
+            quiet(),
+            Some("socket"),
+        )
+        .await
+        .unwrap();
+        let engine = state.slot.running().unwrap();
+        engine.set_view(klipolo_engine::api::ViewSpec {
+            format: klipolo_model::project::FormatKind::Landscape,
+            width: 64,
+            height: 36,
+        });
+        play(&state, 0, None, 1).await.unwrap();
+        for ms in [38.0, f64::NAN, -5.0, f64::INFINITY, 10_000.0] {
+            present_delay(&state, ms);
+        }
+        assert!(engine.is_running(), "the engine runs on");
+        play(&state, 1_000_000, None, 2)
+            .await
+            .expect("it still plays");
+        engine.pause().await;
     }
 
     #[tokio::test(flavor = "multi_thread")]

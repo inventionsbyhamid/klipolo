@@ -14,6 +14,7 @@ import { useProject } from '../../state/project';
 import { pageAt, useAllCaptionPages } from './useCaptionPages';
 import { lookedNow, usePressQueue } from './usePressQueue';
 import { fileWordKey, useWordSelection, wordKey, type Listed } from './useWordSelection';
+import { WordColor } from './WordColor';
 import { WordEditor } from './WordEditor';
 
 /** The DOM id of a word's chip. */
@@ -378,6 +379,7 @@ export function CaptionWords({ format }: { format: FormatKind }) {
     <section aria-labelledby={`${idPrefix}-title`} className="words">
       <div className="words-head">
         <h3 id={`${idPrefix}-title`}>{t({ id: 'captions.words.title', message: 'Words' })}</h3>
+        {words.length > 0 && total > 0 && <WordColor words={words} busy={busy} press={press} />}
         <label className="search">
           <SpriteIcon name="search" />
           <input

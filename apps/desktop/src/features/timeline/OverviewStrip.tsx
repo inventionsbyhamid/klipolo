@@ -2,7 +2,7 @@ import { useLingui } from '@lingui/react/macro';
 import { memo, useEffect, useRef, type CSSProperties, type PointerEvent, type RefObject } from 'react';
 import type { Clip } from '../../bindings/Clip';
 import { useProposal } from '../../state/proposal';
-import { HEADER_PX } from './layout';
+import { useGutterPx } from './layout';
 import { mainIndex } from './model/index';
 
 /** Segments and ticks closer than this share of the strip draw as one, so an hour of cuts is a few dozen elements. */
@@ -53,6 +53,7 @@ export const OverviewStrip = memo(function OverviewStrip({ main, durationUs, pps
   const strip = useRef<HTMLDivElement>(null);
   const outline = useRef<HTMLSpanElement>(null);
   const totalPx = (durationUs / 1e6) * pps;
+  const gutter = useGutterPx();
 
   // After the commit, not in a layout effect: the scroller comes after the strip, so its ref isn't attached yet while
   // the strip's layout effects run. Until placed, the strip stays hidden (no `data-fits`).
@@ -62,7 +63,7 @@ export const OverviewStrip = memo(function OverviewStrip({ main, durationUs, pps
     const el = outline.current;
     if (!scroller || !box || !el || durationUs <= 0) return;
     const place = () => {
-      const view = Math.max(1, scroller.clientWidth - HEADER_PX);
+      const view = Math.max(1, scroller.clientWidth - gutter);
       const fits = totalPx <= view;
       // Its row keeps its height either way, so the lanes never jump.
       box.dataset.fits = String(fits);
@@ -80,11 +81,11 @@ export const OverviewStrip = memo(function OverviewStrip({ main, durationUs, pps
       scroller.removeEventListener('scroll', place);
       sizes.disconnect();
     };
-  }, [scrollRef, durationUs, totalPx]);
+  }, [scrollRef, durationUs, totalPx, gutter]);
 
   // Nothing yet: the empty pill, so the row keeps its place and the lanes don't move when a clip comes in.
   if (durationUs <= 0)
-    return <div data-overview data-fits="false" className="tl-overview" style={{ marginLeft: HEADER_PX }} />;
+    return <div data-overview data-fits="false" className="tl-overview" style={{ marginLeft: gutter }} />;
 
   /** Scrolls the lanes so the outline's middle is at `clientX`, and follows the pointer while it is held. */
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
@@ -94,7 +95,7 @@ export const OverviewStrip = memo(function OverviewStrip({ main, durationUs, pps
     const bar = e.currentTarget;
     bar.setPointerCapture?.(e.pointerId);
     const rect = bar.getBoundingClientRect();
-    const view = Math.max(1, scroller.clientWidth - HEADER_PX);
+    const view = Math.max(1, scroller.clientWidth - gutter);
     const onOutline = e.target === outline.current;
     // Held by the outline: it keeps where it was grabbed; elsewhere it centres on the pointer.
     const grab = onOutline
@@ -122,7 +123,7 @@ export const OverviewStrip = memo(function OverviewStrip({ main, durationUs, pps
       ref={strip}
       data-overview
       className="tl-overview"
-      style={{ marginLeft: HEADER_PX }}
+      style={{ marginLeft: gutter }}
       onPointerDown={onPointerDown}
       title={t({ id: 'timeline.overview.tip', message: 'Drag to scroll the timeline' })}
     >

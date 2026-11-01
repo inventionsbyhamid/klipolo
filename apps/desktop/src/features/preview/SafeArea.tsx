@@ -8,8 +8,8 @@ const CORNER = 0.01;
 
 /**
  * In 9:16, the apps' own buttons, caption and bars as a silhouette over the video, with a dashed edge around what
- * stays clear. It shows all the time while "Show safe area" is on; while a layer is dragged it shows the area chosen
- * last, else all platforms. A view of the preview only: never in the project or an export.
+ * stays clear. It shows all the time while the safe area menu has one chosen; while a layer is dragged it shows the
+ * area chosen last, else all platforms. A view of the preview only: never in the project or an export.
  */
 export function SafeArea({ format }: { format: FormatKind }) {
   const dragging = useDragFeedback((s) => s.dragging);

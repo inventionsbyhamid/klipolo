@@ -113,6 +113,8 @@ pub(super) struct OsBackend {
     bubble: Arc<bubble::BubbleFeed>,
     /// The Record dialog's stills: their JPEG maker, made at the first one.
     stills: thumbs::Stills,
+    /// The take's reads of the system's alerts (`system_alert`).
+    alerts: alerts::AlertWatch,
 }
 
 impl OsBackend {
@@ -121,6 +123,7 @@ impl OsBackend {
             display: Arc::default(),
             bubble: Arc::default(),
             stills: thumbs::Stills::default(),
+            alerts: alerts::AlertWatch::default(),
         }
     }
 }
@@ -245,7 +248,7 @@ impl Backend for OsBackend {
 
     /// One of macOS's own questions on the screen, by the window list (`alerts`).
     fn system_alert(&self) -> bool {
-        alerts::up()
+        self.alerts.up()
     }
 
     fn decodes(&self, info: &StreamInfo, keyframe: &[u8]) -> Option<bool> {

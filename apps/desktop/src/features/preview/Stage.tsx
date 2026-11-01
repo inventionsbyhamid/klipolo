@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, type RefObject } from 'react';
 import type { EngineInfo } from '../../bindings/EngineInfo';
 import type { FormatKind } from '../../bindings/FormatKind';
 import { engine } from '../../bridge/engine';
@@ -7,6 +7,7 @@ import type { Size } from '../../lib/preview';
 import { ASPECT, holeRect, previewPixels } from '../../preview/viewSize';
 import { SocketCanvas } from '../../preview/SocketCanvas';
 import { useEngine } from '../../state/engine';
+import { useFullScreen } from '../../state/fullScreen';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
@@ -14,14 +15,9 @@ import { useShownFormat } from '../editor/formats';
 import { clipIndexAt, mainIndex } from '../timeline/model/index';
 import { GizmoLayer } from './GizmoLayer';
 import { sceneStartUs } from './sceneStart';
+import { cardAnchor, selectedBox, stageLayout } from './stageLayout';
+import { useDevicePixelRatio } from './useDevicePixelRatio';
 import { useSettledSize } from './useSettledSize';
-
-/** The largest box with the given aspect ratio that fits inside `container`. */
-export function fitBox(container: { width: number; height: number }, aspect: [number, number]) {
-  const ratio = aspect[0] / aspect[1];
-  const width = Math.max(0, Math.min(container.width, container.height * ratio));
-  return { width: Math.round(width), height: Math.round(width / ratio) };
-}
 
 /** Whether `fitBox` of a `width` x `height` container is `box`, with no allocation (it runs per resize callback). */
 function fitsAs(width: number, height: number, [w, h]: readonly [number, number], box: Size): boolean {
@@ -32,11 +28,24 @@ function fitsAs(width: number, height: number, [w, h]: readonly [number, number]
 
 export { useShownFormat };
 
+/** The card's width and the gap before its slot (CSS px), from the design tokens. */
+function cardSize(el: Element | null): { width: number; gap: number } {
+  const style = el ? getComputedStyle(el) : null;
+  const px = (name: string, fallback: number) => parseFloat(style?.getPropertyValue(name) ?? '') || fallback;
+  return { width: px('--inspector-w', 264), gap: px('--space-6', 16) };
+}
+
 /**
  * Tells the engine what to render: the format, at the frame box's size in device pixels (within the engine's
- * budget). A drag of the window settles before the size is sent again.
+ * budget). A drag of the window settles before the size is sent again. A move to a screen of another pixel ratio
+ * (`dpr`) sends it at once, resized or not.
  */
-function useViewSync(frame: RefObject<HTMLDivElement | null>, info: EngineInfo | null, format: FormatKind) {
+function useViewSync(
+  frame: RefObject<HTMLDivElement | null>,
+  info: EngineInfo | null,
+  format: FormatKind,
+  dpr: number,
+) {
   useEffect(() => {
     const el = frame.current;
     if (!el || !info || info.port === 0) return;
@@ -45,7 +54,7 @@ function useViewSync(frame: RefObject<HTMLDivElement | null>, info: EngineInfo |
     const send = () => {
       const r = el.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) return;
-      const px = previewPixels(r, window.devicePixelRatio || 1, info.maxPreviewPixels);
+      const px = previewPixels(r, dpr, info.maxPreviewPixels);
       const key = `${format} ${px.width}x${px.height}`;
       if (key === sent) return;
       sent = key;
@@ -61,16 +70,18 @@ function useViewSync(frame: RefObject<HTMLDivElement | null>, info: EngineInfo |
       clearTimeout(timer);
       observer.disconnect();
     };
-  }, [frame, info, format]);
+  }, [frame, info, format, dpr]);
 }
 
 /**
  * The native presenter's hole: the frame box is transparent, the engine's layer sits under the webview exactly there,
  * and everything else still draws above it in HTML. Its rect goes to Rust at most once per animation frame, on layout,
- * resize and display changes. It leaves the window's own colour (what shows around the layer for a frame or two while
- * the window resizes) to the theme: Rust paints it with the theme's canvas (`setAppearance`).
+ * resize and display changes, and again on a move to a screen of another pixel ratio (its scale). It leaves the
+ * window's own colour (what shows around the layer for a frame or two while the window resizes) to the theme: Rust
+ * paints it with the theme's canvas (`setAppearance`).
  */
-function useNativeHole(frame: RefObject<HTMLDivElement | null>, on: boolean) {
+function useNativeHole(frame: RefObject<HTMLDivElement | null>, on: boolean, dpr: number) {
+  const rescale = useRef<(() => void) | null>(null);
   useEffect(() => {
     const el = frame.current;
     if (!el || !on) return;
@@ -96,14 +107,20 @@ function useNativeHole(frame: RefObject<HTMLDivElement | null>, on: boolean) {
     // A window resize may end with the hole where it was while AppKit moved the view: send it again.
     const resized = () => request(true);
     window.addEventListener('resize', resized);
+    rescale.current = () => request(true);
     request();
     return () => {
       cancelAnimationFrame(raf);
       observer.disconnect();
       window.removeEventListener('resize', resized);
+      rescale.current = null;
       void engine.setRect(null).catch(() => undefined);
     };
   }, [frame, on]);
+  // Another screen's pixel ratio: the same box sent again at the new scale, never hidden on the way.
+  useEffect(() => {
+    rescale.current?.();
+  }, [dpr]);
 }
 
 type Pressed = 'video' | 'stage' | null;
@@ -127,6 +144,10 @@ function pressedOn(target: EventTarget, stage: Element, video: Element | null): 
  *
  * While its area resizes the video box follows in CSS, with no render, and the handles hide while the box's size
  * differs from the one drawn; it re-renders once, at the settled size (`useSettledSize`).
+ *
+ * Only the area and the format place the video, never the selection (`stageLayout`): the card that a selection shows
+ * goes in a slot kept clear at the area's right (`data-card="slot"`), or over the video (`"over"`), in the stage's corner
+ * that covers the selected layer least (`data-anchor`), so selecting never resizes the video or the engine's drawable.
  */
 export function Stage() {
   const project = useProject((s) => s.snapshot!.project);
@@ -146,18 +167,29 @@ export function Stage() {
   const area = useSettledSize(areaRef, (on, width, height) =>
     handlesRef.current?.toggleAttribute(
       'data-settling',
-      on && !fitsAs(width, height, FORMAT_SIZE[format], canvas),
+      on && !fitsAs(width - pad, height, FORMAT_SIZE[format], canvas),
     ),
   );
-  const canvas = fitBox(area, FORMAT_SIZE[format]);
-  useViewSync(videoRef, info, format);
-  useNativeHole(videoRef, native);
+  // The tokens change with the window's width, which changes the area too. Full screen shows no card: no slot.
+  const full = useFullScreen((s) => s.on);
+  const size = useMemo(() => cardSize(areaRef.current), [area]);
+  const { card, pad, canvas } = stageLayout(area, FORMAT_SIZE[format], full ? 0 : size.width + size.gap);
+  // Over the video, the card's corner follows the selected layer as the project has it: never mid-drag.
+  const anchor = useSelection((s) =>
+    card === 'over' ? cardAnchor(selectedBox(project, s.selectedId, format), area, canvas, size.width) : undefined,
+  );
+  const dpr = useDevicePixelRatio();
+  useViewSync(videoRef, info, format, dpr);
+  useNativeHole(videoRef, native, dpr);
   const note = status === 'unavailable' ? (message ?? "The preview isn't available right now.") : null;
   return (
     <div
       ref={areaRef}
       data-testid="stage-area"
       className="screen"
+      data-card={card}
+      data-anchor={anchor}
+      style={pad > 0 ? { paddingRight: pad } : undefined}
       onPointerDown={(e) => {
         pressed.current = pressedOn(e.target, e.currentTarget, videoRef.current);
       }}

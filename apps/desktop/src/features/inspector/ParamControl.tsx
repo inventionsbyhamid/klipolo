@@ -8,14 +8,14 @@ import type { ParamValue } from '../../bindings/ParamValue';
 import type { PointN } from '../../bindings/PointN';
 import { Segmented } from '../../design/Segmented';
 import { Toggle } from '../../design/Toggle';
-import { useBundledFamilies } from '../../lib/fonts';
 import type { Label } from '../../lib/labels';
 import { commitToggle } from '../../state/commit';
 import { commitLatest } from '../../state/latest';
 import { useProject } from '../../state/project';
 import { Field, Select } from './fields';
 import { choiceLabel, defaultOf, fits, formatParam, sliderRange } from './paramFormat';
-import { FAMILIES } from './TextInspector';
+import { FontMenu } from '../fonts/FontMenu';
+import { sameFont } from '../../state/fonts';
 import { ToolSlider } from './ToolSlider';
 
 export interface ParamControlProps {
@@ -240,16 +240,15 @@ function AssetSetting({
   );
 }
 
-/** A font setting: one of the bundled families, stored as a `FontRef`. */
+/** A font setting: the font menu (Klipolo's families first, this Mac's and Google's), stored as a `FontRef`. */
 function FontSetting({ label, value, onPick }: { label: string; value: FontRef; onPick: (font: FontRef) => void }) {
-  const families = useBundledFamilies(FAMILIES);
-  const listed = families.includes(value.family) ? families : [value.family, ...families];
   return (
-    <Select
+    <FontMenu
       label={label}
-      value={value.family}
-      choices={listed.map((family) => ({ value: family, label: family }))}
-      onPick={(family) => family !== value.family && onPick({ family, source: { type: 'bundled' } })}
+      value={value}
+      weight={400}
+      italic={false}
+      onPick={(font) => !sameFont(font, value) && onPick(font)}
     />
   );
 }

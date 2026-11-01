@@ -95,4 +95,15 @@ describe('the timeline draws with classes app.css defines', () => {
     expect(document.querySelectorAll('[data-block-id]').length).toBeGreaterThan(2);
     expect(await unstyled('[data-block-id], [data-block-id] *, [data-lane], [data-lane] > *')).toEqual([]);
   });
+
+  it('the small controls in the gutter and on the Video lane reach out with a pad that takes presses', () => {
+    // Marker flags, lane buttons and track toggles are under the design's 28 px: each has an invisible pad.
+    const pads = ['.tl-marker::before', '.icon-btn.tl-lane-btn::before', '.icon-btn.tl-track-toggle::before'];
+    for (const selector of pads) {
+      const rule = new RegExp(`${selector.replace(/[.]/g, '\\.')}[^{]*\\{([^}]*)\\}`).exec(appCss);
+      expect(rule, selector).not.toBeNull();
+      expect(rule![1], selector).toMatch(/inset:/);
+    }
+  });
 });
+

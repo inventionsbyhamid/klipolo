@@ -258,6 +258,7 @@ fn every_tool_schema_is_strict() {
             "addMusic.volume",
             "addText.atSec",
             "addText.durationSec",
+            "addText.font",
             "addImage.atSec",
             "addImage.durationSec",
             "addImage.position",
@@ -511,6 +512,7 @@ fn parses_each_tool_from_spike_shaped_calls() {
                     preset: TextPreset::Title,
                     at_us: Some(0),
                     duration_us: Some(secs_to_us(3.0)),
+                    font: None,
                 },
             ],
         ),
@@ -1378,7 +1380,7 @@ fn the_prompt_is_one_fixed_text_and_small() {
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
     // 914 measured with the clip tools' line and the recordings' line.
     assert!(prompt_tokens <= 920, "prompt {prompt_tokens} tokens");
-    // 4,412 measured with the clip tools (setClip, setTransition), setBackground (about 210), freezeFrame (about 105)
-    // and the recording tools (the camera's three and the recorded sounds' three, about 1,010 of them).
-    assert!(tools_tokens <= 4_460, "tools {tools_tokens} tokens");
+    // 4,438 measured with the clip tools (setClip, setTransition), setBackground (about 210), freezeFrame (about 105),
+    // addText's font (about 25) and the recording tools (the camera's three and the recorded sounds' three, about 1,010).
+    assert!(tools_tokens <= 4_490, "tools {tools_tokens} tokens");
 }
