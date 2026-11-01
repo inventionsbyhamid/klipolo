@@ -1001,6 +1001,14 @@ fn spark_video_tokens_match_the_measured_counts() {
 }
 
 #[test]
+fn sam_frames_usd_estimates_a_video_before_it_is_sent() {
+    // A 60 s short at 2 frames a second, a 10 s clip (under the 50-frame minimum) and nothing at all.
+    assert_usd(pricing::sam_frames_usd(120), 0.024);
+    assert_usd(pricing::sam_frames_usd(20), 0.01);
+    assert_usd(pricing::sam_frames_usd(0), 0.0);
+}
+
+#[test]
 fn sam_usd_bills_at_least_50_frames_per_video() {
     let frames = |video_frames_processed| Usage {
         video_frames_processed,
