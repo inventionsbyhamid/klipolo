@@ -1,10 +1,12 @@
-//! Video layers for the compositor. Main and camera video go through the vendored composite pipeline (crop, mask,
-//! border, look), straight from the frame's NV12 planes when VideoToolbox decoded it. Overlay video is converted at
-//! about the size it's drawn (`nv12_scale::ScaledFrame`) and drawn by the image quad, which rotates; frames without an
-//! IOSurface (the FFmpeg fallback) take Cap's converter path.
+//! Video layers for the compositor. Main and camera video, and overlay video showing part of its picture, go through
+//! the vendored composite pipeline (crop, mask, border, look), straight from the frame's NV12 planes when VideoToolbox
+//! decoded it. Overlay video showing its whole picture is converted at about the size it's drawn
+//! (`nv12_scale::ScaledFrame`) and drawn by the image quad, which rotates; frames without an IOSurface (the FFmpeg
+//! fallback) take Cap's converter path.
 
 use std::sync::Arc;
 
+use crate::plan::framing::FULL;
 use crate::plan::{VideoLayer, VideoRole};
 use crate::render::look;
 use crate::render::nv12::PlaneImporter;
@@ -119,7 +121,7 @@ impl VideoDrawers {
         if uniforms.target_size[0] < 1.0 || uniforms.target_size[1] < 1.0 {
             return None;
         }
-        if v.role == VideoRole::Overlay {
+        if v.role == VideoRole::Overlay && v.crop == FULL {
             // A mirrored layer (a separated camera) flips as it is drawn, or in its effects' first pass.
             let quad = ImageQuad {
                 source_rotation: rotation,

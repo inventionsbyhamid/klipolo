@@ -677,6 +677,11 @@
     "params": []
   },
   {
+    "code": "model.clip.crop",
+    "message": "A crop must leave at least a tenth of the picture each way.",
+    "params": []
+  },
+  {
     "code": "model.camera.noCamera",
     "message": "Only recordings with a camera can have camera settings.",
     "params": []
@@ -806,6 +811,11 @@
   {
     "code": "model.layer.volume",
     "message": "Layer volume must be between 0 and 200 %.",
+    "params": []
+  },
+  {
+    "code": "model.layer.crop",
+    "message": "A layer's crop must leave at least a tenth of its picture each way.",
     "params": []
   },
   {

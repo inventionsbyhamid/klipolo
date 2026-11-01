@@ -468,6 +468,9 @@ pub(super) fn update_clip_at(
     if let Some(v) = &patch.fill_focus {
         clip.fill_focus = v.clone();
     }
+    if let Some(v) = patch.crop {
+        clip.crop = (!v.is_none()).then_some(v);
+    }
     if let Some(v) = &patch.effects {
         clip.effects = v.clone();
     }

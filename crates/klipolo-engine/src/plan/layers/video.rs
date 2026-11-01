@@ -15,6 +15,9 @@ pub enum VideoRole {
     Main,
     Camera,
     Overlay,
+    /// The main footage again, blurred behind it (the blurred video background, `plan::clip`): the same frame of the
+    /// same file, so it is decoded once with the main footage.
+    Backdrop,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -47,7 +50,7 @@ impl SourceRef {
 #[derive(Clone, Debug, PartialEq)]
 pub struct VideoLayer {
     pub role: VideoRole,
-    /// The clip id (main), `camera:<clip id>` (camera) or the item id (overlay).
+    /// The clip id (main), `camera:<clip id>` (camera), `backdrop:<clip id>` (backdrop) or the item id (overlay).
     pub id: Arc<str>,
     pub source: SourceRef,
     /// Where it lands, canvas-normalized, before rotation.
@@ -75,6 +78,16 @@ pub struct VideoLayer {
 }
 
 impl VideoLayer {
+    /// Whether it is drawn by itself in a target of its own first, then placed like an image
+    /// (`Compositor::video_alone`): footage with effects, and an overlay showing part of its picture (the image quad
+    /// draws a whole picture).
+    pub fn drawn_alone(&self) -> bool {
+        match self.role {
+            VideoRole::Overlay => self.crop != crate::plan::framing::FULL,
+            _ => !self.effects.is_empty(),
+        }
+    }
+
     /// This layer drawn by itself, filling its own target (the effect stage then places the result).
     pub fn alone(&self) -> VideoLayer {
         VideoLayer {

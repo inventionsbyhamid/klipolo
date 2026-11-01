@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::coded::ErrorParam;
+use crate::crop::Crop;
 use crate::cursor_style::CursorStyle;
 use crate::fill_focus::FillFocus;
 use crate::ids::Id;
@@ -327,6 +328,10 @@ pub struct ClipPatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub fill_focus: Option<BTreeMap<FormatKind, FillFocus>>,
+    /// The footage's crop; a crop of nothing (`Crop::NONE`) takes it off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub crop: Option<Crop>,
     /// Replaces the whole effect stack (paste attributes).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]

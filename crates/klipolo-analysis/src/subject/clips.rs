@@ -104,7 +104,10 @@ pub fn clip_path(
     footage: &Footage,
     tracks: &[SubjectTrack],
 ) -> Option<FocusPath> {
+    // Fill's crop is in what the clip's crop leaves; the path is in the whole file.
+    let kept = clip.crop.unwrap_or_default().kept();
     let crop = fill_crop(p, clip, format)?;
+    let crop = (crop.w * kept.w, crop.h * kept.h);
     let shift = footage.shift_us;
     let (from, to) = (footage.range.start, footage.range.end);
     let mut frames: Vec<(Us, &TrackedFrame)> = Vec::new();
@@ -137,7 +140,7 @@ pub fn clip_path(
         start_us: from + shift,
         end_us: to + shift,
         cuts: &cuts,
-        crop: (crop.w, crop.h),
+        crop,
     };
     focus_path(&input)
 }

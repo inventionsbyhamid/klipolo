@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { EngineInfo } from '../bindings/EngineInfo';
+import { engine } from '../bridge/engine';
 import { openFrameSocket } from '../bridge/frameSocket';
 import { epochAt } from '../lib/clocks';
 import { isCurrentFrame, useEngine } from '../state/engine';
@@ -7,6 +8,7 @@ import { usePlayback } from '../state/playback';
 import { FrameQueue, REFRESH_MS } from './framePick';
 import { createRenderer } from './frameRenderer';
 import { FLAG_PLAYBACK, type FrameMeta } from './frameTrailer';
+import { presentDelay } from './presentDelay';
 
 /** A frame of another shape belongs to the format shown before a switch: drawn stretched, it would look squashed. */
 function sameShape(meta: FrameMeta, aspect: readonly [number, number]): boolean {
@@ -16,7 +18,8 @@ function sameShape(meta: FrameMeta, aspect: readonly [number, number]): boolean 
 /**
  * The socket presenter's canvas: frames arrive over the websocket and wait in a short queue; each animation frame
  * draws the newest one due by the next refresh, so arrival jitter never becomes judder. The playback clock follows the
- * time of each drawn frame.
+ * time of each drawn frame. While playing, how long frames take to arrive goes to the engine about once a second
+ * (`presentDelay`), so it renders them that far ahead of the sound.
  */
 export function SocketCanvas({ info, aspect }: { info: EngineInfo; aspect: readonly [number, number] }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -28,6 +31,7 @@ export function SocketCanvas({ info, aspect }: { info: EngineInfo; aspect: reado
     if (!host || info.port === 0) return;
     const renderer = createRenderer(host);
     const queue = new FrameQueue();
+    const delivery = presentDelay();
     let raf = 0;
     const show = (buf: ArrayBuffer, meta: FrameMeta) => {
       if (!sameShape(meta, shape.current)) return;
@@ -68,6 +72,8 @@ export function SocketCanvas({ info, aspect }: { info: EngineInfo; aspect: reado
           return;
         }
         early = null;
+        const delay = delivery(meta);
+        if (delay !== null) void engine.presentDelay(delay).catch(() => undefined);
         enqueue(buf, meta);
       },
       () => useEngine.getState().setStatus('unavailable', "The preview isn't available right now."),
