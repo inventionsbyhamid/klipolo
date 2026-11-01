@@ -24,4 +24,8 @@ slowMaster: boolean,
 /**
  * Some file of the project has its words heard in full: a landscape file can also save its captions as a file.
  */
-canSaveCaptions: boolean, };
+canSaveCaptions: boolean, 
+/**
+ * A Maximum plan on a computer with no 10-bit HEVC encoder: its files are H.264 at Maximum's higher bitrate.
+ */
+maximumAsH264: boolean, };

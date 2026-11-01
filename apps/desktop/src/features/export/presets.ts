@@ -77,3 +77,21 @@ export function timeLeft(seconds: number): string {
     message: plural(hours, { one: 'About # hour left', other: 'About # hours left' }),
   });
 }
+
+/** How long an export takes, roughly: "less than a minute", "about a minute", "about 4 minutes", "about 2 hours". */
+export function roughly(seconds: number): string {
+  if (seconds < 45) return t({ id: 'export.time.underMinute', message: 'less than a minute' });
+  if (seconds < 90) return t({ id: 'export.time.aboutMinute', message: 'about a minute' });
+  if (seconds < 5400) {
+    const minutes = Math.round(seconds / 60);
+    return t({
+      id: 'export.time.aboutMinutes',
+      message: plural(minutes, { one: 'about # minute', other: 'about # minutes' }),
+    });
+  }
+  const hours = Math.round(seconds / 3600);
+  return t({
+    id: 'export.time.aboutHours',
+    message: plural(hours, { one: 'about # hour', other: 'about # hours' }),
+  });
+}
