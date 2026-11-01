@@ -73,7 +73,7 @@ pub struct RecordingCursor {
 
 impl RecordingCursor {
     /// A take whose frames show the cursor, with sampled clicks: what a project saved before this record names by its
-    /// alone, and test fixtures. Import takes the recorder's manifest's own values.
+    /// path alone, and test fixtures. Import takes the recorder's manifest's own values.
     pub fn burned_in(path: impl Into<String>) -> Self {
         Self {
             path: path.into(),

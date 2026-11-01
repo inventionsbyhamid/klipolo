@@ -1,6 +1,6 @@
-//! How far keys reach once their eases are counted: an ease that overshoots carries
-//! the value past the key it eases into (a spring between scale keys 1 and 4 reaches about 6.57), so the largest
-//! value is found per pair of keys, from the ease's own range, not from the keys alone.
+//! How far keys reach once their eases are counted: an ease that overshoots carries the value past the key it eases
+//! into (a spring between scale keys 1 and 4 reaches about 6.57), so the largest value is found per pair of keys, from
+//! the ease's own range, not from the keys alone.
 
 use super::{spring_peak, Ease, Key, EASE_Y};
 
