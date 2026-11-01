@@ -172,13 +172,15 @@ function frame() {
   const s = session;
   if (!s?.started || s.stale) return;
   if (!draw(s)) return cancelDrag(); // the block is gone
-  if (s.ops.length === 0) {
+  // Playing, the dry run is what the commit will be; paused, a trim's may leave out a transition (`dryOps`).
+  const dry = usePlayback.getState().playing ? s.ops : (s.dryOps ?? s.ops);
+  if (dry.length === 0) {
     if (s.sent) clearPreview();
     s.sent = null;
-  } else if (!s.sent || !sameOps(s.sent, s.ops)) {
+  } else if (!s.sent || !sameOps(s.sent, dry)) {
     // Each dry run re-applies, re-plans and rebuilds the sound in the engine: only a change is sent.
-    previewOps(s.ops);
-    s.sent = s.ops;
+    previewOps(dry);
+    s.sent = dry;
   }
   showEdge(s);
 }
