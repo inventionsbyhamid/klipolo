@@ -16,11 +16,12 @@ mod tests;
 use std::sync::{Arc, OnceLock, PoisonError, RwLock};
 use std::time::Duration;
 
+use klipolo_chat::{FontNames, NamedFont};
 use klipolo_fonts::google::Catalogue;
 use klipolo_fonts::index::FontIndex;
 use klipolo_fonts::missing::{MissingFont, missing_in};
 use klipolo_fonts::resolve::resolve;
-use klipolo_fonts::search::{FontRow, SearchFilter, search};
+use klipolo_fonts::search::{FontRow, RowState, SearchFilter, search};
 use klipolo_model::coded::CodedError;
 use klipolo_model::font::FontRef;
 use klipolo_model::project::Project;
@@ -213,4 +214,65 @@ pub fn face_bytes(
     let file = resolved.face.file.as_ref().ok_or_else(missing)?;
     klipolo_fonts::sfnt::read_face(&file.path, file.index, klipolo_fonts::sfnt::MAX_FACE_BYTES)
         .map_err(|_| missing())
+}
+
+/// The app's font names, installed once at start-up (`install_names`): chat's and other apps' calls name fonts through
+/// them. None before (tests): no font is named.
+static NAMES: OnceLock<FontNames> = OnceLock::new();
+
+/// Sets the font names chat's and other apps' calls use, once.
+pub fn install_names(names: FontNames) {
+    let _ = NAMES.set(names);
+}
+
+/// The font names chat's and other apps' calls use.
+pub fn names() -> FontNames {
+    NAMES.get().cloned().unwrap_or_default()
+}
+
+/// The font `name` is (its family, case and spacing aside) in `index`: Klipolo's, this computer's, one downloaded, else
+/// Google's while `google` (Google Fonts is on), this Mac's copy before Google's, as the font menu's Enter picks. At its
+/// face nearest `weight` and `italic`, and with what downloading it takes while it isn't here. None for no such font.
+pub fn named(
+    index: &FontIndex,
+    google: bool,
+    name: &str,
+    weight: u16,
+    italic: bool,
+) -> Option<NamedFont> {
+    let key = |s: &str| {
+        s.split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase()
+    };
+    let wanted = key(name);
+    if wanted.is_empty() {
+        return None;
+    }
+    let filter = SearchFilter {
+        want: Some((weight, italic)),
+        google_off: !google,
+        ..SearchFilter::default()
+    };
+    let rows = search(index, name, &filter, MAX_ROWS);
+    let order = |state: RowState| match state {
+        RowState::Bundled => 0,
+        RowState::Installed => 1,
+        RowState::Downloaded => 2,
+        RowState::Download => 3,
+    };
+    let row = rows
+        .into_iter()
+        .filter(|r| key(&r.family) == wanted)
+        .min_by_key(|r| order(r.state))?;
+    Some(NamedFont {
+        font: FontRef {
+            family: row.family,
+            source: row.source,
+        },
+        weight: row.snapped.0,
+        italic: row.snapped.1,
+        download_bytes: (row.state == RowState::Download).then(|| row.size_bytes.unwrap_or(0)),
+    })
 }

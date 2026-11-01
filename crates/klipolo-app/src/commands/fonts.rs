@@ -340,6 +340,15 @@ pub(crate) fn start(app: &tauri::App) {
     tauri::async_runtime::spawn_blocking(move || {
         klipolo_app::fonts::downloads::start(&starting.state::<Fonts>(), &downloads);
     });
+    // Chat's and other apps' calls name fonts from the same index, without Google's while Google Fonts is off.
+    let naming = app.handle().clone();
+    klipolo_app::fonts::install_names(klipolo_chat::FontNames::new(Arc::new(
+        move |name: &str, weight, italic| {
+            let fonts = naming.state::<Fonts>();
+            let google = AppHost(naming.clone()).google().enabled;
+            klipolo_app::fonts::named(&fonts.index(), google, name, weight, italic)
+        },
+    )));
     // This computer's fonts arrive with the engine's one scan: an open font menu asks again then.
     let scanning = app.handle().clone();
     tauri::async_runtime::spawn(async move {

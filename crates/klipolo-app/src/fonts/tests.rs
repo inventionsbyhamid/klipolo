@@ -401,3 +401,32 @@ async fn a_cjk_download_fetches_one_face_and_becomes_the_script_s_fallback() {
     // The engine's fonts are the process's: the other tests never see this stand-in Noto.
     klipolo_engine::render::fonts::unregister(&klipolo_fonts::alias::alias(&font));
 }
+
+#[test]
+fn a_font_name_is_klipolo_s_this_mac_s_or_google_s_at_its_nearest_face() {
+    let index = FontIndex::shipped(klipolo_fonts::bundled::bundled_dir())
+        .with_catalogue(klipolo_fonts::google::shipped());
+    let anton = super::named(&index, true, "  anton ", 700, false).unwrap();
+    assert_eq!(anton.font, FontRef::bundled("Anton"));
+    assert_eq!(
+        (anton.weight, anton.italic),
+        (400, false),
+        "Anton's one face"
+    );
+    assert_eq!(anton.download_bytes, None);
+    let montserrat = super::named(&index, true, "Montserrat", 700, false).unwrap();
+    assert_eq!(montserrat.weight, 900);
+    let lato = super::named(&index, true, "Lato", 400, false).unwrap();
+    assert!(matches!(lato.font.source, FontSource::Google { .. }));
+    assert!(
+        lato.download_bytes.is_some_and(|b| b > 0),
+        "never downloaded by itself: the person does"
+    );
+    assert_eq!(
+        super::named(&index, false, "Lato", 400, false),
+        None,
+        "Google Fonts off names none of Google's"
+    );
+    assert_eq!(super::named(&index, true, "Nowhere Sans", 400, false), None);
+    assert_eq!(super::named(&index, true, "", 400, false), None);
+}
