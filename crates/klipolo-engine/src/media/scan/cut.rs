@@ -136,8 +136,12 @@ impl Cutter {
             .filter(|&c| !has_chunk(root, &self.stem, c))
             .collect();
         self.want_keys = !keyframes::has(root, &self.stem);
-        // Only with chunk 0: a file whose first chunk is cut already keeps its tile as its picture.
-        self.want_poster = self.need.contains(&0) && poster_in(root, &self.stem).is_none();
+        // No poster yet counts as no chunk 0: it is cut again for the poster (a cache from before posters, or an
+        // editing copy's chunk 0 written first), and the chunk on disk is kept as it is (`write`).
+        self.want_poster = self.chunks > 0 && poster_in(root, &self.stem).is_none();
+        if self.want_poster {
+            self.need.insert(0);
+        }
         if self.need.is_empty() && !self.want_keys {
             self.stopped = true;
             return None;

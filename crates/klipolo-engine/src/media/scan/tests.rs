@@ -193,3 +193,25 @@ fn a_turned_phone_video_has_an_upright_poster() {
     let [r, _, b] = mean_rgb(&picture, (0, 170, 152, 100));
     assert!(b > 150.0 && r < 80.0, "bottom {r} red, {b} blue");
 }
+
+/// A cache from before posters (chunk 0 and the keyframe index on disk, no poster): a scan asked for chunk 0 cuts it
+/// again for the poster, and keeps the chunk on disk as it was.
+#[test]
+fn a_cache_without_a_poster_gets_one_and_keeps_its_chunk() {
+    let root = tempfile::tempdir().unwrap();
+    let video = fixture("bars-30fps-0.5gop.mp4");
+    let store = ThumbStore::new(root.path().to_path_buf(), Arc::new(Os));
+    assert_eq!(
+        scan_thumbs(&store.shared(), &video, &[0], &|| true).end,
+        ScanEnd::Done
+    );
+    std::fs::remove_file(poster(root.path(), &video).unwrap().path).unwrap();
+    let chunk = strip(root.path(), &video).unwrap().chunks[0].path.clone();
+    let kept = std::fs::metadata(&chunk).unwrap().modified().unwrap();
+
+    let scanned = scan_thumbs(&store.shared(), &video, &[0], &|| true);
+    assert_eq!(scanned.end, ScanEnd::Done);
+    assert!(scanned.decoded > 0, "chunk 0 was cut again");
+    assert!(poster(root.path(), &video).is_some());
+    assert_eq!(std::fs::metadata(&chunk).unwrap().modified().unwrap(), kept);
+}
