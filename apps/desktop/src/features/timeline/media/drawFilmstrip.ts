@@ -8,7 +8,7 @@ export const MAX_SPRITES = 8;
 /**
  * Decoded sprites the webview keeps: two long files' filmstrips on screen at once (a screen clip and a camera layer),
  * so a repaint never refetches. A 16:9 sprite is 1024 × 576 RGBA, 2.25 MiB decoded: 36 MiB in all (the webview
- * WebContent ≤ 350 MB).
+ * process stays under 350 MB).
  */
 export const CACHED_SPRITES = 2 * MAX_SPRITES;
 

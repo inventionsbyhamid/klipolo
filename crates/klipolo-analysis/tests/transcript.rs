@@ -375,7 +375,7 @@ fn clip_a() -> (Transcription, Alignment) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// The core tests
+// Clip A through the Meta adapter, and the transcript's rules
 
 /// Clip A through the Meta adapter (mock Meta and relay): every word's time is the fixture's milliseconds as µs of
 /// the clip's sound (one chunk at 0, one align request starting at 0), with pauses in the gaps.
@@ -1051,7 +1051,7 @@ async fn runs_as_many_requests_at_once_as_each_service_takes() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// The steps, one by one
+// The steps the app runs one by one (`hear`, `align`, `finish`)
 
 /// Turn-level captions before alignment: `finish` without a timing keeps every word, each spread across its turn.
 #[tokio::test]

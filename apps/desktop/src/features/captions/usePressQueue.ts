@@ -34,17 +34,16 @@ const fixLabel = (item: QueuedSpelling) => ({
 });
 
 /**
- * The look bar's presses and Spelling's saves. While the words are being updated
- * (`pending`: an edit's pages on their way), or a fix this view sent is, they are `busy`: a press or a save is kept, in
- * order (`pressQueue`), not dropped. Once every answer is in at the revision now and what this view sent has landed,
- * each goes, built on the words then, or is dropped and said on the "Updating…" line ("The words changed. Press
- * again."; a spelling: that it wasn't saved). Otherwise a press or a save goes at once on the words pressed, each
- * built as it goes in, from the looks then (and those of this view's presses on their way), through the
- * bar's burst: one still waiting its turn in the commit queue when the project closes goes in its turn, the close
- * waiting for it, the word colour that the close commits from its keys included, and so
- * does a spelling. What is kept
- * when the project or the list closes goes too, waits for its pages (a spelling, while the project closes), or is said
- * with a toast (`settle`): never lost silently, a press that comes after the list closed included.
+ * The look bar's presses and Spelling's saves. While the words are being updated (`pending`: an edit's pages on their
+ * way), or a fix this view sent is, they are `busy`: a press or a save is kept, in order (`pressQueue`), not dropped.
+ * Once every answer is in at the revision now and what this view sent has landed, each goes, built on the words then,
+ * or is dropped and said on the "Updating…" line ("The words changed. Press again."; a spelling: that it wasn't
+ * saved). Otherwise a press or a save goes at once on the words pressed, each built as it goes in, from the looks then
+ * (and those of this view's presses on their way), through the bar's burst: one still waiting its turn in the commit
+ * queue when the project closes goes in its turn, the close waiting for it, the word colour that the close commits
+ * from its keys included, and so does a spelling. What is kept when the project or the list closes goes too, waits for
+ * its pages (a spelling, while the project closes), or is said with a toast (`settle`): never lost silently, a press
+ * that comes after the list closed included.
  */
 export function usePressQueue({
   words,
@@ -161,7 +160,7 @@ export function usePressQueue({
       for (const w of looked) ahead.current.set(fileWordKey(w), { look: withChange(w.look, change), by });
       return lookOps(looked, change);
     };
-    // Through the bar's burst: in its turn, kept at close (the list closed or not).
+    // Through the bar's burst: in its turn, kept at close, the list closed or not.
     const landed = burst.commit(lookLabel(change), build).then((ok) => {
       // Landed (or not): the project's looks say what it did now (before the commit after it is built).
       for (const [key, a] of ahead.current) if (a.by === by) ahead.current.delete(key);
@@ -182,8 +181,8 @@ export function usePressQueue({
   };
   /**
    * Sends a spelling over `ws`, through the bar's burst: in its turn, kept at close, so the close waits for it (closing
-   * closing or not, never ahead of a commit it waits for). A spelling the close waits
-   * for (`hold`) lets go of the close's hold once its commit holds it.
+   * or not, never ahead of a commit it waits for). A spelling the close waits for (`hold`) lets go of the close's hold
+   * once its commit holds it.
    */
   const sendFix = (item: QueuedSpelling, ws: WordView[]) => {
     const ops = fixOps(ws, item.text, captionPunctuation());

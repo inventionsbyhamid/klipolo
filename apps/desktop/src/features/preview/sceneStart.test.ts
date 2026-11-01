@@ -57,7 +57,7 @@ describe('when the scene at the playhead began', () => {
     for (let i = 0; i < frames; i++) sum += sceneStartUs(project, i * step);
     const perUpdateUs = ((performance.now() - began) * 1000) / frames;
     expect(sum).toBeGreaterThan(0);
-    // The target: under 5 µs an update, from 25 to 150 µs for the walk.
+    // The target: under 5 µs an update, where the full walk takes from 25 to 150 µs.
     expect(perUpdateUs).toBeLessThan(5);
   });
 });

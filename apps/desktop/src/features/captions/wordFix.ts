@@ -5,13 +5,12 @@ import { drawnJoined, hidesMarkBetween } from './captionJoins';
 import { fixOp, lookOps } from './captionOps';
 
 /**
- * "Fix the words": what the field
- * shows of a page, and the smallest fixes that turn it into what the person typed. The model draws a correction as one
- * word that can't wrap and is revealed at once, so each fix must cover only the words that changed: a page fixed whole
- * would lose its word-by-word reveal, its keyword and its wrap in a style like Bold. Whatever is typed, the page then
- * shows exactly that, its spaces included (beside a mark the style hides, the style spaces it), and no two fixes
- * overlap (the model keeps only the later of two that do). A fix never covers a hidden word or two files' words
- *: it stops there.
+ * "Fix the words": what the field shows of a page, and the smallest fixes that turn it into what the person typed.
+ * The model draws a correction as one word that can't wrap and is revealed at once, so each fix must cover only the
+ * words that changed: a page fixed whole would lose its word-by-word reveal, its keyword and its wrap in a style like
+ * Bold. Whatever is typed, the page then shows exactly that, its spaces included (beside a mark the style hides, the
+ * style spaces it), and no two fixes overlap (the model keeps only the later of two that do). A fix never covers a
+ * hidden word or two files' words: it stops there.
  */
 
 /** A word as the field shows it: what was said, or the person's fix (never the style's capitals). */
@@ -42,11 +41,11 @@ function field(words: WordView[]): { text: string; spans: [number, number][] } {
 }
 
 /**
- * Where a fix stops between a page's visible words (`visibleWords(all)`):
- * After word k when word k + 1 comes from another file, a cut lies before it or before a hidden word
- * between them (`cutBefore`: another clip, whose file time between may play elsewhere), a hidden word lies between them,
- * or it doesn't follow word k in their file. One fix over both would cover the hidden word (and take its look away, or
- * hide the whole fix), write one file's words over the other's, or take the captions of words played elsewhere.
+ * Where a fix stops between a page's visible words (`visibleWords(all)`): after word k when word k + 1 comes from
+ * another file, a cut lies before it or before a hidden word between them (`cutBefore`: another clip, whose file time
+ * between may play elsewhere), a hidden word lies between them, or it doesn't follow word k in their file. One fix
+ * over both would cover the hidden word (and take its look away, or hide the whole fix), write one file's words over
+ * the other's, or take the captions of words played elsewhere.
  */
 function stops(all: WordView[]): boolean[] {
   const out: boolean[] = [];

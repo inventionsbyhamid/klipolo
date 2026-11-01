@@ -301,7 +301,7 @@ function next(): void {
 /**
  * The project closes: the live gesture is cancelled, and drops still queued are dropped (never sent); returns how many,
  * for the close to say. It first waits for them in their turn: it drops only those its bound gave up on. (The timeline
- * timeline going while the project stays open ends only the gesture, `cancelDrag`: its drops go in.)
+ * going while the project stays open ends only the gesture, `cancelDrag`: its drops go in.)
  */
 export function endDrags(): number {
   cancelDrag();
