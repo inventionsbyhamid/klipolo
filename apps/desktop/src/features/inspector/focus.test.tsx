@@ -173,6 +173,16 @@ describe('the Focus of a filled clip', () => {
     expect(speakerBridge.follow).not.toHaveBeenCalled();
   });
 
+  it('Speaker stays off until its price has come, so nothing is paid for unseen', async () => {
+    vi.mocked(speakerBridge.estimate).mockReturnValueOnce(new Promise(() => undefined));
+    const user = userEvent.setup();
+    renderWithProviders(<Inspector format="portrait" />);
+    const speaker = await screen.findByRole('radio', { name: 'Speaker' });
+    expect(speaker).toBeDisabled();
+    await user.click(speaker);
+    expect(speakerBridge.follow).not.toHaveBeenCalled();
+  });
+
   it('footage tracked before is followed at no charge', async () => {
     vi.mocked(speakerBridge.estimate).mockResolvedValue({ usd: 0, clips: ['b'], cached: true });
     renderWithProviders(<Inspector format="square" />);

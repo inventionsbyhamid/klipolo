@@ -66,10 +66,12 @@ export function FocusField({ clip, format, canFollow }: { clip: Clip; format: Fo
   const running = useSpeakerRun(clip.id, format);
   const noteId = useId();
   const refused = choice !== 'speaker' && Boolean(estimate?.refusal);
+  // Off until its price has come, so a follow is never paid for unseen.
+  const unpriced = choice !== 'speaker' && !estimate;
   const pick = (next: FocusChoice) => {
     if (next === choice || running !== null) return;
-    // Refused (no key or code, more than an access code's credit left): the note under the row says why.
-    if (next === 'speaker') return void (estimate?.refusal || followSpeaker(clip.id, format));
+    // Unpriced, or refused (no key or code, more than an access code's credit left): the note under the row says why.
+    if (next === 'speaker') return void (!estimate || estimate.refusal || followSpeaker(clip.id, format));
     void editClip(next === 'center' ? 'clip.focus.center.undo' : 'clip.focus.fixed.undo', clip, (now) =>
       focusPatch(now, format, next === 'center' ? { kind: 'center' } : null),
     );
@@ -80,7 +82,7 @@ export function FocusField({ clip, format, canFollow }: { clip: Clip; format: Fo
     label: t({ id: 'clip.focusChoice.speaker', message: 'Speaker', comment: 'Focus: follow the person talking' }),
     tooltip: t({ id: 'clip.focusChoice.speaker.tip', message: 'Follow the speaker' }),
     // Off while it can't be paid for: the note under the row says why.
-    disabled: refused,
+    disabled: refused || unpriced,
     describedBy: refused ? noteId : undefined,
   };
   const options = [
