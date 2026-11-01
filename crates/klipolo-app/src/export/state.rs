@@ -22,6 +22,8 @@ pub struct ExportState {
     /// Where the folders exports were written in are remembered across launches (`export-folders.json` in the app's
     /// data folder), so a kept job in a folder picked before is still listed. None: they aren't (tests).
     kept: Mutex<Option<PathBuf>>,
+    /// The folders exports were written in this session: looked in even when the file can't be read or written.
+    written_in: Mutex<Vec<PathBuf>>,
     /// The quit guard is on screen.
     asking: AtomicBool,
     /// The person chose Quit: the next exit request goes through.
@@ -266,35 +268,62 @@ impl ExportState {
         *lock(&self.kept) = Some(file);
     }
 
-    /// The folders exports were written in before, as remembered (none when nothing is, or the file can't be read).
+    /// The folders exports were written in before, as remembered, and this session's (none when nothing is, or the file
+    /// can't be read).
     pub fn kept_folders(&self) -> Vec<PathBuf> {
-        lock(&self.kept)
+        let mut folders = lock(&self.kept)
             .as_deref()
-            .map(read_folders)
-            .unwrap_or_default()
+            .and_then(|file| read_folders(file).ok())
+            .unwrap_or_default();
+        for dir in lock(&self.written_in).iter() {
+            if !folders.contains(dir) {
+                folders.push(dir.clone());
+            }
+        }
+        folders
     }
 
-    /// Remembers `dir` as a folder an export's job was written in (once).
+    /// Remembers `dir` as a folder an export's job was written in (once). A file that can't be read is never written
+    /// over (the folders in it would be lost): the folder is then looked in this session only.
     pub fn remember_folder(&self, dir: &Path) {
+        {
+            let mut written_in = lock(&self.written_in);
+            if !written_in.iter().any(|f| f == dir) {
+                written_in.push(dir.to_path_buf());
+            }
+        }
         let kept = lock(&self.kept);
         let Some(file) = kept.as_deref() else {
             return;
         };
-        let mut folders = read_folders(file);
-        if !folders.iter().any(|f| f == dir) {
-            folders.push(dir.to_path_buf());
-            write_folders(file, &folders);
+        match read_folders(file) {
+            Ok(mut folders) if !folders.iter().any(|f| f == dir) => {
+                folders.push(dir.to_path_buf());
+                write_folders(file, &folders);
+            }
+            Ok(_) => {}
+            Err(error) => {
+                tracing::warn!(%error, "export: the remembered export folders can't be read; left as they are");
+            }
         }
     }
 
-    /// Forgets the remembered folders that hold no job any more (or are gone).
+    /// Forgets the remembered folders that are there and hold no job any more. A folder that isn't there (on a disk
+    /// that isn't attached) or can't be read is kept: its jobs list again once it is back.
     pub fn forget_folders_without_jobs(&self) {
+        lock(&self.written_in).retain(|dir| !holds_no_jobs(dir));
         let kept = lock(&self.kept);
         let Some(file) = kept.as_deref() else {
             return;
         };
-        let folders = read_folders(file);
-        let holding: Vec<PathBuf> = folders.iter().filter(|f| holds_jobs(f)).cloned().collect();
+        let Ok(folders) = read_folders(file) else {
+            return;
+        };
+        let holding: Vec<PathBuf> = folders
+            .iter()
+            .filter(|f| !holds_no_jobs(f))
+            .cloned()
+            .collect();
         if holding.len() != folders.len() {
             write_folders(file, &holding);
         }
@@ -315,12 +344,13 @@ impl ExportState {
     }
 }
 
-/// The folders remembered in `file`; none when it can't be read.
-fn read_folders(file: &Path) -> Vec<PathBuf> {
-    std::fs::read(file)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        .unwrap_or_default()
+/// The folders remembered in `file`: none before the first is; an error when it can't be read or isn't a list.
+fn read_folders(file: &Path) -> std::io::Result<Vec<PathBuf>> {
+    match std::fs::read(file) {
+        Ok(bytes) => serde_json::from_slice(&bytes).map_err(std::io::Error::other),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(error) => Err(error),
+    }
 }
 
 /// Writes `folders` to `file`, atomically; a failure is logged (the folders are then looked in only this session).
@@ -342,16 +372,19 @@ fn write_folders(file: &Path, folders: &[PathBuf]) {
     }
 }
 
-/// Whether the export folder `dir` holds a job (a folder in its `.jobs` named by a job id).
-fn holds_jobs(dir: &Path) -> bool {
-    std::fs::read_dir(klipolo_engine::export::jobs::jobs_root(dir))
-        .into_iter()
-        .flatten()
-        .flatten()
-        .any(|entry| {
+/// Whether the export folder `dir` is there and holds no job: its `.jobs` is missing, or has no folder named by a job
+/// id. A folder that isn't there (a disk that isn't attached) or can't be read never reads as empty.
+fn holds_no_jobs(dir: &Path) -> bool {
+    if !dir.is_dir() {
+        return false;
+    }
+    match std::fs::read_dir(klipolo_engine::export::jobs::jobs_root(dir)) {
+        Ok(entries) => !entries.flatten().any(|entry| {
             entry.path().is_dir()
                 && klipolo_engine::export::jobs::valid_job_id(&entry.file_name().to_string_lossy())
-        })
+        }),
+        Err(error) => error.kind() == std::io::ErrorKind::NotFound,
+    }
 }
 
 /// Lets go of the slot when dropped. The run's task holds one, so a panic in it (the runner, an event's `emit`) still
@@ -367,6 +400,65 @@ impl Drop for Releases<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A job folder `id` in the export folder `dir`'s `.jobs`.
+    fn job_in(dir: &Path, id: &str) -> PathBuf {
+        let job = klipolo_engine::export::jobs::jobs_root(dir).join(id);
+        std::fs::create_dir_all(&job).unwrap();
+        job
+    }
+
+    /// A remembered folder is forgotten only when it is there and its `.jobs` holds no job. One on a disk that isn't
+    /// attached (the folder isn't there) stays remembered, and its job is listed again once the disk is back.
+    #[test]
+    fn a_folder_on_a_disk_thats_out_stays_remembered() {
+        let data = tempfile::tempdir().unwrap();
+        let state = ExportState::default();
+        state.remember_in(data.path().join("export-folders.json"));
+        let disk = tempfile::tempdir().unwrap();
+        let folder = disk.path().join("Exports");
+        let job = job_in(&folder, "0a1b2c3d-4e5f");
+        state.remember_folder(&folder);
+        let listed = |state: &ExportState| {
+            let roots = crate::export::jobs::roots(None, None, &state.kept_folders());
+            crate::export::jobs::list(&roots, |_| false).len()
+        };
+        // The disk is out.
+        let out = disk.path().join("Exports out");
+        std::fs::rename(&folder, &out).unwrap();
+        state.forget_folders_without_jobs();
+        assert_eq!(
+            state.kept_folders(),
+            std::slice::from_ref(&folder),
+            "kept while it's out"
+        );
+        // Back in: its job lists again.
+        std::fs::rename(&out, &folder).unwrap();
+        state.forget_folders_without_jobs();
+        assert_eq!(listed(&state), 1);
+        // Its jobs gone: forgotten.
+        std::fs::remove_dir_all(&job).unwrap();
+        state.forget_folders_without_jobs();
+        assert!(state.kept_folders().is_empty());
+    }
+
+    /// The remembered folders' file is never written over when it can't be read: the folders in it (and their jobs)
+    /// would be lost. It is left as it is, and the folder is looked in this session only.
+    #[test]
+    fn a_folder_file_that_cant_be_read_is_never_written_over() {
+        let data = tempfile::tempdir().unwrap();
+        let file = data.path().join("export-folders.json");
+        std::fs::write(&file, b"[\"/Volumes/Card/Exports\", oops").unwrap();
+        let state = ExportState::default();
+        state.remember_in(file.clone());
+        state.remember_folder(Path::new("/Volumes/Other/Exports"));
+        state.forget_folders_without_jobs();
+        assert_eq!(
+            std::fs::read(&file).unwrap(),
+            b"[\"/Volumes/Card/Exports\", oops",
+            "left as it was"
+        );
+    }
 
     /// A Cancel that doesn't name the job (a reloaded window, a chat command) never stops another project's export: it
     /// is refused by that project's name. Named by its job, or from its own project, it stops.
