@@ -10,15 +10,19 @@
       "id": "title",
       "type": "text",
       "text": "$title",
-      "box": [0.13, 0.2, 0.74, "220px"],
-      "font": "Inter",
-      "size": 120,
+      "box": [0.13, 0.17, 0.74, "360px"],
+      "font": "Montserrat",
+      "size": 100,
       "weight": 900,
       "fill": "#FFFFFF",
       "align": "center",
+      "case": "upper",
+      "lineHeight": 1.05,
+      "outline": { "width": 6, "color": "#000000" },
       "shadow": { "y": 4, "blur": 16, "color": "#00000080" },
       "split": "chars",
-      "fit": "shrink"
+      "wrap": 1,
+      "fit": "clip"
     }
   ],
   "timeline": [

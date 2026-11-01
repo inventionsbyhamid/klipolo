@@ -22,7 +22,7 @@
   "position": { "portrait": { "y": 0.62 }, "landscape": { "y": 0.80 } },
   "active": { "color": { "color": "accent", "fadeMs": 60 }, "scale": 1.06 },
   "keyword": null,
-  "enter": { "per": "word", "motion": { "kind": "pop", "ms": 160, "from": 0.6, "peak": 1.15, "dyEm": 0.12 } },
+  "enter": { "per": "word", "motion": { "kind": "pop", "ms": 160, "from": 0.7, "peak": 1.06, "dyEm": 0.12 } },
   "tiltDeg": 0,
   "shake": null,
   "exit": { "kind": "cut" },
