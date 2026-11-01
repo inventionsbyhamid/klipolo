@@ -3,8 +3,10 @@
 the public domain (CC0 1.0). No recordings, samples or outside media go in.
 
 Python 3 standard library only, and deterministic: fixed seeds, no clocks, and nothing but IEEE arithmetic and square
-roots (sines and exponentials are computed here, never by the platform's maths library), so every machine writes the
-same bytes. It writes, into assets/library or --out DIR:
+roots (sines and exponentials are computed here, never by the platform's maths library), so every machine works out
+the same samples and pixels. The PNGs are deflated by the zlib Python is built with, which can differ between builds
+(zlib-ng, Apple's), so regenerate the pack in the klipolo-ci image (ci/linux.Dockerfile), where its check runs.
+It writes, into assets/library or --out DIR:
   sounds/<id>.wav     48 kHz 16-bit mono, each under 3 s, starting and ending at silence
   music/<id>.wav      24 kHz 16-bit mono beds of 16 s, drawn exactly periodic so they loop without a click
   stickers/<id>.png   1024 x 1024 RGBA, the shape with a border on a transparent canvas
