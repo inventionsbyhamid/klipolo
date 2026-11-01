@@ -347,6 +347,8 @@ export const useExport = create<ExportStore>((set, get) => {
         if (id !== batch) return;
         // Gone meanwhile (discarded elsewhere): Try again exports it anew rather than asking for it again.
         if (isCode(error, 'exports.gone')) set({ jobId: null });
+        // Another build made it: it can only start over or be discarded, never be asked to resume again.
+        if (isCode(error, 'exports.otherBuild')) set({ otherBuild: true });
         get().onEvent({ type: 'failed', message: errorMessage(error) });
       }
     },

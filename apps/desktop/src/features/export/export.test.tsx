@@ -924,6 +924,23 @@ describe('unfinished exports', () => {
     expect(within(row).getByRole('button', { name: 'Resume' })).toBeInTheDocument();
   });
 
+  it('a Resume refused because another build made the export offers Start over and Discard, not Try again', async () => {
+    vi.mocked(exporter.jobs).mockResolvedValue([job({ stale: true })]);
+    vi.mocked(exporter.resume).mockRejectedValueOnce(
+      new Error('Another version of Klipolo made this export, so it can’t resume. Start over or discard it.', {
+        cause: coded('exports.otherBuild'),
+      }),
+    );
+    await openWithJobs(1);
+    await userEvent.click(screen.getByRole('button', { name: 'Resume' }));
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Another version of Klipolo made this export'),
+    );
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Start over with your latest changes' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeInTheDocument();
+  });
+
   it('a Discard Rust refuses is said, and the row stays', async () => {
     vi.mocked(exporter.jobs).mockResolvedValue([job()]);
     vi.mocked(exporter.discard).mockRejectedValueOnce(new Error('The export couldn’t be discarded. Try again.'));

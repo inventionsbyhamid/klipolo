@@ -57,6 +57,8 @@ export interface ExportRun {
   saving: boolean;
   /** What the dialog's status region says: done, failed, stopped. */
   announcement: string;
+  /** Its Resume was refused because another build of Klipolo made the job: it can only start over or be discarded. */
+  otherBuild: boolean;
 }
 
 export const idleRun: ExportRun = {
@@ -79,6 +81,7 @@ export const idleRun: ExportRun = {
   message: null,
   saving: false,
   announcement: '',
+  otherBuild: false,
 };
 
 /** Every way a run stops clears what was in flight. */

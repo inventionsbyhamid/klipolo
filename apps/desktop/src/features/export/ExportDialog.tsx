@@ -587,11 +587,13 @@ function StaleNote() {
 function KeptJobActions() {
   const job = useExport(shownJob);
   const startingOver = useExport((s) => s.startingOver);
+  const refusedBuild = useExport((s) => s.otherBuild);
   const here = useProject((p) => p.snapshot?.project.id) === job?.projectId;
   const restartable = useProject((p) => !!job && canStartOver(job, p.snapshot?.project.settings.formats ?? []));
   if (!job) return null;
-  const compatible = job.compatibility !== null && !job.compatibility.chosen;
-  const startOver = job.stale && here && restartable;
+  const otherBuild = job.otherBuild || refusedBuild;
+  const compatible = job.compatibility !== null && !job.compatibility.chosen && !otherBuild;
+  const startOver = (job.stale || otherBuild) && here && restartable;
   if (!compatible && !startOver) return null;
   return (
     <div className="ex-job-actions">
@@ -685,16 +687,22 @@ function PausedFoot({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** Discard, Close, and Try again: it goes on from the kept job's finished parts. */
+/**
+ * Discard, Close, and Try again: it goes on from the kept job's finished parts. A job another build made can't go on:
+ * no Try again (Start over and Discard are its ways on).
+ */
 function FailedFoot({ onClose }: { onClose: () => void }) {
+  const otherBuild = useExport((s) => s.otherBuild || (shownJob(s)?.otherBuild ?? false));
   return (
     <KeptFoot
       onClose={onClose}
       primary={
-        <Button variant="primary" data-primary onClick={() => void useExport.getState().retry()}>
-          <Icon name="export" />
-          Try again
-        </Button>
+        otherBuild ? null : (
+          <Button variant="primary" data-primary onClick={() => void useExport.getState().retry()}>
+            <Icon name="export" />
+            Try again
+          </Button>
+        )
       }
     />
   );
