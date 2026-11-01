@@ -6,6 +6,7 @@ import { recordingCameras } from '../../../lib/camera';
 import { findClip, findItem, hasOwnSound, itemLabel, sourceLabel } from '../../../lib/timeline';
 import { useProject } from '../../../state/project';
 import { useSelection } from '../../../state/selection';
+import { useUi } from '../../../state/ui';
 import type { Command } from '../../command-palette/command';
 import { useCommands } from '../../command-palette/useCommands';
 import { transitionLabels } from '../keys/transitionActions';
@@ -34,6 +35,7 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
   const { t } = useLingui();
   const commands = useCommands();
   const project = useProject((s) => s.snapshot?.project);
+  const expanded = useUi((s) => s.timelineExpanded);
   const byId = new Map(commands.map((c) => [c.id, c]));
   const found = project ? findItem(project, blockId) : null;
   // A clip with one after it and no transition into it yet (one it has is selected at its cut). A video's only clip
@@ -55,6 +57,8 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
   const order = [
     { id: 'track-up', label: picture ? t({ id: 'timeline.menu.forward', message: 'Bring forward' }) : undefined },
     { id: 'track-down', label: picture ? t({ id: 'timeline.menu.back', message: 'Send back' }) : undefined },
+    // While every track shows, a layer can go onto a track of its own.
+    ...(expanded ? [{ id: 'layer-new-track' }] : []),
   ];
   const addTransition = {
     id: 'add-transition',

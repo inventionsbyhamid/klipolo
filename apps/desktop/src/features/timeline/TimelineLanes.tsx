@@ -1,20 +1,26 @@
 import { useLingui } from '@lingui/react/macro';
 import { useMemo, useState } from 'react';
 import type { Project } from '../../bindings/Project';
+import type { Track } from '../../bindings/Track';
+import { useUi } from '../../state/ui';
+import { AddTrackRow } from './lanes/AddTrackRow';
 import { AudioLane } from './lanes/AudioLane';
 import { audioLines } from './lanes/audioRole';
 import { LaneHeader } from './lanes/LaneHeader';
 import { LaneRow } from './lanes/LaneRow';
 import { LayersLane, layersLanePx } from './lanes/LayersLane';
 import { MainLane } from './lanes/MainLane';
+import { NewTrackSlot } from './lanes/NewTrackZone';
 import { SourceLanes } from './lanes/SourceLanes';
 import type { LineView } from './lanes/TrackLane';
-import { CLIP_INNER_PX } from './layout';
+import { TrackRow } from './lanes/TrackRow';
+import { AUDIO_TRACK_PX, CLIP_INNER_PX, MAIN_LANE_PX, TRACK_ROW_PX } from './layout';
 import { laneTracks, type LaneId } from './model/laneOps';
 import { createZoomRest } from './media/zoomRest';
 import { ViewportContext, ZoomRestContext } from './media/ViewportContext';
 import { MarkerFlags } from './MarkerFlags';
 import { ProposalOverlay } from './ProposalOverlay';
+import { TrackHeader } from './TrackHeader';
 import { useLaneSizes } from './useLaneSizes';
 import type { Viewport } from './useViewport';
 
@@ -36,11 +42,15 @@ interface TimelineLanesProps {
  * three rows), Video (the clips, taking the spare height, with a recording's marker flags), Sounds and Music; and
  * between Video and Sounds, one lane per kind of sound the takes recorded (`SourceLanes`), only while a take has it.
  * Overlays, Sound effects and Music have their header while a track is on them (`LaneHeader`: options, Hide or Mute).
- * Empty lanes are a faint strip. It gives the blocks' media the window it draws in and this timeline's zoom gestures
- * to wait out (`media/BlockMedia`).
+ * Empty lanes are a faint strip. Show all tracks lists every track in a row of its own instead of the Overlays, Sound
+ * effects and Music lanes: the picture tracks above Video (the top one first), the audio tracks under the recorded
+ * sounds, each with its header (`TrackHeader`), then the new-track zone a dragged layer can go to and the buttons that
+ * add a track. It gives the blocks' media the window it draws in and this timeline's zoom gestures to wait out
+ * (`media/BlockMedia`).
  */
 export function TimelineLanes({ project, viewport, view, width, clipPx = CLIP_INNER_PX, onSeek }: TimelineLanesProps) {
   const { t } = useLingui();
+  const expanded = useUi((s) => s.timelineExpanded);
   const { main, tracks } = project.timeline;
   const { assets, recordings } = project;
   // One object per asset and recording lists, which the source lanes' kinds are kept by.
@@ -67,28 +77,81 @@ export function TimelineLanes({ project, viewport, view, width, clipPx = CLIP_IN
     laneTracks(tracks, lane).length > 0 ? (
       <LaneHeader lane={lane} name={names[lane]} icon={icon} tracks={tracks} />
     ) : undefined;
+  /** A track's own row, while every track shows. */
+  const trackRow = (track: Track) => {
+    const rowPx = track.kind === 'audio' ? AUDIO_TRACK_PX : TRACK_ROW_PX;
+    return (
+      <LaneRow
+        key={track.id}
+        lane={track.id}
+        track={track}
+        name={track.name}
+        header={<TrackHeader track={track} />}
+        empty={track.items.length === 0}
+        height={rowPx}
+        width={width}
+        onSeek={onSeek}
+      >
+        <TrackRow track={track} assets={assets} recordings={recordings} rowPx={rowPx} {...view} />
+        <ProposalOverlay lane="track" track={track} rowPx={rowPx} {...ghostWindow} />
+      </LaneRow>
+    );
+  };
+  // The four lanes' own: Overlays above Video, Sound effects and Music under the recorded sounds.
+  const layersLane = (
+    <LaneRow
+      lane="layers"
+      icon="layers"
+      name={names.layers}
+      header={header('layers', 'layers')}
+      empty={!tracks.some((track) => track.kind !== 'audio' && track.items.length > 0)}
+      height={layersLanePx(tracks)}
+      width={width}
+      onSeek={onSeek}
+    >
+      <LayersLane tracks={tracks} assets={assets} recordings={recordings} {...view} />
+      <ProposalOverlay lane="layers" tracks={tracks} {...ghostWindow} />
+    </LaneRow>
+  );
+  const soundLanes = (['sounds', 'music'] as const).map((role) => (
+    <LaneRow
+      key={role}
+      lane={role}
+      icon={role === 'music' ? 'music' : 'pulse'}
+      name={names[role]}
+      header={header(role, role === 'music' ? 'music' : 'pulse')}
+      empty={sounds[role].items.length === 0}
+      height={sizes[role]}
+      width={width}
+      onSeek={onSeek}
+    >
+      <AudioLane role={role} rowPx={sizes[role]} tracks={tracks} assets={assets} recordings={recordings} {...view} />
+      <ProposalOverlay lane={role} rowPx={sizes[role]} tracks={tracks} {...ghostWindow} />
+    </LaneRow>
+  ));
   return (
     <ViewportContext value={drawWindow}>
       <ZoomRestContext value={zoomRest}>
-        <LaneRow
-          lane="layers"
-          icon="layers"
-          name={names.layers}
-          header={header('layers', 'layers')}
-          empty={!tracks.some((track) => track.kind !== 'audio' && track.items.length > 0)}
-          height={layersLanePx(tracks)}
-          width={width}
-          onSeek={onSeek}
-        >
-          <LayersLane tracks={tracks} assets={assets} recordings={recordings} {...view} />
-          <ProposalOverlay lane="layers" tracks={tracks} {...ghostWindow} />
-        </LaneRow>
+        {expanded ? (
+          <>
+            {/* A dragged overlay or zoom layer's new-track zone, then the picture tracks, top first, as they draw. */}
+            <NewTrackSlot at="top" />
+            {tracks
+              .filter((track) => track.kind !== 'audio')
+              .reverse()
+              .map(trackRow)}
+          </>
+        ) : (
+          layersLane
+        )}
         <LaneRow
           lane="main"
           icon="film"
           name={t({ id: 'timeline.lane.video', message: 'Video' })}
           empty={main.length === 0}
-          grow
+          // Among every track's row it keeps its own height; with the four lanes it takes the spare height.
+          grow={!expanded}
+          height={MAIN_LANE_PX}
           width={width}
           onSeek={onSeek}
         >
@@ -112,46 +175,16 @@ export function TimelineLanes({ project, viewport, view, width, clipPx = CLIP_IN
           width={width}
           onSeek={onSeek}
         />
-        <LaneRow
-          lane="sounds"
-          icon="pulse"
-          name={names.sounds}
-          header={header('sounds', 'pulse')}
-          empty={sounds.sounds.items.length === 0}
-          height={sizes.sounds}
-          width={width}
-          onSeek={onSeek}
-        >
-          <AudioLane
-            role="sounds"
-            rowPx={sizes.sounds}
-            tracks={tracks}
-            assets={assets}
-            recordings={recordings}
-            {...view}
-          />
-          <ProposalOverlay lane="sounds" rowPx={sizes.sounds} tracks={tracks} {...ghostWindow} />
-        </LaneRow>
-        <LaneRow
-          lane="music"
-          icon="music"
-          name={names.music}
-          header={header('music', 'music')}
-          empty={sounds.music.items.length === 0}
-          height={sizes.music}
-          width={width}
-          onSeek={onSeek}
-        >
-          <AudioLane
-            role="music"
-            rowPx={sizes.music}
-            tracks={tracks}
-            assets={assets}
-            recordings={recordings}
-            {...view}
-          />
-          <ProposalOverlay lane="music" rowPx={sizes.music} tracks={tracks} {...ghostWindow} />
-        </LaneRow>
+        {expanded ? (
+          <>
+            {tracks.filter((track) => track.kind === 'audio').map(trackRow)}
+            {/* A dragged sound's new-track zone, then the buttons that add a track. */}
+            <NewTrackSlot at="bottom" />
+            <AddTrackRow />
+          </>
+        ) : (
+          soundLanes
+        )}
       </ZoomRestContext>
     </ViewportContext>
   );

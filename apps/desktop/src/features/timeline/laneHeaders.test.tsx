@@ -146,7 +146,7 @@ describe("a lane's header", () => {
     show(lanesSnapshot((tracks) => (tracks[0].locked = tracks[1].locked = true)));
     await userEvent.click(screen.getByRole('button', { name: 'Overlays options' }));
     const items = screen.getAllByRole('menuitem').map((item) => item.textContent);
-    expect(items).toEqual(['Hide Overlays', 'Solo Overlays', 'Unlock Overlays']);
+    expect(items).toEqual(['Hide Overlays', 'Solo Overlays', 'Unlock Overlays', 'Show all tracks']);
     await userEvent.click(screen.getByRole('menuitem', { name: 'Solo Overlays' }));
     // A zoom track has no solo.
     expect(await lastApply()).toEqual({

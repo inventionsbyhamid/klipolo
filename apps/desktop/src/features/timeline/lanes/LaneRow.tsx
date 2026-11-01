@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
+import type { TrackKind } from '../../../bindings/TrackKind';
 import { cn } from '../../../design/cn';
 import { Tooltip } from '../../../design/Tooltip';
 import { Icon, type IconName } from '../../../layout/Icon';
 import { useDropIndicator } from '../dropTarget';
-import { HEADER_PX } from '../layout';
+import { useGutterPx } from '../layout';
 
 /** What a dragged file over a lane would land as: the Video lane takes clips, Overlays pictures, the others sounds. */
 const DROPS: Record<string, 'main' | 'picture' | 'sound'> = {
@@ -19,6 +20,8 @@ interface LaneRowProps {
    * is `source:<kind>`, which the keyboard and drops pass over.
    */
   lane: string;
+  /** A track's own row (every track showing): a dragged layer and dropped media find the rows to go to by these. */
+  track?: { id: string; kind: TrackKind };
   /** The lane's icon in the gutter, and its name (the icon's tooltip, and the lane's name for screen readers). */
   icon?: IconName;
   name: string;
@@ -40,6 +43,7 @@ interface LaneRowProps {
  */
 export function LaneRow({
   lane,
+  track,
   icon,
   name,
   header,
@@ -50,6 +54,7 @@ export function LaneRow({
   onSeek,
   children,
 }: LaneRowProps) {
+  const gutter = useGutterPx();
   // The lane the file is held over, only: both audio lanes take a sound, so a sound's target names its lane (`row`).
   const dropOver = useDropIndicator(
     (s) =>
@@ -64,8 +69,10 @@ export function LaneRow({
       className={cn('tl-row', grow && 'is-grow')}
       style={grow ? undefined : { height }}
       data-lane={lane}
+      data-track-id={track?.id}
+      data-track-kind={track?.kind}
     >
-      <div className="tl-gutter" style={{ width: HEADER_PX }}>
+      <div className="tl-gutter" style={{ width: gutter }}>
         {header ??
           (icon && (
             <Tooltip label={name} side="right">

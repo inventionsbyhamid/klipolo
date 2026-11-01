@@ -4,9 +4,9 @@ import type { Track } from '../../bindings/Track';
 import { cn } from '../../design/cn';
 import { useProposal, type Proposal } from '../../state/proposal';
 import { audioBox } from './lanes/AudioLane';
-import { audioLines, type AudioRole } from './lanes/audioRole';
+import { audioLines, audioRole, type AudioRole } from './lanes/audioRole';
 import { packedBox } from './lanes/LayersLane';
-import type { Box } from './lanes/TrackLane';
+import { rowBox, type Box } from './lanes/TrackLane';
 import { packRows } from './model/packRows';
 import { usToPx } from './scale';
 
@@ -16,8 +16,12 @@ interface Window {
   toUs: number;
 }
 
-/** Which lane the overlay covers: the Overlays lane, or the Sounds or Music lane (`rowPx` tall). */
-export type ProposalOverlayProps = Window & { lane: 'layers' | AudioRole; tracks: Track[]; rowPx?: number };
+/**
+ * Which lane the overlay covers: the Overlays lane, or the Sounds or Music lane (`rowPx` tall); or, while every track
+ * shows, one track's row (`track`, `rowPx` tall).
+ */
+export type ProposalOverlayProps = Window &
+  ({ lane: 'layers' | AudioRole; tracks: Track[]; rowPx?: number } | { lane: 'track'; track: Track; rowPx: number });
 
 /**
  * What goes on one lane, in start order, with the furthest end reached so far (`reach`), so the window's are found by
@@ -138,7 +142,20 @@ function layersGhosts(proposal: Proposal, tracks: Track[]): Ghosts {
   });
 }
 
+/** One track's layers that go or get shorter, in its row `rowPx` tall, where its row draws each. */
+function trackGhosts(proposal: Proposal, track: Track, rowPx: number): Ghosts {
+  const gone = affectedBy(proposal);
+  return ghostsFor(proposal, `track:${rowPx}`, track, () => {
+    const boxOf = (id: string) => {
+      const item = track.items.find((i) => i.id === id);
+      return track.kind === 'audio' && item ? audioBox(audioRole(item), rowPx) : rowBox(rowPx);
+    };
+    return layerGhosts(track.items, gone, boxOf);
+  });
+}
+
 function laneGhosts(proposal: Proposal, props: ProposalOverlayProps): Ghosts {
+  if (props.lane === 'track') return trackGhosts(proposal, props.track, props.rowPx);
   return props.lane === 'layers'
     ? layersGhosts(proposal, props.tracks)
     : audioGhosts(proposal, props.tracks, props.lane, props.rowPx ?? 0);

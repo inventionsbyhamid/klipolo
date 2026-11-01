@@ -1359,6 +1359,75 @@
   border-radius: var(--radius-xs);
 }
 
+/* While every track shows: each track's header fills the wider gutter (its name, its toggles while pointed at or
+   focused, its options), the new-track zone a dragged layer can go to, and the buttons that add a track. */
+.tl-track-head {
+  justify-self: stretch;
+  width: 100%;
+  min-width: 0;
+}
+
+.icon-btn.tl-track-toggle,
+.tl-track-head [data-track-menu] {
+  border-radius: var(--radius-xs);
+}
+
+.icon-btn.tl-track-toggle.is-on {
+  background: var(--color-paper-wash);
+  box-shadow: inset 0 0 0 1px var(--color-paper);
+  color: var(--color-ink);
+}
+
+.tl-track-name-field {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-paper);
+  border-radius: var(--radius-xs);
+  background: var(--color-night);
+  color: var(--color-ink);
+  font-size: var(--text-xs);
+  outline: none;
+}
+
+.tl-new-track {
+  display: flex;
+  flex: none;
+}
+
+.tl-new-track-name {
+  place-items: center start;
+  padding-left: var(--space-5);
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+}
+
+.tl-new-track-zone {
+  flex: 1;
+  margin: 2px;
+  border: 1px dashed var(--color-line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-paper-wash);
+}
+
+.tl-add-track {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 32px;
+}
+
+.tl-add-track-buttons {
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+}
+
 /* A lane's icon opens its options; a soloed or locked lane shows it on a small badge at the icon's corner. */
 .tl-lane-btn .ico {
   width: 14px;

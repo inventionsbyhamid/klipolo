@@ -9,7 +9,7 @@ import { useProject } from '../../state/project';
 import { useUi } from '../../state/ui';
 import { startAutoscroll } from './drag/autoscroll';
 import { SNAP_PX } from './drag/session';
-import { HEADER_PX } from './layout';
+import { gutterPx } from './layout';
 import { nearestCut, type DropTarget } from './model/dropOps';
 import { snapEdges, snapTargets } from './model/snap';
 import { pxToUs } from './scale';
@@ -87,10 +87,11 @@ export function dropAutoscroll(pointer: () => { x: number; y: number }, onScroll
   // The lanes don't move during a drag: one layout read.
   const box = scroller.getBoundingClientRect();
   const middle = box.left + box.width / 2;
-  const lanesLeft = box.left + HEADER_PX;
+  const gutter = gutterPx();
+  const lanesLeft = box.left + gutter;
   return startAutoscroll(
     scroller,
-    HEADER_PX,
+    gutter,
     () => {
       const { x, y } = pointer();
       return y >= box.top && y < box.bottom && x >= lanesLeft ? x : middle;
@@ -138,8 +139,9 @@ function edgesOf(project: Project): Float64Array {
 
 /**
  * Over `scroller`'s lanes (below its ruler, `headBottom`): the main lane gives the cut nearest the pointer's time; the
- * Overlays lane a picture layer there; the Sounds lane a sound effect and the Music lane music. A layer's start keeps to the frame grid, and
- * holds to a cut, a layer's edge or the playhead within 8 px while snapping is on: O(log edges) a frame.
+ * Overlays lane a picture layer there; the Sounds lane a sound effect and the Music lane music. A layer's start keeps
+ * to the frame grid, and holds to a cut, a layer's edge or the playhead within 8 px while snapping is on: O(log edges)
+ * a frame.
  *
  * Null elsewhere: the ruler, outside the lanes, a read-only project, a zoom, hidden or locked track, and a row that
  * won't take what is dragged (`kind`: a sound over a picture row, a picture over a sound row, a sound or a picture over
@@ -165,7 +167,7 @@ export function timelineTargetAt(
   const { project } = snapshot;
   const { pxPerSecond: pps, snapping } = useUi.getState();
   // Over the track headers: the lanes' left edge.
-  const px = Math.max(0, clientX - box.left - HEADER_PX) + scroller.scrollLeft;
+  const px = Math.max(0, clientX - box.left - gutterPx()) + scroller.scrollLeft;
   const pointerUs = Math.max(0, pxToUs(px, pps));
   const atUs = () => {
     const at = snapToFrame(pointerUs, project.settings.fps);

@@ -11,7 +11,7 @@ import { changedSince, type Built } from '../../../state/editBase';
 import { usePlayback } from '../../../state/playback';
 import { captureBase, useProject } from '../../../state/project';
 import { useUi } from '../../../state/ui';
-import { HEADER_PX } from '../layout';
+import { gutterPx } from '../layout';
 import { mainIndex } from '../model/index';
 import { pxToUs } from '../scale';
 import { blockElement, clearShifts } from './registry';
@@ -118,7 +118,7 @@ export function newSession(
     revision: snapshot.history.revision,
     pps,
     // Before the first layout (jsdom) a 1200 px view, as `useViewport` assumes.
-    viewUs: pxToUs((view.scroller.clientWidth || 1200) - HEADER_PX, pps),
+    viewUs: pxToUs((view.scroller.clientWidth || 1200) - gutterPx(), pps),
     fps: snapshot.project.settings.fps,
     expanded,
     playheadUs,

@@ -8,9 +8,11 @@ import { Icon, type IconName } from '../../../layout/Icon';
 import { labelText } from '../../../lib/labels';
 import { soloedTracks } from '../../../lib/solo';
 import { useProject } from '../../../state/project';
+import { useUi } from '../../../state/ui';
 import { setLaneFlag, soloOff, soloOffLabel } from '../keys/trackActions';
 import { laneToggleLabel, trackStateName, type TrackState } from '../keys/trackLabels';
 import { laneFlag, laneOff, laneToggles, laneTracks, type LaneId } from '../model/laneOps';
+import { useTrackViewLabel } from '../TrackViewToggle';
 
 const icon = (Glyph: LucideIcon) => <Glyph size={14} strokeWidth={1.8} aria-hidden />;
 
@@ -37,10 +39,11 @@ interface LaneHeaderProps {
 }
 
 /**
- * A lane's header, in the gutter: its icon, which opens the lane's options (Hide or Mute, Solo, Lock), and Hide or
- * Mute, in a toolbar named after the lane, as a recorded sound's lane has its volume and Mute. Each acts on every track
- * the lane draws, one undo step (`setLaneFlag`); its name says what it does, so it has no pressed state as well. At
- * rest a small badge on the icon shows a soloed or locked lane, and the options button says what the lane is.
+ * A lane's header, in the gutter: its icon, which opens the lane's options (Hide or Mute, Solo, Lock, Show all
+ * tracks), and Hide or Mute, in a toolbar named after the lane, as a recorded sound's lane has its volume and Mute.
+ * Each toggle acts on every track the lane draws, one undo step (`setLaneFlag`); its name says what it does, so it has
+ * no pressed state as well. At rest a small badge on the icon shows a soloed or locked lane, and the options button
+ * says what the lane is.
  */
 export function LaneHeader({ lane, name, icon: iconName, tracks }: LaneHeaderProps) {
   const { t } = useLingui();
@@ -99,11 +102,13 @@ export function LaneHeader({ lane, name, icon: iconName, tracks }: LaneHeaderPro
 }
 
 /**
- * The lane's options: its toggles, worded for what a press does, and Turn off solo while any track is soloed. Mounted
- * only while the menu is open, so only an open menu follows the tracks.
+ * The lane's options: its toggles, worded for what a press does, Turn off solo while any track is soloed, and Show all
+ * tracks (each track's own row and header). Mounted only while the menu is open, so only an open menu follows the
+ * tracks.
  */
 function LaneMenuItems({ lane }: { lane: LaneId }) {
   const tracks = useProject((s) => s.snapshot?.project.timeline.tracks);
+  const showAll = useTrackViewLabel();
   if (!tracks) return null;
   const on = laneTracks(tracks, lane);
   const anySolo = soloedTracks(tracks).length > 0;
@@ -120,6 +125,8 @@ function LaneMenuItems({ lane }: { lane: LaneId }) {
           <MenuItem onSelect={() => void soloOff()}>{soloOffLabel()}</MenuItem>
         </>
       )}
+      <MenuSeparator />
+      <MenuItem onSelect={() => useUi.getState().setTimelineExpanded(true)}>{showAll}</MenuItem>
     </>
   );
 }

@@ -1,4 +1,5 @@
 import { plural, select, t } from '@lingui/core/macro';
+import { create } from 'zustand';
 import type { Track } from '../../../bindings/Track';
 import type { TrackKind } from '../../../bindings/TrackKind';
 import { newId } from '../../../lib/defaults';
@@ -7,6 +8,7 @@ import { findItem, itemLabel } from '../../../lib/timeline';
 import { keyBurst } from '../../../state/keyBurst';
 import { useProject } from '../../../state/project';
 import { toast } from '../../../state/toasts';
+import { useUi } from '../../../state/ui';
 import { laneFlag, laneTracks, setLaneOps, type LaneId } from '../model/laneOps';
 import { moveItemOps } from '../model/moveOps';
 import {
@@ -25,10 +27,31 @@ import { commit, editable } from './timelineActions';
 import { laneName, laneToggleLabel, toggledSaid, trackToggleId } from './trackLabels';
 
 /*
- * What the track commands do (a sound layer's track muted, a layer's own track): each reads the project when it runs,
- * builds its ops with `model/trackOps`, commits them as one undo step through `useProject.apply` in the timeline's
- * commit queue, and says what it did in the live region. Klipolo shows no track headers; the model's tracks stay.
+ * What the track and lane commands do (a track's header and options, a lane's, a sound layer's track muted, a layer's
+ * own track): each reads the project when it runs, builds its ops with `model/trackOps` or `model/laneOps`, commits
+ * them as one undo step through `useProject.apply` in the timeline's commit queue, and says what it did in the live
+ * region.
  */
+
+/** The track whose name is a field in its header now (Rename), if any. */
+export const useTrackRename = create<{ id: string | null }>(() => ({ id: null }));
+
+/** Track `id`'s name becomes a field in its header: every track shows, so its header does. */
+export function startRename(id: string) {
+  useUi.getState().setTimelineExpanded(true);
+  useTrackRename.setState({ id });
+}
+
+// A name being edited is dropped when the headers go (fewer tracks shown, another project): it never reopens later.
+const endRename = () => {
+  if (useTrackRename.getState().id !== null) useTrackRename.setState({ id: null });
+};
+useUi.subscribe((u, prev) => {
+  if (prev.timelineExpanded && !u.timelineExpanded) endRename();
+});
+useProject.subscribe((p, prev) => {
+  if (p.snapshot?.project.id !== prev.snapshot?.project.id) endRename();
+});
 
 const trackIn = (id: string) => {
   const project = editable();

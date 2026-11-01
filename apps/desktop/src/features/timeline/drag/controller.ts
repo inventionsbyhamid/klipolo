@@ -14,7 +14,7 @@ import { useProject } from '../../../state/project';
 import { toast } from '../../../state/toasts';
 import { clearPreview, dropPendingPreview, previewOps } from '../../../state/livePreview';
 import { announce } from '../announce';
-import { HEADER_PX } from '../layout';
+import { gutterPx } from '../layout';
 import { attachedTo, sameOps } from '../model/moveOps';
 import { pxToUs } from '../scale';
 import { startAutoscroll } from './autoscroll';
@@ -154,7 +154,7 @@ function start(s: Session): boolean {
     finish();
     return false;
   }
-  s.stopScroll = startAutoscroll(s.view.scroller, HEADER_PX, () => s.last.x, frame);
+  s.stopScroll = startAutoscroll(s.view.scroller, gutterPx(), () => s.last.x, frame);
   return true;
 }
 

@@ -17,7 +17,7 @@ import { registerDropTarget, timelineLaneAt, timelineTargetAt } from './dropTarg
 import { forgetGoneTransition } from './keys/transitionActions';
 import { useRovingFocus } from './keys/useRovingFocus';
 import { cancelRangeDrag, RangeSelection, rangeDragJustEnded, startRangeDrag } from './lanes/RangeSelection';
-import { BLOCK_HINT_ID, CLIP_INNER_PX, HEADER_PX, MAIN_LANE_MIN_PX, TAIL_US } from './layout';
+import { BLOCK_HINT_ID, CLIP_INNER_PX, MAIN_LANE_MIN_PX, TAIL_US, useGutterPx } from './layout';
 import { LiveRegion } from './LiveRegion';
 import { OverviewStrip } from './OverviewStrip';
 import { Playhead } from './Playhead';
@@ -26,6 +26,7 @@ import { Ruler } from './ruler/Ruler';
 import { pxToUs, usToPx } from './scale';
 import { SnapGuide } from './SnapGuide';
 import { TimelineLanes } from './TimelineLanes';
+import { TrackViewToggle } from './TrackViewToggle';
 import { useFollowPlayhead } from './useFollowPlayhead';
 import { useViewport } from './useViewport';
 import { fitTimeline, peekZoomScroll, registerZoomTarget, takeZoomScroll, zoomGestures } from './zoomControl';
@@ -79,6 +80,8 @@ export function TimelineView() {
   const { t } = useLingui();
   const project = useProject((s) => s.snapshot!.project);
   const pps = useUi((s) => s.pxPerSecond);
+  // The gutter: the lanes' icons, or every track's header while all tracks show.
+  const gutter = useGutterPx();
   const seek = usePlayback((s) => s.seek);
   const selectedId = useSelection((s) => s.selectedId);
   const select = useSelection((s) => s.select);
@@ -99,8 +102,8 @@ export function TimelineView() {
     if (scroll !== null && scrollRef.current) scrollRef.current.scrollLeft = scroll;
   }, [pps]);
   // A zoom's render already draws the window at the scroll it is about to take (no extra blocks for one render).
-  const viewport = useViewport(scrollRef, pps, HEADER_PX, peekZoomScroll());
-  useFollowPlayhead(scrollRef, pps, HEADER_PX);
+  const viewport = useViewport(scrollRef, pps, gutter, peekZoomScroll());
+  useFollowPlayhead(scrollRef, pps, gutter);
   const clipPx = useClipPx(scrollRef);
   const roving = useRovingFocus(scrollRef, project, selectedId, pps, viewport.scrollPx);
   const { tabStopId } = roving;
@@ -116,7 +119,7 @@ export function TimelineView() {
     if (!scroller) return;
     registerZoomTarget({
       scroller,
-      headerPx: HEADER_PX,
+      headerPx: gutter,
       durationUs: projectDurationUs,
       fps: () => useProject.getState().snapshot?.project.settings.fps ?? 30,
     });
@@ -133,7 +136,7 @@ export function TimelineView() {
       registerZoomTarget(null);
       registerDropTarget(null);
     };
-  }, []);
+  }, [gutter]);
   // The whole video in view as a project opens (one with only layers too: to their end), or as an empty one gets its
   // first clips (`fitOwed`), once its lanes are laid out: what was just added isn't off to the right. A layer added to
   // an empty project leaves the fit owed to its clips; the project's id runs it for each project opened, even when an
@@ -173,7 +176,7 @@ export function TimelineView() {
   // The video's length: to the main track's or its last layer's end, whichever is later, so the ruler and the
   // playhead reach a layer past the main track.
   const durationUs = videoDurationUs(project.timeline);
-  const laneWidth = Math.max(viewport.widthPx - HEADER_PX, usToPx(durationUs + TAIL_US, pps));
+  const laneWidth = Math.max(viewport.widthPx - gutter, usToPx(durationUs + TAIL_US, pps));
   const fps = project.settings.fps;
   const empty = project.timeline.main.length === 0 && project.timeline.tracks.every((tr) => tr.items.length === 0);
 
@@ -225,9 +228,11 @@ export function TimelineView() {
           >
             {/* At least the view's width: while a window drag holds the lanes' window (`useViewport`), the lanes and
                 the ruler stretch to the edge in CSS. */}
-            <div className="tl-content" style={{ width: HEADER_PX + laneWidth }}>
+            <div className="tl-content" style={{ width: gutter + laneWidth }}>
               <div ref={headRef} className="tl-head">
-                <div className="tl-gutter" style={{ width: HEADER_PX }} />
+                <div className="tl-gutter" style={{ width: gutter }}>
+                  <TrackViewToggle />
+                </div>
                 <Ruler
                   width={laneWidth}
                   pps={pps}
@@ -237,7 +242,7 @@ export function TimelineView() {
                   onScrub={seekTo}
                 />
                 {/* The snap guide's part in the ruler row, which covers the lanes' part as they scroll under it. */}
-                <SnapGuide ref={rulerGuideRef} part="ruler" left={HEADER_PX} />
+                <SnapGuide ref={rulerGuideRef} part="ruler" left={gutter} />
                 {/* Where a dragged layer lands, or a dragged clip's position; drawn by the drag (`showTip`). */}
                 <div ref={tipRef} aria-hidden className="tl-tip" />
               </div>
@@ -250,7 +255,7 @@ export function TimelineView() {
                 onSeek={seekPx}
               />
               {/* Over the blocks, under the gutter: the cuts a proposal waits on, the time range, the playhead. */}
-              <div className="tl-marks" style={{ left: HEADER_PX, width: laneWidth }}>
+              <div className="tl-marks" style={{ left: gutter, width: laneWidth }}>
                 <ProposalRanges pps={pps} fromUs={viewport.fromUs} toUs={viewport.toUs} />
                 <RangeSelection pps={pps} />
                 <Playhead pps={pps} />

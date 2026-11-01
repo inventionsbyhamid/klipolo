@@ -15,6 +15,7 @@ import { nudge } from './keys/nudge';
 import { muteLabel } from '../preview';
 import { separateCamera, stepTrack, toggleAttach, toggleSoundMute } from './keys/layerActions';
 import { addMarkerAtPlayhead } from './keys/sourceActions';
+import { moveToNewTrack } from './keys/trackActions';
 import { split, trimToPlayhead } from './keys/timelineActions';
 import { clipIndexAt, mainIndex } from './model/index';
 import { useTimelineNavCommands } from './useTimelineNavCommands';
@@ -236,6 +237,18 @@ export function useTimelineCommands(): Command[] {
             ? t({ id: 'command.separateCamera.done', message: "This clip's camera is already in its own layer." })
             : undefined,
         run: () => separateCamera(id),
+      },
+      {
+        id: 'layer-new-track',
+        action: 'addTrack',
+        group: 'edit',
+        label: t({
+          id: 'command.layerNewTrack',
+          message: 'Move to a new track',
+          comment: 'A layer, onto a track of its own',
+        }),
+        enabled: layer !== null,
+        run: () => moveToNewTrack(id),
       },
       {
         id: 'marker-add',
