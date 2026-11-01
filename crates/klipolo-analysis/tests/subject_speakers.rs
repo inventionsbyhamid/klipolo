@@ -293,3 +293,32 @@ fn a_mm_hm_over_short_turns_never_frames_the_pair_it_makes() {
         assert!((x_at(&path, t) - 0.25).abs() < 0.03, "at {t}: {path:?}");
     }
 }
+
+#[test]
+fn a_very_long_busy_talk_keeps_its_path_within_the_cap() {
+    // 84 minutes of two people walking to and fro, a far switch every 2 s: more legs than the key budget planned for.
+    let seconds = 5_040.0;
+    let n = (seconds * FPS) as u32;
+    let f: Vec<TrackedFrame> = (0..n)
+        .map(|frame| {
+            let t = f64::from(frame) / FPS;
+            let sway = 0.12 * (t * std::f64::consts::TAU / 1.5).sin();
+            TrackedFrame {
+                frame,
+                boxes: vec![person(1, 0.25 + sway, 0.2), person(2, 0.75 - sway, 0.2)],
+            }
+        })
+        .collect();
+    let said: Vec<Talk> = (0..(seconds / 2.0) as u32)
+        .map(|i| {
+            let at = f64::from(i) * 2.0;
+            talk(at, at + 2.0, if i % 2 == 0 { 1 } else { 2 })
+        })
+        .collect();
+    let path = path_of(&f, PORTRAIT, &said, &Keep::Speaker);
+    assert!(
+        path.keys.len() <= FocusPath::MAX_KEYS,
+        "{} keys",
+        path.keys.len()
+    );
+}

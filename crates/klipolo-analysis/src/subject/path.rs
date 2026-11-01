@@ -177,7 +177,24 @@ pub fn focus_path(input: &PathInput) -> Option<FocusPath> {
             keys[first].cut = true;
         }
     }
+    thin(&mut keys);
     found.then_some(FocusPath { keys })
+}
+
+/// `keys` within the path's cap: the budget above counts shots, but far switches add legs of their own, so a very
+/// long, busy talk can go over. Every other key that isn't a cut goes until it fits; the cuts all stay.
+fn thin(keys: &mut Vec<FocusKey>) {
+    while keys.len() > FocusPath::MAX_KEYS {
+        let before = keys.len();
+        let mut keep = false;
+        keys.retain(|k| {
+            keep = k.cut || !keep;
+            keep
+        });
+        if keys.len() == before {
+            break;
+        }
+    }
 }
 
 /// The ids of a shot's people, left to right: its main subject and those framed with them (`companions`), at most
