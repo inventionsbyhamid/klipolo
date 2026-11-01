@@ -191,7 +191,6 @@ describe('a recording in the Library', () => {
   });
 });
 
-
 describe('Record your screen', () => {
   it('record_button_opens_the_recorder', async () => {
     renderWithProviders(<Library />);
