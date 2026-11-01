@@ -407,3 +407,58 @@ async fn another_phrase_follows_that_and_asks_nobody_whose_voice_it_is() {
         .unwrap();
     assert_eq!(setup.spark.asked.load(Ordering::SeqCst), 0);
 }
+
+#[test]
+fn chat_reads_each_matched_voice_as_its_persons_number() {
+    use klipolo_analysis::transcript::Turn;
+    use klipolo_app::analysis::chat::{people_voices, person_turns};
+    let setup = setup(false);
+    let mut p = setup.project.clone();
+    let voice = |part: u32, label: &str| Voice {
+        part,
+        label: label.into(),
+    };
+    p.timeline.main[0].fill_focus.insert(
+        Portrait,
+        FillFocus::Speaker {
+            path: FocusPath::default(),
+            keep: Keep::Speaker,
+            people: vec![
+                Person {
+                    voices: vec![voice(0, "A"), voice(1, "B")],
+                    share: 60,
+                },
+                Person {
+                    voices: vec![voice(0, "B")],
+                    share: 30,
+                },
+            ],
+        },
+    );
+    let people = people_voices(&p, "talk");
+    let turn = |chunk: u32, label: &str| Turn {
+        start_us: 0,
+        end_us: 1,
+        text: String::new(),
+        speaker: Some(label.into()),
+        chunk,
+        aligned: true,
+    };
+    let said: Vec<Option<String>> = person_turns(
+        &[
+            turn(0, "A"),
+            turn(0, "B"),
+            turn(1, "A"),
+            turn(1, "B"),
+            turn(0, "C"),
+        ],
+        &people,
+    )
+    .into_iter()
+    .map(|t| t.speaker)
+    .collect();
+    // Each part's own "A" and "B"; a voice nobody was matched to keeps its label.
+    let want = ["P1", "P2", "A", "P1", "C"].map(|l| Some(l.to_owned()));
+    assert_eq!(said, want);
+    assert!(people_voices(&p, "other").is_empty());
+}
