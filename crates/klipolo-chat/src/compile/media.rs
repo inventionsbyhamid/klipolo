@@ -51,7 +51,9 @@ use klipolo_model::timeline::ItemContent;
 use klipolo_model::validate::MAX_TEXT;
 use klipolo_model::{Project, apply_ops};
 
-use super::{Compiler, Edit, Job, MakeSticker, Refused, animate, label, to_model, unfounded};
+use super::{
+    Compiler, Edit, Job, MakeSticker, Refused, animate, clear, label, to_model, unfounded,
+};
 use crate::context::{secs, within_video};
 use crate::evidence::TOLERANCE_US;
 use crate::library::{Found, LibraryItem, MediaKind, is_generic};
@@ -530,8 +532,9 @@ pub(super) fn add_image(
     let size = size.unwrap_or(PictureSize::Medium);
     let spot = position.unwrap_or(Position::Center).spot();
     // As the library's + puts a picture (`add_image_ops`), at a size and in a corner when one was asked for.
-    let ops = add_image_ops_at(work, &item.asset, start, size.share(), spot)
+    let mut ops = add_image_ops_at(work, &item.asset, start, size.share(), spot)
         .map_err(|e| to_model(format!("addImage: {e}")))?;
+    clear::clear_of_person(work, &mut ops, &item.asset, (size.share(), spot), start);
     Ok(Edit {
         ops: lasting(ops, length(work, start, duration, IMAGE_US)),
         label: label(
@@ -562,6 +565,8 @@ pub fn sticker_placement(p: &Project, job: &MakeSticker) -> Option<(Us, Us)> {
 pub fn sticker_ops(p: &Project, job: &MakeSticker, asset: &Asset) -> Option<Vec<Op>> {
     let (start, duration) = sticker_placement(p, job)?;
     let mut ops = add_image_ops_at(p, asset, start, job.size.share(), job.position.spot()).ok()?;
+    let placed = (job.size.share(), job.position.spot());
+    clear::clear_of_person(p, &mut ops, asset, placed, start);
     if let Some(m) = &job.motion {
         for op in &mut ops {
             if let Op::AddItem { item, .. } = op {

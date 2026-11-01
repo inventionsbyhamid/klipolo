@@ -1557,13 +1557,13 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
     // 914 measured with the clip tools' line and the recordings' line; 1,098 with autoZoom's line and the short's
-    // recipe; then the composing tools' lines and the catalogues they name (presets, effects, looks, fonts). Ruled at
-    // most 1,400.
+    // recipe; then the composing tools' lines and the catalogues they name (presets, effects, looks, fonts).
     assert!(prompt_tokens <= 1_400, "prompt {prompt_tokens} tokens");
     // 4,438 measured with the clip tools (setClip, setTransition), setBackground (about 210), freezeFrame (about 105),
     // addText's font (about 25) and the recording tools (the camera's three and the recorded sounds' three, about 1,010);
-    // 4,831 with animate, the words' entrance, autoZoom and the shorts' two caption styles (about 390); 5,478 with the
-    // tools that compose any edit (setMotion, animateText, setLayer, styleText, setEffects), whose catalogues the prompt
-    // lists. Ruled at most 6,000 for every lane's tools.
+    // 4,837 with animate, the words' entrance, autoZoom and the shorts' two caption styles (about 390); 5,822 with the
+    // tools that compose any edit (setMotion, animateText, setLayer, styleText, setEffects, about 985), whose catalogues
+    // the prompt lists. The prompt may take 1,400 and the tools 6,000: a thousand tokens are about a tenth of a cent a
+    // request.
     assert!(tools_tokens <= 6_000, "tools {tools_tokens} tokens");
 }

@@ -787,3 +787,86 @@ fn animate_last_never_reaches_past_a_layer_that_was_not_added() {
     let after = apply_ops(&p, &out.additions.unwrap().ops).unwrap();
     assert_eq!(layers(&after, TrackKind::Overlay)[0].layout.motion, None);
 }
+
+/// `p` in 9:16 only.
+fn vertical(mut p: Project) -> Project {
+    p.settings.formats = vec![klipolo_model::project::FormatKind::Portrait];
+    p.settings.primary_format = klipolo_model::project::FormatKind::Portrait;
+    p
+}
+
+/// The 9:16 box of the one picture on `p` after `out`'s additions.
+fn sticker_box(p: &Project, out: &Compiled) -> klipolo_model::layout::BoxN {
+    let after = applied(p, out);
+    let picture = (layers(&after, TrackKind::Overlay).into_iter())
+        .find(|i| matches!(i.content, ItemContent::Image { .. }))
+        .expect("a picture");
+    picture.layout.rect
+}
+
+fn heart_at(position: &str) -> Value {
+    json!({"file": "Heart", "size": "medium", "position": position, "atSec": 10.0, "durationSec": null})
+}
+
+#[test]
+fn a_shorts_sticker_without_follow_data_goes_to_the_far_top_corner_small() {
+    let p = vertical(project());
+    let out = run(
+        &p,
+        "a heart at 10 s",
+        &[("addImage", heart_at("top-right"))],
+    );
+    let b = sticker_box(&p, &out);
+    assert!((b.w - 0.28).abs() < 1e-6, "{b:?}");
+    assert!(b.x + b.w > 0.95, "pushed to the frame's edge: {b:?}");
+    assert!(b.y < 0.2, "at the top: {b:?}");
+    let out = run(&p, "a heart at 10 s", &[("addImage", heart_at("top-left"))]);
+    let b = sticker_box(&p, &out);
+    assert!(b.x < 0.05 && (b.w - 0.28).abs() < 1e-6, "{b:?}");
+}
+
+#[test]
+fn a_shorts_sticker_goes_to_the_corner_away_from_the_followed_speaker() {
+    use klipolo_model::fill_focus::{FillFocus, FocusKey, FocusPath};
+    use klipolo_model::project::FormatKind;
+    let mut p = vertical(project());
+    // The speaker stands at the far left of the 16:9 picture: in 9:16 the crop can't centre them, so they sit left.
+    let at = |at_us, x| FocusKey {
+        at_us,
+        x,
+        y: 0.4,
+        cut: false,
+    };
+    let path = FocusPath {
+        keys: vec![at(0, 0.05), at(secs(30.0), 0.05)],
+    };
+    p.timeline.main[0]
+        .fill_focus
+        .insert(FormatKind::Portrait, FillFocus::Speaker { path });
+    let out = run(&p, "a heart at 10 s", &[("addImage", heart_at("top-left"))]);
+    let b = sticker_box(&p, &out);
+    // The right corner is clear of them: there at its size.
+    assert!(b.x + b.w > 0.8 && (b.w - 0.35).abs() < 1e-6, "{b:?}");
+    // Followed in the middle, no corner is clear: the asked one, pushed to the edge, small.
+    let path = FocusPath {
+        keys: vec![at(0, 0.5), at(secs(30.0), 0.5)],
+    };
+    p.timeline.main[0]
+        .fill_focus
+        .insert(FormatKind::Portrait, FillFocus::Speaker { path });
+    let out = run(&p, "a heart at 10 s", &[("addImage", heart_at("top-left"))]);
+    let b = sticker_box(&p, &out);
+    assert!(b.x < 0.05 && (b.w - 0.28).abs() < 1e-6, "{b:?}");
+}
+
+#[test]
+fn a_landscape_picture_keeps_its_corner_and_size() {
+    let p = project();
+    let out = run(
+        &p,
+        "a heart at 10 s",
+        &[("addImage", heart_at("top-right"))],
+    );
+    let b = sticker_box(&p, &out);
+    assert!((b.w - 0.35).abs() < 1e-6, "{b:?}");
+}
