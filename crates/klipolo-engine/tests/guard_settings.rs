@@ -1,6 +1,6 @@
 //! Every setting that decides how much work a pixel does is found, with its costly end, or the shader is refused
-//!. The worker measures only these settings' ends, and the envelope leaves the
-//! others free, so one that's missed runs unmeasured.
+//! The measurement times only these settings' ends, and the envelope leaves the others free, so one that's missed runs
+//! unmeasured.
 
 use klipolo_engine::registry::ShaderKind;
 use klipolo_engine::registry::guard::{CostlyParam, End, Severity, check};
@@ -62,8 +62,7 @@ fn a_setting_that_skips_the_work_early_is_costly() {
 
 #[test]
 fn a_colour_or_point_that_decides_the_work_is_probed_with_a_note_where() {
-    // Never refused: measured at the probe set, with a note on the line that
-    // decides and a hint for its kind.
+    // Never refused: measured at the probe set, with a note on the line that decides and a hint for its kind.
     let def = generator(
         r##"[{"key":"tint","label":"T","type":"color","default":"#FF0000"},
             {"key":"center","label":"C","type":"point","default":{"x":0.5,"y":0.5}}]"##,

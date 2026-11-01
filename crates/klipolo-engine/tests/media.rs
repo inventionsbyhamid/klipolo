@@ -110,8 +110,7 @@ fn a_held_scan_waits_then_finishes_where_it_was() {
     let root = tempfile::tempdir().unwrap();
     let video = fixture("scan-130s-720p.mp4").to_string_lossy().to_string();
     let store = ThumbStore::new(root.path().to_path_buf(), Arc::new(Os));
-    // Transcription hears whether scans that need work wait or run, and goes on beside them at half its threads
-    //.
+    // Transcription hears whether scans that need work wait or run, and goes on beside them at half its threads.
     let waiting = Arc::new(std::sync::Mutex::new(Vec::new()));
     let heard = waiting.clone();
     store.on_waiting(move |on| heard.lock().unwrap().push(on));

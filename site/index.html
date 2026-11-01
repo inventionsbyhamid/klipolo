@@ -104,8 +104,8 @@
                 <div class="msg msg-app msg-latest">
                   <p>Found 3 ums and 2 long pauses. That's 18 seconds, marked in red.</p>
                   <div class="msg-actions">
-                    <span class="pill pill-solid">Approve</span>
-                    <span class="pill">Keep all</span>
+                    <span class="pill pill-solid">Apply</span>
+                    <span class="pill">Discard</span>
                   </div>
                 </div>
                 <p class="mock-input">Say what you want</p>
@@ -219,19 +219,20 @@
             <p>Describe the part. Klipolo finds it.</p>
           </div>
           <div class="ask-group">
-            <h3>Reframe</h3>
+            <h3>Stickers and titles</h3>
             <ul class="ask-list">
-              <li class="bubble">make it vertical and follow the girl in yellow</li>
+              <li class="bubble">add a paper plane sticker</li>
+              <li class="bubble">make a title card that says Day one</li>
             </ul>
-            <p>It finds the person or object and keeps them in frame.</p>
+            <p>Muse Image draws the sticker or the card's background. Your title stays your exact words.</p>
           </div>
           <div class="ask-group">
-            <h3>Blur</h3>
+            <h3>Music and sound</h3>
             <ul class="ask-list">
-              <li class="bubble">blur faces</li>
-              <li class="bubble">blur the laptop screen</li>
+              <li class="bubble">add some upbeat music</li>
+              <li class="bubble">add a whoosh at every topic change</li>
             </ul>
-            <p>The blur follows what it covers as it moves.</p>
+            <p>From your files or Klipolo's pack. Music dips while someone talks.</p>
           </div>
           <div class="ask-group">
             <h3>Captions</h3>
@@ -291,7 +292,7 @@
         <div class="feature">
           <div class="feature-text">
             <h3>Wide, tall or square</h3>
-            <p>Export an MP4 in 16:9, 9:16 or 1:1. Ask for vertical and name who to follow. Klipolo keeps them in frame.</p>
+            <p>Export an MP4 in 16:9, 9:16 or 1:1. Keep all three in one project, and export one file for each.</p>
           </div>
           <ul class="feature-visual formats">
             <li><span class="frame f169" aria-hidden="true"><i></i></span><span>16:9</span></li>
@@ -300,11 +301,25 @@
           </ul>
         </div>
 
+        <div class="soon is-now">
+          <h3>Edit by hand too</h3>
+          <ul class="soon-list">
+            <li>Split and trim</li>
+            <li>Transitions</li>
+            <li>Clip speed</li>
+            <li>Volume</li>
+            <li>Fit or Fill</li>
+            <li>Video layers</li>
+          </ul>
+          <p>Each change is one step to undo.</p>
+        </div>
+
         <div class="soon">
           <h3>Coming soon</h3>
           <ul class="soon-list">
             <li>Screen recording with mic and camera</li>
             <li>Auto zoom on clicks</li>
+            <li>Follow a person and blur faces</li>
           </ul>
           <p>These are not in the app yet.</p>
         </div>
@@ -316,20 +331,24 @@
       <div class="wrap">
         <div class="section-head">
           <h2 id="models-title">Built on Meta's models</h2>
-          <p class="lede">Klipolo uses three of Meta's AI models through Meta's model API.</p>
+          <p class="lede">Klipolo uses four of Meta's AI models, and no others. Three run through Meta's model API. Meta's open MMS aligner runs on Klipolo's server.</p>
         </div>
         <dl class="model-list">
           <div class="model">
             <dt>Muse Spark</dt>
-            <dd>Reads your chat and watches the footage, both picture and sound.</dd>
-          </div>
-          <div class="model">
-            <dt>SAM 3.1</dt>
-            <dd>Finds and follows people and objects. Reframing and blurring run on it.</dd>
+            <dd>Watches your footage, picture and sound, and turns your chat into edits.</dd>
           </div>
           <div class="model">
             <dt>Muse Voice Transcribe</dt>
-            <dd>Turns what people say into the transcript.</dd>
+            <dd>Turns what people say into a transcript, split by speaker.</dd>
+          </div>
+          <div class="model">
+            <dt>Muse Image</dt>
+            <dd>Draws stickers and title card backgrounds when you ask.</dd>
+          </div>
+          <div class="model">
+            <dt>MMS aligner</dt>
+            <dd>Times every word, so captions follow the voice and cuts land between words.</dd>
           </div>
         </dl>
       </div>
@@ -355,16 +374,19 @@
             <ul class="flow-list">
               <li>The audio</li>
               <li>Low-resolution copies of the video</li>
+              <li>Your chat messages, with the project's name, transcript, scene log and file names</li>
+              <li>What you ask Muse Image to draw</li>
             </ul>
           </div>
           <div class="flow-box flow-out">
             <h3>Sent to Klipolo's server</h3>
             <ul class="flow-list">
-              <li>The audio, to time each word</li>
+              <li>The audio and transcript, to time each word</li>
+              <li>Your requests to Meta, when you use an access code</li>
             </ul>
           </div>
         </div>
-        <p class="privacy-why">Klipolo sends these so the models can understand your footage. Klipolo's server deletes the audio as soon as the words are timed. Because of all this, Klipolo needs an internet connection.</p>
+        <p class="privacy-why">Klipolo sends these so Meta's models can understand your footage and do what you ask. Klipolo's server keeps no audio, video or text, only each call's usage and cost, and each Mac's word timing minutes for the day. Editing and export work offline. Analysis, chat and pictures need the internet.</p>
       </div>
     </section>
 
@@ -391,7 +413,7 @@
           </details>
           <details>
             <summary>Does it work offline?</summary>
-            <p>No. Editing and export happen on your Mac. To understand your footage, Klipolo sends the audio and low-resolution copies of the video to Meta's model API, and the audio to Klipolo's server to time each word. The server doesn't keep it.</p>
+            <p>Editing and export work offline. Analysis, chat and pictures need the internet. They send the audio, low-resolution copies of the video, your chat messages with the project's name, transcript, scene log and file names, and what you ask Muse Image to draw to Meta's model API. The audio and transcript also go to Klipolo's server to time each word, and with an access code your requests to Meta pass through it. The server keeps no audio, video or text, only each call's usage and cost, and each Mac's word timing minutes for the day.</p>
           </details>
           <details>
             <summary>Which languages do captions support?</summary>
@@ -399,7 +421,7 @@
           </details>
           <details>
             <summary>Is Klipolo made by Meta?</summary>
-            <p>No. Klipolo is built on Meta's models through Meta's model API. Meta did not make it and does not endorse it.</p>
+            <p>No. Klipolo is built on Meta's models. Meta did not make it and does not endorse it.</p>
           </details>
         </div>
       </div>
@@ -430,7 +452,7 @@
         <a href="#privacy">Privacy</a>
         <a href="#faq">FAQ</a>
       </nav>
-      <p class="footer-small">Built on Meta's Muse Spark, SAM 3.1 and Muse Voice Transcribe. Klipolo is not made or endorsed by Meta.</p>
+      <p class="footer-small">Built on Meta's Muse Spark, Muse Voice Transcribe, Muse Image and MMS aligner. Klipolo is not made or endorsed by Meta.</p>
       <p class="footer-small">&copy; 2026 Klipolo</p>
     </div>
   </footer>

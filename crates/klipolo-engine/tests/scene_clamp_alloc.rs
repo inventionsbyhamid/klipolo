@@ -1,6 +1,6 @@
-//! Its own binary, with a per-thread counting allocator: a scene layer held to its envelope
-//! keeps its held settings between frames, so planning it allocates no more than planning one inside its envelope (no
-//! copy of its settings a frame; until scenes are measured again, a layer can stay held all session).
+//! Its own binary, with a per-thread counting allocator: a scene layer held to its envelope keeps its held settings
+//! between frames, so planning it allocates no more than planning one inside its envelope (no copy of its settings a
+//! frame; a layer can stay held all session until its scene is measured again).
 
 mod support;
 use std::alloc::{GlobalAlloc, Layout, System};

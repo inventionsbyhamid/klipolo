@@ -1,10 +1,9 @@
-//! Fenced timing takes a slope between a single frame and a batch of its
-//! copies, so every copy must pay what the single frame pays. Scenes keep results between frames: a still scene holds
-//! its last picture (the hold), and a title keeps its texture once built. A timed frame never shows a held
-//! scene picture (`EffectStage::fresh`, as for a stepped generator's kept picture), so a still scene's single frame and
-//! every copy draw its passes; a title is built by its first frame and drawn from its texture by every frame after,
-//! The timed single and each copy alike. And every copy draws with the uniforms the first wrote
-//! identical-uniform assumption, pinned for the merged effect stage).
+//! Fenced timing takes a slope between a single frame and a batch of its copies, so every copy must pay what the single
+//! frame pays. The renderer keeps results between frames: a still scene holds its last picture, and a title keeps its
+//! texture once built. A timed frame never shows a held scene picture (`EffectStage::fresh`, as for a stepped
+//! generator's kept picture), so a still scene's single frame and every copy draw its passes; a title is built by its
+//! first frame and drawn from its texture by every frame after, the timed single and each copy alike. And every copy
+//! draws with the uniforms the first wrote (fenced timing's identical-uniform assumption, pinned for the effect stage).
 
 use std::sync::Arc;
 

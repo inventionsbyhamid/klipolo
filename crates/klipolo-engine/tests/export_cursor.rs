@@ -1,5 +1,5 @@
-//! Export's cursors before its first frame: every take and
-//! its smoothing loaded as the preview holds them, every shape in range in the atlas from frame 0, and preview and
+//! Export's cursors before its first frame: every take and its smoothing loaded as the preview holds them, every shape
+//! in range in the atlas from frame 0, and preview and
 //! export planning the same cursor. A separate cursor is never dropped silently (`export_cursor/asks.rs`), preview and
 //! export draw the same pixels (`export_cursor/pixels.rs`), and what it costs (`export_cursor/timing.rs`). The screens'
 //! activity is made before frame 1 (`export_cursor/analysing.rs`), so export plans the preview's camera runs and follow

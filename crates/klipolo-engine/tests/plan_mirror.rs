@@ -42,7 +42,7 @@ fn a_video_layer_plans_its_own_mirror() {
     assert_eq!(planned(false, false), (false, false, 0));
 }
 
-/// The plan keeps a mirrored layer's mirror beside its effect passes (the name said more).
+/// The plan keeps a mirrored layer's mirror beside its effect passes.
 #[test]
 fn a_mirrored_layer_with_an_effect_keeps_its_mirror_in_the_plan() {
     assert_eq!(planned(true, true), (true, true, 1));

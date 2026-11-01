@@ -10,8 +10,8 @@ pub mod scene;
 #[cfg(feature = "trial")]
 pub mod stalls;
 pub mod takes;
-// Helpers live in their own files (`make.rs`, `scene.rs`), and every test's
-// `use support::*` sees them. A test that uses none of a lane's helpers mustn't warn.
+// Helpers are grouped by area (`make.rs` for shader safety and the render worker, `scene.rs` for scenes), and every
+// test's `use support::*` sees them. A test that uses none of a group's helpers mustn't warn.
 #[allow(unused_imports)]
 pub use make::*;
 #[allow(unused_imports)]

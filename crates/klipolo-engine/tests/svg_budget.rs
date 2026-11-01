@@ -1,10 +1,10 @@
-//! Hostile SVGs for the rest of usvg's work
-//! Markers refused by name; arcs, circles, ellipses and rounded rects weighed by their radius, a percentage by
+//! Hostile SVGs for the rest of usvg's work: markers refused by name; arcs, circles, ellipses and rounded rects weighed
+//! by their radius, a percentage by
 //! the largest viewport a `<use>` can give it, and every percentage refused once a viewport grows past 100 %;
 //! attribute bytes weighed once per copy and once per descendant that inherits them; style sheets by their selectors
 //! and combinators; duplicate ids resolved first-wins and `href` before `xlink:href`, as usvg resolves them; gradient
-//! chains. A `<use>` that names nothing is ignored, and every refusal names what it found and says what to do.
-//! Each refusal comes within a second.
+//! chains. A `<use>` that names nothing is ignored, and every refusal names what it found and says what to do. Each
+//! refusal comes within a second.
 
 mod svg_support;
 
@@ -111,7 +111,7 @@ fn a_percentage_in_a_file_whose_viewport_grows_is_refused() {
             p.message
         );
     };
-    // The crafted file: about 7 KB, a 32-deep chain, 4 nested <svg> at 200 % in each symbol (usvg made its one
+    // A crafted file: about 7 KB, a 32-deep chain, 4 nested <svg> at 200 % in each symbol (usvg made its one
     // ellipse 1.6 million segments before this was refused).
     let file = chained(32, 4);
     assert!(file.len() < 12 << 10, "{} bytes", file.len());

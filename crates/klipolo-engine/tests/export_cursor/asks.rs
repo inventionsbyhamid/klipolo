@@ -1,9 +1,8 @@
-//! A separate cursor is never dropped silently: a take whose frames have no cursor and
-//! whose cursor can't be read, or that the budget passes over, stops the export before anything is
-//! written and asks, once its footage is known to be there; with a yes it exports without that cursor
-//! and says so, once however often it is tried. A run with nothing left to draw never asks, nor one whose
-//! parts left never draw that cursor; one whose finished parts already show it says so. Through
-//! the runner, with the worker run in this process (`worker.rs`).
+//! A separate cursor is never dropped silently: a take whose frames have no cursor and whose cursor can't be read, or
+//! that the budget passes over, stops the export before anything is written and asks, once its footage is known to be
+//! there; with a yes it exports without that cursor and says so, once however often it is tried. A run with nothing
+//! left to draw never asks, nor one whose parts left never draw that cursor; one whose finished parts already show it
+//! says so. Through the runner, with the worker run in this process (`worker.rs`).
 
 use std::path::Path;
 use std::sync::Arc;
@@ -71,7 +70,7 @@ async fn a_separate_take_whose_cursor_cant_be_read_stops_the_export_and_asks() {
         "nothing written"
     );
 
-    // A separate take the budget passes over can't be drawn either, and the question says why
+    // A separate take the budget passes over can't be drawn either, and the question says why. Here the budget holds
     // take 1's cursor alone.
     let mut p = Project::new("Over the budget");
     for k in 1..=2 {

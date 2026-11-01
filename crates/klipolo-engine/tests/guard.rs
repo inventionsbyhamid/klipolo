@@ -101,8 +101,7 @@ fn text_caps_hold_before_naga_parses() {
 }
 
 /// naga resolves a call to the module's own function before WGSL's, so a body's `fn max(vec3, vec3)` would replace the
-/// one the prelude's `kl_to_linear` calls: the host's code calls only the host's functions, and `kl_fs` the entry
-///.
+/// one the prelude's `kl_to_linear` calls: the host's code calls only the host's functions, and `kl_fs` the entry.
 #[test]
 fn a_body_function_the_hosts_code_would_call_is_refused() {
     let shadow = "fn max(a: vec3<f32>, b: vec3<f32>) -> vec3<f32> {\n    return a;\n}\nfn effect(uv: vec2<f32>) -> vec4<f32> {\n    return vec4<f32>(kl_to_linear(vec3<f32>(-1.0)), 1.0);\n}";
@@ -204,8 +203,7 @@ fn the_entry_function_must_have_the_kinds_signature() {
     assert!(d.iter().any(|d| d.code == "rule.entry"));
 }
 
-// ---- More cases: the sample sparkle filter, the assembly, bounds and settings that reach a loop
-// indirectly.
+// ---- More cases: the sample sparkle filter, the assembly, bounds and settings that reach a loop indirectly.
 
 #[test]
 fn the_research_sparkle_filter_passes_and_its_padding_setting_is_costly() {

@@ -74,8 +74,8 @@ fn moving_right_v1() -> CursorTrack {
 
 #[test]
 fn a_project_saved_before_the_cursor_layer_still_follows_its_cursor() {
-    // An early version wrote the take's cursor file as `cursorPath`, and the file itself in format 1:
-    // both still read, so its Auto zoom plans exactly as a take recorded now does.
+    // Early builds wrote the take's cursor file as `cursorPath`, and the file itself in format 1: both still read, so
+    // its Auto zoom plans exactly as a take recorded now does.
     let (p, tracks) = support::recording::auto_zoom_project(moving_right(), 0.0, 3.0, 2.0);
     let (p1, tracks1) = support::recording::auto_zoom_project(moving_right_v1(), 0.0, 3.0, 2.0);
     let v1 = tracks1.get(support::recording::CURSOR_PATH).unwrap();

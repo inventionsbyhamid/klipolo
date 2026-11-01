@@ -1,7 +1,6 @@
-//! The work a setting decides is tallied: the arms and
-//! early exits each setting reaches, times the trips of the loops around them, summed over branches and calls. A
-//! setting that decides more than 1,024 operations is costly at both ends. With smaller edge cases and the type-depth
-//! rule.
+//! The work a setting decides is tallied: the arms and early exits each setting reaches, times the trips of the loops
+//! around them, summed over branches and calls. A setting that decides more than 1,024 operations is costly at both
+//! ends. With smaller edge cases and the type-depth rule.
 
 use klipolo_engine::registry::ShaderKind;
 use klipolo_engine::registry::guard::{End, check};
@@ -252,8 +251,8 @@ fn a_zoom_blur_around_a_point_isnt_refused_for_the_preludes_early_return() {
         .unwrap(),
         ..ContribDef::new("lib.k3f9q2ma/effect.zoom.v1", ContribKind::Effect, "Zoom")
     };
-    // `kl_unpremultiply` returns early on a clear texel: a prelude helper's exit counts only its own arms,
-    // so 64 taps placed by a point setting decide no work.
+    // `kl_unpremultiply` returns early on a clear texel: a prelude helper's exit counts only its own arms, so 64 taps
+    // placed by a point setting decide no work.
     let body = "fn effect(uv: vec2<f32>) -> vec4<f32> {
     var acc = vec4<f32>(0.0);
     for (var i = 0; i < 64; i++) {

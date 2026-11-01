@@ -1,7 +1,7 @@
-//! Version folders: a folder loads only as it was saved, every file within its
-//! size, hashed, never through a link, its names and id well formed and agreeing, its definition clean and within the
-//! caps; the registry built from what loaded lists every definition but draws only what the caller
-//! gave a shader; and the shader cache assembles a body once across rebuilds.
+//! Version folders: a folder loads only as it was saved, every file within its size, hashed, never through a link, its
+//! names and id well formed and agreeing, its definition clean and within the definition caps; the registry built from
+//! what loaded lists every definition but draws only what the caller gave a shader; and the shader cache assembles a
+//! body once across rebuilds.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};

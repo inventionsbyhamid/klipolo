@@ -171,9 +171,9 @@ async fn a_source_moved_away_while_open_is_missing_with_no_fallback() {
     assert!(set.missing.is_empty());
 }
 
-/// When an open source's reader stops returning frames, whether its file is still there is asked off the
-/// engine's task, within the preview's limit, and only then is the software fallback started; the reader never asks
-/// itself (a stat there ran on the engine's task and hung it when a volume stopped answering). While the disk is silent
+/// When an open source's reader stops returning frames, whether its file is still there is asked off the engine's task,
+/// within the preview's limit, and only then is the software fallback started; the reader never asks itself (a stat
+/// there ran on the engine's task and hung it when a volume stopped answering). While the disk is silent
 /// (`slow_stats`), the frame is held no longer than that limit, a redraw and another source's frame aren't held at all,
 /// and nothing falls back. Once the disk answers that the file is there, the redraw signal fires and the still is read
 /// through the fallback.
@@ -248,10 +248,9 @@ async fn a_disk_that_stops_answering_under_an_open_source_never_holds_the_previe
     slow_stats(file, None);
 }
 
-/// A disk slow to answer (spinning up, a network volume) is never called missing. Export waits for it
-/// (up to a minute); the preview says nothing while it waits and never holds a frame past the first second for it,
-/// and when the disk answers its redraw signal fires: a paused still is drawn again, with the video, and nothing else
-/// has to happen.
+/// A disk slow to answer (spinning up, a network volume) is never called missing. Export waits for it (up to a minute);
+/// the preview says nothing while it waits and never holds a frame past the first second for it, and when the disk
+/// answers its redraw signal fires: a paused still is drawn again, with the video, and nothing else has to happen.
 #[cfg(feature = "trial")]
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs scripts/gen-engine-fixtures.sh"]
@@ -507,8 +506,8 @@ fn export_decodes_at_full_size_and_the_preview_at_preview_size() {
     );
 }
 
-// A set of seeks, scaled into the 4 s fixture (5.0, 1.2, 1.3, 9.9, 0.0, 7.5, 2.0, 8.8 on 10 s): far, back,
-// a small step on, to the end, to the start.
+// A seek pattern scaled into the 4 s fixture (5.0, 1.2, 1.3, 9.9, 0.0, 7.5, 2.0, 8.8 on 10 s): far, back, a small step
+// on, to the end, to the start.
 #[cfg(target_os = "macos")]
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs scripts/gen-engine-fixtures.sh"]
@@ -698,8 +697,8 @@ async fn frame_starts_rounded_down_to_whole_us_show_their_own_frame() {
 }
 
 /// On a short GOP (an editing copy's: a keyframe every 0.5 s), a still a newer seek replaced stops its read at the
-/// nearest frame of its GOP read so far (a scrub moving on doesn't wait for the rest of the GOP); one nobody replaced is
-/// read to its own frame.
+/// nearest frame of its GOP read so far (a scrub moving on doesn't wait for the rest of the GOP); one nobody replaced
+/// is read to its own frame.
 #[cfg(target_os = "macos")]
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs scripts/gen-engine-fixtures.sh"]
@@ -731,8 +730,8 @@ async fn a_superseded_seek_stops_at_the_nearest_frame_read() {
     assert_eq!((f64::from(frame.time_s()) * 30.0).round() as i64, 104);
 }
 
-/// On a long-GOP original (a keyframe every 10 s) a replaced seek is still read to its own frame: the
-/// nearest frame read could be seconds away, so only GOPs of at most a second stop early.
+/// On a long-GOP original (a keyframe every 10 s) a replaced seek is still read to its own frame: the nearest frame
+/// read could be seconds away, so only GOPs of at most a second stop early.
 #[cfg(target_os = "macos")]
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs scripts/gen-engine-fixtures.sh"]
@@ -850,14 +849,14 @@ async fn scrub_p95() {
 }
 
 /// Ruler drags as the editor makes them, on one file through the preview's decoder pool (an editing copy:
-/// `KLIPOLO_SCRUB_FILE`, `KLIPOLO_SCRUB_SECONDS` long; the 0.5 s GOP fixture by default). A pointer moves every 16.7 ms for
-/// 10 s along the HUD harness's sweep (`scrub` in `src/features/trial/acceptance.ts`): back and forth over `range`
-/// seconds of the timeline every 4 s. The decoding side takes only the newest move each time it is free, as the
-/// engine's actor does (its seek is a `watch`). Per speed: each move → the first decode of it or a newer one, p50 / p95
-/// ms (the HUD's input → shown, less drawing and presenting), the decodes, and the readers made. Each decode stops its
-/// read once a newer move arrived, as the engine's stills do (`DecoderPool::decode_unless`); `KLIPOLO_SCRUB_NO_CUT=1`
-/// reads every frame to the end, as F4. `KLIPOLO_SCRUB_FFMPEG=1` reads with FFmpeg instead of AVAssetReader;
-/// `--features trial` adds what readers and reads cost.
+/// `KLIPOLO_SCRUB_FILE`, `KLIPOLO_SCRUB_SECONDS` long; the 0.5 s GOP fixture by default). A pointer moves every 16.7 ms
+/// for 10 s along a sweep: back and forth over `range` seconds of the timeline every 4 s. The decoding side takes only
+/// the newest move each time it is free, as the engine's actor does (its seek is a `watch`). Per speed: each move → the
+/// first decode of it or a newer one, p50 / p95 ms (input → shown, less drawing and presenting), the decodes, and the
+/// readers made. Each decode stops its read once a newer move arrived, as the engine's stills do
+/// (`DecoderPool::decode_unless`); `KLIPOLO_SCRUB_NO_CUT=1` reads every frame to the end instead.
+/// `KLIPOLO_SCRUB_FFMPEG=1` reads with FFmpeg instead of AVAssetReader; `--features trial` adds what readers and reads
+/// cost.
 #[cfg(target_os = "macos")]
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "measurement: run by hand"]

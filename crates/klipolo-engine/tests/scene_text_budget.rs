@@ -1,5 +1,5 @@
-//! Scene text's room and atlas, on the CPU through `TextProbe`, as the text build thread lays
-//! it out: text at rest stands on whole pixels; every text a node can show is charged to the caps; plausible
+//! Scene text's room and atlas, on the CPU through `TextProbe`, as the text build thread lays it out: text at rest
+//! stands on whole pixels; every text a node can show is charged to the caps; plausible 4K text is drawn sharp; text
 //! past the atlas's budget at its softest is refused and said (the atlas cap).
 
 use std::time::{Duration, Instant};
@@ -139,7 +139,7 @@ fn an_atlas_past_its_budget_at_its_softest_is_refused() {
     }
 }
 
-/// A letter's blur is clamped in 1080p pixels, so a 4K frame blurs it as its preview does (twice the
+/// A letter's blur is clamped in 1080p pixels, so a 4K frame blurs it as its preview does (twice the deviation in
 /// texels, drawn small at twice the step) in the same scratch rows. Clamped in texels it was 24
 /// at both.
 #[test]

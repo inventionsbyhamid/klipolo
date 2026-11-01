@@ -23,6 +23,7 @@ use klipolo_app::analysis::{
     AnalysisDone, AnalysisEvent, AnalysisFailed, AnalysisState, AnalysisStep, AnalysisStopped,
     Asked, AssetState, FILE_MISSING, NEEDS_KEY,
 };
+use klipolo_app::chat::Findings;
 use klipolo_app::credentials::{
     Credentials, Endpoints, META_API_KEY, MemoryStore, RELAY_CODE, RELAY_TOKEN, SecretStore,
 };
@@ -1709,6 +1710,70 @@ async fn rough_words_say_why_and_whether_timing_them_again_can_help() {
         }))
     );
     assert_eq!(h.state.state_of("odd"), timed_roughly(ROUGH_WORDS, false));
+    // Chat points the person at Time words again only where the preview's header offers it.
+    assert!(Findings::time_again(&*h.state, "down"));
+    assert!(!Findings::time_again(&*h.state, "odd"));
+    server.verify().await;
+}
+
+/// The preview's header shows its spinner, not Time words again, while any file's words are being timed (a song from
+/// the banner, a clip off the timeline): chat points the person at the button only once none are.
+#[tokio::test(flavor = "multi_thread")]
+async fn time_words_again_is_not_offered_while_other_words_are_being_timed() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/asr/transcribe"))
+        .respond_with(asr_answer())
+        .expect(2)
+        .mount(&server)
+        .await;
+    // Word timing can't answer for the first clip; the song's words take a moment to time.
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(ResponseTemplate::new(503))
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(align_answer().set_delay(Duration::from_millis(400)))
+        .expect(1)
+        .with_priority(2)
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let h = harness(&server, key_store(), FakeMedia::whole(SECONDS));
+    let down = asset("down", AssetKind::Audio, &h.clip("down.m4a", 1), SECONDS);
+    let song = asset("song", AssetKind::Audio, &h.clip("song.m4a", 2), SECONDS);
+    h.state
+        .start(std::slice::from_ref(&down))
+        .await
+        .finished()
+        .await;
+    assert!(Findings::time_again(&*h.state, "down"));
+
+    let started = h.state.start(std::slice::from_ref(&song)).await;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while !matches!(
+        h.state.state_of("song"),
+        AssetState::Running {
+            step: AnalysisStep::Words,
+            ..
+        }
+    ) {
+        assert!(
+            Instant::now() < deadline,
+            "the song's words were never timed"
+        );
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert!(
+        !Findings::time_again(&*h.state, "down"),
+        "the header shows the spinner while the song's words are timed"
+    );
+    started.finished().await;
+    assert!(Findings::time_again(&*h.state, "down"));
     server.verify().await;
 }
 

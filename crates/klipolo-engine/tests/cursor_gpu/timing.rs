@@ -1,6 +1,6 @@
 //! What the cursor pass costs on the GPU (a measurement, never a gate): two slots at their heaviest, at 1080p and 4K,
 //! with the smear across and on the diagonal, against the same pass with nothing in it, through timestamp queries
-//! where the adapter has them. lavapipe gives relative cost only; the Mac's own figure comes from a Mac run.
+//! where the adapter has them. lavapipe gives relative cost only; the Mac's own figure comes from a run on a Mac.
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -143,7 +143,7 @@ fn busy_at(
 }
 
 #[test]
-#[ignore = "a measurement, relative on lavapipe (the Mac's figure comes from a Mac run): \
+#[ignore = "a measurement, relative on lavapipe (the Mac's figure comes from a run on a Mac): \
             cargo test -p klipolo-engine --release --test cursor_gpu -- --ignored --nocapture cursor_pass_gpu_time"]
 fn cursor_pass_gpu_time() {
     let instance = wgpu::Instance::new(&klipolo_engine::platform::gpu::instance_descriptor());

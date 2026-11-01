@@ -1,7 +1,8 @@
 //! The caption pages the Captions panel shows: a window of the open project's pages in one format at a time
 //! (`answer`), from the model's own `captions`, so they are the pages the engine draws and an export freezes; and every
-//! place a word shows (`find`), for "Fix all". One build is kept while what pages are made from is unchanged. No Tauri
-//! types: the app's commands (`commands::captions`) read the engine's feed and call in here.
+//! place a word shows (`find`), for "Fix all". One build is kept while what pages are made from is unchanged. A change
+//! of speech names the files whose words changed (`words_changed`). No Tauri types: the app's commands
+//! (`commands::captions`) read the engine's feed and call in here.
 //!
 //! Cost: a build is O(words × formats), made only when a view asks after the speech or what pages are made from
 //! changed. An answer is two binary searches plus at most `MAX_PAGES` pages copied, each word's said text (and a
@@ -241,6 +242,23 @@ pub fn answer(
                 .collect()
         }),
     })
+}
+
+/// The files whose words differ from `was` to `now` (heard, timed again or gone), by asset id, in order: what the page
+/// is told when the speech changes. Words timed again are a new transcript, even the same words; a change of loudness
+/// alone names none. With no `was` (the first speech), every file with words.
+pub fn words_changed(was: Option<&Speech>, now: &Speech) -> Vec<String> {
+    let before = |id: &str| was.and_then(|w| w.transcripts.get(id));
+    let mut changed: Vec<String> = (now.transcripts.iter())
+        .filter(|(id, words)| !before(id).is_some_and(|b| Arc::ptr_eq(b, words)))
+        .map(|(id, _)| id.clone())
+        .collect();
+    if let Some(was) = was {
+        let gone = (was.transcripts.keys()).filter(|id| !now.transcripts.contains_key(*id));
+        changed.extend(gone.cloned());
+    }
+    changed.sort();
+    changed
 }
 
 /// A word as matched: lowercase, without the marks around it.

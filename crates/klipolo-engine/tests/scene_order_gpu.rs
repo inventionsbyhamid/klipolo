@@ -1,4 +1,4 @@
-//! A group's effects in CSS's order on the GPU (lavapipe in CI): its filters before its mask
+//! A group's effects in CSS's order on the GPU (lavapipe in CI): its filters before its mask, and its own clip in its
 //! own, turned space. Goldens within 2/255.
 
 mod support;

@@ -1,7 +1,6 @@
-//! The advice measures a definition against what it could run as. At a stop, one that may run
-//! at half size is held to Heavy there (a quarter of the pixels), never to Normal; "or let it run at half size" is
-//! offered only to what could (a generator or a filter, never a transition); and the CPU line says what Heavy needs, as
-//! the memory line does.
+//! The advice measures a definition against what it could run as. At a stop, one that may run at half size is held to
+//! Heavy there (a quarter of the pixels), never to Normal; "or let it run at half size" is offered only to what could
+//! (a generator or a filter, never a transition); and the CPU line says what Heavy needs, as the memory line does.
 
 use super::*;
 

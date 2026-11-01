@@ -1,6 +1,6 @@
 //! A synced recording's sound: a picture source whose file carries sound plays it at its mix (an imported camera's own
-//! camera's own sound), Klipolo's takes stay as they were, and the synced mic plays where the camera heard it, its run
-//! starting inside its file and corrected for its drift. A picture file's own sound plays with its sound lead.
+//! sound), Klipolo's takes stay as they were, and the synced mic plays where the camera heard it, its run starting
+//! inside its file and corrected for its drift. A picture file's own sound plays with its sound lead.
 use std::sync::Arc;
 
 use klipolo_engine::audio::mix::{Mixdown, RATE, read_position_after};

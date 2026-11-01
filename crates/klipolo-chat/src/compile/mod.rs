@@ -12,8 +12,8 @@
 //!   `makeTitleCard`'s background jobs for a picture to be drawn (never an op until it exists), `askUser` questions,
 //!   `undo` a flag. `cannotDo` is a refusal shown to the person, as is a tool that needs an analysis the clip doesn't
 //!   have yet (`STILL_LISTENING`, `STILL_WATCHING`, `ANALYZE_FIRST`), filler words only roughly timed
-//!   (`ROUGH_FILLERS`) and a removal with nothing to remove (`NO_FILLERS`, no pause that long); every other refusal
-//!   goes back to the model with its reason.
+//!   (`ROUGH_FILLERS`, `ROUGH_FILLERS_STAY`) and a removal with nothing to remove (`NO_FILLERS`, no pause that long);
+//!   every other refusal goes back to the model with its reason.
 //!
 //! All calls compile on one working copy, in two phases: the additions in call order (the edits first, then the media
 //! layers on what the edits made, so a trim later in the answer never shortens a picture placed before it), then the
@@ -41,7 +41,7 @@ mod media;
 mod removals;
 mod trim;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use klipolo_model::coded::{CodedError, ErrorParam};
 use klipolo_model::ids::Id;
@@ -75,9 +75,14 @@ pub const ANALYZE_FIRST: &str = "Analyze this clip first";
 /// What the person is told when `removeFillers` finds no filler word.
 pub const NO_FILLERS: &str = "There are no filler words to remove.";
 /// What the person is told when a filler word is only roughly timed (word timing failed, stopped or ran out, so its
-/// turn's words were spread over it by length): a cut at its guessed time would take real words.
+/// turn's words were spread over it by length): a cut at its guessed time would take real words. Said when the
+/// preview's header offers Time words again for its clip (`Inputs::time_again`).
 pub const ROUGH_FILLERS: &str = "Some words in this clip are only roughly timed, so I can't cut filler words exactly. \
-                                 Time the words again in Captions, then ask me.";
+                                 Press Time words again above the video, then ask me.";
+/// `ROUGH_FILLERS` when the preview's header doesn't offer Time words again for the clip (timing again can't help,
+/// as when its words don't match their sound, or its analysis isn't done): it names no button.
+pub const ROUGH_FILLERS_STAY: &str =
+    "Some words in this clip are only roughly timed, so I can't cut filler words exactly.";
 /// The most pictures one answer draws (`makeSticker`, `makeTitleCard`): each drawing is paid for, so an answer asking
 /// for more draws its first ones and refuses the rest (`TOO_MANY_PICTURES`).
 pub const MAX_PICTURES: usize = 3;
@@ -113,6 +118,9 @@ pub struct Inputs {
     pub scenes: HashMap<String, SceneLog>,
     /// Each file's analysis, by asset id.
     pub analysis: HashMap<String, AnalysisState>,
+    /// The files whose rough words the preview's header offers to time again (Time words again), by asset id: a
+    /// refusal of their filler words points there (`ROUGH_FILLERS`), any other's doesn't (`ROUGH_FILLERS_STAY`).
+    pub time_again: HashSet<String>,
     /// What the media tools name: the project's music, sounds and pictures and Klipolo's pack.
     pub library: Library,
 }
@@ -198,7 +206,7 @@ pub struct Refusal {
     pub audience: Audience,
     /// The clip the refusal is about, by its ref in the context (`c4`): set when a clip isn't analyzed yet or its
     /// fillers are only roughly timed, so the person sees which one `STILL_LISTENING`, `STILL_WATCHING`, `ANALYZE_FIRST`
-    /// or `ROUGH_FILLERS` means (the app names it after "this clip").
+    /// or `ROUGH_FILLERS` (`ROUGH_FILLERS_STAY`) means (the app names it after "this clip").
     pub clip: Option<String>,
 }
 

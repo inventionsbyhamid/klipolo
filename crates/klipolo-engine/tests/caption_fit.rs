@@ -114,8 +114,8 @@ fn a_long_word_shrinks_past_autofit_min_only_to_stay_inside_the_frame() {
     assert_eq!(lay_out(&bold, &page(&["MAKE", "IT", "POP"])).autofit, 1.0);
 }
 
-/// A frame-bounded word in Arcade, with the ad-safe switch on (its centre at 504 of
-/// 1080 px), stays inside the frame while it is the word being said (×1.08), its outline included.
+/// A frame-bounded word in Arcade, with the ad-safe switch on (its centre at 504 of 1080 px), stays inside the frame
+/// while it is the word being said (×1.08), its outline included.
 #[test]
 fn an_ad_safe_word_at_its_active_scale_stays_inside_the_frame() {
     use klipolo_engine::plan::captions::place::{Anchor, active_scale};

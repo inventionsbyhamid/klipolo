@@ -1,8 +1,8 @@
-//! Export plans what the preview plans: the screens' activity its takes' facts and follow
-//! paths read is made before the first frame, so its camera runs and follow crops equal the preview's over the whole
-//! timeline, also at the budget's edge, where the takes' sizes (their activity's facts included) decide which are held
-//!. A screen that can't be analysed is planned without its activity by both: export marks it in the
-//! folder they share, and the editor reads the mark.
+//! Export plans what the preview plans: the screens' activity its takes' facts and follow paths read is made before the
+//! first frame, so its camera runs and follow crops equal the preview's over the whole timeline, also at the budget's
+//! edge, where the takes' sizes (their activity's facts included) decide which are held. A screen that can't be
+//! analysed is planned without its activity by both: export marks it in the folder they share, and the editor reads the
+//! mark.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -222,7 +222,7 @@ fn export_plans_the_same_zooms_and_crops_as_preview() {
 /// A take's plans read its screens' activity only under an Auto zoom, or following (`Want::plans_read_activity`): a
 /// landscape-only take with no Auto zoom reads none, so neither export nor the preview analyses its screens for its plans,
 /// and its facts and size don't depend on how far their analysis has got. Its screens stay listed (chat's facts read
-/// facts read every take's).
+/// every take's).
 #[test]
 fn only_the_takes_whose_plans_read_activity_have_it_analysed() {
     let dir = tempfile::tempdir().unwrap();

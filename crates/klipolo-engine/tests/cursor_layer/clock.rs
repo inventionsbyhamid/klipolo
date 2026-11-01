@@ -1,6 +1,6 @@
-//! The clock under the separate cursor: clocks are per stream, a screen's
-//! frames count from its first one (every decoder numbers them from `render::probe::stream_start`), and the cursor
-//! file is on the take's clock, so the cursor drawn over a frame is the one captured with it.
+//! The clock under the separate cursor: clocks are per stream, a screen's frames count from its first one (every
+//! decoder numbers them from `render::probe::stream_start`), and the cursor file is on the take's clock, so the cursor
+//! drawn over a frame is the one captured with it.
 
 use klipolo_model::cursor_style::Smoothing;
 use klipolo_model::project::FormatKind::Landscape;

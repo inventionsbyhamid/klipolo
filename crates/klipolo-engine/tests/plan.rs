@@ -60,8 +60,8 @@ fn portrait_splits_screen_over_camera() {
     assert_eq!((v[1].radius, v[1].border), (0.0, false));
 }
 
-/// The clip's framing reaches the split's screen pane, as it does the full frame. "Fill it"
-/// (m5-081) fills the 1080×960 top pane from the centre; "keep the left side in view" (m5-083) from the left.
+/// The clip's framing reaches the split's screen pane, as it does the full frame. "Fill it" fills the 1080×960 top pane
+/// from the centre; "keep the left side in view" from the left.
 #[test]
 fn the_split_screen_pane_takes_the_clips_framing() {
     let filled = |focus_x| {
@@ -522,7 +522,7 @@ fn presets_on_both_ends_combine() {
     assert_eq!([blurs(1.15), blurs(2.5), blurs(3.85)], [1, 0, 1]);
 }
 
-/// The camera bubble's keys run on the recording's source time (ledger line 17), so across a cut they stay with the
+/// The camera bubble's keys run on the recording's source time, so across a cut they stay with the
 /// footage; its turn is its own rotation plus its keys' (the composite draws it).
 #[test]
 fn the_camera_bubble_moves_on_source_time_across_a_cut() {
