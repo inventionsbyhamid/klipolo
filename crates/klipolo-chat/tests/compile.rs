@@ -456,9 +456,9 @@ fn keep_only_proposes_the_complement() {
 
 #[test]
 fn keep_only_names_what_it_leaves_past_the_new_end() {
-    // On "broll.mov" (30 s), free of the clips: a 40 s sound from 20 s (its last 10 s past the video) and a title from
-    // 3 to 8 s; and music from 20 to 28 s. Keeping only the first 5 s leaves the sound and the music past the new end,
-    // and the title across it.
+    // On "broll.mov" (30 s), free of the clips: a 40 s sound from 20 s (its last 10 s past the video), a title from 3 to
+    // 8 s and an end card after the video (30 to 32 s); and music from 20 to 28 s. Keeping only the first 5 s leaves the
+    // sound and the music past the new end and the title across it, and moves the card to the new end.
     let mut p = broll(30.0);
     for (id, length) in [("whoosh", 40.0), ("song", 60.0)] {
         let mut sound = file(id, length, true);
@@ -482,6 +482,15 @@ fn keep_only_names_what_it_leaves_past_the_new_end() {
         5.0,
         ItemContent::Text {
             text: "Thanks for watching".into(),
+            style: TextStyle::default(),
+        },
+    ));
+    titles.items.push(free(
+        "card",
+        30.0,
+        2.0,
+        ItemContent::Text {
+            text: "See you next time".into(),
             style: TextStyle::default(),
         },
     ));
@@ -530,14 +539,21 @@ fn keep_only_names_what_it_leaves_past_the_new_end() {
     assert_eq!(out.refusals, vec![]);
     let proposal = out.proposal.expect("a proposal");
     let after = &proposal.review.after;
-    assert_eq!(video_duration(&after.timeline), secs(5.0));
+    assert_eq!(video_duration(&after.timeline), secs(7.0));
     let left: Vec<(&str, Us, Us)> = (after.timeline.tracks.iter().flat_map(|t| &t.items))
         .map(|i| (i.id.as_str(), i.start_us, i.end_us()))
         .collect();
-    assert_eq!(left, [("title", secs(3.0), secs(5.0))]);
+    assert_eq!(
+        left,
+        [
+            ("title", secs(3.0), secs(5.0)),
+            ("card", secs(5.0), secs(7.0))
+        ]
+    );
     let removals = &proposal.review.removals;
     assert_eq!(removals.items, ["whoosh-layer", bed[0].as_str()]);
     assert_eq!(removals.shortened, ["title"]);
+    assert_eq!(removals.moved, ["card"]);
 }
 
 #[test]
