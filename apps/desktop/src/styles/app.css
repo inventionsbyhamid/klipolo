@@ -24,7 +24,8 @@
   }
 
   /* No background on the page or on any box around the preview: on macOS the engine's layer sits under the
-     transparent webview and shows through the preview hole. The window itself is painted --color-night. */
+     transparent webview and shows through the preview hole. The window itself is painted --color-night of the theme in
+     use (Rust, `appearance`). */
   html,
   body,
   #root {
