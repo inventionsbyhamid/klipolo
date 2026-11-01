@@ -7,7 +7,8 @@ import type { Item } from '../bindings/Item';
 import type { ParamValue } from '../bindings/ParamValue';
 import type { SnapshotPatch } from '../bindings/SnapshotPatch';
 import type { Transaction } from '../bindings/Transaction';
-import { findItem } from '../lib/timeline';
+import { EffectStack } from '../features/inspector/EffectStack';
+import { findClip, findItem } from '../lib/timeline';
 import { useProject } from '../state/project';
 import { fixtureSnapshot, titleItem } from './fixtures';
 
@@ -115,3 +116,11 @@ export function onClipA(effects: EffectInstance[]) {
   return snapshot;
 }
 
+/** The stack of `target` as the store has it, re-rendered when a change lands (as the Effects popover is). */
+export function StackOf({ target }: { target: EffectTarget }) {
+  const effects = useProject((s) => {
+    const project = s.snapshot!.project;
+    return target.type === 'clip' ? findClip(project, target.id)!.effects : findItem(project, target.id)!.item.effects;
+  });
+  return <EffectStack target={target} effects={effects} />;
+}
