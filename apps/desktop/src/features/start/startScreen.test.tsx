@@ -146,6 +146,9 @@ describe('StartScreen', () => {
     // One running reads as exporting, whatever else it has.
     act(() => useExport.setState({ jobs: [unfinished('kiln', 'paused'), unfinished('kiln', 'running')] }));
     expect(within(card('Kiln vlog')).getByText('Exporting')).toBeInTheDocument();
+    // Another build's paused job can't resume: it reads as unfinished.
+    act(() => useExport.setState({ jobs: [{ ...unfinished('tour', 'paused'), otherBuild: true }] }));
+    expect(within(card('Studio tour')).getByText('Export unfinished')).toBeInTheDocument();
   });
 
   it('lists_projects_with_name_opened_time_and_duration', async () => {

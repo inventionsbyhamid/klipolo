@@ -37,7 +37,8 @@ function unfinishedOf(jobs: ReturnType<typeof useExport.getState>['jobs'], proje
   const mine = jobs.filter((j) => j.projectId === projectId);
   if (mine.length === 0) return null;
   if (mine.some((j) => j.state === 'running')) return 'running';
-  if (mine.some((j) => j.state === 'paused')) return 'paused';
+  // Another build's job can't resume: it reads as unfinished, not paused.
+  if (mine.some((j) => j.state === 'paused' && !j.otherBuild)) return 'paused';
   return 'unfinished';
 }
 
