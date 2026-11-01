@@ -5,18 +5,25 @@ import { holdDock } from '../../../state/dockHold';
 import { usePlayback } from '../../../state/playback';
 import { keyBurst } from '../../../state/keyBurst';
 import { useProject } from '../../../state/project';
-import { useSelection } from '../../../state/selection';
+import { groupOf, useSelection } from '../../../state/selection';
 import { useUi } from '../../../state/ui';
+import { addRange } from '../keys/groupActions';
 import { mainIndex } from '../model/index';
 import { pxToUs } from '../scale';
 import { timelineDragView } from './dragView';
 import { blockElement } from './registry';
 import type { Gesture } from './session';
 import { trimGesture } from './trimFrame';
+import { beginDrag } from './controller';
 import { onTrimHandle, pressBlock, pressTrim } from './useBlockDrag';
 
 /** On a Mac, ⌃-click is a right-click: the block's menu opens (`BlockMenu`), and the press neither picks nor drags. */
 const MAC = typeof navigator !== 'undefined' && /^Mac/.test(navigator.platform);
+/**
+ * ⌘-click adds a block to the selection or takes it out; Ctrl-click on Windows and Linux. An unknown platform (jsdom's
+ * empty one) counts as a Mac, as the editor's shortcuts read it.
+ */
+const COMMAND_CLICK = typeof navigator === 'undefined' || !/^(Win|Linux)/.test(navigator.platform);
 
 /**
  * Selects block `id`. Outside it, the playhead goes where it shows whole (past a title's fade-in); inside, it stays, so
@@ -46,7 +53,12 @@ export function blockPressHandlers(
   guideRefs: readonly RefObject<HTMLElement | null>[],
   tipRef: RefObject<HTMLElement | null>,
 ) {
-  /** A press picks, then a move starts with the project as it is now. */
+  /**
+   * A press picks, then a move starts with the project as it is now. ⌘ (Ctrl off a Mac) adds the block to the
+   * selection or takes it out, and ⇧ adds the blocks from the one picked last to it on one track: neither drags. ⌥ on a
+   * clip slips its footage and ⌥⇧ slides it (`drag/editFrame`). A press on a block of the selected group moves the
+   * group.
+   */
   const onPress = (e: PointerEvent<HTMLElement>, id: string) => {
     const scroller = scrollRef.current;
     const project = useProject.getState().snapshot?.project;
@@ -58,8 +70,32 @@ export function blockPressHandlers(
     // mouse-focusable on a Mac), so focus never drops to the page; and a drag selects no text.
     e.preventDefault();
     e.currentTarget.focus({ preventScroll: true });
+    if ((COMMAND_CLICK ? e.metaKey : e.ctrlKey) && !e.altKey) return useSelection.getState().toggle(id);
+    if (e.shiftKey && !e.altKey) return addRange(id);
     // The move snaps to the playhead where the user had it, not where this pick puts it (the block's own start).
     const playheadUs = usePlayback.getState().playheadUs;
+    const isClip = findItem(project, id) === null && project.timeline.main.some((c) => c.id === id);
+    if (e.altKey && isClip) {
+      const clip = project.timeline.main.find((c) => c.id === id)!;
+      holdDock();
+      useSelection.getState().select(id);
+      const gesture: Gesture = {
+        kind: 'edit',
+        edit: e.shiftKey ? 'slide' : 'slip',
+        clipId: id,
+        label: sourceLabel(project, clip.source),
+      };
+      return pressBlock(e, gesture, timelineDragView(scroller, null, guideRefs, tipRef), playheadUs);
+    }
+    const group = groupOf(useSelection.getState());
+    if (group?.includes(id)) {
+      holdDock();
+      const found = findItem(project, id);
+      const label = found ? itemLabel(project, found.item) : '';
+      const gesture: Gesture = { kind: 'group', grabId: id, ids: group, label };
+      const view = timelineDragView(scroller, found?.track.id ?? null, guideRefs, tipRef);
+      return pressBlock(e, gesture, view, playheadUs);
+    }
     // The preview docks the picked block's card once the press is over, not under the pointer.
     holdDock();
     pickBlock(id);
@@ -99,5 +135,22 @@ export function blockPressHandlers(
     pressTrim(e, block, gesture, timelineDragView(scroller, null, guideRefs, tipRef));
   };
 
-  return { onPick: pickBlock, onPress, onTrimPress };
+  /** A press on the roll handle of the cut after clip `clipId`: the cut moves, the two clips' lengths with it. */
+  const onRollPress = (e: PointerEvent<HTMLElement>, clipId: string) => {
+    const scroller = scrollRef.current;
+    const project = useProject.getState().snapshot?.project;
+    const i = project ? project.timeline.main.findIndex((c) => c.id === clipId) : -1;
+    if (e.button !== 0 || (MAC && e.ctrlKey) || !scroller || !project || i < 0) return;
+    keyBurst.flush();
+    e.preventDefault();
+    e.stopPropagation();
+    holdDock();
+    const main = project.timeline.main;
+    const label = `${sourceLabel(project, main[i].source)}`;
+    const gesture: Gesture = { kind: 'edit', edit: 'roll', clipId, label };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    beginDrag(e, gesture, timelineDragView(scroller, null, guideRefs, tipRef));
+  };
+
+  return { onPick: pickBlock, onPress, onTrimPress, onRollPress };
 }

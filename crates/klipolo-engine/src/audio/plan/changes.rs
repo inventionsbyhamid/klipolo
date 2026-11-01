@@ -92,10 +92,16 @@ pub fn may_change_sound(p: &Project, op: &Op) -> bool {
         | Op::InsertClip { .. }
         | Op::MoveClip { .. }
         | Op::TrimClip { .. }
+        | Op::Roll { .. }
+        | Op::Slip { .. }
+        | Op::Slide { .. }
         | Op::Split { .. }
+        | Op::FreezeFrame { .. }
+        | Op::ReverseClip { .. }
         | Op::DeleteRanges { .. }
         | Op::RemoveClip { .. }
         | Op::DetachSource { .. }
+        | Op::DetachSound { .. }
         // A source's mix, nudge or runs re-timed, and Sync's two ops: a clip on its recording now plays the
         // recording's sound, and a new source may sound.
         | Op::UpdateRecordingSource { .. }

@@ -111,7 +111,8 @@ fn nearest_copy(main: &[Clip], attach: &Attach, own: Option<usize>) -> Option<us
     let mut copies = main
         .iter()
         .enumerate()
-        .filter(|(_, c)| covers(c, attach, false))
+        // A freeze frame shows none of its file's footage: its range is only its length.
+        .filter(|(_, c)| covers(c, attach, false) && !c.is_freeze())
         .map(|(i, _)| i);
     match own {
         Some(k) => copies.min_by_key(|&i| (i.abs_diff(k), Reverse(i))),

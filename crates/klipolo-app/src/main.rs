@@ -131,14 +131,17 @@ fn main() {
             chat.set_speaker(speaker.clone());
             // The person's view as the page last told it, which other apps' calls read as the person's.
             let view: ViewHandle = Arc::new(ViewState::default());
-            // Another project opening (or this one closing) stops analysis, starts chat over and forgets the view, once
-            // the switch is sure.
+            // Another project opening (or this one closing) stops analysis, starts chat over, forgets the view and stops
+            // the clips being reversed, once the switch is sure.
+            let reversing = commands::reverse::ReverseJobs::default();
+            app.manage(reversing.clone());
             let (stopping, forgetting, unseen) = (analysis.clone(), chat.clone(), view.clone());
             app.state::<ProjectSessionState>()
                 .on_switch(Arc::new(move || {
                     stopping.project_changed();
                     forgetting.project_changed();
                     unseen.forget();
+                    reversing.stop_all();
                 }));
             // Other apps (MCP) edit through chat's tools and its proposal slot, listening at launch when the person
             // left it on.
@@ -256,6 +259,9 @@ fn main() {
             commands::media::media_update_item,
             commands::media::media_picture,
             commands::media::media_speech_ranges,
+            commands::reverse::clip_reverse,
+            commands::reverse::clip_reverse_stop,
+            commands::reverse::clip_reverse_discard,
             commands::media::library_pack,
             commands::library::library_marks,
             commands::library::library_set_favorite,

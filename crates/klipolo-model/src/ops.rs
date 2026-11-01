@@ -17,7 +17,8 @@ use crate::project::{
 pub use crate::risk::{op_risk, OpRisk};
 use crate::time::{RangeUs, Us};
 use crate::timeline::{
-    CameraLayout, Clip, EffectInstance, Framing, Item, ItemContent, Look, TrackKind, Transition,
+    CameraLayout, Clip, EffectInstance, Framing, Item, ItemContent, Look, ReverseCopy, TrackKind,
+    Transition,
 };
 
 /// One atomic change request. Batches of ops form a [`Transaction`].
@@ -108,9 +109,42 @@ pub enum Op {
         edge: Edge,
         source_us: Us,
     },
+    /// Roll the cut after main-track clip `clip_id` by `by_us` of timeline, later when positive: the clip's out point and
+    /// the next clip's in point move together, so nothing after the cut moves and the video keeps its length.
+    Roll {
+        clip_id: Id,
+        by_us: Us,
+    },
+    /// Slip a main-track clip's footage by `by_us` of timeline, later footage when positive: its in and out points move
+    /// together through its source, and its place and length stay.
+    Slip {
+        clip_id: Id,
+        by_us: Us,
+    },
+    /// Slide a main-track clip `by_us` of timeline, later when positive, between the clips either side, which trim to
+    /// make room: the one before ends later and the one after starts later. The clip and the video keep their length.
+    Slide {
+        clip_id: Id,
+        by_us: Us,
+    },
     /// Split the main-track clip playing at `at_us` into two.
     Split {
         at_us: Us,
+    },
+    /// Hold the frame shown at `at_us` there for `duration_us` (10 ms to 10 minutes): the clip playing there is split
+    /// and a freeze frame of it (`Clip::freeze_at_us`) goes between its pieces, with its look, framing, effects, camera
+    /// and cursor, silent. Within 10 ms of a clip's edge it goes at that edge (the end of the main track included),
+    /// holding the frame shown there. What comes after moves later by `duration_us`, layers attached to it with it.
+    FreezeFrame {
+        at_us: Us,
+        duration_us: Us,
+    },
+    /// Play imported clip `clip_id` backward from `copy`, its file's stretch written backward, over the same length: its
+    /// range turns around inside the copy (`Clip::reversed` keeps where it came from). With `copy` None, a reversed clip
+    /// plays forward from its own file again. Nothing moves: layers attached to it keep their place.
+    ReverseClip {
+        clip_id: Id,
+        copy: Option<ReverseCopy>,
     },
     /// Remove timeline ranges from the main track; gaps close and attached layers follow. Free layers keep their time,
     /// those left past the video's new end are trimmed to it or removed (music is fitted to it), and those placed after
@@ -170,6 +204,12 @@ pub enum Op {
     DetachSource {
         clip_id: Id,
         source_id: Id,
+    },
+    /// Put an imported video clip's own sound in a sound layer of its own, attached under the clip (id `{clip}-sound`,
+    /// then `-2`, `-3`), and mute the clip so it isn't heard twice: the layer takes the clip's volume, mute and fades,
+    /// so nothing heard changes (only at normal speed). A recording's sounds go one by one (`DetachSource`).
+    DetachSound {
+        clip_id: Id,
     },
     /// Change a recording source's name, default mix, sync nudge or timing (its runs, re-timed by Sync); unset patch
     /// fields are left alone.
@@ -479,7 +519,12 @@ impl Op {
             Op::InsertClip { .. } => "insertClip",
             Op::MoveClip { .. } => "moveClip",
             Op::TrimClip { .. } => "trimClip",
+            Op::Roll { .. } => "roll",
+            Op::Slip { .. } => "slip",
+            Op::Slide { .. } => "slide",
             Op::Split { .. } => "split",
+            Op::FreezeFrame { .. } => "freezeFrame",
+            Op::ReverseClip { .. } => "reverseClip",
             Op::DeleteRanges { .. } => "deleteRanges",
             Op::RemoveClip { .. } => "removeClip",
             Op::UpdateClip { .. } => "updateClip",
@@ -491,6 +536,7 @@ impl Op {
             Op::RemoveItem { .. } => "removeItem",
             Op::SetAttach { .. } => "setAttach",
             Op::DetachSource { .. } => "detachSource",
+            Op::DetachSound { .. } => "detachSound",
             Op::UpdateRecordingSource { .. } => "updateRecordingSource",
             Op::SetClipSourceMix { .. } => "setClipSourceMix",
             Op::UseRecording { .. } => "useRecording",

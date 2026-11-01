@@ -73,11 +73,15 @@ run "test app" cargo test -p klipolo-app --locked --no-fail-fast
 run "test fonts (local download server)" cargo test -p klipolo-fonts --features test-hosts --locked
 # Export tests that need an H.264 encoder skip themselves: the LGPL FFmpeg has none on Linux.
 run "test engine (no GPU)" cargo test -p klipolo-engine --locked --no-fail-fast
-# The fixture tests the default run ignores, on the CPU: FFmpeg software decode, in-process probe, the PCM cache.
+# The fixture tests the default run ignores, on the CPU: FFmpeg software decode, in-process probe, the PCM cache, and
+# reversed copies of H.264 with B-frames, a turned, a variable rate, a full range and an HDR clip, and a long file.
 run "test engine fixtures (no GPU)" cargo test -p klipolo-engine --locked --no-fail-fast \
-  --test decode --test probe --test audio --test video_start -- --ignored --exact \
+  --test decode --test probe --test audio --test video_start --test reversed -- --ignored --exact \
   decodes_a_frame_from_the_fixture unknown_fps_is_probed imports_probe_without_an_ffprobe_tool pcm_cache_keeps_mono_mono \
-  ffmpeg_and_the_stored_index_start_the_picture_at_the_same_place
+  ffmpeg_and_the_stored_index_start_the_picture_at_the_same_place \
+  a_b_frame_source_reverses_every_frame_at_every_window_edge a_turned_clip_reverses_upright \
+  a_variable_rate_clip_keeps_each_frame_s_length a_full_range_bt601_clip_keeps_its_values_and_its_tags \
+  an_hdr_clip_is_written_as_hdr_or_refused a_short_stretch_of_a_long_file_reads_only_near_it
 # The 16 kHz WAV for speech from the fixtures (a clip with sound, a stereo one, one with none).
 run "test analysis fixtures" cargo test -p klipolo-analysis --locked --test audio --test cli -- --ignored
 # Import on the fixtures: unreadable files named with why, a portrait phone video's rotation and an NTSC rate kept.

@@ -8,6 +8,7 @@ import type { FillFocus } from "./FillFocus";
 import type { FormatKind } from "./FormatKind";
 import type { Framing } from "./Framing";
 import type { Look } from "./Look";
+import type { Reversed } from "./Reversed";
 import type { SourceMix } from "./SourceMix";
 import type { Transition } from "./Transition";
 
@@ -47,4 +48,16 @@ sourceMix?: { [key in string]: SourceMix },
 /**
  * This clip's own cursor style; none draws the project's (`Project::cursor_for`).
  */
-cursor?: CursorStyle, };
+cursor?: CursorStyle, 
+/**
+ * A freeze frame (`FreezeFrame`): the clip holds its source's frame at this source time for its whole length (a
+ * recording's every picture and its cursor as they were then) and plays no sound. Its source range only gives its
+ * length and the room its trims have, so it may run past the file, and it holds no footage: its sound, words and
+ * cursor path are nobody's. Left out of the JSON while None.
+ */
+freezeAtUs?: number, 
+/**
+ * The clip plays backward (`ReverseClip`): its source is a copy of this file's stretch written backward, and
+ * Reverse again plays it forward from this file. Left out of the JSON while None.
+ */
+reversed?: Reversed, };

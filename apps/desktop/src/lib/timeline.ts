@@ -164,12 +164,88 @@ export function hasOwnSound(project: Pick<Project, 'assets'>, item: Item): boole
   return content.type === 'audio' || (content.type === 'video' && !!assetById(project, content.assetId)?.hasAudio);
 }
 
+/**
+ * Whether main clip `clip` is a freeze frame (`Clip.freezeAtUs`): it holds that one frame of its source for its length,
+ * silent; its source range only gives the length.
+ */
+export function isFreeze(clip: Pick<Clip, 'freezeAtUs'>): boolean {
+  return clip.freezeAtUs !== undefined && clip.freezeAtUs !== null;
+}
+
+/**
+ * How a freeze frame's block reads its footage: from its frame, at a speed so near 0 that every point of the block shows
+ * that frame (a speed of 0 would divide by 0 where a block maps its pixels back to source time).
+ */
+export const STILL_SPEED = 1e-9;
+
 /** Whether main clip `clip` has sound for its Volume and Mute: its file's, or its recording's sound sources. */
 export function clipHasSound(project: Sources, clip: Clip): boolean {
+  // A freeze frame plays none.
+  if (isFreeze(clip)) return false;
   const source = clip.source;
   if (source.type === 'asset') return !!assetById(project, source.id)?.hasAudio;
   const recording = project.recordings.find((r) => r.id === source.id);
   return !!recording && soundSources(project, recording).length > 0;
+}
+
+/**
+ * What Reverse does to main clip `main[i]`: 'forward' plays a reversed clip forward again from its own file (at once);
+ * 'backward' writes an imported video clip's footage backward first; 'separated' while its own sound plays in a layer
+ * (`soundInALayer`), which would keep playing forward, so the model refuses; a freeze frame ('freeze') and a recording
+ * clip or a missing file ('none') can't. O(clips + layers).
+ */
+export function clipReverseState(
+  project: Pick<Project, 'assets' | 'recordings' | 'timeline'>,
+  i: number,
+): 'backward' | 'forward' | 'separated' | 'freeze' | 'none' {
+  const clip = project.timeline.main[i];
+  if (!clip) return 'none';
+  if (isFreeze(clip)) return 'freeze';
+  if (soundInALayer(project, i)) return 'separated';
+  if (clip.reversed) return 'forward';
+  const source = clip.source;
+  return source.type === 'asset' && assetById(project, source.id)?.kind === 'video' ? 'backward' : 'none';
+}
+
+/**
+ * Whether imported clip `main[i]`'s own sound can go on a layer of its own (Separate sound, `detachSound`): 'none' for a
+ * recording clip (its sounds go one by one), a freeze frame or a file without sound; 'sped' at a speed other than 1×,
+ * which the model refuses; 'separated' while its own sound plays in a layer (`soundInALayer`); else 'separable'.
+ * O(clips + layers).
+ */
+export function clipSoundState(
+  project: Pick<Project, 'assets' | 'timeline'>,
+  i: number,
+): 'none' | 'sped' | 'separated' | 'separable' {
+  const clip = project.timeline.main[i];
+  const source = clip?.source;
+  if (!clip || source.type !== 'asset' || isFreeze(clip) || !assetById(project, source.id)?.hasAudio) return 'none';
+  if (clip.speed !== 1) return 'sped';
+  return soundInALayer(project, i) ? 'separated' : 'separable';
+}
+
+/**
+ * Whether imported clip `main[i]`'s own sound plays in a sound layer over it: a layer of its file that plays each moment
+ * where the clip plays it, as Separate sound makes one (the model's `sound_in_a_layer`); the same file used as music
+ * elsewhere is not its sound. O(clips + layers).
+ */
+export function soundInALayer(project: Pick<Project, 'timeline'>, i: number): boolean {
+  const clip = project.timeline.main[i];
+  const source = clip?.source;
+  if (!clip || source.type !== 'asset') return false;
+  const startUs = clipStarts(project.timeline.main)[i];
+  const endUs = startUs + clipDurationUs(clip);
+  const leadUs = clip.sourceInUs - startUs;
+  return project.timeline.tracks.some((track) =>
+    track.items.some(
+      (item) =>
+        item.content.type === 'audio' &&
+        item.content.assetId === source.id &&
+        item.content.sourceInUs - item.startUs === leadUs &&
+        item.startUs < endUs &&
+        itemEndUs(item) > startUs,
+    ),
+  );
 }
 
 /**
@@ -206,6 +282,17 @@ export function sourceLabel(project: Sources, source: ClipSource): string {
   if (source.type === 'recording') return recordingName(project, source.id);
   const asset = primaryAsset(project, source);
   return asset ? assetName(project, asset) : missingMedia();
+}
+
+/** A main clip's name: its source's ("broll.mp4", "Recording 1"), a freeze frame's of it ("Freeze frame of …"). */
+export function clipLabel(project: Sources, clip: Clip): string {
+  const name = sourceLabel(project, clip.source);
+  if (!isFreeze(clip)) return name;
+  return t({
+    id: 'clip.freezeName',
+    message: `Freeze frame of ${name}`,
+    comment: 'A freeze frame on the timeline and its card; {name} is the clip it holds a frame of, e.g. intro.mov',
+  });
 }
 
 /**

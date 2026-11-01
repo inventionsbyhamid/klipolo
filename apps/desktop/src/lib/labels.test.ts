@@ -41,6 +41,7 @@ describe('undo labels as message ids', () => {
       'removeFillers',
       'trimClip',
       'splitAt',
+      'freezeFrame',
       'setClip',
       'setClip.note',
       'setTransition',

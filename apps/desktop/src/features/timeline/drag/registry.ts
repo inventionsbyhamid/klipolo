@@ -30,6 +30,32 @@ export function registerFollower(id: string, el: HTMLElement | null): () => void
   };
 }
 
+/** Where a box is on screen (client px). */
+export interface ScreenBox {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/**
+ * The clips and layers whose blocks a box drawn over the lanes touches (an edge on its edge counts), in the order they
+ * were drawn. Cuts, transitions and roll handles (ids with a ':') aren't blocks to select. O(mounted blocks).
+ */
+export function blocksTouching(box: ScreenBox): string[] {
+  const out: string[] = [];
+  for (const [id, el] of blocks) {
+    if (id.includes(':')) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) continue;
+    if (box.left <= r.right && box.right >= r.left && box.top <= r.bottom && box.bottom >= r.top) out.push(id);
+  }
+  return out;
+}
+
+/** The roll handle on the cut after clip `clipId` (`RollHandle`), registered as a block so a roll can move it. */
+export const rollId = (clipId: string) => `roll:${clipId}`;
+
 export function blockElement(id: string): HTMLElement | null {
   return blocks.get(id) ?? null;
 }
@@ -56,6 +82,18 @@ export function sizeBlock(id: string, leftPx: number, widthPx: number) {
   el.dataset.trimming = 'true';
   const follower = followers.get(id);
   if (follower) follower.style.visibility = 'hidden';
+  touched.add(id);
+}
+
+/**
+ * A clip whose footage slips: drawn where it is, its filmstrip and waveform moved `px` the other way (`--trim-dx`), as
+ * the footage now in it plays there.
+ */
+export function slipBlock(id: string, px: number) {
+  const el = blocks.get(id);
+  if (!el) return;
+  el.style.setProperty('--trim-dx', `${px}px`);
+  el.dataset.trimming = 'true';
   touched.add(id);
 }
 

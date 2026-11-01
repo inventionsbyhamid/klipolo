@@ -6,6 +6,7 @@
 //!   punctuation around the words shown stays around the fix ("Caden," reads "Kaiden,").
 //! - `splitAt`: `Split`, the time snapped to the evidence when it is near some (never refused for standing on none),
 //!   and mapped to where that moment plays now.
+//! - `freezeFrame`: `FreezeFrame`, its time snapped and mapped as a split's, or the playhead's; 2 s unless said.
 //!
 //! A change that changes nothing (a format the video already has) adds no op.
 
@@ -16,11 +17,13 @@ use klipolo_model::captions::styles::BuiltinCaptionStyle;
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::ops::Op;
 use klipolo_model::project::{FormatKind, Settings};
+use klipolo_model::query::main_track_duration;
 use klipolo_model::speech::{SpokenWord, WordKind, fix_text_ok, spoken};
 use klipolo_model::time::Us;
 
 use super::{Compiler, Edit, Refused, label, to_model, us};
-use crate::context::secs;
+use crate::context::{secs, within_video};
+use crate::tools::FREEZE_DEFAULT_US;
 
 /// The format's word, as the tool takes it.
 pub(super) fn format_word(format: FormatKind) -> &'static str {
@@ -95,6 +98,45 @@ pub(super) fn split_at(c: &Compiler, work: &Project, at_us: Us) -> Result<Edit, 
     Ok(Edit {
         ops: vec![Op::Split { at_us: now }],
         label: label("splitAt", vec![("atUs", us(at))]),
+    })
+}
+
+/// `freezeFrame` at the time given (snapped to the evidence near it, as a split is) or the playhead, mapped to where
+/// that moment plays now; at the main track's end, its last frame. Holds for `duration_us`, 2 s when unsaid.
+pub(super) fn freeze_frame(
+    c: &Compiler,
+    work: &Project,
+    at_us: Option<Us>,
+    duration_us: Option<Us>,
+) -> Result<Edit, Refused> {
+    let at = match at_us {
+        Some(t) => c.evidence.time(t),
+        None => within_video(c.snapshot, &c.inputs.view).0,
+    };
+    let now = match c.map.time(work, at) {
+        Some(now) => now,
+        None if !work.timeline.main.is_empty()
+            && at == main_track_duration(&c.snapshot.timeline.main) =>
+        {
+            main_track_duration(&work.timeline.main)
+        }
+        None => {
+            return Err(to_model(format!(
+                "freezeFrame: no clip plays at {} s.",
+                secs(at)
+            )));
+        }
+    };
+    let duration = duration_us.unwrap_or(FREEZE_DEFAULT_US);
+    Ok(Edit {
+        ops: vec![Op::FreezeFrame {
+            at_us: now,
+            duration_us: duration,
+        }],
+        label: label(
+            "freezeFrame",
+            vec![("atUs", us(at)), ("holdDurationUs", us(duration))],
+        ),
     })
 }
 

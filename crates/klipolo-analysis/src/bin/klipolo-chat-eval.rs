@@ -610,6 +610,9 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
             json!({"clip": clip, "edge": word(edge), "toSec": s(*to_us)})
         }
         ToolCall::SplitAt { at_us } => json!({"atSec": s(*at_us)}),
+        ToolCall::FreezeFrame { at_us, duration_us } => {
+            json!({"atSec": at_us.map(s), "durationSec": duration_us.map(s)})
+        }
         ToolCall::SetClip {
             clip,
             speed,

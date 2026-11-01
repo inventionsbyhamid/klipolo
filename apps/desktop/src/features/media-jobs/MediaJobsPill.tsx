@@ -19,7 +19,7 @@ const LENGTH = 2 * Math.PI * R;
 /**
  * A 14 px progress ring (decorative: the pill's name says the percentage). Paper on the progress track.
  */
-function Ring({ percent }: { percent: number }) {
+export function Ring({ percent }: { percent: number }) {
   return (
     <svg width={14} height={14} viewBox="0 0 14 14" aria-hidden className="copies-ring">
       <circle cx={7} cy={7} r={R} className="copies-ring-track" />

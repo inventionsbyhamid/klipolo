@@ -192,6 +192,7 @@ fn every_tool_schema_is_strict() {
             "removeFillers",
             "trimClip",
             "splitAt",
+            "freezeFrame",
             "setClip",
             "setTransition",
             "setBackground",
@@ -239,6 +240,8 @@ fn every_tool_schema_is_strict() {
         nullable,
         [
             "removeSilences.minPauseSec",
+            "freezeFrame.atSec",
+            "freezeFrame.durationSec",
             "setClip.framing",
             "setClip.framingFormat",
             "setClip.muted",
@@ -601,6 +604,13 @@ fn parses_each_tool_from_spike_shaped_calls() {
                 clips: None,
             }],
         ),
+        (
+            "freeze here for two seconds",
+            vec![FreezeFrame {
+                at_us: None,
+                duration_us: Some(secs_to_us(2.0)),
+            }],
+        ),
     ];
     assert_eq!(fixture.answers.len(), expected.len());
     let mut seen = BTreeSet::new();
@@ -880,6 +890,12 @@ fn bad_arguments_name_the_tool_and_the_field() {
             r#"{"atSec": null}"#,
             Some("atSec"),
             "splitAt: atSec must be a number of seconds, not null.",
+        ),
+        (
+            "freezeFrame",
+            r#"{"atSec": 4, "durationSec": 0}"#,
+            Some("durationSec"),
+            "freezeFrame: durationSec must be between 0.1 and 60 seconds, not 0.",
         ),
         (
             "setFormat",
@@ -1366,10 +1382,10 @@ fn the_prompt_is_one_fixed_text_and_small() {
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
     // 914 measured with the clip tools' line and the recordings' line.
     assert!(prompt_tokens <= 920, "prompt {prompt_tokens} tokens");
-    // 4,307 measured with the clip tools (setClip, setTransition), setBackground (about 210) and the recording tools
-    // (the camera's three and the recorded sounds' three, about 1,010 of them); 4,424 with followSubject's focus
-    // (about 120).
-    assert!(tools_tokens <= 4_450, "tools {tools_tokens} tokens");
+    // 4,438 measured with the clip tools (setClip, setTransition), setBackground (about 210), freezeFrame (about 105),
+    // addText's font (about 25) and the recording tools (the camera's three and the recorded sounds' three, about 1,010);
+    // 4,555 with followSubject's focus (about 117).
+    assert!(tools_tokens <= 4_580, "tools {tools_tokens} tokens");
 }
 
 #[test]
