@@ -203,8 +203,8 @@ export function clipReverseState(project: Sources, clip: Clip): 'backward' | 'fo
 /**
  * Whether imported clip `main[i]`'s own sound can go on a layer of its own (Separate sound, `detachSound`): 'none' for a
  * recording clip (its sounds go one by one), a freeze frame or a file without sound; 'sped' at a speed other than 1×,
- * which the model refuses; 'separated' while a sound layer of its file plays over it; else 'separable'. O(clips +
- * layers).
+ * which the model refuses; 'separated' while its own sound plays in a layer (`soundInALayer`); else 'separable'.
+ * O(clips + layers).
  */
 export function clipSoundState(
   project: Pick<Project, 'assets' | 'timeline'>,
@@ -214,18 +214,31 @@ export function clipSoundState(
   const source = clip?.source;
   if (!clip || source.type !== 'asset' || isFreeze(clip) || !assetById(project, source.id)?.hasAudio) return 'none';
   if (clip.speed !== 1) return 'sped';
+  return soundInALayer(project, i) ? 'separated' : 'separable';
+}
+
+/**
+ * Whether imported clip `main[i]`'s own sound plays in a sound layer over it: a layer of its file that plays each moment
+ * where the clip plays it, as Separate sound makes one (the model's `sound_in_a_layer`); the same file used as music
+ * elsewhere is not its sound. O(clips + layers).
+ */
+export function soundInALayer(project: Pick<Project, 'timeline'>, i: number): boolean {
+  const clip = project.timeline.main[i];
+  const source = clip?.source;
+  if (!clip || source.type !== 'asset') return false;
   const startUs = clipStarts(project.timeline.main)[i];
   const endUs = startUs + clipDurationUs(clip);
-  const heard = project.timeline.tracks.some((track) =>
+  const leadUs = clip.sourceInUs - startUs;
+  return project.timeline.tracks.some((track) =>
     track.items.some(
       (item) =>
         item.content.type === 'audio' &&
         item.content.assetId === source.id &&
+        item.content.sourceInUs - item.startUs === leadUs &&
         item.startUs < endUs &&
         itemEndUs(item) > startUs,
     ),
   );
-  return heard ? 'separated' : 'separable';
 }
 
 /**

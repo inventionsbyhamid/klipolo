@@ -135,4 +135,19 @@ describe('Separate sound', () => {
     const block = document.querySelector('[data-block-id="b-sound"]');
     expect(block).toHaveClass('is-recorded');
   });
+
+  it('is on for a clip whose file also plays as music elsewhere: only its own sound counts', () => {
+    // The b-roll's sound from its 5 s mark as a bed from 18 s, over clip b (20 to 30 s, from the file's 0).
+    const music = separated(4);
+    const bed = music.project.timeline.tracks[music.project.timeline.tracks.length - 1].items[0];
+    Object.assign(bed, { id: 'bed', startUs: 18 * S, durationUs: 5 * S, attach: null });
+    Object.assign(bed.content, { sourceInUs: 5 * S });
+    music.project.timeline.main[1].muted = false;
+    act(() => {
+      useProject.setState({ snapshot: music });
+      useSelection.setState({ selectedId: 'b' });
+    });
+    renderWithProviders(<Commands />);
+    expect(command('separate-sound')).toMatchObject({ enabled: true });
+  });
 });
