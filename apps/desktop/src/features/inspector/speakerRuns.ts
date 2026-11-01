@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { FormatKind } from '../../bindings/FormatKind';
+import type { Keep } from '../../bindings/Keep';
 import { speakerBridge } from '../../bridge/speaker';
 import { useProject } from '../../state/project';
 import { toast } from '../../state/toasts';
@@ -53,6 +54,27 @@ export async function followSpeaker(clipId: string, format: FormatKind): Promise
     return false;
   } finally {
     stop();
+    setRun(key, null);
+  }
+}
+
+/**
+ * Keeps `keep` in frame in clip `clipId` in `format` (Rust makes it from what the follow tracked, at no charge), its
+ * change taken into the project as one undo step. A failure is said in a toast. Nothing while a follow of the same
+ * clip and format runs.
+ */
+export async function keepInFrame(clipId: string, format: FormatKind, keep: Keep): Promise<boolean> {
+  const key = runKey(clipId, format);
+  if (useSpeakerRuns.getState().runs[key] !== undefined) return false;
+  setRun(key, 0);
+  try {
+    const change = await speakerBridge.keep(clipId, format, keep);
+    await useProject.getState().adopt(change);
+    return true;
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : String(error));
+    return false;
+  } finally {
     setRun(key, null);
   }
 }
