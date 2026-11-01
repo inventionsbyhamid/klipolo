@@ -74,7 +74,7 @@ fn the_worker_answers_from_its_session_and_refuses_another_sessions_profile() {
     ];
     let (code, replies, log) = run(&exe, session.dir(), &requests);
     assert_eq!(code, Some(0), "{replies:?}");
-    // RLIMIT_FSIZE, read by the worker itself (`getrlimit`): the Mac's check of the file size cap too.
+    // RLIMIT_FSIZE, read by the worker itself (`getrlimit`): the Mac's check of the file-size cap too.
     #[cfg(unix)]
     assert!(
         log.contains(&format!(
