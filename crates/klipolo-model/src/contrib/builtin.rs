@@ -200,6 +200,18 @@ pub(super) fn catalog() -> Catalog {
             .unwrap_or_else(|e| panic!("presets/{local}/contrib.json: {e}"));
         c = c.with(preset);
     }
+    // Animated words: a scene made from its settings (`media::text_motion`), so it has no folder of its own.
+    c = c.with(ContribDef {
+        description: "Words that come in letter by letter, word by word or line by line, each from its own values."
+            .into(),
+        tags: ["text", "words", "animation", "kinetic"].map(String::from).to_vec(),
+        ..def(
+            crate::media::text_motion::source(),
+            ContribKind::Scene,
+            "Animated words",
+            crate::media::text_motion::definition_params(),
+        )
+    });
     c.with(ContribDef {
         downsample: Some(DownsampleSpec {
             param: "radius".into(),

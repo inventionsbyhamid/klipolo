@@ -230,6 +230,11 @@ const NAMES: Record<string, MessageDescriptor> = {
     message: 'Lower third',
     comment: 'A title template: a name and a role at the bottom left',
   }),
+  'klipolo.builtin/scene.text-motion': msg({
+    id: 'contrib.scene.text-motion',
+    message: 'Animated words',
+    comment: 'Words that come in letter by letter, word by word or line by line',
+  }),
   'klipolo.builtin/scene.title-card': msg({
     id: 'contrib.scene.title-card',
     message: 'Title card',
