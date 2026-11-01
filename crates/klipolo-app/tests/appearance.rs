@@ -58,7 +58,11 @@ fn a_development_build_keeps_its_theme_apart() {
         p.theme = Theme::Dark
     })
     .unwrap();
-    assert_eq!(prefs::load(dir.path()).theme, Theme::System, "the release's file is left alone");
+    assert_eq!(
+        prefs::load(dir.path()).theme,
+        Theme::System,
+        "the release's file is left alone"
+    );
     assert_eq!(
         prefs::load(&appearance::theme_dir(dir.path(), true)).theme,
         Theme::Dark
