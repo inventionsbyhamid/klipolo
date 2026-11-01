@@ -4,10 +4,11 @@ import type { Clip } from '../../bindings/Clip';
 import { codedMessage } from '../../bridge/call';
 import { cameraState } from '../../lib/camera';
 import { labelText } from '../../lib/labels';
-import { clipSoundState, findItem, hasOwnSound, isFreeze } from '../../lib/timeline';
+import { clipReverseState, clipSoundState, findItem, hasOwnSound, isFreeze } from '../../lib/timeline';
 import { useClipboard } from '../../state/clipboard';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
+import { useReversing } from '../../state/reversing';
 import { useSelection } from '../../state/selection';
 import { searchWords, type Command } from '../command-palette/command';
 import { copy, cut, duplicate, paste, pasteEffects } from './keys/clipboardActions';
@@ -15,6 +16,7 @@ import { trackStepOps } from './keys/keyOps';
 import { nudge } from './keys/nudge';
 import { muteLabel } from '../preview';
 import { separateCamera, separateSound, stepTrack, toggleAttach, toggleSoundMute } from './keys/layerActions';
+import { reverseClip } from './keys/reverseActions';
 import { freezeFrame, nothingToFreeze, split, trimToPlayhead } from './keys/timelineActions';
 import { clipIndexAt, mainIndex } from './model/index';
 import { useTimelineNavCommands } from './useTimelineNavCommands';
@@ -23,11 +25,11 @@ import { useTransitionCommands } from './useTransitionCommands';
 const NO_CLIPS: Clip[] = [];
 
 /**
- * The timeline's commands: split, freeze frame, trims to the playhead, nudges, the clipboard, track moves, attaching,
- * a sound or video layer's mute, Separate camera and an imported clip's Separate sound, plus `useTransitionCommands`'
- * (Add transition, ⌘T) and `useTimelineNavCommands`' (selection steps, edit points, zoom, snapping). Each has a stable
- * id, is `enabled` only when it can act on the selection, and runs the same code from its shortcut, the player bar and
- * the block menu. `useCommands` merges them.
+ * The timeline's commands: split, freeze frame, reverse, trims to the playhead, nudges, the clipboard, track moves,
+ * attaching, a sound or video layer's mute, Separate camera and an imported clip's Separate sound, plus
+ * `useTransitionCommands`' (Add transition, ⌘T) and `useTimelineNavCommands`' (selection steps, edit points, zoom,
+ * snapping). Each has a stable id, is `enabled` only when it can act on the selection, and runs the same code from its
+ * shortcut, the player bar and the block menu. `useCommands` merges them.
  */
 export function useTimelineCommands(): Command[] {
   const { t } = useLingui();
@@ -41,6 +43,8 @@ export function useTimelineCommands(): Command[] {
   const clipUnderPlayhead = usePlayback((s) => clipIndexAt(index, s.playheadUs) >= 0);
   // A freeze needs a clip at the playhead, or the main track's end (its last frame).
   const freezable = usePlayback((s) => index.starts.length > 0 && s.playheadUs <= index.mainEndUs);
+  // The selected clip's footage is being written backward.
+  const reversing = useReversing((s) => s.jobs.some((j) => j.clipId === selectedId));
   return useMemo(() => {
     if (!project) return [];
     const main = project.timeline.main;
@@ -70,12 +74,15 @@ export function useTimelineCommands(): Command[] {
       camera: labelText('undo.separateCamera'),
       sound: labelText('undo.sound.separate'),
       freeze: labelText('undo.freeze'),
+      reverse: labelText('undo.reverse'),
     };
     // A recording clip's camera, as the cards see it (`cameraState`).
     // A freeze frame's camera holds still with its screen: it has no footage to separate.
     const camera = clip && !isFreeze(main[clipAt]) ? cameraState(project, main[clipAt]) : 'none';
     // An imported clip's own sound, for Separate sound.
     const sound = clip ? clipSoundState(project, clipAt) : 'none';
+    // What Reverse does to it.
+    const turn = clip ? clipReverseState(project, main[clipAt]) : 'none';
 
     const edits: Command[] = [
       {
@@ -284,7 +291,31 @@ export function useTimelineCommands(): Command[] {
         // From a clip's menu, on that clip alone (as Split at playhead).
         run: (options) => freezeFrame(options?.block),
       },
+      {
+        id: 'reverse',
+        action: 'reverseClip',
+        group: 'edit',
+        label: label.reverse,
+        keywords: searchWords(
+          t({
+            id: 'command.reverse.keywords',
+            message: 'backward, backwards, rewind, play backward',
+            comment: 'Comma-separated search words for Reverse (a clip plays backward)',
+          }),
+        ),
+        // An imported clip, while its copy isn't being made; a reversed one goes forward again at once.
+        enabled: turn === 'forward' || (turn === 'backward' && !reversing),
+        reason:
+          turn === 'freeze'
+            ? codedMessage({ code: 'model.reverse.freeze', params: {} })
+            : turn === 'none' && clip
+              ? codedMessage({ code: 'model.reverse.recording', params: {} })
+              : turn === 'backward' && reversing
+                ? codedMessage({ code: 'reverse.busy', params: {} })
+                : undefined,
+        run: () => reverseClip(id),
+      },
     ];
     return [...edits, ...transitions, ...nav];
-  }, [t, project, selectedId, clipboard, nav, transitions, index, clipUnderPlayhead, freezable]);
+  }, [t, project, selectedId, clipboard, nav, transitions, index, clipUnderPlayhead, freezable, reversing]);
 }

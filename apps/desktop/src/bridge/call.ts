@@ -60,6 +60,11 @@ const APP_CODES: Record<string, string> = {
   'project.libraryFailed': "Klipolo couldn't make its projects folder. Check the disk, then try again.",
   'project.revealGone': "This project's file isn't there any more.",
   'project.revealFailed': "Klipolo couldn't open Finder. Try again.",
+  'reverse.busy': 'This clip is already being reversed.',
+  'reverse.noEncoder': 'This Mac has no video encoder for the reversed copy.',
+  'reverse.missing': "{name} isn't where it was, so it can't be reversed.",
+  'reverse.failed': "Klipolo couldn't reverse {name}. Check the disk, then try again.",
+  'reverse.stopped': 'Reversing stopped.',
 };
 
 /**

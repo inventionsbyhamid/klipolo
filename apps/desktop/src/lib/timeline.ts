@@ -189,6 +189,18 @@ export function clipHasSound(project: Sources, clip: Clip): boolean {
 }
 
 /**
+ * What Reverse does to main clip `clip`: 'forward' plays a reversed clip forward again from its own file (at once);
+ * 'backward' writes an imported video clip's footage backward first; a freeze frame ('freeze') and a recording clip or
+ * a missing file ('none') can't.
+ */
+export function clipReverseState(project: Sources, clip: Clip): 'backward' | 'forward' | 'freeze' | 'none' {
+  if (isFreeze(clip)) return 'freeze';
+  if (clip.reversed) return 'forward';
+  const source = clip.source;
+  return source.type === 'asset' && assetById(project, source.id)?.kind === 'video' ? 'backward' : 'none';
+}
+
+/**
  * Whether imported clip `main[i]`'s own sound can go on a layer of its own (Separate sound, `detachSound`): 'none' for a
  * recording clip (its sounds go one by one), a freeze frame or a file without sound; 'sped' at a speed other than 1×,
  * which the model refuses; 'separated' while a sound layer of its file plays over it; else 'separable'. O(clips +

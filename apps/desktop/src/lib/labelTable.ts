@@ -92,6 +92,11 @@ export const TABLE = {
     message: 'Freeze frame',
     comment: 'Command and undo history entry: the frame at the playhead holds still for a while',
   }),
+  'undo.reverse': msg({
+    id: 'undo.reverse',
+    message: 'Reverse',
+    comment: 'Command and undo history entry: the clip plays backward, or forward again',
+  }),
   // A recording's sources and markers: `{source}` is a source's name, e.g. Mic, Game sound.
   'undo.source.volume': msg({
     id: 'undo.source.volume',

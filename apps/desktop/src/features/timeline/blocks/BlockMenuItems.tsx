@@ -3,7 +3,16 @@ import { useLingui } from '@lingui/react/macro';
 import { Fragment } from 'react';
 import { ContextMenuItem, ContextMenuSeparator } from '../../../design/ContextMenu';
 import { recordingCameras } from '../../../lib/camera';
-import { clipLabel, clipSoundState, findClip, findItem, hasOwnSound, isFreeze, itemLabel } from '../../../lib/timeline';
+import {
+  clipLabel,
+  clipReverseState,
+  clipSoundState,
+  findClip,
+  findItem,
+  hasOwnSound,
+  isFreeze,
+  itemLabel,
+} from '../../../lib/timeline';
 import { useProject } from '../../../state/project';
 import { useSelection } from '../../../state/selection';
 import type { Command } from '../../command-palette/command';
@@ -47,6 +56,8 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
     at >= 0 && !!project && !!main[at].camera && !isFreeze(main[at]) && recordingCameras(project, main[at]).length > 0;
   // An imported clip whose file has sound: Separate sound (off, saying why, once it is a layer or while sped up).
   const hasSound = at >= 0 && !!project && clipSoundState(project, at) !== 'none';
+  // An imported clip plays backward, or forward again: Reverse.
+  const turns = at >= 0 && !!project && ['backward', 'forward'].includes(clipReverseState(project, main[at]));
 
   // A sound layer, or a video layer whose file has sound, has Mute.
   const mutes = !!project && !!found && hasOwnSound(project, found.item);
@@ -75,7 +86,12 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
   const groups: { id: string; label?: string; off?: string }[][] =
     kind === 'clip'
       ? [
-          [split, { id: 'freeze-frame' }, ...(transitionAfter || onlyClip ? [addTransition] : [])],
+          [
+            split,
+            { id: 'freeze-frame' },
+            ...(turns ? [{ id: 'reverse' }] : []),
+            ...(transitionAfter || onlyClip ? [addTransition] : []),
+          ],
           [{ id: 'copy' }, { id: 'cut' }, { id: 'duplicate' }],
           sounds,
           [
