@@ -11,6 +11,7 @@ pub mod channels;
 pub mod chat;
 pub mod credentials;
 pub mod export;
+pub mod fonts;
 pub mod mcp_config;
 pub mod prefs;
 
