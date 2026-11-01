@@ -908,6 +908,24 @@ fn which_mic_when_a_recording_has_two() {
     );
 }
 
+#[test]
+fn which_past_each_recordings_one_source_goes_back_to_the_model() {
+    // "The mic in the second recording" read as the second mic: every recording has one.
+    let second = call(
+        "muteSource",
+        json!({"source": "mic", "muted": true, "which": "2", "clips": null}),
+    );
+    assert_eq!(
+        refused(&two_takes(), &[second]),
+        (
+            "muteSource: each recording has one mic, so which names none. Leave which null and name that \
+             recording's clips."
+                .to_owned(),
+            Audience::Model
+        )
+    );
+}
+
 // ---- separateSound.
 
 fn separate(source: &str, clips: Value) -> ToolCall {

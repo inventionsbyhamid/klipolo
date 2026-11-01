@@ -28,7 +28,7 @@ use klipolo_model::time::{Us, clock};
 use klipolo_model::timeline::{ClipSource, ItemContent};
 
 use super::recorded::{Noted, named, noted};
-use super::{Compiler, Edit, Refused, label, to_person};
+use super::{Compiler, Edit, Refused, label, to_model, to_person};
 use crate::tools::Sound;
 use crate::tools::recorded::SOUNDS;
 
@@ -144,9 +144,11 @@ struct Found {
 /// The sources of `sound`'s kind a tool acts on: those of the recordings the clips `named` play (with those clips), or
 /// with none named, of every recording that has one; in each recording every source of the kind, or the one `which`
 /// names. Said to the person when there is none, or when the clips named are imported files; when `which` names none of
-/// the sources there are, the person is asked which.
+/// the sources there are, the person is asked which, unless each recording has one: then `which` was a misreading
+/// ("the mic in the second recording"), and `tool`'s call goes back to the model.
 fn find(
     work: &Project,
+    tool: &str,
     sound: Sound,
     which: Option<&str>,
     named: Option<&HashSet<Id>>,
@@ -199,7 +201,15 @@ fn find(
     }
     if found.is_empty() {
         let name = sound.name();
-        return Err(if !missed.is_empty() {
+        let one_each = (missed.iter())
+            .filter_map(|id| work.recording(id))
+            .all(|r| of_kind(work, r, sound).len() == 1);
+        return Err(if !missed.is_empty() && one_each {
+            to_model(format!(
+                "{tool}: each recording has one {name}, so which names none. Leave which null and name that \
+                 recording's clips."
+            ))
+        } else if !missed.is_empty() {
             ask_which(work, sound, &missed)
         } else if file_clip {
             to_person(format!(
@@ -328,7 +338,7 @@ fn mixed(
     change: impl Fn(&mut SourceMix),
 ) -> Result<Noted, Refused> {
     let named = named(c, work, tool, clips)?;
-    let found = find(work, sound, which, named.as_ref())?;
+    let found = find(work, tool, sound, which, named.as_ref())?;
     let (ops, own_track) = change_mix(work, &found, change);
     let notes = if own_track {
         vec![format!(
@@ -400,7 +410,7 @@ pub(super) fn separate(
         return Err(to_person(VIDEO_SOUND_STAYS.to_owned()));
     }
     let named = named(c, work, TOOL, clips)?;
-    let found = find(work, sound, which, named.as_ref())?;
+    let found = find(work, TOOL, sound, which, named.as_ref())?;
     if which.is_none() {
         one_each(work, sound, &found)?;
     }
