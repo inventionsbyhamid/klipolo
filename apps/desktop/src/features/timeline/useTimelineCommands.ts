@@ -7,10 +7,21 @@ import { findItem, hasOwnSound } from '../../lib/timeline';
 import { useClipboard } from '../../state/clipboard';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
-import { useSelection } from '../../state/selection';
+import { groupOf, useSelection } from '../../state/selection';
 import { searchWords, type Command } from '../command-palette/command';
 import { copy, cut, duplicate, paste, pasteEffects } from './keys/clipboardActions';
+import {
+  copyGroup,
+  cutGroup,
+  duplicateGroup,
+  muteGroup,
+  nudgeGroup,
+  pasteEffectsGroup,
+  pasteGroup,
+} from './keys/groupActions';
+import { allEffects, countOf, groupMuted, membersOf } from './keys/groupOps';
 import { trackStepOps } from './keys/keyOps';
+import { editByKey } from './keys/editKeys';
 import { nudge } from './keys/nudge';
 import { muteLabel } from '../preview';
 import { separateCamera, stepTrack, toggleAttach, toggleSoundMute } from './keys/layerActions';
@@ -34,6 +45,7 @@ export function useTimelineCommands(): Command[] {
   const { t } = useLingui();
   const project = useProject((s) => s.snapshot?.project);
   const selectedId = useSelection((s) => s.selectedId);
+  const selectedIds = useSelection((s) => s.selectedIds);
   const clipboard = useClipboard();
   const nav = useTimelineNavCommands();
   const transitions = useTransitionCommands();
@@ -58,6 +70,12 @@ export function useTimelineCommands(): Command[] {
         ? content
         : null;
     const ours = clipboard.projectId === project.id;
+    // A group selected: the clipboard's, the nudges' and Mute's commands act on all of it.
+    const groupIds = groupOf({ selectedId, selectedIds });
+    const group = groupIds ? membersOf(project, groupIds) : null;
+    const many = group !== null && countOf(group) > 1;
+    const groupMute = many && group ? !groupMuted(project, group) : false;
+    const copiedGroup = clipboard.group ?? null;
     // The commands' names are their undo labels, in the language shown.
     const label = {
       clip: labelText('undo.split.clip'),
@@ -119,9 +137,10 @@ export function useTimelineCommands(): Command[] {
         }),
         shortcut: ',',
         // Whenever a block is selected: it says why it can't move (first, at the start, locked).
-        enabled: block,
-        // ⇧: ten frames (a clip still moves one place).
-        run: (options) => nudge(id, clip || !options?.large ? -1 : -10, options?.repeat),
+        enabled: block || many,
+        // ⇧: ten frames (a clip still moves one place); a group's layers a frame, or with ⇧ a second.
+        run: (options) =>
+          many ? nudgeGroup(-1, !!options?.large) : nudge(id, clip || !options?.large ? -1 : -10, options?.repeat),
       },
       {
         id: 'nudge-forward',
@@ -133,8 +152,53 @@ export function useTimelineCommands(): Command[] {
           comment: 'A layer a frame later, or a clip a place',
         }),
         shortcut: '.',
-        enabled: block,
-        run: (options) => nudge(id, clip || !options?.large ? 1 : 10, options?.repeat),
+        enabled: block || many,
+        run: (options) =>
+          many ? nudgeGroup(1, !!options?.large) : nudge(id, clip || !options?.large ? 1 : 10, options?.repeat),
+      },
+      {
+        id: 'roll-back',
+        action: 'roll',
+        group: 'edit',
+        label: t({ id: 'command.rollBack', message: 'Roll cut earlier', comment: 'The cut nearest the playhead, a frame' }),
+        shortcut: '⌥,',
+        enabled: main.length > 1,
+        run: (options) => editByKey('roll', -1, options?.repeat),
+      },
+      {
+        id: 'roll-forward',
+        action: 'roll',
+        group: 'edit',
+        label: t({ id: 'command.rollForward', message: 'Roll cut later', comment: 'The cut nearest the playhead, a frame' }),
+        shortcut: '⌥.',
+        enabled: main.length > 1,
+        run: (options) => editByKey('roll', 1, options?.repeat),
+      },
+      {
+        id: 'slip-back',
+        action: 'slip',
+        group: 'edit',
+        label: t({
+          id: 'command.slipBack',
+          message: 'Slip to earlier footage',
+          comment: 'The clip under the playhead shows footage a frame earlier, in the same place',
+        }),
+        shortcut: '⌥⇧,',
+        enabled: clipUnderPlayhead,
+        run: (options) => editByKey('slip', -1, options?.repeat),
+      },
+      {
+        id: 'slip-forward',
+        action: 'slip',
+        group: 'edit',
+        label: t({
+          id: 'command.slipForward',
+          message: 'Slip to later footage',
+          comment: 'The clip under the playhead shows footage a frame later, in the same place',
+        }),
+        shortcut: '⌥⇧.',
+        enabled: clipUnderPlayhead,
+        run: (options) => editByKey('slip', 1, options?.repeat),
       },
       {
         id: 'copy',
@@ -142,8 +206,8 @@ export function useTimelineCommands(): Command[] {
         group: 'edit',
         label: t({ id: 'timeline.copy', message: 'Copy', comment: 'Command' }),
         shortcut: '⌘C',
-        enabled: block,
-        run: () => copy(id),
+        enabled: block || many,
+        run: () => (many ? copyGroup() : copy(id)),
       },
       {
         id: 'cut',
@@ -151,8 +215,8 @@ export function useTimelineCommands(): Command[] {
         group: 'edit',
         label: labelText('undo.cut'),
         shortcut: '⌘X',
-        enabled: clip || layer !== null,
-        run: () => cut(id),
+        enabled: clip || layer !== null || many,
+        run: () => (many ? cutGroup() : cut(id)),
       },
       {
         id: 'paste',
@@ -161,7 +225,7 @@ export function useTimelineCommands(): Command[] {
         label: labelText('undo.paste'),
         shortcut: '⌘V',
         enabled: ours && clipboard.entry !== null,
-        run: paste,
+        run: () => (copiedGroup && copiedGroup.length > 1 ? pasteGroup(copiedGroup) : paste()),
       },
       {
         id: 'duplicate',
@@ -169,8 +233,8 @@ export function useTimelineCommands(): Command[] {
         group: 'edit',
         label: labelText('undo.duplicate'),
         shortcut: '⌘D',
-        enabled: clip || layer !== null,
-        run: () => duplicate(id),
+        enabled: clip || layer !== null || many,
+        run: () => (many ? duplicateGroup() : duplicate(id)),
       },
       {
         id: 'paste-effects',
@@ -179,13 +243,16 @@ export function useTimelineCommands(): Command[] {
         label: labelText('undo.pasteEffects'),
         shortcut: '⌥⌘V',
         // Sound and zoom layers have no effects.
-        enabled: ours && clipboard.effects !== null && (clip || layer?.track.kind === 'overlay'),
+        enabled:
+          ours &&
+          clipboard.effects !== null &&
+          (many ? !!group && allEffects(group) : clip || layer?.track.kind === 'overlay'),
         // Nothing with effects copied in this project yet: said where it is listed.
         reason:
           ours && clipboard.effects !== null
             ? undefined
             : t({ id: 'timeline.pasteEffects.none', message: 'Copy a clip or layer that has effects first.' }),
-        run: () => pasteEffects(id),
+        run: () => (many ? pasteEffectsGroup() : pasteEffects(id)),
       },
       {
         id: 'track-up',
@@ -226,9 +293,10 @@ export function useTimelineCommands(): Command[] {
             comment: 'Comma-separated search words for Mute sound and Unmute sound',
           }),
         ),
-        // A sound or video layer's own switch, as the inspector's Mute: its volume stays for when it plays again.
-        enabled: layer !== null && mutable !== null,
-        run: () => toggleSoundMute(id),
+        // A sound or video layer's own switch, as the inspector's Mute: its volume stays for when it plays again. A
+        // group's sounds all at once.
+        enabled: (layer !== null && mutable !== null) || many,
+        run: () => (many ? muteGroup(groupMute) : toggleSoundMute(id)),
       },
       {
         id: 'separate-camera',
@@ -274,5 +342,5 @@ export function useTimelineCommands(): Command[] {
       },
     ];
     return [...edits, ...transitions, ...nav];
-  }, [t, project, selectedId, clipboard, nav, transitions, index, clipUnderPlayhead]);
+  }, [t, project, selectedId, selectedIds, clipboard, nav, transitions, index, clipUnderPlayhead]);
 }

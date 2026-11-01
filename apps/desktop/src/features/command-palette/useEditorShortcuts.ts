@@ -47,7 +47,8 @@ export const CONTROL_COMMAND: Readonly<Record<string, string>> = { i: 'toggle-ch
  * fit the timeline; 1 / 2 / 3 the format the preview shows; N snapping on or off; M a marker at the playhead (on a
  * recording); Escape clears the selection. With a clip or layer selected: Q / W trim its start or end to the playhead;
  * , and . move it a frame (⇧ ten) or a clip a place; ⌘C ⌘X ⌘V ⌘D copy, cut, paste, duplicate; ⌥⌘V paste effects;
- * ⌥↑ / ⌥↓ the track above or below. ⌘L turns Loop on or off; F shows the preview full screen, and Escape leaves it
+ * ⌥↑ / ⌥↓ the track above or below. With several selected: Delete, , and . (a frame, ⇧ a second), the clipboard's keys
+ * and ⌥⌘V act on all of them. ⌥, and ⌥. roll the cut nearest the playhead a frame; ⌥⇧, and ⌥⇧. slip the clip under it. ⌘L turns Loop on or off; F shows the preview full screen, and Escape leaves it
  * (before it clears anything).
  * (On a focused timeline block the arrows, Home, End, Enter and Space move between blocks: `useRovingFocus`.)
  * Everything but ⌘K, ⌘↩ and the ⌃⌘ keys (`CONTROL_COMMAND`) is ignored while typing in a field; everything while a
@@ -103,6 +104,12 @@ export function useEditorShortcuts() {
       } else if (!mod && !e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault();
         run(e.key === 'ArrowUp' ? 'track-up' : 'track-down');
+      } else if (!mod && (e.code === 'Comma' || e.code === 'Period')) {
+        // ⌥, and ⌥. roll the cut at the playhead a frame; with ⇧, the clip there slips a frame.
+        e.preventDefault();
+        const later = e.code === 'Period';
+        const id = e.shiftKey ? (later ? 'slip-forward' : 'slip-back') : later ? 'roll-forward' : 'roll-back';
+        run(id, { repeat: e.repeat });
       }
       return;
     }
