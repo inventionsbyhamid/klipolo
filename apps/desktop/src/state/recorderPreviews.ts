@@ -4,6 +4,7 @@ import type { PreviewId } from '../bindings/PreviewId';
 import type { Previews } from '../bindings/Previews';
 import type { RecorderEvent } from '../bindings/RecorderEvent';
 import type { RecorderSetup } from '../bindings/RecorderSetup';
+import type { ViewPixels } from '../bindings/ViewPixels';
 import type { WhatToRecord } from '../bindings/WhatToRecord';
 import { isCode, saidOf } from '../bridge/call';
 import { recorder } from '../bridge/recorder';
@@ -89,6 +90,8 @@ let starts = 0;
 /** The app's calls go one at a time, in order: an off never overtakes the start before it. */
 let chain: Promise<unknown> = Promise.resolve();
 let busyTimer: ReturnType<typeof setTimeout> | undefined;
+/** The live picture's box in device pixels, as the dialog measures it (`useLivePixels`); null while none shows. */
+let livePixels: ViewPixels | null = null;
 
 function inTurn(run: () => Promise<void>): Promise<void> {
   const next = chain.then(run, run);
@@ -106,7 +109,8 @@ export function cardKey(what: WhatToRecord | null): string | null {
  * What the dialog previews for these choices: every card's still and the live picture of what is chosen while Screen
  * Recording is allowed (`screenRefused`: a take or the previews were refused it in this opening), and the camera and
  * the mic chosen (the app starts those only once allowed, or on an Allow press). Null when nothing should run: no
- * setup yet, or a take runs.
+ * setup yet, or a take runs. The live picture's box is the dialog's own, added as the previews start
+ * (`startPreviews`).
  */
 export function previewsFor(setup: RecorderSetup | null, picks: Picks, screenRefused: boolean): Previews | null {
   if (setup === null || setup.busy || setup.ownTake) return null;
@@ -241,10 +245,11 @@ function screenPicturesRefused() {
 }
 
 /**
- * The previews should show `want` (on opening, on every change of choice, and back in front): the app is told, and the
- * pictures a change leaves behind go at once.
+ * The previews should show `asked` (on opening, on every change of choice, and back in front), its live picture made
+ * for its box as measured now: the app is told, and the pictures a change leaves behind go at once.
  */
-export function startPreviews(want: Previews): void {
+export function startPreviews(asked: Previews): void {
+  const want: Previews = { ...asked, livePixels: asked.live === null ? null : livePixels };
   const mine = ++starts;
   const opening = openings;
   clearTimeout(busyTimer);
@@ -255,6 +260,18 @@ export function startPreviews(want: Previews): void {
   void inTurn(() => recorder.previews(want, onFrame)).catch((error: unknown) =>
     refusedStart(mine, opening, want, error),
   );
+}
+
+/**
+ * The live picture's box measures `pixels` (null: it has gone, or has no size). While the previews show a live
+ * picture, the app is asked for the same previews at the new size: its running live picture takes it (no other is
+ * opened for it), and an Allow press's ask isn't sent again. Otherwise the next start takes it.
+ */
+export function setLivePixels(pixels: ViewPixels | null): void {
+  if (pixels?.width === livePixels?.width && pixels?.height === livePixels?.height) return;
+  livePixels = pixels;
+  // A box that goes leaves the picture as it is: the dialog that held it is closing, or has stopped its previews.
+  if (pixels !== null && running && wanted !== null && wanted.live !== null) startPreviews({ ...wanted, ask: null });
 }
 
 /** "Allow camera" or "Allow microphone": the previews as they are, asking for `device`, which is when macOS asks. */
@@ -357,6 +374,7 @@ export function resetPreviews(): void {
   starts++;
   openings++;
   chain = Promise.resolve();
+  livePixels = null;
   dropAll();
   set(FRESH);
 }

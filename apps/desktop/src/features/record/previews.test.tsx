@@ -10,6 +10,7 @@ import type { Previews } from '../../bindings/Previews';
 import type { RecorderSetup } from '../../bindings/RecorderSetup';
 import { useRecorder } from '../../state/recorder';
 import { useRecorderPreviews } from '../../state/recorderPreviews';
+import { stubSize } from '../../test/layoutBox';
 import {
   app,
   deferred,
@@ -22,8 +23,10 @@ import {
 } from '../../test/recorderBridge';
 import { frameIn, frameMessage, nameAt, sendFrame, shownIn } from '../../test/recorderPreviews';
 import { renderWithProviders } from '../../test/render';
+import { captureResizeObservers } from '../../test/resizeObservers';
 import { STALE_MS } from './LivePreview';
 import { RecordDialog } from './RecordDialog';
+import { SETTLE_MS } from './useLivePixels';
 
 const rec = () => useRecorder.getState();
 const previews = () => useRecorderPreviews.getState();
@@ -687,5 +690,145 @@ describe('the previews and Screen Recording', () => {
     said.push(dialog.textContent ?? '');
     const dashes = new RegExp(`[${String.fromCharCode(0x2013, 0x2014)}]`);
     for (const text of said) expect(text).not.toMatch(dashes);
+  });
+});
+
+describe('the live picture is made for its box', () => {
+  /** The preview box, read live: a test changes it, then fires the ResizeObservers. */
+  const box = { width: 672, height: 378 };
+  /** The display's scale as jsdom had it. */
+  const jsdomScale = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio');
+  const setScale = (value: number) => Object.defineProperty(window, 'devicePixelRatio', { configurable: true, value });
+  let observers: ReturnType<typeof captureResizeObservers>;
+  let unstub: () => void;
+
+  beforeEach(() => {
+    Object.assign(box, { width: 672, height: 378 });
+    observers = captureResizeObservers();
+    unstub = stubSize('.record-preview', box);
+    // A Retina display.
+    setScale(2);
+  });
+
+  afterEach(() => {
+    unstub();
+    observers.restore();
+    if (jsdomScale) Object.defineProperty(window, 'devicePixelRatio', jsdomScale);
+    else delete (window as { devicePixelRatio?: number }).devicePixelRatio;
+  });
+
+  const big = { width: 1344, height: 756 };
+
+  /** The box takes `width` × `height` CSS px, and the ResizeObservers hear it. */
+  const resizeTo = (width: number, height: number) => {
+    Object.assign(box, { width, height });
+    act(() => observers.fire());
+  };
+
+  /** A resize has settled, on the real clock (a test that presses with userEvent keeps it). */
+  const settled = async () => {
+    await act(() => new Promise((done) => setTimeout(done, SETTLE_MS + 50)));
+    await flush();
+  };
+
+  it('asks_for_the_box_s_own_pixels_once_as_it_opens', async () => {
+    await openOn();
+    // 672 × 378 points on a 2x display: one call, with the size.
+    expect(fake.previewed).toEqual([want({ livePixels: big })]);
+    // Nothing live (One app, none chosen): no size.
+    await userEvent.click(screen.getByRole('radio', { name: 'One app' }));
+    await flush();
+    expect(fake.previewed.at(-1)).toEqual(want({ live: null }));
+  });
+
+  it('asks_again_once_a_resize_settles', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    await openOn();
+    // A window too narrow for the dialog: it follows once the size holds still.
+    resizeTo(640, 360);
+    resizeTo(600, 338);
+    await flush();
+    act(() => void vi.advanceTimersByTime(SETTLE_MS - 1));
+    await flush();
+    expect(fake.previewed).toEqual([want({ livePixels: big })]);
+    act(() => void vi.advanceTimersByTime(1));
+    await flush();
+    expect(fake.previewed).toEqual([want({ livePixels: big }), want({ livePixels: { width: 1200, height: 676 } })]);
+    // The same size again asks nothing.
+    resizeTo(600, 338);
+    act(() => void vi.advanceTimersByTime(SETTLE_MS));
+    await flush();
+    expect(fake.previewed).toHaveLength(2);
+  });
+
+  it('asks_again_when_the_window_moves_to_a_display_of_another_scale', async () => {
+    const watching = new Map<string, () => void>();
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      (query: string) =>
+        ({
+          matches: false,
+          media: query,
+          addEventListener: (_: string, listener: () => void) => watching.set(query, listener),
+          removeEventListener: () => watching.delete(query),
+          addListener: () => undefined,
+          removeListener: () => undefined,
+        }) as unknown as MediaQueryList,
+    );
+    await openOn();
+    expect(fake.previewed).toEqual([want({ livePixels: big })]);
+    // To a 1x display: its CSS size is the same, its pixels half.
+    setScale(1);
+    act(() => watching.get('(resolution: 2dppx)')?.());
+    await flush();
+    expect(fake.previewed.at(-1)).toEqual(want({ livePixels: { width: 672, height: 378 } }));
+    // And back: the 1x display's scale is the one watched now.
+    setScale(2);
+    act(() => watching.get('(resolution: 1dppx)')?.());
+    await flush();
+    expect(fake.previewed.at(-1)).toEqual(want({ livePixels: big }));
+    expect(fake.previewed).toHaveLength(3);
+  });
+
+  it('a_resize_while_klipolo_is_behind_asks_nothing_until_it_is_in_front', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    await openOn();
+    await windowFocus('blur');
+    resizeTo(600, 338);
+    act(() => void vi.advanceTimersByTime(SETTLE_MS));
+    await flush();
+    expect(fake.previewed).toEqual([want({ livePixels: big })]);
+    await windowFocus('focus');
+    expect(fake.previewed.at(-1)).toEqual(want({ livePixels: { width: 1200, height: 676 } }));
+  });
+
+  it('closing_still_stops_the_live_picture_and_a_late_resize_asks_nothing', async () => {
+    await openOn();
+    resizeTo(600, 338);
+    act(() => rec().close());
+    await flush();
+    await settled();
+    expect(fake.previewed).toEqual([want({ livePixels: big }), 'off']);
+    // Opening again asks for the box's size now; Record stops it too, whatever its size.
+    await act(() => rec().openRecorder());
+    await flush();
+    expect(fake.previewed.at(-1)).toEqual(want({ livePixels: { width: 1200, height: 676 } }));
+    await userEvent.click(recordButton());
+    await flush();
+    expect(fake.log.slice(-3)).toEqual(['previewsOff', 'arm', 'send:start']);
+  });
+
+  it('an_allow_press_asks_once_and_a_resize_after_it_asks_nothing_more_of_macos', async () => {
+    await openOn(
+      recorderSetup({ cameras: [device('FaceTime HD Camera')], permissions: { camera: 'notAsked', mic: 'notAsked' } }),
+    );
+    await choose('Camera: No camera', 'FaceTime HD Camera');
+    await userEvent.click(screen.getByRole('button', { name: 'Allow camera' }));
+    await flush();
+    expect(fake.previewed.at(-1)).toEqual(want({ camera: 'FaceTime HD Camera', livePixels: big, ask: 'camera' }));
+    resizeTo(600, 338);
+    await settled();
+    expect(fake.previewed.at(-1)).toEqual(
+      want({ camera: 'FaceTime HD Camera', livePixels: { width: 1200, height: 676 } }),
+    );
   });
 });
