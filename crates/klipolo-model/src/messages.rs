@@ -296,6 +296,12 @@ pub const MESSAGES: Messages = &[
     ("model.motion.notVisual", "Only layers that show a picture can move or blend."),
     ("model.motion.blendNeedsPicture", "An adjustment layer has no picture of its own to blend."),
     ("model.motion.cameraBlend", "The camera always blends normally."),
+    // volume.rs and validate.rs: a clip's or sound layer's volume keys.
+    ("model.volume.tooManyKeys", "A clip or sound can have at most 64 volume keys."),
+    ("model.volume.badValue", "A volume key must be between 0 and 200 %."),
+    ("model.volume.unsorted", "A clip's or sound's volume keys are out of order."),
+    ("model.volume.outside", "A volume key is outside its clip or sound."),
+    ("model.volume.badEase", "A volume key has an ease Klipolo can't use. A curve's y values stay from -2 to 3, steps go from 1 to 64, and a spring needs stiffness 1 to 1000, damping 0 to 100, mass 0.1 to 10 and enough damping to settle."),
     // cursor_style.rs: the cursor layer's style and the following crop.
     ("model.cursor.size", "The cursor size must be between 0.5× and 4×."),
     ("model.cursor.hide", "The cursor can hide after it's been still for 0.5 to 10 seconds."),

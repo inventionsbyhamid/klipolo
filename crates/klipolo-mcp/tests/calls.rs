@@ -1578,6 +1578,7 @@ fn song(id: &str, asset: &str, start: f64, length: f64) -> klipolo_model::timeli
             centre_from: None,
             tie: None,
             duck: Some(-12.0),
+            volume_keys: Vec::new(),
         },
         effects: Vec::new(),
     }

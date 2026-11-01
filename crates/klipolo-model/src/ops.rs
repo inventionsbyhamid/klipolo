@@ -9,6 +9,7 @@ use crate::cursor_style::CursorStyle;
 use crate::fill_focus::FillFocus;
 use crate::ids::Id;
 use crate::layout::Layout;
+use crate::motion::Key;
 use crate::params::ParamValue;
 use crate::project::{
     Asset, AudioSettings, Background, CaptionSettings, ColorLut, FormatKind, Marker, Recording,
@@ -346,6 +347,10 @@ pub struct ClipPatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub volume: Option<f64>,
+    /// Replaces the volume keys (`Clip::volume_keys`); an empty list takes them off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub volume_keys: Option<Vec<Key>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub muted: Option<bool>,

@@ -53,6 +53,7 @@ fn sound(id: &str, asset: &str, duck: Option<f64>) -> Item {
             centre_from: None,
             tie: None,
             duck,
+            volume_keys: Vec::new(),
         },
         effects: Vec::new(),
     }

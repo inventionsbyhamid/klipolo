@@ -512,6 +512,7 @@ fn keep_only_names_what_it_leaves_past_the_new_end() {
             centre_from: None,
             tie: None,
             duck: None,
+            volume_keys: Vec::new(),
         },
     ));
     p.timeline.tracks = vec![titles, sounds];

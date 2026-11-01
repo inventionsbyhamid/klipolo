@@ -395,6 +395,7 @@ fn something_added_elsewhere_doesnt_make_up_for_what_goes() {
             centre_from: None,
             tie: None,
             duck: None,
+            volume_keys: Vec::new(),
         },
         ..still_item(id, start, len)
     };

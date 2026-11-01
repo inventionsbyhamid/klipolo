@@ -40,6 +40,7 @@ pub mod time;
 pub mod timeline;
 pub mod transitions;
 pub mod validate;
+pub mod volume;
 
 pub use apply::{apply_in_place, apply_ops, apply_part, finish_parts};
 pub use contrib::{Catalog, ContribId};

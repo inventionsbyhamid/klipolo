@@ -59,6 +59,7 @@ pub fn add_sound_ops(p: &Project, asset: &Asset, at_us: Us) -> Result<Vec<Op>> {
             centre_from: None,
             tie: None,
             duck: None,
+            volume_keys: Vec::new(),
         },
         effects: Vec::new(),
     };
