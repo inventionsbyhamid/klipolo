@@ -244,7 +244,7 @@ pub struct Estimate {
     pub problem: Option<String>,
 }
 
-/// What a clip's analysis found so far: what chat reads (Plan 4), in the clip's own times (words and turns in its sound
+/// What a clip's analysis found so far: what chat reads, in the clip's own times (words and turns in its sound
 /// time, the scene log in its file time). Assets on one file share it.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct AssetAnalysis {
@@ -468,8 +468,8 @@ impl AnalysisState {
     }
 
     /// `f(true)` when analysis starts decoding a clip on this Mac (its sound, its levels, its small copy), `f(false)`
-    /// once that step has ended: an editing copy under way pauses as the step starts (the two may overlap for about a
-    /// frame while it stops), and no copy starts until the step has ended.
+    /// once that step has ended: an editing copy under way pauses as the step starts (the two may overlap while it
+    /// stops, from a few milliseconds up to about a second), and no copy starts until the step has ended.
     pub fn on_decoding(&self, f: impl Fn(bool) + Send + Sync + 'static) {
         self.decoding.listen(Box::new(f));
     }

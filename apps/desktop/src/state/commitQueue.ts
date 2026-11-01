@@ -147,7 +147,7 @@ export function onSettling(flush: () => boolean) {
 
 /**
  * For work at its turn that builds on every edit made before it (undo, redo, an export): a nudge that a press waiting
- * ahead of it left settling goes in first, and `run` then goes again before anything that waited after it
+ * ahead of it left settling goes in first, and `run` then goes again before anything that waited after it. True when
  * it gave up its turn. (`keyBurst.after` and the drag queue do the same for their own waiters.)
  * `edit: false`: `run` makes no edit itself (a drain).
  */

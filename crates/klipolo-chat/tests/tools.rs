@@ -1,11 +1,11 @@
 //! The tools the planner offers the language model, and its calls read into typed edits.
 //!
-//! `fixtures/calls_spike_shaped.json` holds function calls shaped as Muse Spark 1.3 wrote them in the planner spike
-//! (its default run): the arguments as JSON text, keys in any order (`endSec`
-//! before `startSec`), `{}` for a tool without arguments, two calls in one answer. The spike's 12 requests come first,
+//! `fixtures/calls_spike_shaped.json` holds function calls shaped as Muse Spark 1.3 wrote them in a first trial of the
+//! planner (its default run): the arguments as JSON text, keys in any order (`endSec`
+//! before `startSec`), `{}` for a tool without arguments, two calls in one answer. That trial's 12 requests come first,
 //! in this tool set's names and words (its `removeFillerWords` is `removeFillers`, `setCaptionStyle` with
 //! `karaoke_highlight` is `setCaptions` with `karaoke`, `setFormat` `9:16` is `portrait`); the rest cover the tools the
-//! spike did not have, the media tools last, with times from the clip A context fixture.
+//! trial did not have, the media tools last, with times from the clip A context fixture.
 
 use std::collections::BTreeSet;
 
@@ -179,7 +179,7 @@ fn every_tool_schema_is_strict() {
         strictness(name, params, &mut problems);
     }
     assert!(problems.is_empty(), "not strict:\n{}", problems.join("\n"));
-    // The tools of the plan, in its order (the order is part of the cached prefix).
+    // The tools, in their order (the order is part of the cached prefix).
     assert_eq!(
         tool_names(),
         [
@@ -484,7 +484,7 @@ fn parses_each_tool_from_spike_shaped_calls() {
 
 #[test]
 fn unknown_tool_is_a_parse_error_naming_it() {
-    // The spike's old names, a near miss in case, an empty name and one the model made up.
+    // The first trial's old names, a near miss in case, an empty name and one the model made up.
     for name in [
         "deleteEverything",
         "removeFillerWords",
@@ -565,7 +565,7 @@ fn style_enum_matches_caption_style_ids() {
         // The word is the model's own name for the style.
         assert_eq!(serde_json::to_value(style).unwrap(), json!(word));
     }
-    // The hidden built-ins, a near miss and the spike's word are refused, naming the field and the words allowed.
+    // The hidden built-ins, a near miss and the first trial's word are refused, naming the field and the words allowed.
     for word in ["loud", "arcade", "Karaoke", "karaoke_highlight"] {
         let args = json!({"on": true, "style": word}).to_string();
         let err = ToolCall::parse(&call("setCaptions", &args)).unwrap_err();

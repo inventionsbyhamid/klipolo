@@ -1,7 +1,7 @@
 import { buttonColumn, clearFrom, type SafeAreaSpec } from './spec';
 
 /**
- * TikTok's feed, organic (Adaptly 2026): 108 top, 320 bottom, 60 left, 120 right at
+ * TikTok's feed, organic (Adaptly, 2026): 108 top, 320 bottom, 60 left, 120 right at
  * 1080 × 1920.
  */
 export const TIKTOK: SafeAreaSpec = {

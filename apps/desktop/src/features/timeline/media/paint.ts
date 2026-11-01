@@ -75,8 +75,8 @@ const shown = new WeakMap<HTMLCanvasElement, string>();
 
 /**
  * Loads what `spec` needs (the strip and its sprites, the peaks) and draws it in an animation frame, once any zoom
- * under way has rested (`rest`). Every load is fire-and-forget: a failure leaves that part in the block's plain colour
- *.
+ * under way has rested (`rest`). Every load is fire-and-forget: a failure leaves that part in the block's plain
+ * colour.
  *
  * A canvas that already shows something keeps it, over the time it drew, until everything has arrived, so a zoom or a
  * window step never flashes; a new one draws each part as soon as it exists (peaks come long before thumbnails). The

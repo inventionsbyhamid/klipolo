@@ -245,7 +245,8 @@ pub const TITLE_FIELD: &str = "The title to show, in your own words.";
 pub const TITLE_CARD_TOOL: &str = "A full-screen title card: your title over a background Muse Image draws, with no \
 lettering in the picture. Use it when a title card or a picture behind the title is wanted; for words over the video, \
 use addText.";
-/// `makeSticker`, for an app: chat's own is placed once drawn, an app's waits in Klipolo's chat for the person's Use.
+/// `makeSticker`, for an app: as with chat's, the sticker waits in Klipolo's chat for the person's Use, said so the
+/// app can tell its person where to look.
 pub const STICKER_TOOL: &str = "Have Muse Image draw a new sticker when no picture in Library fits. Once drawn, it \
 waits in Klipolo's chat panel for the person to place it with Use.";
 

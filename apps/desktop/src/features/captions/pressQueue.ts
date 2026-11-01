@@ -4,9 +4,9 @@ import type { LookChange } from './captionOps';
 
 /**
  * The look bar's presses and Spelling's saves made while the words are being updated, as plain functions: kept in
- * order, and once the words settle each is sent, built on the words then, or
- * dropped and said. A wait starts after the press that causes it and lasts less than a reaction, so a press made in
- * it is the person's, never one to throw away; but it goes only when nothing it was made for changed meanwhile.
+ * order, and once the words settle each is sent, built on the words then, or dropped and said. A wait starts after the
+ * press that causes it and lasts less than a reaction, so a press made in it is the person's, never one to throw
+ * away; but it goes only when nothing it was made for changed meanwhile.
  */
 
 /** A look press, with the pick it was made on, the person's other actions so far, and the words lit. */
