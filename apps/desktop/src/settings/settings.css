@@ -455,6 +455,22 @@
   margin-top: var(--space-2);
 }
 
+/* Appearance, the last section: System, Light or Dark, set apart by a hairline as the others are. */
+.appearance-settings {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-4);
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--color-line);
+}
+
+.appearance-settings .section-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  line-height: var(--lh-lg);
+  font-weight: var(--weight-strong);
+}
+
 /* The toggle, scoped here until the shared one lands: a 36 x 20 track. Off: raised, a line-strong edge and
    an ink-soft knob. On: paper with an on-paper knob. The knob slides in 140 ms, and not at all with reduced motion. */
 .settings-dialog .settings-switch {
