@@ -57,7 +57,14 @@ export function Swatches({
   onPick: (color: string) => void;
 }) {
   return (
-    <ColorField label={label} value={value} presets={swatches} onCommit={(color) => color !== null && onPick(color)} />
+    <ColorField
+      label={label}
+      value={value}
+      presets={swatches}
+      // A colour with opacity is checked by its red, green and blue, and a pick keeps the opacity it holds.
+      alpha={value.length === 9}
+      onCommit={(color) => color !== null && onPick(color)}
+    />
   );
 }
 
