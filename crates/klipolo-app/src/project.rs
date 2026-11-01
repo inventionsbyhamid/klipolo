@@ -15,6 +15,7 @@ mod create;
 mod disk;
 mod duplicate;
 mod library;
+pub(crate) mod posters;
 mod recent;
 mod saver;
 mod session;
@@ -42,12 +43,14 @@ use klipolo_model::history::{Change, Document, HistoryLimits, Snapshot, Snapshot
 use klipolo_model::project::{AssetKind, FormatKind, Project};
 use klipolo_platform::pressure::{self, Pressure};
 pub(crate) use library::{library_dir, read};
-use recent::{ProjectRow, RECENT_FILE, RECENT_LIMIT, mark_open, recent_in};
+use klipolo_app::analysis::holds::Holds;
+use posters::{Posters, ProjectPoster};
+use recent::{ProjectRow, RECENT_FILE, RECENT_LIMIT, mark_open, poster_wants, recent_in};
 pub(crate) use saver::{SaveStatus, Saver, Version};
 pub(crate) use session::ProjectSessionState;
 #[cfg(test)]
 pub(crate) use session::opened;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::pack::Pack;
 use crate::state::EngineState;
@@ -182,13 +185,24 @@ pub fn project_duplicate(
 
 /// The start screen's and the project menu's recent projects (`recent::recent_in`): the library's project files, last
 /// opened first, the one open now marked (`recent::mark_open`). Nothing is opened. Each card's picture is let through
-/// the asset protocol (the cache folder's scope holds it already). A projects folder that can't be listed fails as
-/// `project.libraryFailed`, never as an empty library.
+/// the asset protocol (the cache folder's scope holds it already), and the posters the cards still lack are asked for
+/// (`posters`). A projects folder that can't be listed fails as `project.libraryFailed`, never as an empty library.
 #[tauri::command(async)]
 pub fn projects_recent(
     app: AppHandle,
     engine: State<'_, EngineState>,
     state: State<'_, ProjectSessionState>,
+) -> Result<Vec<ProjectRow>, Said> {
+    let rows = recent_rows(&app, &engine, &state)?;
+    want_posters(&app, &engine, &rows);
+    Ok(rows)
+}
+
+/// The recent projects as `projects_recent` lists them.
+fn recent_rows(
+    app: &AppHandle,
+    engine: &EngineState,
+    state: &ProjectSessionState,
 ) -> Result<Vec<ProjectRow>, Said> {
     // Without an app data folder nothing was stamped: the list goes by last save.
     let stamps = app
@@ -202,7 +216,7 @@ pub fn projects_recent(
             tracing::warn!(%error, "the projects folder couldn't be listed");
             Said::code("project.libraryFailed")
         })?;
-    let open = lock(&state).as_ref().map(|open| open.file.clone());
+    let open = lock(state).as_ref().map(|open| open.file.clone());
     mark_open(&mut rows, open.as_deref());
     let scope = app.asset_protocol_scope();
     for row in &mut rows {
@@ -216,6 +230,57 @@ pub fn projects_recent(
         }
     }
     Ok(rows)
+}
+
+/// The event that tells the start screen a card's poster landed (`ProjectPoster`).
+pub(crate) const POSTER_EVENT: &str = "projects://poster";
+/// How long after launch the library's posters are asked for by a listing of their own: the window and the start
+/// screen's own listing come first.
+const POSTERS_AFTER_LAUNCH: Duration = Duration::from_secs(5);
+
+/// Asks for the posters `rows`' cards still lack.
+fn want_posters(app: &AppHandle, engine: &EngineState, rows: &[ProjectRow]) {
+    if let (Some(posters), Some(caches)) = (app.try_state::<Posters>(), engine.caches()) {
+        posters.want(poster_wants(rows, &caches.thumbs()));
+    }
+}
+
+/// The start screen's posters (`posters::Posters`): made by the engine's poster maker in the thumbnail cache, waiting
+/// on analysis's `holds`, each told to the page as `POSTER_EVENT` once its picture is let through the asset protocol.
+/// None without a cache folder. Soon after launch the library is listed once for them, whether the start screen shows
+/// or a project opened first.
+pub(crate) fn start_posters(app: &AppHandle, holds: Arc<Holds>) -> Option<Posters> {
+    let root = app.state::<EngineState>().caches()?.thumbs();
+    let make: Arc<posters::Make> = Arc::new(|root: &Path, file: &str| {
+        klipolo_engine::media::poster::make_poster(root, &klipolo_platform::durable::Os, file)
+    });
+    let handle = app.clone();
+    let tell: Arc<posters::Tell> = Arc::new(move |poster: ProjectPoster| {
+        if handle
+            .asset_protocol_scope()
+            .allow_file(&poster.thumb.sprite)
+            .is_ok()
+        {
+            let _ = handle.emit(POSTER_EVENT, poster);
+        }
+    });
+    let handle = app.clone();
+    let listing = std::thread::Builder::new()
+        .name("klipolo-posters-at-launch".into())
+        .spawn(move || {
+            std::thread::sleep(POSTERS_AFTER_LAUNCH);
+            let (engine, state) = (
+                handle.state::<EngineState>(),
+                handle.state::<ProjectSessionState>(),
+            );
+            if let Ok(rows) = recent_rows(&handle, &engine, &state) {
+                want_posters(&handle, &engine, &rows);
+            }
+        });
+    if let Err(error) = listing {
+        tracing::warn!(%error, "the posters' listing at launch");
+    }
+    Some(Posters::new(root, holds, make, tell))
 }
 
 /// The open project's file, for Show in Finder: `project.none` with none open, `project.revealGone` when the file isn't
