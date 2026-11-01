@@ -156,7 +156,7 @@ fn photos_pictures_and_sound_still_open() {
 /// The one place allowed to open an input.
 const HELPER: &str = "crates/klipolo-engine/src/media/open.rs";
 /// How code opens an input with libavformat directly (`format::open` and `open_with` too, and the context's own
-/// own `wrap`). `format::input` covers `avformat::input(`.
+/// `wrap`). `format::input` covers `avformat::input(`.
 const DIRECT: [&str; 7] = [
     "format::input",
     "input_with_dictionary(",
