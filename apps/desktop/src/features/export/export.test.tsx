@@ -911,6 +911,8 @@ describe('unfinished exports', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
     expect(exporter.pause).toHaveBeenCalledWith('old');
     expect(await screen.findByText('Resume export of Billing tutorial: 3 of 10 parts done')).toBeInTheDocument();
+    // The keyboard stays in the row: on its Resume.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Resume' })).toHaveFocus());
   });
 
   it('a job paused by a hardware failure can finish in compatibility mode', async () => {
@@ -925,7 +927,10 @@ describe('unfinished exports', () => {
       ),
     ).toBeInTheDocument();
     const finish = within(row).getByRole('button', { name: 'Finish in compatibility mode' });
-    expect(finish).toHaveAccessibleDescription('Slower. Redoes 3 finished parts.');
+    // Described by its row, so it's clear which export it finishes, then by what it costs.
+    expect(finish).toHaveAccessibleDescription(
+      /^Resume export of Billing tutorial: 3 of 10 parts done .* Slower\. Redoes 3 finished parts\.$/,
+    );
     finish.focus();
     await userEvent.keyboard('{Enter}');
     expect(exporter.resume).toHaveBeenCalledWith('old', expect.any(Function), 'compatible');
@@ -990,8 +995,9 @@ describe('unfinished exports', () => {
       }),
     ]);
     await openWithJobs(1);
-    const row = rowOf('Resume export of an earlier project: 0 of 0 parts done');
-    expect(within(row).getByText('This export can’t be read, so it can only be discarded.')).toBeInTheDocument();
+    const row = rowOf('An export Klipolo can’t read');
+    expect(within(row).getByText('It can only be discarded.')).toBeInTheDocument();
+    expect(within(row).queryByText(/parts done/)).toBeNull();
     expect(within(row).queryByRole('button', { name: 'Resume' })).toBeNull();
     expect(within(row).getByRole('button', { name: 'Discard' })).toBeInTheDocument();
   });

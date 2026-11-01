@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { ExportJobInfo } from '../../bindings/ExportJobInfo';
 import { Button } from '../../design/Button';
 import { useIntlLocale } from '../../i18n/react';
@@ -18,13 +18,14 @@ export const STALE_RESUME = 'Resume finishes the version from when you started.'
 export const OTHER_BUILD = 'Another version of Klipolo made this export, so it can’t resume.';
 
 /**
- * "Resume export of Launch: 3 of 10 parts done", "Exporting Launch: …" while it runs, and "Unfinished export of Launch:
- * …" when another build made it.
+ * "Resume export of Launch: 3 of 10 parts done", "Exporting Launch: …" while it runs, "Unfinished export of Launch: …"
+ * when another build made it, and "An export Klipolo can’t read" when it can't be read.
  */
 export function jobText(job: ExportJobInfo): string {
   const parts = `${job.segmentsDone} of ${job.segmentsTotal} parts done`;
   const name = job.projectName || 'an earlier project';
   if (job.state === 'running') return `Exporting ${name}: ${parts}`;
+  if (!job.projectName) return 'An export Klipolo can’t read';
   if (job.otherBuild) return `Unfinished export of ${name}: ${parts}`;
   return `Resume export of ${name}: ${parts}`;
 }
@@ -45,18 +46,23 @@ interface UnfinishedJobRowProps {
 export function UnfinishedJobRow({ job, here, onLeave }: UnfinishedJobRowProps) {
   const id = useId();
   const locale = useIntlLocale();
+  const resumeButton = useRef<HTMLButtonElement>(null);
+  /** Its Pause took: once it shows paused, the keyboard goes to its Resume. */
+  const [paused, setPaused] = useState(false);
+  useEffect(() => {
+    if (paused && job.state !== 'running') {
+      setPaused(false);
+      resumeButton.current?.focus();
+    }
+  }, [paused, job.state]);
   const store = useExport.getState;
   const startingOver = useExport((s) => s.startingOver);
   // A yes or no, so an edit that leaves it as it was renders no row again.
   const restartable = useProject((s) => canStartOver(job, s.snapshot?.project.settings.formats ?? []));
   // An unreadable job has no project name (its reason is technical): it can only be discarded.
-  const unreadable = !job.projectName;
+  const unreadable = !job.projectName && job.state !== 'running';
   // Why it paused or failed, always; a changed project or another build is a line beside it, never instead of it.
-  const note = unreadable
-    ? 'This export can’t be read, so it can only be discarded.'
-    : job.message === null
-      ? null
-      : saidText(job.message);
+  const note = unreadable ? 'It can only be discarded.' : job.message === null ? null : saidText(job.message);
   const chosen = job.compatibility?.chosen ?? false;
   // Another build's job never resumes: Start over (this project's, with one of its formats still in it) or Discard.
   const resumable = !job.otherBuild;
@@ -75,16 +81,16 @@ export function UnfinishedJobRow({ job, here, onLeave }: UnfinishedJobRowProps) 
   );
   return (
     <li className="ex-job">
+      {/* Its lines, spaced, so a screen reader reads them as sentences, not run together. */}
       <span id={id} className="ex-job-text">
-        <span className="ex-job-name">{jobText(job)}</span>
-        {note && <span>{note}</span>}
-        {job.otherBuild && !unreadable && <span>{OTHER_BUILD}</span>}
+        <span className="ex-job-name">{jobText(job)}</span>{' '}
+        {note && <span>{note}</span>}{' '}
+        {job.otherBuild && !unreadable && <span>{OTHER_BUILD}</span>}{' '}
         {job.stale && !unreadable && resumable && (
           <>
-            <span>{STALE}</span>
-            <span>{STALE_RESUME}</span>
+            <span>{STALE}</span> <span>{STALE_RESUME}</span>
           </>
-        )}
+        )}{' '}
         {job.bytes > 0 && <span>{`Uses ${formatFileSize(locale, job.bytes)}`}</span>}
       </span>
       <span className="ex-job-actions">
@@ -95,7 +101,10 @@ export function UnfinishedJobRow({ job, here, onLeave }: UnfinishedJobRowProps) 
             onClick={() =>
               void store()
                 .pause(job.jobId)
-                .then((refused) => refused && toast.error(refused))
+                .then((refused) => {
+                  if (refused === null) setPaused(true);
+                  else toast.error(refused);
+                })
             }
           >
             Pause
@@ -106,6 +115,7 @@ export function UnfinishedJobRow({ job, here, onLeave }: UnfinishedJobRowProps) 
           <>
             {resumable && (
               <Button
+                ref={resumeButton}
                 size="sm"
                 variant="primary"
                 aria-describedby={id}
@@ -116,7 +126,7 @@ export function UnfinishedJobRow({ job, here, onLeave }: UnfinishedJobRowProps) 
               </Button>
             )}
             {resumable && job.compatibility && !chosen && (
-              <CompatibilityButton jobId={job.jobId} partsToRedo={job.compatibility.partsToRedo} />
+              <CompatibilityButton jobId={job.jobId} partsToRedo={job.compatibility.partsToRedo} describedBy={id} />
             )}
             {startOver && (
               <Button

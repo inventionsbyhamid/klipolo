@@ -11,13 +11,23 @@ export function redoText(parts: number): string {
  * "Finish in compatibility mode": offered when the hardware path kept failing. Slower, and it redoes the finished parts
  * the hardware encoder made (none: no second line).
  */
-export function CompatibilityButton({ jobId, partsToRedo }: { jobId: string; partsToRedo: number }) {
+export function CompatibilityButton({
+  jobId,
+  partsToRedo,
+  describedBy,
+}: {
+  jobId: string;
+  partsToRedo: number;
+  /** What it acts on, said first: its row's text, in a list of several. */
+  describedBy?: string;
+}) {
   const id = useId();
+  const described = [describedBy, partsToRedo > 0 ? id : undefined].filter(Boolean).join(' ');
   return (
     <span className="ex-compat">
       <Button
         size="sm"
-        aria-describedby={partsToRedo > 0 ? id : undefined}
+        aria-describedby={described || undefined}
         onClick={() => void useExport.getState().resume(jobId, 'compatible')}
       >
         Finish in compatibility mode
