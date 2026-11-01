@@ -2791,10 +2791,17 @@ mod follow {
 
     /// A chat on "talk.mov" (its file a real one, so its tracking is cached) that follows with the fake SAM.
     pub fn following(answers: Vec<Result<ModelResponse, ModelError>>) -> Following {
+        following_on(talk(), answers)
+    }
+
+    /// `following` on `project` (its first file, "talk.mov", made real).
+    pub fn following_on(
+        mut project: Project,
+        answers: Vec<Result<ModelResponse, ModelError>>,
+    ) -> Following {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("talk.mov");
         std::fs::write(&file, b"the talk").unwrap();
-        let mut project = talk();
         project.assets[0].path = file.to_string_lossy().into_owned();
         let model = Script::new(answers);
         let chat = chat_on(project, model.clone(), Found::done(), Paying::key(model));
@@ -2966,5 +2973,70 @@ mod follow {
         assert_eq!(r["notes"], serde_json::json!([NO_CROP]));
         assert_eq!(f.sam.calls.load(Ordering::SeqCst), 0);
         assert_eq!(f.chat.project.revision(), 0);
+    }
+
+    #[tokio::test]
+    async fn a_format_the_person_left_on_fit_is_not_followed() {
+        let mut project = talk();
+        project.settings.formats = vec![FormatKind::Landscape, FormatKind::Square];
+        let fit = klipolo_model::timeline::Framing {
+            mode: klipolo_model::timeline::FramingMode::Fit,
+            focus_x: 0.5,
+            focus_y: 0.5,
+            follow: None,
+        };
+        project.timeline.main[0]
+            .framing
+            .insert(FormatKind::Square, fit);
+        let f = following_on(
+            project,
+            vec![answer("Done.", vec![portrait(), follow_the_speaker()])],
+        );
+        let r = reply(
+            &f.chat
+                .session
+                .send(request("vertical, and follow me"))
+                .await
+                .unwrap(),
+        );
+        assert!(r["applied"].is_object(), "{r:#}");
+        let p = f.chat.project.project();
+        let clip = &p.timeline.main[0];
+        // The new vertical version follows; the square one stays on Fit, untouched.
+        assert!(speaker_x(&p, 10.0).is_some());
+        assert!(!clip.fill_focus.contains_key(&FormatKind::Square));
+        assert_eq!(clip.framing[&FormatKind::Square], fit);
+        assert_eq!(
+            r["notes"],
+            serde_json::json!([
+                "The vertical version keeps the speaker in frame now. Tracking cost $0.01."
+            ])
+        );
+    }
+
+    #[tokio::test]
+    async fn a_named_subject_is_sent_without_its_article_and_two_versions_keep_them_in_frame() {
+        let mut project = talk();
+        project.settings.formats = vec![FormatKind::Landscape, FormatKind::Square];
+        let woman = fc(
+            "s",
+            "followSubject",
+            r#"{"description": "the woman in red"}"#,
+        );
+        let f = following_on(project, vec![answer("Done.", vec![portrait(), woman])]);
+        let r = reply(
+            &f.chat
+                .session
+                .send(request("vertical, and follow her"))
+                .await
+                .unwrap(),
+        );
+        assert_eq!(*f.sam.phrases.lock().unwrap(), ["woman in red"]);
+        assert_eq!(
+            r["notes"],
+            serde_json::json!([
+                "The vertical and square versions keep the woman in red in frame now. Tracking cost $0.01."
+            ])
+        );
     }
 }

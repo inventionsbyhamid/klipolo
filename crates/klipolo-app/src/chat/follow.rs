@@ -27,6 +27,11 @@ pub const NO_CROP: &str =
     "Following works in a vertical or square version. Ask me to make one first.";
 /// Said when the footage that plays has no one in it to follow.
 pub const NO_ONE_THERE: &str = "I couldn't find anyone to follow in this video.";
+/// Said when vertical or square versions exist but no clip there can follow a person.
+pub const NO_FOOTAGE: &str =
+    "None of these clips can follow a person. A screen recording follows the cursor instead.";
+/// Said when a message names more than one thing to follow: the first is followed.
+pub const ONE_AT_A_TIME: &str = "I followed the first one you named. Ask again for another.";
 
 /// Words for the person talking: SAM finds them as a person (it would look for a loudspeaker for "speaker").
 const SPEAKER_WORDS: [&str; 12] = [
@@ -44,14 +49,18 @@ const SPEAKER_WORDS: [&str; 12] = [
     "whoever is talking",
 ];
 
-/// The phrase SAM looks for, for `description`.
+/// The phrase SAM looks for, for `description`: a person for the speaker, and a noun phrase without its article.
 pub fn phrase_for(description: &str) -> String {
     let plain = description.trim().to_lowercase();
     if plain.is_empty() || SPEAKER_WORDS.contains(&plain.as_str()) {
-        PERSON.to_owned()
-    } else {
-        plain
+        return PERSON.to_owned();
     }
+    let bare = ["the ", "a ", "an "]
+        .iter()
+        .find_map(|article| plain.strip_prefix(article))
+        .map(str::trim)
+        .filter(|rest| !rest.is_empty());
+    bare.map_or(plain.clone(), str::to_owned)
 }
 
 /// What the message's follows came to: sentences for the reply, and a line for the conversation's note.
@@ -80,9 +89,13 @@ pub(super) async fn follow_jobs(
         }
         _ => true,
     });
-    // The project once the additions are in, and once the proposal's cuts are too: what plays.
+    // The project once the additions are in, and once the proposal's cuts are too: what plays. Additions that don't
+    // apply won't land either: nothing is tracked or paid for then.
     let work = match &out.compiled.additions {
-        Some(tx) => apply_ops(&now.project, &tx.ops).unwrap_or_else(|_| (*now.project).clone()),
+        Some(tx) => match apply_ops(&now.project, &tx.ops) {
+            Ok(work) => work,
+            Err(_) => return Follows::default(),
+        },
         None => (*now.project).clone(),
     };
     let target =
@@ -96,8 +109,11 @@ pub(super) async fn follow_jobs(
             .estimate(&target, &clip_ids, &formats, &phrase)
             .await;
         if estimate.clips.is_empty() {
-            follows.said.push(NO_CROP.to_owned());
-            follows.note = format!("Nothing to follow {phrase} in: no clip is cropped.");
+            let cropped = formats.iter().any(|f| *f != FormatKind::Landscape);
+            follows
+                .said
+                .push((if cropped { NO_FOOTAGE } else { NO_CROP }).to_owned());
+            follows.note = format!("Nothing to follow {phrase} in: no clip can follow.");
             return follows;
         }
         match speaker.follow(&target, &clip_ids, &formats, &phrase).await {
@@ -107,23 +123,29 @@ pub(super) async fn follow_jobs(
             }
             Ok(followed) => {
                 let ops = followed.ops(&target);
+                let cost = if followed.paid_usd > 0.0 {
+                    format!("Tracking cost {}.", dollars(followed.paid_usd))
+                } else {
+                    "No charge: that footage was tracked before.".to_owned()
+                };
                 if ops.is_empty() {
-                    follows.said.push(NO_ONE_THERE.to_owned());
+                    follows.said.push(format!("{NO_ONE_THERE} {cost}"));
                     follows.note = format!("No {phrase} was found to follow.");
-                } else if attach(out, &work, ops, &phrase) {
-                    let cost = if followed.paid_usd > 0.0 {
-                        format!("Tracking cost {}.", dollars(followed.paid_usd))
-                    } else {
-                        "No charge: that footage was tracked before.".to_owned()
-                    };
+                } else if !attach(out, &work, ops, &phrase) {
+                    // Paid for all the same: the reply says so.
+                    follows.said.push(format!(
+                        "The follow couldn't be added to these changes. {cost}"
+                    ));
+                    follows.note = format!("Following {phrase} didn't fit the changes.");
+                } else {
                     let when = if out.compiled.proposal.is_some() {
                         "once you apply this"
                     } else {
                         "now"
                     };
+                    let (which, keep) = versions(&target, &formats);
                     follows.said.push(format!(
-                        "The {} keeps the {} in frame {when}. {cost}",
-                        versions(&target, &formats),
+                        "The {which} {keep} the {} in frame {when}. {cost}",
                         shown(&phrase)
                     ));
                     follows.note = format!(
@@ -132,6 +154,9 @@ pub(super) async fn follow_jobs(
                     );
                 }
             }
+        }
+        if asked.len() > 1 {
+            follows.said.push(ONE_AT_A_TIME.to_owned());
         }
         return follows;
     }
@@ -155,9 +180,9 @@ pub(super) async fn follow_jobs(
     {
         let ops = followed.ops(&target);
         if !ops.is_empty() && attach(out, &work, ops, PERSON) {
+            let (which, keep) = versions(&target, &made);
             follows.said.push(format!(
-                "The {} keeps the speaker in frame too, at no charge: that footage was tracked before.",
-                versions(&target, &made)
+                "The {which} {keep} the speaker in frame too, at no charge: that footage was tracked before."
             ));
             follows.note = "Followed the speaker, tracked before.".to_owned();
             return follows;
@@ -198,9 +223,16 @@ fn attach(out: &mut PlanOut, work: &Project, ops: Vec<Op>, phrase: &str) -> bool
     true
 }
 
-/// "vertical version", "vertical and square versions": the formats of `formats` that crop some clip of `p`.
-fn versions(p: &Project, formats: &[FormatKind]) -> String {
-    let cropped: Vec<&str> = (formats.iter())
+/// "vertical version" with "keeps", or "vertical and square versions" with "keep": the formats of `formats` some clip
+/// of `p` follows in, vertical first.
+fn versions(p: &Project, formats: &[FormatKind]) -> (String, &'static str) {
+    let order = [
+        FormatKind::Portrait,
+        FormatKind::Square,
+        FormatKind::Landscape,
+    ];
+    let followed: Vec<&str> = (order.iter())
+        .filter(|f| formats.contains(f))
         .filter(|f| (p.timeline.main.iter()).any(|c| !followable_formats(p, c, &[**f]).is_empty()))
         .map(|f| match f {
             FormatKind::Portrait => "vertical",
@@ -208,10 +240,13 @@ fn versions(p: &Project, formats: &[FormatKind]) -> String {
             FormatKind::Landscape => "16:9",
         })
         .collect();
-    match cropped.as_slice() {
-        [] => "video".to_owned(),
-        [one] => format!("{one} version"),
-        [first, rest @ ..] => format!("{first} and {} versions", rest.join(" and ")),
+    match followed.as_slice() {
+        [] => ("video".to_owned(), "keeps"),
+        [one] => (format!("{one} version"), "keeps"),
+        [first, rest @ ..] => (
+            format!("{first} and {} versions", rest.join(" and ")),
+            "keep",
+        ),
     }
 }
 
