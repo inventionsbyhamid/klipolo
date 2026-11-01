@@ -195,14 +195,15 @@ impl DecoderPool {
         self.sink = Some(sink);
     }
 
-    /// The main footage gets the pool's tuning; the camera half its cache, an overlay at most 32 MiB; a second lane
+    /// The main footage (and its blurred backdrop) gets the pool's tuning; the camera half its cache, an overlay at most 32 MiB; a second lane
     /// (primed for the next cut) half its role's. With an output box (preview), the main footage decodes at most
     /// 1920×1080 and the camera and overlays at most 1280×720: larger sources are scaled while decoding, so frames are
     /// smaller in the cache and on the GPU.
     pub fn tuning_for(&self, role: VideoRole, lane: u8) -> DecoderTuning {
         let main = self.tuning.max_cache_bytes;
         let (max_cache_bytes, max_output) = match role {
-            VideoRole::Main => (main, MAIN_BOX),
+            // The backdrop shows the main footage's own frame: listed first, its request decodes it for both.
+            VideoRole::Main | VideoRole::Backdrop => (main, MAIN_BOX),
             VideoRole::Camera => (main / 2, SMALL_BOX),
             VideoRole::Overlay => (main.min(OVERLAY_CACHE_BYTES), SMALL_BOX),
         };

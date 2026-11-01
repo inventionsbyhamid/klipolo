@@ -34,7 +34,8 @@ interface GizmoProps {
 
 /**
  * One pickable layer over the engine's pixels: pressing selects it (pausing playback) and dragging moves
- * it in the same gesture. Selected, it shows a paper outline and eight handles to resize it, and its keys: arrows
+ * it in the same gesture. Selected, it shows a paper outline, eight handles to resize it and (text, images and videos)
+ * a knob to turn it, and its keys: arrows
  * nudge, Enter types a title's words on the canvas (as a double-click does), Space plays, Escape lets go. A title
  * template's words are typed in the inspector instead (its place is the frame). Layers on locked tracks select but
  * don't move, and their titles aren't typed.
@@ -159,7 +160,7 @@ export function Gizmo({
         handlers.onPointerDown(e);
       }}
     >
-      {selected && !playing && !fixed && <GizmoHandles compact={compact} />}
+      {selected && !playing && !fixed && <GizmoHandles compact={compact} rotatable={target.rotatable} />}
     </button>
   );
 }

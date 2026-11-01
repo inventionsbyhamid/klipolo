@@ -8,13 +8,14 @@ import { Inspector, useInspected } from '../features/inspector/Inspector';
 import { useInspectedTransition } from '../features/inspector/TransitionInspector';
 import { useImportMedia } from '../features/media/useImportMedia';
 import { AddTitleMenu } from '../features/preview/AddTitleMenu';
+import { SafeAreaMenu } from '../features/preview/SafeAreaMenu';
 import { Stage } from '../features/preview/Stage';
 import { Icon } from '../layout/Icon';
 import { useDockHold } from '../state/dockHold';
 import { useEngine } from '../state/engine';
 import { useFullScreen } from '../state/fullScreen';
 import { useProject } from '../state/project';
-import { useUi } from '../state/ui';
+import { useSelection } from '../state/selection';
 
 /** The format the preview shows (it lives with the format switch). */
 export { useShownFormat };
@@ -47,8 +48,8 @@ function DropZone({ over }: { over: boolean }) {
 }
 
 /**
- * Whether the card docks: `wanted`, except while a timeline press or drag, or a keyboard walk along the lanes, holds
- * the dock (`state/dockHold`); then what it was before, so the frame never changes size under the pointer or at every
+ * Whether the card shows: `wanted`, except while a timeline press or drag, or a keyboard walk along the lanes, holds
+ * the dock (`state/dockHold`); then what it was before, so the card doesn't come and go under the pointer or at every
  * bare cut. It follows `wanted` again once the hold ends.
  */
 function useSteadyDock(wanted: boolean): boolean {
@@ -62,9 +63,10 @@ function useSteadyDock(wanted: boolean): boolean {
  * The preview panel: the format pills, Add title, the safe area menu (9:16 only), Full screen (F; it
  * fills the screen with this panel, and Escape or the same button leaves), and the engine's frames fitted to the panel
  * in the chosen format with the layers there selectable and editable (`Stage`), under the analysis banner; the inspector
- * docks at the right under the banner while a main clip, a transition or a layer it has fields for is selected, and the
- * frame moves left for it (never mid-press or mid-walk on the timeline: `useSteadyDock`; never in full screen). With no
- * clip yet, the drop zone.
+ * shows at the right under the banner while a main clip, a transition or a layer it has fields for is selected (never
+ * mid-press or mid-walk on the timeline: `useSteadyDock`; never in full screen). Selecting never resizes or moves the
+ * frame: the card goes in a slot of its own beside it, or over its right side when a slot would cost the frame too much
+ * of its size (`stageLayout`). An empty slot says what goes there. With no clip yet, the drop zone.
  * `filesOver`: files from Finder are held over the window.
  */
 export function Preview({ filesOver = false }: { filesOver?: boolean }) {
@@ -73,15 +75,13 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
   const message = useEngine((s) => s.message);
   const hasVideo = useProject((s) => (s.snapshot?.project.timeline.main.length ?? 0) > 0);
   const format = useShownFormat();
-  const portrait = format === 'portrait';
-  const safeArea = useUi((s) => s.safeArea);
-  const setSafeArea = useUi((s) => s.setSafeArea);
   const inspected = useInspected();
   const transition = useInspectedTransition();
   const native = useEngine((s) => s.presenter === 'native' && !!s.info);
   const full = useFullScreen((s) => s.on);
   // Full screen is for watching: the card stays out of the way until it ends.
   const docked = useSteadyDock(inspected !== null || transition !== null) && hasVideo && !full;
+  const nothingSelected = useSelection((s) => s.selectedId === null);
   return (
     <main className={native && hasVideo ? 'panel stage has-hole' : 'panel stage'} aria-label="Preview">
       <div className="stage-head">
@@ -90,21 +90,7 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
         {status !== 'unavailable' && message && <span className="stage-status">{message}</span>}
         <RoughCaptionsNote />
         <AddTitleMenu disabled={!hasVideo} />
-        {/* The guide is drawn in 9:16 only: elsewhere the switch is off (focusable, so its tooltip says why). */}
-        <button
-          className="icon-btn"
-          aria-label={t({ id: 'preview.safeArea', message: 'Show safe area' })}
-          title={
-            portrait
-              ? t({ id: 'preview.safeArea.tip', message: 'Safe area: where the apps leave a 9:16 video clear' })
-              : t({ id: 'preview.safeArea.off', message: 'Shows in 9:16' })
-          }
-          aria-pressed={portrait && safeArea !== 'off'}
-          aria-disabled={!portrait || undefined}
-          onClick={() => portrait && setSafeArea(safeArea === 'off' ? 'all' : 'off')}
-        >
-          <Icon name="safe" />
-        </button>
+        <SafeAreaMenu />
         {/* Off until there is a video to watch (focusable, so its tooltip says why). */}
         <button
           className="icon-btn"
@@ -130,10 +116,18 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
       </div>
       <div className={docked ? 'stage-body has-inspector' : 'stage-body'}>
         {hasVideo && <AnalysisBanner />}
-        {/* Under the banner: the frame, and the inspector docked at its right. */}
+        {/* Under the banner: the frame, and the inspector at its right (in the slot, or over the frame). */}
         <div className="stage-main">
           {hasVideo ? <Stage /> : <DropZone over={filesOver} />}
           {docked && <Inspector format={format} />}
+          {/* The empty slot's outline, drawn in the slot only (app.css): over the frame it would cover the video. It
+              says what goes there while nothing is selected; a selection waiting for its card leaves it blank. */}
+          {hasVideo && !docked && !full && (
+            <p className="stage-hint" aria-hidden={!nothingSelected || undefined}>
+              {nothingSelected &&
+                t({ id: 'preview.hint.select', message: 'Select something on the video to change it.' })}
+            </p>
+          )}
         </div>
       </div>
     </main>

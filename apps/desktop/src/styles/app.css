@@ -277,8 +277,9 @@
   color: var(--color-ink-disabled);
 }
 
-/* A toggle that is on: a 4 px paper dot under its icon. */
-.icon-btn[aria-pressed="true"]::after {
+/* A toggle that is on, or a menu whose choice is on: a 4 px paper dot under its icon. */
+.icon-btn[aria-pressed="true"]::after,
+.icon-btn[data-on]::after {
   content: "";
   position: absolute;
   bottom: 2px;
@@ -666,6 +667,13 @@
   gap: var(--space-4);
   min-height: 56px;
   padding: var(--space-5) var(--space-5) var(--space-3) var(--space-6);
+  pointer-events: none;
+}
+
+/* Only its controls take presses: between them, a press reaches the top handles and rotate knob of a layer at the
+   canvas's top, which reach up under the header. */
+.stage-head > :not(.spacer) {
+  pointer-events: auto;
 }
 
 .spacer {
@@ -2547,6 +2555,28 @@
   inset: 0;
 }
 
+/* The rotate knob: a round handle on a paper stem above the top edge's handle. It turns with the layer. */
+.gizmo-stem {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: calc(50% - 0.75px);
+  width: 1.5px;
+  height: 14px;
+  background: var(--color-paper);
+  pointer-events: none;
+}
+
+.gizmo-handle.is-rotate {
+  bottom: calc(100% + 24px);
+  left: calc(50% - 5px);
+  border-radius: 50%;
+  cursor: grab;
+}
+
+.gizmo-handle.is-rotate::after {
+  border-radius: 50%;
+}
+
 /* The line a moving layer snapped to: dashed paper, across the canvas. */
 .snap-guide {
   position: absolute;
@@ -2626,7 +2656,8 @@
 
 /* ---------- Inspector ---------- */
 
-/* What sits under the analysis banner: the frame, and the inspector docked at its right. */
+/* What sits under the analysis banner: the frame, and the inspector at its right. Selecting never resizes or moves the
+   frame: the card goes in the slot the stage keeps clear beside it (`data-card="slot"`), or floats over it ("over"). */
 .stage-main {
   position: relative;
   flex: 1;
@@ -2635,8 +2666,46 @@
   flex-direction: column;
 }
 
-.stage-body.has-inspector .screen {
-  margin-right: calc(var(--inspector-w) + var(--space-6));
+/* Over the frame: only as tall as its fields, up to 60 % of the stage (they scroll inside), lifted off the video, in
+   the stage's corner that covers the selected layer least (`data-anchor`: the top right unless it says otherwise). */
+.screen[data-card="over"] ~ .inspector {
+  bottom: auto;
+  max-height: 60%;
+  box-shadow: var(--shadow-2);
+}
+
+.screen[data-card="over"][data-anchor^="bottom"] ~ .inspector {
+  top: auto;
+  bottom: 0;
+}
+
+.screen[data-card="over"][data-anchor$="left"] ~ .inspector {
+  right: auto;
+  left: 0;
+}
+
+/* The empty slot says what goes there. Never over the frame. */
+.stage-hint {
+  display: none;
+}
+
+.screen[data-card="slot"] ~ .stage-hint {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--inspector-w);
+  display: grid;
+  place-content: center;
+  margin: 0;
+  padding: var(--space-8);
+  border: 1px dashed var(--color-line);
+  border-radius: var(--radius-md);
+  color: var(--color-ink-faint);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  text-align: center;
+  pointer-events: none;
 }
 
 .inspector {
@@ -2744,6 +2813,15 @@
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-3);
   }
+}
+
+/* The Crop row opens its edges' sliders: its chevron turns while they show. */
+.crop-toggle .ico {
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.crop-toggle[aria-expanded="true"] .ico {
+  transform: rotate(180deg);
 }
 
 /* An effect's or generator's setting: its control, and Reset beside it once it differs from its default. */

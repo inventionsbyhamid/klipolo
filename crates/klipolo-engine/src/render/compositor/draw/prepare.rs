@@ -5,7 +5,7 @@ use std::path::Path;
 
 use super::super::frame::FrameCtx;
 use super::super::{Compositor, Draw, staged};
-use crate::plan::{Layer, VideoRole};
+use crate::plan::Layer;
 use crate::render::captions::CaptionDrawer;
 use crate::render::image_load::ImageError;
 use crate::render::pool::DecodedSet;
@@ -30,13 +30,13 @@ impl Compositor {
         let dev = self.dev.clone();
         let (device, queue) = (&dev.device, &dev.queue);
         match layer {
-            Layer::Video(v) if v.role == VideoRole::Main && !v.effects.is_empty() => {
+            Layer::Video(v) if v.drawn_alone() => {
                 let decoded = frames.get(f.video);
                 f.video += 1;
                 let Some((frame, rotation)) = decoded else {
                     return;
                 };
-                self.main_with_effects(f, draws, v, frame, *rotation).await;
+                self.video_alone(f, draws, v, frame, *rotation).await;
             }
             Layer::Video(v) => {
                 let decoded = frames.get(f.video);

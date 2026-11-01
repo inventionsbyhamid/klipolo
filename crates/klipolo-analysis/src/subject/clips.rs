@@ -142,7 +142,7 @@ pub fn speaker_path(
     tracks: &[SubjectTrack],
     speech: &Speech,
 ) -> Option<FocusPath> {
-    let crop = fill_crop(p, clip, format)?;
+    let crop = path_crop(p, clip, format)?;
     let shift = footage.shift_us;
     let (frames, cuts) = file_frames(footage, tracks);
     let frames: Vec<(Us, &TrackedFrame)> =
@@ -154,7 +154,7 @@ pub fn speaker_path(
         start_us: footage.range.start + shift,
         end_us: footage.range.end + shift,
         cuts: &cuts,
-        crop: (crop.w, crop.h),
+        crop,
         talk: &talk,
         keep: speech.keep,
     };
@@ -190,6 +190,14 @@ fn file_frames<'t>(
     (frames, cuts)
 }
 
+/// The share of the whole file's picture `clip`'s Fill crop shows in `format` (across, down): Fill's crop is in what
+/// the clip's own crop leaves, the path in the whole file. None when Fill crops nothing there.
+fn path_crop(p: &Project, clip: &Clip, format: FormatKind) -> Option<(f64, f64)> {
+    let kept = clip.crop.unwrap_or_default().kept();
+    let crop = fill_crop(p, clip, format)?;
+    Some((crop.w * kept.w, crop.h * kept.h))
+}
+
 /// The windows `clip`'s voices are matched in (`voices::windows`), in the footage it plays, for the narrowest crop of
 /// `formats` it may follow in. None where it follows in none.
 pub fn voice_windows(
@@ -201,8 +209,8 @@ pub fn voice_windows(
     turns: &[VoiceTurn],
 ) -> Vec<Window> {
     let narrowest = (followable_formats(p, clip, formats).into_iter())
-        .filter_map(|f| fill_crop(p, clip, f))
-        .map(|c| c.w)
+        .filter_map(|f| path_crop(p, clip, f))
+        .map(|c| c.0)
         .min_by(f64::total_cmp);
     let Some(crop_w) = narrowest else {
         return Vec::new();

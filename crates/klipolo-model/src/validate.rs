@@ -520,6 +520,10 @@ fn validate_clip(p: &Project, c: &Clip) -> Result<()> {
         c.fill_focus.values().all(FillFocus::is_valid),
         code!("model.clip.fillFocus"),
     )?;
+    check(
+        c.crop.is_none_or(|crop| crop.is_valid()),
+        code!("model.clip.crop"),
+    )?;
     validate_look(p, &c.look)?;
     validate_effects(p, &c.effects)?;
     crate::cursor_style::check_clip(c)?;
@@ -686,6 +690,7 @@ fn validate_content(p: &Project, content: &ItemContent, duration: Us) -> Result<
             source_in_us,
             speed,
             volume,
+            crop,
             ..
         } => {
             let asset = p
@@ -694,6 +699,7 @@ fn validate_content(p: &Project, content: &ItemContent, duration: Us) -> Result<
                 .ok_or_else(|| invalid(code!("model.layer.videoMissing")))?;
             check(in_range(*speed, 0.25, 4.0), code!("model.layer.speed"))?;
             check(in_range(*volume, 0.0, 2.0), code!("model.layer.volume"))?;
+            check(crop.is_none_or(|c| c.is_valid()), code!("model.layer.crop"))?;
             check(
                 valid_time(*source_in_us)
                     && source_in_us.saturating_add(unscaled(duration, *speed))

@@ -639,6 +639,17 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
         ToolCall::SetCaptions { on, style } => {
             json!({"on": on, "style": style.map(|st| st.key())})
         }
+        ToolCall::SetBackground {
+            kind,
+            color,
+            color_end,
+            padding,
+        } => json!({
+            "kind": kind.map(|k| k.key()),
+            "color": color,
+            "colorEnd": color_end,
+            "padding": padding.map(|share| share * 100.0),
+        }),
         ToolCall::FixCaptionWords { find, replace } => json!({"find": find, "replace": replace}),
         ToolCall::FindMoments { query, moments } => json!({
             "query": query,

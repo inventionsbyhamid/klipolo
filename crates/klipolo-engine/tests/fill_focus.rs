@@ -4,6 +4,7 @@
 mod support;
 
 use klipolo_engine::plan::{VideoRole, frame_plan};
+use klipolo_model::crop::Crop;
 use klipolo_model::fill_focus::{FillFocus, FocusKey, FocusPath};
 use klipolo_model::layout::BoxN;
 use klipolo_model::project::FormatKind::{self, Landscape, Portrait, Square};
@@ -132,4 +133,29 @@ fn a_mirrored_camera_only_clip_follows_the_speaker_where_the_file_has_them() {
     assert_eq!(v.source.asset_id.as_ref(), "camera");
     assert!(v.mirror);
     close(v.crop, portrait_at(0.25));
+}
+
+#[test]
+fn a_cropped_clip_keeps_its_focus_inside_what_the_crop_leaves() {
+    // The left fifth cut off: the same height, so Fill shows the same share of the file's width.
+    let left = Crop {
+        left: 0.2,
+        top: 0.0,
+        right: 0.0,
+        bottom: 0.0,
+    };
+    let in_kept = |x: f64| {
+        let w = PORTRAIT_W;
+        bx((x - w / 2.0).clamp(0.2, 1.0 - w), 0.0, w, 1.0)
+    };
+    // Centre is the middle of what is left, not of the file.
+    let mut p = with_focus(Portrait, FillFocus::Center);
+    p.timeline.main[1].crop = Some(left);
+    close(drawn(&p, 22.0, Portrait), in_kept(0.6));
+    // The speaker's path is in the whole file; the crop never shows what the clip's crop cut off.
+    let mut p = with_focus(Portrait, speaker());
+    p.timeline.main[1].crop = Some(left);
+    close(drawn(&p, 20.0, Portrait), in_kept(0.3));
+    close(drawn(&p, 25.0, Portrait), in_kept(0.7));
+    assert!(drawn(&p, 28.0, Portrait).x >= 0.2 - 1e-9);
 }

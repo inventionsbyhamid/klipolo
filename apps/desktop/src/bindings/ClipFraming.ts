@@ -20,7 +20,8 @@ follows: boolean,
  */
 speaker: boolean, 
 /**
- * Every format's Fill crop from the centre (source-normalised): narrower than the footage where Fill crops
- * across, shorter where it crops down, all of it where nothing is cropped; empty for a clip with no video.
+ * Every format's Fill crop from the centre, normalised to what the clip's crop leaves of its footage: narrower
+ * than that where Fill crops across, shorter where it crops down, all of it where nothing is cropped; empty for a
+ * clip with no video.
  */
 fillCrop: { [key in FormatKind]?: BoxN }, };

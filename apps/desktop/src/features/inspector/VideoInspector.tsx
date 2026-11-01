@@ -9,6 +9,7 @@ import { hasOwnSound, sourceLabel } from '../../lib/timeline';
 import { contentNow, contentOps, editContent } from '../../state/latest';
 import { useProject } from '../../state/project';
 import { PositionField, TimingField } from './common';
+import { CropField, isNoCrop } from './CropField';
 import { EffectsButton } from './EffectsButton';
 import { Field } from './fields';
 import { setClipSpeed } from './clipSpeed';
@@ -20,11 +21,13 @@ import { VolumeControls } from './VolumeControls';
 export type VideoContent = Extract<ItemContent, { type: 'video' }>;
 
 /**
- * A video layer's fields (a picture in picture): Size, Opacity and Corner radius (`PictureFields`), Effects, its
- * sound (Volume and Mute, when its file has sound), Speed (its length follows), Mirror, Position and Timing. A separated camera keeps
- * its clip's speed, so the lips stay in sync with the mic: its Speed changes the clip's as the clip card's does, saying
- * what that does to the clip's transitions. Each change is built at its turn from the layer as the project has it then
- * (`contentOps`), setting only its own field: Speed keeps a volume change still on its way.
+ * A video layer's fields (a picture in picture): Size, Opacity and Corner radius (`PictureFields`), Framing (Fit shows
+ * the whole picture in its box, Fill covers the box from the centre, cutting the edges) and Crop (`CropField`),
+ * Effects, its sound (Volume and Mute, when its file has sound), Speed (its length follows), Mirror, Position and
+ * Timing. A separated camera keeps its clip's speed, so the lips stay in sync with the mic: its Speed changes the
+ * clip's as the clip card's does, saying what that does to the clip's transitions. Each change is built at its turn
+ * from the layer as the project has it then (`contentOps`), setting only its own field: Speed keeps a volume change
+ * still on its way.
  */
 export function VideoInspector({
   item,
@@ -50,9 +53,39 @@ export function VideoInspector({
       ? setClipSpeed(cameraClip, value, cameraTitle, `${formatNumber(locale, value)}×`)
       : editContent('speed.undo', item, content, { speed: value }));
   const mirror = t({ id: 'camera.mirror', message: 'Mirror' });
+  const framing = t({ id: 'clip.framing', message: 'Framing' });
   return (
     <>
       <PictureFields item={item} format={format} primary={primary} />
+      <Field label={framing}>
+        <Segmented
+          label={framing}
+          value={content.fill ? 'fill' : 'fit'}
+          options={[
+            {
+              value: 'fit',
+              label: t({ id: 'clip.framing.fit', message: 'Fit', comment: 'Show the whole video inside the frame' }),
+              tooltip: t({ id: 'layer.framing.fit.tip', message: 'Show the whole video in its box' }),
+            },
+            {
+              value: 'fill',
+              label: t({ id: 'clip.framing.fill', message: 'Fill', comment: 'Fill the frame with the video' }),
+              tooltip: t({ id: 'layer.framing.fill.tip', message: 'Fill its box, cropping the edges' }),
+            },
+          ]}
+          fill
+          onChange={(mode) =>
+            void editContent(mode === 'fit' ? 'clip.framing.fit.undo' : 'clip.framing.fill.undo', item, content, {
+              fill: mode === 'fill',
+            })
+          }
+        />
+      </Field>
+      <CropField
+        crop={content.crop}
+        latest={() => contentNow(item.id, content).crop}
+        ops={(crop) => contentOps(item, content, { crop: isNoCrop(crop) ? undefined : crop })}
+      />
       <EffectsButton target={{ type: 'item', id: item.id }} effects={item.effects} />
       {hasAudio && (
         <VolumeControls
