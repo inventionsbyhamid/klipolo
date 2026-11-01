@@ -962,7 +962,7 @@ fn separate_the_sound_puts_it_on_a_track_of_its_own() {
             Audience::Person
         )
     );
-    // Its mix there is its layers' now: a mute everywhere leaves them, and says so.
+    // Its mix there is its layers' now: a mute in c1 leaves them, and says so.
     let out = compiled(&done, &[mute(json!(["c1"]), false)]);
     assert_eq!(
         out.refusals[0].reason,

@@ -3,8 +3,8 @@
 //! play there.
 //! - The camera: how the main format shows it (`camera bubble bottomRight circle`: for a bubble, its place and shape),
 //!   then each other format of the video that shows it another way (`landscape splitBottom`), its border (`border on`)
-//!   while a format shows the bubble, and its mirror (`mirrored`, `not mirrored`) while one shows the camera; `camera on
-//!   its own layer` once it is separated, and `camera only, mirrored` when it is the clip's footage.
+//!   while a format shows the bubble, and its mirror (`mirrored`, `not mirrored`) while one shows the camera; `camera
+//!   on its own layer` once it is separated, and `camera only, mirrored` when it is the clip's footage.
 //! - The sounds the tools name, in the recording's order, a second one of a kind numbered (`mic 2`, as `which` takes
 //!   it): each `at 50%` when it isn't as recorded and `muted` when it is, both as the clip plays it (its own mix, else
 //!   the source's), or `on its own track` once separated there.

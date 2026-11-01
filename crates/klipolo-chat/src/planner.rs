@@ -17,13 +17,13 @@
 //! call, and no question or `cannotDo` instead).
 //!
 //! The reply is the model's text, then what the edits left as they were (`Compiled::notes`), then the sentences of
-//! refusals meant for the person, then what couldn't be done; all of it without em or en dashes (`sanitize::reply`). When a call was refused for the person beside others that went
-//! through, the model's text, written before that refusal, may claim it: it is left out, and what went through is said
-//! plainly instead ("The music is in."). When nothing came of the answer and a call of it was refused after
-//! the model wrote its text (still refused back, or refused for the person, `cannotDo` aside), that text, which may
-//! claim the edit, is left out. With none of these, the reply is `askUser`'s questions, else a short sentence on what
-//! was done (or, for only work handed to a runner, that it is under way); otherwise the questions are only in
-//! `Compiled::questions`.
+//! refusals meant for the person, then what couldn't be done; all of it without em or en dashes (`sanitize::reply`).
+//! When a call was refused for the person beside others that went through, the model's text, written before that
+//! refusal, may claim it: it is left out, and what went through is said plainly instead ("The music is in."). When
+//! nothing came of the answer and a call of it was refused after the model wrote its text (still refused back, or
+//! refused for the person, `cannotDo` aside), that text, which may claim the edit, is left out. With none of these, the
+//! reply is `askUser`'s questions, else a short sentence on what was done (or, for only work handed to a runner, that
+//! it is under way); otherwise the questions are only in `Compiled::questions`.
 //!
 //! Errors leave the project untouched: nothing is compiled, and each is one plain sentence (`ChatError`). A project
 //! whose context is over budget (`ChatContext::fits`) is refused before any model call.

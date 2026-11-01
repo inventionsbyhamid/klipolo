@@ -5,11 +5,11 @@
 //! the `Refs` the context was built with and then to its pieces in the working copy (`Map::pieces_of`), so a split
 //! earlier in the answer still leaves the clip named; none named is every clip.
 //!
-//! Each is an addition, applied at once in the answer's one undo step. What a call left as it was (a camera that is
-//! its own layer already, a sound playing from its own track) is a note for the person (`Noted::notes`), said after the
+//! Each is an addition, applied at once in the answer's one undo step. What a call left as it was (a camera that is its
+//! own layer already, a sound playing from its own track) is a note for the person (`Noted::notes`), said after the
 //! reply; a call that changes nothing but has a note is refused for the person with it, since nothing was done.
-//! Refusals the model can mend (a ref that names no clip, a bubble change that names nothing) go back to it; facts about
-//! the project (no camera, no such sound, a format the video doesn't have) are said to the person.
+//! Refusals the model can mend (a ref that names no clip, a bubble change that names nothing) go back to it; facts
+//! about the project (no camera, no such sound, a format the video doesn't have) are said to the person.
 //!
 //! Undo labels: `chat.setCameraMode {mode}`, `chat.adjustCamera`, `chat.detachCamera`, `chat.muteSource {source,
 //! mute}`, `chat.setSourceVolume {source, percent}` and `chat.separateSound {source}`, `source` the tool's word.

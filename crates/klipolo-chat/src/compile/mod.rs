@@ -3,10 +3,9 @@
 //! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, a trim that makes a clip longer, the media:
 //!   `addMusic`, `addSound`, `addText`, `addImage` and `makeTitleCard`'s title, and a recording's camera and sounds:
 //!   `setCameraMode`, `adjustCamera`, `detachCamera`, `muteSource`, `setSourceVolume`, `separateSound`) are one
-//!   `Transaction` the app
-//!   applies at once: one undo step. An addition is judged by what its part does, not by its tool: one that takes
-//!   something away (the model's own `removals`, as a format dropped with what was placed in it) is compiled again with
-//!   the removals and proposed.
+//!   `Transaction` the app applies at once: one undo step. An addition is judged by what its part does, not by its
+//!   tool: one that takes something away (the model's own `removals`, as a format dropped with what was placed in it)
+//!   is compiled again with the removals and proposed.
 //! - Removals (`cutRange`, `keepOnly`, `removeSilences`, `removeFillers`, a trim that makes a clip shorter) are one
 //!   `Proposal`: a `Transaction` for the project as the additions leave it, judged by the model's own review (what it
 //!   takes away, on the timeline), applied as one undo step when the person says so.
