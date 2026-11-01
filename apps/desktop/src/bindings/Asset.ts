@@ -19,7 +19,7 @@ rotation?: number, hasAudio: boolean,
  * reader takes: playback, transcripts, waveforms, and Sync with its hand marks.
  *
  * None means never probed: a video imported before the lead was read, filled from the probe when its project
- * files and images stay None (no lead). Left out of the JSON while None.
+ * opens; sound files and images stay None (no lead). Left out of the JSON while None.
  */
 audioLeadUs?: number, 
 /**
