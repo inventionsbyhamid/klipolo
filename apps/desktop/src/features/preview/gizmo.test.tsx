@@ -5,6 +5,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CameraLayout } from '../../bindings/CameraLayout';
 import type { Layout } from '../../bindings/Layout';
 import type { Op } from '../../bindings/Op';
+import { resolveRect } from '../../lib/layout';
 import { fixtureSnapshot, titleItem } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
 
@@ -304,5 +305,58 @@ describe('the camera bubble on the canvas', () => {
     useProject.setState({ snapshot: alone });
     renderWithProviders(<Stage />);
     expect(screen.queryByRole('button', { name: /Camera/ })).toBeNull();
+  });
+
+  it('as a bubble in 9:16 a drag writes the 9:16 place only, leaving the layouts as they are', async () => {
+    const snapshot = fixtureSnapshot();
+    snapshot.project.settings.formats = ['landscape', 'portrait'];
+    snapshot.project.timeline.main[0].camera!.modeOverrides = { portrait: 'bubble' };
+    useProject.setState({ snapshot });
+    useUi.setState({ previewFormat: 'portrait' });
+    useSelection.setState({ selectedId: 'camera:a' });
+    renderWithProviders(<Stage />);
+    const bubble = screen.getByRole('button', { name: /^Camera/ });
+    // Placed from 16:9: a 384 px square on 1080 × 1920.
+    const start = resolveRect(camera().bubble, 'landscape', 'portrait');
+    fireEvent.pointerDown(bubble, { button: 0, clientX: 200, clientY: 300, pointerId: 1 });
+    fireEvent.pointerMove(bubble, { clientX: 150, clientY: 300, pointerId: 1, metaKey: true });
+    fireEvent.pointerUp(bubble, { pointerId: 1 });
+    const { label, camera: moved } = sent();
+    expect(label).toBe('gizmo.move.undo');
+    expect(moved.bubble.rect).toEqual(camera().bubble.rect);
+    expect(Object.keys(moved.bubble.overrides)).toEqual(['portrait']);
+    const placed = moved.bubble.overrides.portrait!;
+    expect(placed.x).toBeLessThan(start.x - 0.1);
+    expect([placed.y, placed.w, placed.h].map((v) => +v.toFixed(6))).toEqual(
+      [start.y, start.w, start.h].map((v) => +v.toFixed(6)),
+    );
+    expect([moved.mode, moved.modeOverrides]).toEqual(['bubble', { portrait: 'bubble' }]);
+    await act(() => Promise.resolve());
+  });
+
+  it('a run of arrow keys is one Nudge camera step, in the format shown only', async () => {
+    vi.useFakeTimers();
+    const snapshot = fixtureSnapshot();
+    snapshot.project.settings.formats = ['landscape', 'square'];
+    useProject.setState({ snapshot });
+    useUi.setState({ previewFormat: 'square' });
+    useSelection.setState({ selectedId: 'camera:a' });
+    renderWithProviders(<Stage />);
+    const bubble = screen.getByRole('button', { name: /^Camera/ });
+    act(() => bubble.focus());
+    for (let i = 0; i < 3; i++) fireEvent.keyDown(bubble, { key: 'ArrowRight' });
+    expect(apply).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(400));
+    const { label, params, camera: nudged } = sent();
+    expect([label, params]).toEqual(['gizmo.nudge.undo', { layer: 'camera' }]);
+    expect(nudged.bubble.rect).toEqual(camera().bubble.rect);
+    expect(Object.keys(nudged.bubble.overrides)).toEqual(['square']);
+    // Three 1 px steps of 1080.
+    const start = resolveRect(camera().bubble, 'landscape', 'square');
+    expect(nudged.bubble.overrides.square!.x).toBeCloseTo(start.x + 3 / 1080, 9);
+    expect(nudged.bubble.overrides.square!.y).toBeCloseTo(start.y, 9);
+    expect([nudged.mode, nudged.modeOverrides]).toEqual([camera().mode, camera().modeOverrides]);
+    vi.useRealTimers();
+    await act(() => Promise.resolve());
   });
 });
