@@ -140,8 +140,9 @@ fn any_finished(speech: &Speech, project: &Project) -> bool {
 }
 
 /// The batch an export of `project` runs: its files planned in `dir`, the captions frozen from `speech` (its finished
-/// transcripts only) and in `text_language`, decoded sound read from (and kept in) `pcm_dir`. The job keeps its own
-/// frozen copy of the project: edits made while it runs aren't in it.
+/// transcripts only) and in `text_language`, decoded sound read from (and kept in) `pcm_dir`, and the caption file asked
+/// for (saved beside each landscape video, from the same words). The job keeps its own frozen copy of the project: edits
+/// made while it runs aren't in it.
 pub fn freeze(
     project: Arc<Project>,
     speech: &Speech,
@@ -161,8 +162,8 @@ pub fn freeze(
         pcm_dir,
         // What it draws besides the built-ins: none in Klipolo yet.
         contribs: JobContribs::default(),
-        // No caption file beside the videos: the captions are burned in.
-        caption_file: None,
+        // SRT or WebVTT beside each landscape video, when the person asked for one.
+        caption_file: req.caption_file,
         allow_stand_ins: req.allow_stand_ins,
         // No recordings yet: no screens' activity, no cursors.
         activity_dir: None,
@@ -222,6 +223,7 @@ pub fn folder_error(e: &io::Error, dir: &Path) -> Said {
 #[cfg(test)]
 mod tests {
     use klipolo_engine::api::ExportQuality;
+    use klipolo_model::captions::sidecar::CaptionFile;
     use klipolo_model::project::FormatKind;
 
     use super::*;
@@ -351,6 +353,28 @@ mod tests {
         // No caption file unless asked, and never a stand-in font unless asked.
         assert!(batch.caption_file.is_none());
         assert!(!batch.allow_stand_ins);
+    }
+
+    #[test]
+    fn the_batch_carries_the_caption_file_asked_for() {
+        let (project, speech) =
+            klipolo_engine::test_support::captions_project("caption.bold", &[("Hello", 1.0, 1.4)]);
+        let dir = tempfile::tempdir().unwrap();
+        for kind in [CaptionFile::Srt, CaptionFile::Vtt] {
+            let req = ExportRequest {
+                caption_file: Some(kind),
+                ..request(&[FormatKind::Landscape], ExportQuality::High)
+            };
+            let batch = freeze(
+                Arc::new(project.clone()),
+                &speech,
+                "en".into(),
+                &req,
+                dir.path(),
+                None,
+            );
+            assert_eq!(batch.caption_file, Some(kind));
+        }
     }
 
     #[test]
