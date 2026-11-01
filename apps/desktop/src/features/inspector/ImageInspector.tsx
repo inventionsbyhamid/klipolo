@@ -4,6 +4,7 @@ import type { Item } from '../../bindings/Item';
 import { layoutPatchFor, scaleAbout } from '../../lib/geometry';
 import { resolveRect } from '../../lib/layout';
 import { AnimationField, PositionField, TimingField } from './common';
+import { EffectsButton } from './EffectsButton';
 import { Field } from './fields';
 import { layoutOps } from '../../state/latest';
 import { ToolSlider } from './ToolSlider';
@@ -14,11 +15,13 @@ const percent = (v: number) => `${Math.round(v * 100)}%`;
 
 /**
  * A picture's fields: Size, Opacity and Corner radius (`PictureFields`), Effects, Position, Animation
+ * and Timing.
  */
 export function ImageInspector({ item, format, primary }: { item: Item; format: FormatKind; primary: FormatKind }) {
   return (
     <>
       <PictureFields item={item} format={format} primary={primary} />
+      <EffectsButton target={{ type: 'item', id: item.id }} effects={item.effects} />
       <PositionField item={item} format={format} primary={primary} />
       <AnimationField item={item} typewriter={false} />
       <TimingField item={item} />

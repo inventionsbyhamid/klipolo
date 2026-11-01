@@ -178,6 +178,11 @@ export function useTimelineCommands(): Command[] {
         shortcut: '⌥⌘V',
         // Sound and zoom layers have no effects.
         enabled: ours && clipboard.effects !== null && (clip || layer?.track.kind === 'overlay'),
+        // Nothing with effects copied in this project yet: said where it is listed.
+        reason:
+          ours && clipboard.effects !== null
+            ? undefined
+            : t({ id: 'timeline.pasteEffects.none', message: 'Copy a clip or layer that has effects first.' }),
         run: () => pasteEffects(id),
       },
       {
