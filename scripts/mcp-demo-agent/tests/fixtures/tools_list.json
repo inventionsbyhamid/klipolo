@@ -831,7 +831,7 @@
             "type": "boolean"
           },
           "source": {
-            "description": "computerSound is the computer's sound; videoSound the camera's own sound.",
+            "description": "computerSound is the computer's (system) sound; videoSound the camera's own sound.",
             "enum": [
               "mic",
               "computerSound",
@@ -878,7 +878,7 @@
             ]
           },
           "source": {
-            "description": "computerSound is the computer's sound; videoSound the camera's own sound.",
+            "description": "computerSound is the computer's (system) sound; videoSound the camera's own sound.",
             "enum": [
               "mic",
               "computerSound",
@@ -929,7 +929,7 @@
             ]
           },
           "source": {
-            "description": "computerSound is the computer's sound; videoSound the camera's own sound.",
+            "description": "computerSound is the computer's (system) sound; videoSound the camera's own sound.",
             "enum": [
               "mic",
               "computerSound",

@@ -295,7 +295,7 @@ fn sound(rest: Vec<(&'static str, Value)>) -> Vec<(&'static str, Value)> {
         "source",
         words(
             &SOUNDS,
-            "computerSound is the computer's sound; videoSound the camera's own sound.",
+            "computerSound is the computer's (system) sound; videoSound the camera's own sound.",
         ),
     )];
     out.extend(rest);
