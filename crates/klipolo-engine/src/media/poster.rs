@@ -275,7 +275,7 @@ impl Fit {
             let (w, h) = (w as usize, h as usize);
             let (data, stride) = (self.yuv.data(p), self.yuv.stride(p));
             let out = &mut self.packed[p];
-            if self.rotation % 360 == 0 {
+            if self.rotation.is_multiple_of(360) {
                 out.clear();
                 for row in 0..h {
                     out.extend_from_slice(&data[row * stride..row * stride + w]);

@@ -20,8 +20,7 @@ use crate::project::recent::{RECENT_LIMIT, poster_wants, recent_in};
 use crate::project::save;
 use klipolo_app::analysis::holds::{Holds, SETTLE};
 
-#[path = "../../../klipolo-engine/tests/support/fixture_set.rs"]
-mod fixture_set;
+use crate::media::tests::fixture_set;
 
 fn fixture(name: &str) -> PathBuf {
     let path = fixture_set::fixture_dir().join(name);
