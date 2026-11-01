@@ -1486,11 +1486,13 @@ def subscribe():
 
 def cursor_hand():
     """A white pointing hand in a navy outline, as a cursor over a link: the index finger up, the others folded."""
-    hand = Union(Strokes([[(-60.0, -380.0), (-60.0, 0.0)]], 110.0),
-                 Strokes([[(40.0, -90.0), (40.0, 40.0)], [(140.0, -60.0), (140.0, 60.0)]], 100.0),
-                 Strokes([[(235.0, -30.0), (235.0, 70.0)]], 95.0),
-                 Box(70.0, 170.0, 220.0, 170.0, 110.0), Taper(-140.0, 130.0, 60.0, -270.0, -10.0, 50.0), k=24.0)
-    creases = Strokes([[(90.0, -40.0), (90.0, 80.0)], [(190.0, -10.0), (190.0, 90.0)]], 14.0)
+    # The fingers overlap by 40 px, deeper than the outline, so only the creases mark where they meet.
+    hand = Union(Strokes([[(-50.0, -380.0), (-50.0, 20.0)]], 120.0),
+                 Strokes([[(30.0, -90.0), (30.0, 40.0)], [(110.0, -60.0), (110.0, 60.0)],
+                          [(190.0, -30.0), (190.0, 70.0)]], 120.0),
+                 Box(60.0, 170.0, 210.0, 170.0, 110.0), Taper(-120.0, 140.0, 65.0, -260.0, -10.0, 50.0), k=24.0)
+    creases = Strokes([[(-10.0, -120.0), (-10.0, 60.0)], [(70.0, -95.0), (70.0, 80.0)],
+                       [(150.0, -65.0), (150.0, 90.0)]], 14.0)
     return outlined(hand, WHITE) + [(creases, 0.0, NAVY)]
 
 
