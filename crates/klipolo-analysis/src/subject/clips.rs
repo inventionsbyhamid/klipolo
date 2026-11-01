@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use klipolo_engine::plan::fill_crop;
-use klipolo_model::fill_focus::{FillFocus, FocusPath};
+use klipolo_model::fill_focus::{FillFocus, FocusPath, Keep};
 use klipolo_model::framing::effective_framing;
 use klipolo_model::ids::Id;
 use klipolo_model::ops::{ClipPatch, Op};
@@ -138,6 +138,8 @@ pub fn clip_path(
         end_us: to + shift,
         cuts: &cuts,
         crop: (crop.w, crop.h),
+        talk: &[],
+        keep: &Keep::Speaker,
     };
     focus_path(&input)
 }

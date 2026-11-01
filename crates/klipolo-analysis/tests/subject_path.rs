@@ -6,7 +6,7 @@ use klipolo_analysis::providers::{TrackedBox, TrackedFrame};
 use klipolo_analysis::subject::path::{
     DEAD_ZONE, KEY_STEP_US, PathInput, SPEED, focus_path, main_subject,
 };
-use klipolo_model::fill_focus::FocusPath;
+use klipolo_model::fill_focus::{FocusPath, Keep};
 use klipolo_model::time::Us;
 
 /// A 16:9 picture filling 9:16 shows this share of its width, all of its height.
@@ -53,6 +53,8 @@ fn input<'a>(
         end_us: (frames.len() as f64 / FPS * 1e6) as Us,
         cuts,
         crop,
+        talk: &[],
+        keep: &Keep::Speaker,
     }
 }
 
