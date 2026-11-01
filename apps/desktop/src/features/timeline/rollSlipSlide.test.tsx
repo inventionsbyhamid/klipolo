@@ -69,7 +69,7 @@ describe('rolling a cut', () => {
     renderWithProviders(<Editor />);
     // The cut after a is at 18 s (720 px at 40 px/s).
     const handle = document.querySelector<HTMLElement>('[data-roll="a"]')!;
-    expect(handle).toHaveAttribute('title', 'Drag to roll this cut');
+    expect(handle).toHaveAttribute('data-tip', 'Drag to roll this cut');
     fireEvent.pointerDown(handle, { pointerId: 1, button: 0, clientX: 720, clientY: 10 });
     fireEvent.pointerMove(handle, { pointerId: 1, clientX: 760, clientY: 10 });
     await frames();

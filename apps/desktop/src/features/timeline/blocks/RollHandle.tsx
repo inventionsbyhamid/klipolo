@@ -19,7 +19,8 @@ interface RollHandleProps {
  * The cut between two clips, as a thin strip a drag rolls (`drag/editFrame`): the clip before it ends later or earlier
  * and the one after starts with it, so the video keeps its length. Its cursor says so on hover. It sits over the two
  * clips' trim pads, between them (each clip's own edge just inside it still trims that clip), and above the cut's
- * marker along the lane's bottom. Pointer only: ⌥, and ⌥. roll the cut at the playhead.
+ * marker along the lane's bottom; the lane's one tip (`CutTip`) names it. Pointer only: ⌥, and ⌥. roll the cut at the
+ * playhead.
  */
 export const RollHandle = memo(function RollHandle({ clipId, cutUs, pps, onRollPress }: RollHandleProps) {
   const { t } = useLingui();
@@ -29,7 +30,7 @@ export const RollHandle = memo(function RollHandle({ clipId, cutUs, pps, onRollP
       ref={ref}
       aria-hidden
       data-roll={clipId}
-      title={t({ id: 'timeline.roll.handle', message: 'Drag to roll this cut' })}
+      data-tip={t({ id: 'timeline.roll.handle', message: 'Drag to roll this cut' })}
       className="tl-roll"
       style={{ left: usToPx(cutUs, pps) }}
       onPointerDown={(e) => onRollPress(e, clipId)}
