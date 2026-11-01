@@ -78,7 +78,7 @@ pub struct Transcript {
 }
 
 /// A person's correction of the words heard in `[start_us, end_us)` of `asset_id` (its sound time): captions, the
-/// Script view and chat's snippets read `text` instead (the transcript-derived text override).
+/// Script view and chat's snippets read `text` instead (a text override on what the transcript heard).
 // `Eq`, so the project's shared list compares by pointer first (`Arc`'s `==`): an edit that leaves it alone diffs it in
 // O(1).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS, schemars::JsonSchema)]

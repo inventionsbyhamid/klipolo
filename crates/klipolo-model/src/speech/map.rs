@@ -198,12 +198,12 @@ pub fn spans(p: &Project, speech: &Speech) -> Vec<SpeechSpan> {
 /// One word as it plays: `word` indexes its asset's transcript (the first of a fixed run); `fix` indexes
 /// `Project::word_fixes` when a fix replaces the run.
 ///
-/// A fix reads once per use of its words. Its pieces are walked in
-/// timeline order; a piece that covers words an earlier piece of the current use already covered starts a new use (a
-/// copy of the clip, the same range placed again). The first piece of each use carries the text, whichever of the
-/// fix's words it holds: a split or a cut of one use reads once, cutting its first word moves the text to the next
-/// piece kept, and a copy reads again. Every other piece is `continued`: it keeps its time range, so it can be selected
-/// and cut, and shows no text. With every covered word cut, nothing reads it.
+/// A fix reads once per use of its words. Its pieces are walked in timeline order; a piece that covers words an earlier
+/// piece of the current use already covered starts a new use (a copy of the clip, the same range placed again). The
+/// first piece of each use carries the text, whichever of the fix's words it holds: a split or a cut of one use reads
+/// once, cutting its first word moves the text to the next piece kept, and a copy reads again. Every other piece is
+/// `continued`: it keeps its time range, so it can be selected and cut, and shows no text. With every covered word cut,
+/// nothing reads it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SpokenWord {
     pub span: u32,

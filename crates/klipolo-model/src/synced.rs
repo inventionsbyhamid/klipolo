@@ -1,6 +1,6 @@
 //! How Sync lined a recording source up: by listening, or by the person's marks, and how sure it was. It lives on the
-//! lives on the source, so a sync again and a hand line-up update it in the same `updateRecordingSource`. A take Klipolo
-//! recorded has none. Re-exported from `project`.
+//! source, so a sync again and a hand line-up update it in the same `updateRecordingSource`. A take Klipolo recorded
+//! has none. Re-exported from `project`.
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;

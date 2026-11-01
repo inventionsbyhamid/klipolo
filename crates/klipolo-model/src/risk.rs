@@ -1,4 +1,4 @@
-//! Principle 3 in one place for chat, external agents, polish and plugins: a batch that takes content away is
+//! One rule in one place for chat, external agents, polish and plugins: a batch that takes content away is
 //! proposed, not applied at once. `Transaction::review` applies a batch once and lists what it takes away
 //! ([`Removals`]); the batch is a removal exactly when that list isn't empty. `op_risk` judges an op by itself,
 //! conservatively, for when there is no project to compare against.
@@ -176,7 +176,7 @@ impl Transaction {
     }
 }
 
-/// What a batch takes away, for the proposal card and the ghosted timeline (principle 3). `ranges` are main-track
+/// What a batch takes away, for the proposal card and the ghosted timeline. `ranges` are main-track
 /// footage that goes, on the timeline as it was before the batch; the rest are ids from before the batch, in the
 /// project's order. Not empty exactly when `risk_against` says Removal.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
