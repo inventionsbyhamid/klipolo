@@ -81,7 +81,7 @@ export function CentreSwitch({
           aria-describedby={hint}
           checked={centred}
           aria-disabled={own || undefined}
-          onChange={(on) => {
+          onCheckedChange={(on) => {
             if (!own) void setKindCentred(source.role, on, nth, param);
           }}
         />

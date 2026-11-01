@@ -3,7 +3,7 @@
 //! take the person's start key began is counting down, it shows the seconds left (marked "⚠" while a problem
 //! flashes), or why the countdown is held (`StatusView::held`: a muted mic, a source not sending) with how to answer
 //! it (`answer`: the start key records without it, the item's Cancel ends it), then flashes as the
-//! take begins: their editor is hidden, so it is all they see (UX decision 4). It is redrawn at most twice a second, showing and
+//! take begins: their editor is hidden, so it is all they see. It is redrawn at most twice a second, showing and
 //! hiding excepted. Pure: every time is an argument; a shell draws what `frame` returns and asks again at `next_due`.
 
 use std::time::{Duration, Instant};

@@ -1,7 +1,7 @@
 //! AppKit's class cursors as system shapes: each one's key on this Mac, made once as the sampler
 //! starts, so a recorded shape whose key is one of them is named (`sys`). The table has the macOS 15 resize cursors in
-//! every direction beside the ones the macOS 15 SDK marks to be deprecated (c9-findings), each asked only when this
-//! macOS answers it. C9 found `currentSystem`'s own images can differ from the class cursors': an unmatched shape
+//! every direction beside the ones the macOS 15 SDK marks to be deprecated, each asked only when this
+//! macOS answers it. `currentSystem`'s own images can differ from the class cursors': an unmatched shape
 //! simply has no `sys`.
 
 use std::ffi::CStr;

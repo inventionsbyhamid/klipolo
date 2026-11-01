@@ -1,0 +1,85 @@
+{
+ "version": 7,
+ "id": "space-station-music",
+ "name": "Space station Q&A and a song",
+ "settings": {
+  "fps": 30,
+  "formats": [
+   "landscape"
+  ],
+  "primaryFormat": "landscape"
+ },
+ "assets": [
+  {
+   "id": "clip-a",
+   "kind": "video",
+   "path": "/media/astronauts.mp4",
+   "name": "astronauts.mp4",
+   "durationUs": 155040000,
+   "width": 1280,
+   "height": 720,
+   "fps": 29.97,
+   "hasAudio": true
+  },
+  {
+   "id": "music",
+   "kind": "video",
+   "path": "/media/music.mp4",
+   "name": "music.mp4",
+   "durationUs": 40000000,
+   "width": 1280,
+   "height": 720,
+   "fps": 30.0,
+   "hasAudio": true
+  }
+ ],
+ "timeline": {
+  "main": [
+   {
+    "id": "clip-a1",
+    "source": {
+     "type": "asset",
+     "id": "clip-a"
+    },
+    "sourceInUs": 0,
+    "sourceOutUs": 150000000,
+    "speed": 1.0,
+    "volume": 1.0,
+    "muted": false,
+    "fadeInUs": 0,
+    "fadeOutUs": 0,
+    "look": {
+     "preset": null,
+     "strength": 1.0,
+     "lutId": null,
+     "lutStrength": 1.0
+    }
+   },
+   {
+    "id": "music1",
+    "source": {
+     "type": "asset",
+     "id": "music"
+    },
+    "sourceInUs": 2000000,
+    "sourceOutUs": 30000000,
+    "speed": 1.0,
+    "volume": 1.0,
+    "muted": false,
+    "fadeInUs": 0,
+    "fadeOutUs": 0,
+    "look": {
+     "preset": null,
+     "strength": 1.0,
+     "lutId": null,
+     "lutStrength": 1.0
+    }
+   }
+  ],
+  "tracks": []
+ },
+ "captions": {
+  "enabled": true,
+  "style": "klipolo.builtin/caption.clean"
+ }
+}
