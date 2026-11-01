@@ -74,7 +74,13 @@ pub(super) fn main_layers(
                     format,
                     false,
                 );
-                main.crop = fill_focused(clip, format, framing.mode, (main.crop, crop.kept()), source_us);
+                main.crop = fill_focused(
+                    clip,
+                    format,
+                    framing.mode,
+                    (main.crop, crop.kept()),
+                    source_us,
+                );
                 backdrop(p, registry, (clip, &main, content), format, s, out);
                 out.push(Layer::Video(main));
             }
@@ -99,7 +105,8 @@ pub(super) fn main_layers(
                         mirror,
                     );
                     let kept = as_shown(mirror, crop.kept());
-                    main.crop = fill_focused(clip, format, framing.mode, (main.crop, kept), source_us);
+                    main.crop =
+                        fill_focused(clip, format, framing.mode, (main.crop, kept), source_us);
                     backdrop(p, registry, (clip, &main, content), format, s, out);
                     out.push(Layer::Video(main));
                 }
@@ -142,7 +149,13 @@ pub(super) fn main_layers(
                 let base = (main.crop, crop.kept());
                 main.crop = followed(follows, rec, base, follow.closer, source_us);
             } else {
-                main.crop = fill_focused(clip, format, framing.mode, (main.crop, crop.kept()), source_us);
+                main.crop = fill_focused(
+                    clip,
+                    format,
+                    framing.mode,
+                    (main.crop, crop.kept()),
+                    source_us,
+                );
             }
             backdrop(p, registry, (clip, &main, area), format, s, out);
             out.push(Layer::Video(main));
