@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import { newId } from '../../../lib/defaults';
 import { commitInFlight } from '../../../state/commitQueue';
 import { useDragState } from '../../../state/dragState';
+import { showEditFrames } from '../../../state/editFrames';
 import { changedSince, type Built } from '../../../state/editBase';
 import { usePlayback } from '../../../state/playback';
 import { captureBase, useProject } from '../../../state/project';
@@ -212,6 +213,7 @@ export const draggedId = (g: Gesture) =>
 
 /** Puts down what `s` lifted; its shifts stay while they are being committed (until the new revision draws them). */
 export function lower(s: Session, keepShifts: boolean) {
+  showEditFrames(null);
   s.stopScroll?.();
   s.stopScroll = null;
   s.view.showGuide(null);

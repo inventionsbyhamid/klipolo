@@ -1266,6 +1266,40 @@
   cursor: ew-resize;
 }
 
+/* A roll's, slip's or slide's two frames at the edit, side by side over the bottom of the preview while it is dragged. */
+.edit-frames {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  z-index: 20;
+  display: flex;
+  gap: 4px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.edit-frame {
+  margin: 0;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: var(--color-night);
+  box-shadow: var(--shadow-1);
+}
+
+.edit-frame canvas {
+  display: block;
+  width: 168px;
+  height: auto;
+  aspect-ratio: 16 / 9;
+}
+
+.edit-frame figcaption {
+  padding: 2px 6px;
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  color: var(--color-ink-soft);
+}
+
 /* The box a drag over empty lane space draws: what it touches is selected. */
 .tl-box {
   position: fixed;

@@ -9,6 +9,8 @@ import { countOf, groupMoveOps, membersOf } from '../keys/groupOps';
 import { mainIndex } from '../model/index';
 import { attachedTo } from '../model/moveOps';
 import { editOps, editRoom, heldTo, type EditKind, type EditLimit } from '../model/editRoom';
+import { showEditFrames } from '../../../state/editFrames';
+import { editPair } from '../media/editFrames';
 import { usToPx } from '../scale';
 import { shiftBlock, sizeBlock, slipBlock } from './registry';
 import type { Gesture, Session } from './session';
@@ -96,6 +98,8 @@ export function frameEdit(s: Session, g: Edit, project: Project, dtUs: number): 
     shiftBlock(rollId(g.clipId), px);
     s.edgeUs = index.starts[i] + by;
   }
+  // The two frames that meet at the edit show beside the preview's (`EditFrames`).
+  showEditFrames(editPair(project, g.edit, i, by), g.edit === 'slip');
   s.ops = editOps(g.edit, g.clipId, by);
   s.dryOps = null;
   s.label = g.edit === 'roll' ? 'timeline.roll.undo' : g.edit === 'slip' ? 'timeline.slip.undo' : 'timeline.slide.undo';

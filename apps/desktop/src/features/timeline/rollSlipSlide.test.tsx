@@ -19,6 +19,7 @@ const { usePlayback } = await import('../../state/playback');
 const { useSelection } = await import('../../state/selection');
 const { useUi } = await import('../../state/ui');
 const { useToasts } = await import('../../state/toasts');
+const { useEditFrames } = await import('../../state/editFrames');
 const { Timeline } = await import('./Timeline');
 const { useEditorShortcuts } = await import('../command-palette/useEditorShortcuts');
 
@@ -80,8 +81,14 @@ describe('rolling a cut', () => {
     // The preview shows the frame at the new cut, the playhead left where it was.
     expect(vi.mocked(engine.seek).mock.calls.at(-1)?.[0]).toBe(19 * S);
     expect(usePlayback.getState().playheadUs).toBe(0);
+    // Beside it, the two frames that meet at the new cut.
+    expect(useEditFrames.getState().pair).toEqual([
+      { path: '/media/screen', fileUs: 21 * S - 33_333 },
+      { path: '/media/broll', fileUs: 3 * S },
+    ]);
     fireEvent.pointerUp(handle, { pointerId: 1, clientX: 760, clientY: 10 });
     await frames();
+    expect(useEditFrames.getState().pair).toBeNull();
     expect(bridge.apply).toHaveBeenCalledWith({
       label: 'timeline.roll.undo',
       ops: [{ type: 'roll', clipId: 'a', byUs: S }],
