@@ -1837,3 +1837,89 @@ async fn a_stalled_error_body_is_read_for_the_short_timeout_only() {
         started.elapsed()
     );
 }
+
+// Streamed responses (SAM through the relay).
+
+/// A server-sent event stream of `events`, each one `data:` line.
+fn sse(events: &[Value]) -> ResponseTemplate {
+    let body: String = events
+        .iter()
+        .map(|e| {
+            format!(
+                "event: {}\ndata: {e}\n\n",
+                e["type"].as_str().unwrap_or("x")
+            )
+        })
+        .collect();
+    ResponseTemplate::new(200).set_body_raw(body, "text/event-stream")
+}
+
+#[tokio::test]
+async fn a_streamed_answer_is_read_to_its_final_usage() {
+    let server = MockServer::start().await;
+    let text = "<0f>0<|box;x1=1;y1=2;x2=3;y2=4;w=10;h=10|><|mask;x=0;y=0;data=1,1,!a|>\n<1f>";
+    let (first, rest) = text.split_at(20);
+    Mock::given(method("POST"))
+        .and(path("/meta/v1/responses"))
+        .respond_with(sse(&[
+            json!({"type": "response.created", "response": {"status": "in_progress"}}),
+            json!({"type": "response.output_text.delta", "delta": first}),
+            json!({"type": "response.output_text.delta", "delta": rest}),
+            json!({"type": "response.completed", "response": {
+                "model": "sam-3.1", "status": "completed", "output": [],
+                "usage": {"input_tokens": 0, "output_tokens": 0, "video_frames_processed": 160}
+            }}),
+        ]))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let out = relay(&server)
+        .respond_stream(json!({"model": "sam-3.1", "input": []}))
+        .await
+        .unwrap();
+    assert_eq!(out.output_text.as_deref(), Some(text));
+    assert_eq!(out.usage.video_frames_processed, 160);
+    assert_eq!(out.status.as_deref(), Some("completed"));
+    // Sent as a stream, asking for events.
+    let sent = only_request(&server).await;
+    assert_eq!(sent.body_json::<Value>().unwrap()["stream"], true);
+    assert_eq!(
+        sent.headers.get("accept").unwrap().to_str().unwrap(),
+        "text/event-stream"
+    );
+}
+
+#[tokio::test]
+async fn a_stream_that_fails_or_ends_early_is_an_error() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .respond_with(sse(&[
+            json!({"type": "response.created", "response": {}}),
+            json!({"type": "response.failed", "response": {"status": "failed", "error": {"message": "The video could not be read."}}}),
+        ]))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    let failed = direct(&server)
+        .respond_stream(json!({"model": "sam-3.1"}))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&failed, MetaError::Refused { message: Some(m) } if m.contains("could not be read")),
+        "{failed:?}"
+    );
+
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .respond_with(sse(&[
+            json!({"type": "response.output_text.delta", "delta": "<0f>"}),
+        ]))
+        .mount(&server)
+        .await;
+    let cut = direct(&server)
+        .respond_stream(json!({"model": "sam-3.1"}))
+        .await
+        .unwrap_err();
+    assert!(matches!(cut, MetaError::Decode(_)), "{cut:?}");
+}

@@ -1,8 +1,11 @@
-//! The Responses API (`POST /responses`), non-streaming: Muse Spark and SAM.
+//! The Responses API (`POST /responses`): Muse Spark and SAM, as one JSON answer (`respond`) or read from its
+//! server-sent events to the end (`respond_stream`, for a call that may take minutes).
 
+use reqwest::header::ACCEPT;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::client::network_error;
 use crate::ledger::Row;
 use crate::{pricing, MetaClient, MetaError};
 
@@ -55,6 +58,33 @@ impl MetaClient {
         let response = self.send_meta(request).await?;
         let raw: Value = self.read_json(response).await?;
         let out = ResponseOut::parse(raw)?;
+        self.record_response(&body, &out);
+        Ok(out)
+    }
+
+    /// [`Self::respond`] for a call that may take minutes, such as a SAM video: sent with `stream: true` and read as
+    /// server-sent events to its `response.completed` (or `response.incomplete`), whose answer is parsed as
+    /// `respond`'s is. The text deltas stand in for an answer that carries no output of its own. Klipolo's relay
+    /// forwards SAM video calls only streamed, so it can read them to their final usage.
+    pub async fn respond_stream(&self, mut body: Value) -> Result<ResponseOut, MetaError> {
+        if let Some(fields) = body.as_object_mut() {
+            fields.insert("stream".into(), Value::Bool(true));
+        }
+        let request = self
+            .http
+            .post(self.meta_url("responses"))
+            .header(ACCEPT, "text/event-stream")
+            .json(&body);
+        let mut response = self.send_meta(request).await?;
+        let mut events = Events::default();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|e| network_error(&e, &self.secrets()))?
+        {
+            events.read(&chunk)?;
+        }
+        let out = events.finish()?;
         self.record_response(&body, &out);
         Ok(out)
     }
@@ -144,6 +174,75 @@ impl ResponseOut {
             status,
             raw,
         })
+    }
+}
+
+/// A streamed answer as its events arrive: the text so far, and the final answer once it comes.
+#[derive(Default)]
+struct Events {
+    /// Bytes of a line not ended yet.
+    partial: Vec<u8>,
+    text: String,
+    done: Option<Value>,
+}
+
+impl Events {
+    /// The next bytes of the stream: every whole `data:` line in them read.
+    fn read(&mut self, bytes: &[u8]) -> Result<(), MetaError> {
+        self.partial.extend_from_slice(bytes);
+        while let Some(end) = self.partial.iter().position(|b| *b == b'\n') {
+            let line: Vec<u8> = self.partial.drain(..=end).collect();
+            self.line(&line)?;
+        }
+        Ok(())
+    }
+
+    fn line(&mut self, line: &[u8]) -> Result<(), MetaError> {
+        let line = String::from_utf8_lossy(line);
+        let Some(data) = line.trim_end().strip_prefix("data:") else {
+            return Ok(());
+        };
+        let data = data.trim();
+        if data.is_empty() || data == "[DONE]" {
+            return Ok(());
+        }
+        let event: Value = serde_json::from_str(data)
+            .map_err(|e| MetaError::Decode(format!("a streamed event: {e}")))?;
+        match event.get("type").and_then(Value::as_str) {
+            Some("response.output_text.delta") => {
+                if let Some(delta) = event.get("delta").and_then(Value::as_str) {
+                    self.text.push_str(delta);
+                }
+            }
+            Some("response.completed" | "response.incomplete") => {
+                self.done = event.get("response").cloned();
+            }
+            Some("response.failed" | "error") => {
+                let message = (event.pointer("/response/error/message"))
+                    .or_else(|| event.pointer("/error/message"))
+                    .or_else(|| event.get("message"))
+                    .and_then(Value::as_str)
+                    .map(str::to_owned);
+                return Err(MetaError::Refused { message });
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// The final answer, its text from the deltas when it carries none.
+    fn finish(mut self) -> Result<ResponseOut, MetaError> {
+        let rest = std::mem::take(&mut self.partial);
+        self.line(&rest)?;
+        let raw = self
+            .done
+            .take()
+            .ok_or_else(|| MetaError::Decode("the stream ended before its answer".into()))?;
+        let mut out = ResponseOut::parse(raw)?;
+        if out.output_text.is_none() && !self.text.is_empty() {
+            out.output_text = Some(self.text);
+        }
+        Ok(out)
     }
 }
 
