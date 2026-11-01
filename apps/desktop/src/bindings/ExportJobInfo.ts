@@ -16,6 +16,10 @@ message: Said | null, frame: number, totalFrames: number, segmentsDone: number, 
  */
 stale: boolean, createdMs: number, 
 /**
+ * What its folder takes on the disk (its finished parts, sound and manifest): Discard frees it.
+ */
+bytes: number, 
+/**
  * Set when it paused because the hardware path kept failing: it may finish in compatibility mode.
  */
 compatibility: ExportCompatibility | null, };

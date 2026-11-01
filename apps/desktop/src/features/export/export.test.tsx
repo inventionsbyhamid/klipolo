@@ -108,6 +108,7 @@ function job(patch: Partial<ExportJobInfo> = {}): ExportJobInfo {
     segmentsTotal: 10,
     stale: false,
     createdMs: 0,
+    bytes: 0,
     compatibility: null,
     ...patch,
   };
@@ -939,6 +940,15 @@ describe('unfinished exports', () => {
     await userEvent.click(resume);
     // The job keeps the person's choice: a plain resume continues in compatibility mode.
     expect(exporter.resume).toHaveBeenCalledWith('old', expect.any(Function));
+  });
+
+  it('a row says how much disk its finished parts use', async () => {
+    vi.mocked(exporter.jobs).mockResolvedValue([job({ bytes: 2_140_000_000 }), job({ jobId: 'new', bytes: 0 })]);
+    await openWithJobs(2);
+    const [kept, fresh] = within(screen.getByRole('region', { name: 'Unfinished exports' })).getAllByRole('listitem');
+    expect(within(kept).getByText('Uses 2.1 GB')).toBeInTheDocument();
+    expect(within(kept).getByRole('button', { name: 'Discard' })).toHaveAccessibleDescription(/Uses 2\.1 GB/);
+    expect(within(fresh).queryByText(/^Uses /)).toBeNull();
   });
 
   it('an earlier project’s job that can’t be read can only be discarded', async () => {

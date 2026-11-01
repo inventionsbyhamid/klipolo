@@ -1,6 +1,8 @@
 import { useId } from 'react';
 import type { ExportJobInfo } from '../../bindings/ExportJobInfo';
 import { Button } from '../../design/Button';
+import { useIntlLocale } from '../../i18n/react';
+import { formatFileSize } from '../../lib/format';
 import { canStartOver, useExport } from '../../state/export';
 import { saidText } from '../../state/exportRun';
 import { useProject } from '../../state/project';
@@ -35,6 +37,7 @@ interface UnfinishedJobRowProps {
  */
 export function UnfinishedJobRow({ job, here, onLeave }: UnfinishedJobRowProps) {
   const id = useId();
+  const locale = useIntlLocale();
   const store = useExport.getState;
   const startingOver = useExport((s) => s.startingOver);
   // A yes or no, so an edit that leaves it as it was renders no row again.
@@ -71,6 +74,7 @@ export function UnfinishedJobRow({ job, here, onLeave }: UnfinishedJobRowProps) 
             <span>{STALE_RESUME}</span>
           </>
         )}
+        {job.bytes > 0 && <span>{`Uses ${formatFileSize(locale, job.bytes)}`}</span>}
       </span>
       <span className="ex-job-actions">
         {job.state === 'running' ? (

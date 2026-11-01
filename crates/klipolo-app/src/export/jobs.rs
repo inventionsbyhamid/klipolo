@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 use klipolo_engine::api::{ExportJobInfo, ExportJobState, ExportQuality};
 use klipolo_engine::export::job::{ExportJob, JOB_FILE};
-use klipolo_engine::export::jobs::{UNREADABLE, jobs_root, list_jobs, valid_job_id};
+use klipolo_engine::export::jobs::{UNREADABLE, folder_bytes, jobs_root, list_jobs, valid_job_id};
 use klipolo_engine::export::runner::{self, discard_job_atomically};
 use klipolo_model::coded::Said;
 
@@ -53,10 +53,13 @@ pub fn find(roots: &[PathBuf], job: &str) -> Result<Option<PathBuf>, Said> {
 /// Why one stopped is said as a code where the app has one (`run::coded`). One that can't be read can only be
 /// discarded: it has no project name, and the reason goes to the log.
 pub fn list(roots: &[PathBuf], mut stale: impl FnMut(&ExportJob) -> bool) -> Vec<ExportJobInfo> {
-    let mut jobs: Vec<_> = roots.iter().flat_map(|root| list_jobs(root)).collect();
-    jobs.sort_by_key(|j| std::cmp::Reverse(j.as_ref().map_or(0, |j| j.created_ms)));
+    let mut jobs: Vec<_> = roots
+        .iter()
+        .flat_map(|root| list_jobs(root).into_iter().map(move |job| (root, job)))
+        .collect();
+    jobs.sort_by_key(|(_, j)| std::cmp::Reverse(j.as_ref().map_or(0, |j| j.created_ms)));
     jobs.into_iter()
-        .map(|job| match job {
+        .map(|(root, job)| match job {
             Ok(job) => {
                 let running = runner::is_running(&job.job_id);
                 let mut info = job.info(running, !running && stale(&job));
@@ -65,14 +68,15 @@ pub fn list(roots: &[PathBuf], mut stale: impl FnMut(&ExportJob) -> bool) -> Vec
             }
             Err((job_id, reason)) => {
                 tracing::warn!(job = %job_id, %reason, "export: an unfinished job can't be read");
-                unreadable(job_id)
+                let bytes = folder_bytes(&root.join(&job_id));
+                unreadable(job_id, bytes)
             }
         })
         .collect()
 }
 
-/// A job that can't be read, as the list shows it: only Discard.
-fn unreadable(job_id: String) -> ExportJobInfo {
+/// A job that can't be read (its folder taking `bytes`), as the list shows it: only Discard.
+fn unreadable(job_id: String, bytes: u64) -> ExportJobInfo {
     ExportJobInfo {
         job_id,
         project_id: String::new(),
@@ -87,6 +91,7 @@ fn unreadable(job_id: String) -> ExportJobInfo {
         segments_total: 0,
         stale: true,
         created_ms: 0,
+        bytes,
         compatibility: None,
     }
 }
@@ -354,6 +359,24 @@ mod tests {
         assert_eq!(owner(&roots, id), Owner::Unreadable);
         discard(&roots, id).unwrap();
         assert!(!damaged.exists());
+    }
+
+    /// A row says how much disk its kept parts use, an unreadable job's too: Discard frees it.
+    #[tokio::test]
+    async fn a_row_says_how_much_disk_its_parts_use() {
+        let dir = tempfile::tempdir().unwrap();
+        let (_, job) = crashed_job(dir.path()).await;
+        let empty = list(&roots_of(dir.path()), |_| false)[0].bytes;
+        let part = job.dir.join(&job.outputs[0].segments[0].file);
+        std::fs::write(&part, vec![7u8; 4096]).unwrap();
+        assert_eq!(
+            list(&roots_of(dir.path()), |_| false)[0].bytes,
+            empty + 4096
+        );
+        std::fs::write(job.dir.join(JOB_FILE), b"{ damaged").unwrap();
+        let unreadable = &list(&roots_of(dir.path()), |_| false)[0];
+        assert_eq!(unreadable.project_name, "");
+        assert!(unreadable.bytes >= 4096, "{}", unreadable.bytes);
     }
 
     /// Jobs in the picked folder and the usual one are listed together, newest first.

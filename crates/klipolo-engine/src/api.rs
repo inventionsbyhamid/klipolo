@@ -621,6 +621,8 @@ pub struct ExportJobInfo {
     /// exported); "Start over with your latest changes" is offered beside it.
     pub stale: bool,
     pub created_ms: u64,
+    /// What its folder takes on the disk (its finished parts, sound and manifest): Discard frees it.
+    pub bytes: u64,
     /// Set when it paused because the hardware path kept failing: it may finish in compatibility mode.
     pub compatibility: Option<ExportCompatibility>,
 }

@@ -124,6 +124,7 @@ const unfinished = (projectId: string, state: ExportJobInfo['state']): ExportJob
   segmentsTotal: 4,
   stale: false,
   createdMs: 0,
+  bytes: 0,
   compatibility: null,
 });
 

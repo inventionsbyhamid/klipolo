@@ -122,6 +122,20 @@ pub fn tidy_staging(jobs_root: &Path) {
     }
 }
 
+/// The bytes the files in `dir` take, and those in its folders (a job's format folders hold its parts).
+pub fn folder_bytes(dir: &Path) -> u64 {
+    std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| match entry.metadata() {
+            Ok(meta) if meta.is_dir() => folder_bytes(&entry.path()),
+            Ok(meta) => meta.len(),
+            Err(_) => 0,
+        })
+        .sum()
+}
+
 /// Job folders live here, inside the exports folder (same volume: finished files are renamed into place).
 pub const JOBS_DIR: &str = ".jobs";
 
@@ -291,6 +305,7 @@ impl ExportJob {
             segments_total: self.segments_total(),
             stale,
             created_ms: self.created_ms,
+            bytes: folder_bytes(&self.dir),
             compatibility: (self.state == JobState::Paused && self.offer_compatible).then(|| {
                 ExportCompatibility {
                     parts_to_redo: self.outputs.iter().map(JobOutput::parts_to_redo).sum(),

@@ -90,6 +90,7 @@ describe('export run', () => {
       segmentsTotal: 4,
       stale: false,
       createdMs: 0,
+      bytes: 0,
       compatibility: null,
     };
     const fromList = { ...idleRun, ...resuming(idleRun, 'kept', listed) };
