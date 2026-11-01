@@ -11,13 +11,15 @@ const runKey = (clipId: string, format: FormatKind) => `${clipId}:${format}`;
 interface SpeakerRuns {
   /** How far each follow under way is (0 to 100), by `runKey`. */
   runs: Record<string, number>;
+  /** The changes of who is kept under way, by `runKey`: nothing is tracked for them, so no progress is shown. */
+  keeping: Record<string, true>;
 }
 
 /**
  * The follows under way, so a clip card shows its progress again when the clip is selected again while Rust still
  * tracks. Progress comes from `speaker://progress`, for every clip a follow names.
  */
-export const useSpeakerRuns = create<SpeakerRuns>(() => ({ runs: {} }));
+export const useSpeakerRuns = create<SpeakerRuns>(() => ({ runs: {}, keeping: {} }));
 
 const setRun = (key: string, pct: number | null) =>
   useSpeakerRuns.setState((s) => {
@@ -30,6 +32,18 @@ const setRun = (key: string, pct: number | null) =>
 /** How far clip `clipId`'s follow in `format` is, or null when none is under way. */
 export const useSpeakerRun = (clipId: string, format: FormatKind) =>
   useSpeakerRuns((s) => s.runs[runKey(clipId, format)] ?? null);
+
+/** Whether a change of who clip `clipId` keeps in `format` is under way. */
+export const useSpeakerKeep = (clipId: string, format: FormatKind) =>
+  useSpeakerRuns((s) => s.keeping[runKey(clipId, format)] === true);
+
+const setKeeping = (key: string, on: boolean) =>
+  useSpeakerRuns.setState((s) => {
+    const keeping = { ...s.keeping };
+    if (on) keeping[key] = true;
+    else delete keeping[key];
+    return { keeping };
+  });
 
 /**
  * Follows the speaker in clip `clipId` in `format`: its progress shown while Rust tracks, and its change (one undo step,
@@ -67,8 +81,9 @@ export async function followSpeaker(clipId: string, format: FormatKind): Promise
  */
 export async function keepInFrame(clipId: string, format: FormatKind, keep: Keep): Promise<boolean> {
   const key = runKey(clipId, format);
-  if (useSpeakerRuns.getState().runs[key] !== undefined) return false;
-  setRun(key, 0);
+  const { runs, keeping } = useSpeakerRuns.getState();
+  if (runs[key] !== undefined || keeping[key]) return false;
+  setKeeping(key, true);
   try {
     const change = await speakerBridge.keep(clipId, format, keep);
     await useProject.getState().adopt(change);
@@ -77,6 +92,6 @@ export async function keepInFrame(clipId: string, format: FormatKind, keep: Keep
     toast.error(error instanceof Error ? error.message : String(error));
     return false;
   } finally {
-    setRun(key, null);
+    setKeeping(key, false);
   }
 }

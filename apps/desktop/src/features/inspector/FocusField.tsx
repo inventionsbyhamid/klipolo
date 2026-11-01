@@ -13,7 +13,7 @@ import { editClip } from '../../state/latest';
 import { useProject } from '../../state/project';
 import { about } from '../analysis/analysis';
 import { Field } from './fields';
-import { followSpeaker, keepInFrame, useSpeakerRun } from './speakerRuns';
+import { followSpeaker, keepInFrame, useSpeakerKeep, useSpeakerRun } from './speakerRuns';
 
 /** Where a Fill crop keeps its focus in a format. */
 export type FocusChoice = 'speaker' | 'fixed' | 'center';
@@ -69,12 +69,13 @@ export function FocusField({ clip, format, canFollow }: { clip: Clip; format: Fo
   const choice = focusChoice(clip, format);
   const estimate = useSpeakerEstimate(clip.id, format, canFollow);
   const running = useSpeakerRun(clip.id, format);
+  const keeping = useSpeakerKeep(clip.id, format);
   const noteId = useId();
   const refused = choice !== 'speaker' && Boolean(estimate?.refusal);
   // Off until its price has come, so a follow is never paid for unseen.
   const unpriced = choice !== 'speaker' && !estimate;
   const pick = (next: FocusChoice) => {
-    if (next === choice || running !== null) return;
+    if (next === choice || running !== null || keeping) return;
     // Unpriced, or refused (no key or code, more than an access code's credit left): the note under the row says why.
     if (next === 'speaker') return void (!estimate || estimate.refusal || followSpeaker(clip.id, format));
     void editClip(next === 'center' ? 'clip.focus.center.undo' : 'clip.focus.fixed.undo', clip, (now) =>
@@ -122,7 +123,7 @@ export function FocusField({ clip, format, canFollow }: { clip: Clip; format: Fo
           value={running !== null ? 'speaker' : choice}
           options={options}
           fill
-          disabled={running !== null}
+          disabled={running !== null || keeping}
           onChange={pick}
         />
       </Field>
@@ -137,7 +138,7 @@ export function FocusField({ clip, format, canFollow }: { clip: Clip; format: Fo
           format={format}
           keep={focus.keep ?? { kind: 'speaker' }}
           people={people}
-          busy={running !== null}
+          busy={running !== null || keeping}
         />
       )}
     </>

@@ -290,4 +290,24 @@ describe('the Focus of a filled clip', () => {
     await waitFor(() => expect(adopt).toHaveBeenCalledWith({ baseRevision: 3 }));
     await waitFor(() => expect(useToasts.getState().toasts.map((t) => t.text)).toContain(note));
   });
+
+  it('a change of who is kept shows no search for the speaker', async () => {
+    let finish!: (change: SnapshotPatch) => void;
+    vi.mocked(speakerBridge.keep).mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+    const path = { keys: [{ atUs: 0, x: 0.3, y: 0.5 }] };
+    const people = [{ share: 60 }, { share: 40 }];
+    useProject.setState({
+      snapshot: withB({ framing: { portrait: fill }, fillFocus: { portrait: { kind: 'speaker', path, people } } }),
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<Inspector format="portrait" />);
+    const keep = await screen.findByRole('radiogroup', { name: 'Keep' });
+    await user.click(within(keep).getByRole('radio', { name: 'Right' }));
+    expect(speakerBridge.keep).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Finding the speaker/)).toBeNull();
+    // Off while it lands, so one change is one step.
+    expect(within(keep).getByRole('radio', { name: 'Left' })).toBeDisabled();
+    await act(async () => finish({ baseRevision: 3 } as SnapshotPatch));
+    await waitFor(() => expect(within(keep).getByRole('radio', { name: 'Left' })).not.toBeDisabled());
+  });
 });
