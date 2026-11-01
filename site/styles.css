@@ -1325,6 +1325,12 @@ ol {
   font-size: 0.9375rem;
 }
 
+/* The same box for what is in the app now: solid lines, as dashed means not yet */
+.soon.is-now,
+.soon.is-now .soon-list li {
+  border-style: solid;
+}
+
 /* ---------- Built on Meta's models ---------- */
 
 /* Same dark bay as the editor illustration, in both modes */
