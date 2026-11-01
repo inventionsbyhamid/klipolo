@@ -115,6 +115,7 @@ export function previewsFor(setup: RecorderSetup | null, picks: Picks, screenRef
   return {
     thumbs: screen && cards > 0,
     live: screen ? whatToRecord(picks) : null,
+    livePixels: null,
     camera: picks.camera,
     mic: picks.mic,
     ask: null,

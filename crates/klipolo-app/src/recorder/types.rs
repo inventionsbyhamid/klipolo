@@ -2,6 +2,7 @@
 //! through the generated `src/bindings`). The worker's own protocol (`CaptureCommand`, `CaptureEvent`) and the setup
 //! (`RecorderSetup`) are klipolo-capture's.
 
+use klipolo_capture::live_view_size::ViewPixels;
 use klipolo_capture::protocol::Event;
 use klipolo_model::coded::CodedError;
 use klipolo_model::history::Snapshot;
@@ -132,8 +133,12 @@ pub enum PrivacyPage {
 pub struct Previews {
     /// A still of each display and app of the dialog's last setup, about once a second each (`PreviewKind::Thumb`).
     pub thumbs: bool,
-    /// The live picture of what a take of this would record, small (`PreviewKind::Live`); None: no live picture.
+    /// The live picture of what a take of this would record (`PreviewKind::Live`); None: no live picture.
     pub live: Option<WhatToRecord>,
+    /// The size of the box that shows the live picture, in device pixels (its CSS size times the display's scale): the
+    /// picture is made for it, so it is as sharp as the box (`live_view_size`: within 1080p and this computer's pixels
+    /// a second). None: the small picture.
+    pub live_pixels: Option<ViewPixels>,
     /// The camera's picture for the bubble (`PreviewKind::Camera`); None: "No camera".
     pub camera: Option<String>,
     /// The mic's level, ten peaks a second, as `recorder-event`s of `PreviewId::Mic`; None: "No microphone".

@@ -3,7 +3,7 @@
 //! writes nothing and holds nothing once told to stop:
 //! - **the stills** (`--record-worker --thumbs`): each display and app of the dialog's last setup, about once a second
 //!   each, for the cards;
-//! - **the live picture** of the chosen display or app, small (`live_view`);
+//! - **the live picture** of the chosen display or app, made for the dialog's box (`live_view`);
 //! - **the camera** for the bubble (`check`);
 //! - **the mic's meter** (`--record-worker --meter`): ten peaks a second, as `recorder-event`s of `PreviewId::Mic`.
 //!
@@ -308,7 +308,7 @@ impl PreviewWorkers {
         let screen = allowed.screen == Permission::Granted && !run.screen_refused;
         let thumbs = thumbs_wanted(&run.targets, want.thumbs && screen);
         self.show(&mut run, Kind::Thumbs, thumbs, now);
-        let live = live_wanted(want.live.as_ref().filter(|_| screen));
+        let live = live_wanted(want.live.as_ref().filter(|_| screen), want.live_pixels);
         self.show(&mut run, Kind::Live, live, now);
         let asked = |page| want.ask == Some(page);
         // The press for a device refused already: nothing opens, and the page is told, so the row can offer the

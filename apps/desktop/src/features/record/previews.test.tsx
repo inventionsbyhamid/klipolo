@@ -62,6 +62,7 @@ async function openOn(setup: RecorderSetup | Error = recorderSetup()) {
 const want = (over: Partial<Previews> = {}): Previews => ({
   thumbs: true,
   live: { kind: 'screen', display: 'main' },
+  livePixels: null,
   camera: null,
   mic: 'mic-1',
   ask: null,

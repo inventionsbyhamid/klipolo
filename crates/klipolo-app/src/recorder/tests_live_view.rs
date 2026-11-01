@@ -1,24 +1,125 @@
 //! The live picture's tests: it opens with Screen Recording allowed and never launches without it; it closes when a take
 //! arms and never opens during one; a new choice restarts it and the same one keeps it; it closes when the window goes
-//! behind and its frames stop; one that doesn't stop is killed, and none outlives Klipolo; and one whose worker ends by
-//! itself says so. Fake workers only: nothing captures.
+//! behind and its frames stop; one that doesn't stop is killed, and none outlives Klipolo; one whose worker ends by
+//! itself says so; and it opens for its box's pixels, while the cards stay small. Fake workers only: nothing captures.
 
 use klipolo_capture::backend::{Permission, Permissions, Target};
+use klipolo_capture::live_view_size::ViewPixels;
 use klipolo_capture::protocol::{Command, Event};
 use klipolo_capture::shell::WorkerState;
 
 use super::test_previews::*;
 use super::test_support::*;
-use super::types::{PreviewId, PreviewKind, Previews};
+use super::types::{PreviewId, PreviewKind, Previews, WhatToRecord};
 
 const LIVE: &str = "--live-view";
 
-/// The live picture of `what` alone.
-fn live(what: super::types::WhatToRecord) -> Previews {
+/// The live picture of `what` alone: the small picture.
+fn live(what: WhatToRecord) -> Previews {
     Previews {
         live: Some(what),
         ..nothing()
     }
+}
+
+/// The live picture of `what` alone, for a box of `width` × `height` device pixels.
+fn live_in(what: WhatToRecord, width: u32, height: u32) -> Previews {
+    Previews {
+        live_pixels: Some(pixels(width, height)),
+        ..live(what)
+    }
+}
+
+fn pixels(width: u32, height: u32) -> ViewPixels {
+    ViewPixels { width, height }
+}
+
+/// The box's size a live view's worker was launched for: its last argument after the target.
+fn launched_for(args: &[String]) -> Option<ViewPixels> {
+    assert_eq!(args[..2], ["--record-worker", LIVE]);
+    (args.get(3)).map(|view| serde_json::from_str(view).expect("a view's size as JSON"))
+}
+
+#[test]
+fn it_opens_for_its_box_s_own_pixels() {
+    // The dialog's 672 × 378 box on a 2x display.
+    let p = previewing(all_allowed());
+    p.set(live_in(screen(), 1344, 756)).unwrap();
+    let args = p.launch.last_args();
+    assert_eq!(args.len(), 4, "the target, then the box's size");
+    assert_eq!(launched_for(&args), Some(pixels(1344, 756)));
+    assert!(p.told(p.worker(LIVE)).is_empty());
+}
+
+#[test]
+fn a_launch_waiting_its_turn_opens_at_the_latest_size() {
+    let p = previewing(all_allowed());
+    p.set(live_in(screen(), 1344, 756)).unwrap();
+    let first = p.worker(LIVE);
+    p.set(live_in(notes(), 1344, 756)).unwrap();
+    p.set(live_in(notes(), 1200, 676)).unwrap();
+    assert_eq!(p.launch.spawned(), 1, "it waits its turn");
+    p.advance_ms(500);
+    assert_eq!(p.launch.spawned(), 2);
+    assert_eq!(launched_for(&p.launch.last_args()), Some(pixels(1200, 676)));
+    assert_eq!(
+        p.told(first),
+        [Command::Stop],
+        "the first is only told to stop"
+    );
+    assert!(p.told(p.worker(LIVE)).is_empty());
+}
+
+#[test]
+fn a_size_never_opens_a_picture() {
+    // Its worker ended by itself: a new size opens nothing until the dialog opens again.
+    let p = previewing(all_allowed());
+    p.set(live_in(screen(), 1344, 756)).unwrap();
+    p.launch.exit(None);
+    p.advance_ms(500);
+    p.set(live_in(screen(), 1200, 676)).unwrap();
+    assert_eq!(p.launch.spawned(), 1);
+    // Behind: nothing starts, whatever the size.
+    let p = previewing(all_allowed());
+    p.state.window_in_front(false);
+    p.set(live_in(screen(), 1344, 756)).unwrap();
+    assert_eq!(p.launch.spawned(), 0);
+    // Without Screen Recording: refused, and nothing starts.
+    let p = previewing(Permissions {
+        screen: Permission::NotAsked,
+        ..all_allowed()
+    });
+    let refused = p.set(live_in(screen(), 1344, 756)).unwrap_err();
+    assert_eq!(refused.code, "capture.permission.screen");
+    assert_eq!(p.launch.spawned(), 0);
+}
+
+#[test]
+fn a_sized_picture_still_stops_on_close_and_on_arming() {
+    let p = previewing(all_allowed());
+    p.set(live_in(screen(), 1344, 756)).unwrap();
+    let view = p.worker(LIVE);
+    p.state.previews_off();
+    assert_eq!(p.told(view), [Command::Stop], "the dialog closed");
+    p.advance_ms(3_000);
+    assert_eq!(p.launch.kills(), [true], "hard-stopped after the wait");
+    p.set(live_in(screen(), 1344, 756)).unwrap();
+    assert_eq!(p.launch.spawned(), 2);
+    p.arm(options_screen()).unwrap();
+    assert_eq!(p.launch.kills(), [true, true], "killed at arming");
+}
+
+#[test]
+fn the_cards_stay_small() {
+    let p = previewing(all_allowed());
+    p.set(Previews {
+        thumbs: true,
+        ..live_in(screen(), 1344, 756)
+    })
+    .unwrap();
+    let stills = p.launched("--thumbs");
+    assert_eq!(stills.len(), 1);
+    assert_eq!(stills[0].len(), 3, "the cards' targets alone: no size");
 }
 
 #[test]
