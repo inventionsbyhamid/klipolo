@@ -220,6 +220,7 @@ fn main() {
             commands::media::library_pack,
             commands::fonts::fonts_bundled,
             commands::fonts::fonts_face,
+            commands::screen_color::screen_color_pick,
             commands::captions::captions_pages,
             commands::captions::captions_find,
             commands::captions::dev_fixture_speech,
