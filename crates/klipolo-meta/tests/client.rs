@@ -1992,3 +1992,25 @@ async fn a_sam_video_goes_to_the_relays_sam_videos_and_with_a_key_to_meta_as_it_
     );
     let _ = std::fs::remove_file(&video);
 }
+
+#[tokio::test]
+async fn a_relay_without_sam_videos_says_it_needs_updating() {
+    let video =
+        std::env::temp_dir().join(format!("klipolo-meta-sam-old-{}.mp4", std::process::id()));
+    std::fs::write(&video, b"the small copy").unwrap();
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/meta/v1/sam/videos"))
+        .respond_with(
+            ResponseTemplate::new(404)
+                .set_body_json(json!({"error": "not_found", "message": "Not found."})),
+        )
+        .mount(&server)
+        .await;
+    let err = relay(&server).upload_sam_video(&video).await.unwrap_err();
+    assert_eq!(
+        err.relay_user_message(),
+        "Following the speaker needs Klipolo's server to be updated. Try again later."
+    );
+    let _ = std::fs::remove_file(&video);
+}

@@ -11,6 +11,10 @@ use crate::client::check;
 use crate::error::redact;
 use crate::{MetaClient, MetaError};
 
+/// Said when Klipolo's relay is too old to make SAM's videos.
+pub const SAM_NEEDS_NEWER_RELAY: &str =
+    "Following the speaker needs Klipolo's server to be updated. Try again later.";
+
 /// Meta deletes an upload after a day even if the app never gets to.
 const UPLOAD_EXPIRY_SECONDS: u64 = 24 * 60 * 60;
 
@@ -66,7 +70,14 @@ impl MetaClient {
             .header(CONTENT_TYPE, "video/mp4")
             .header(CONTENT_LENGTH, len)
             .body(Body::from(file));
-        let response = self.send_meta(request).await?;
+        let response = self.send_meta_unchecked(request).await?;
+        // A relay from before it made SAM's videos has no such route; nothing was charged.
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(MetaError::NotAllowed {
+                message: Some(SAM_NEEDS_NEWER_RELAY.into()),
+            });
+        }
+        let response = check(response, &self.secrets(), self.short_timeout).await?;
         let uploaded: Uploaded = self.read_json(response).await?;
         Ok(uploaded.id)
     }
