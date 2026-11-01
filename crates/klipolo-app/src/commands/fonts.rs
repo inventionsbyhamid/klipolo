@@ -251,6 +251,14 @@ pub(crate) fn start(app: &tauri::App) {
     tauri::async_runtime::spawn_blocking(move || {
         klipolo_app::fonts::downloads::start(&starting.state::<Fonts>(), &downloads);
     });
+    // This computer's fonts arrive with the engine's one scan: an open font menu asks again then.
+    let scanning = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        let mut scanned = klipolo_engine::render::fonts::subscribe_scanned();
+        if scanned.wait_for(|done| *done).await.is_ok() {
+            let _ = scanning.emit("fonts-scanned", ());
+        }
+    });
     let decoding = app.handle().clone();
     tauri::async_runtime::spawn_blocking(move || {
         decoding
