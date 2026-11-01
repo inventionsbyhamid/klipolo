@@ -16,6 +16,7 @@ import { switchFormat } from '../editor/formats';
 import { useEffectCommands } from '../inspector/useEffectCommands';
 import { importFiles } from '../media/useImportMedia';
 import { deleteBlock, deleteRange, removeTransition, useTimelineCommands } from '../timeline/commands';
+import { useSourceCommands } from '../timeline/useSourceCommands';
 import { searchWords, type Command } from './command';
 import { useTransportCommands } from './useTransportCommands';
 
@@ -25,8 +26,8 @@ const FORMAT_KEYS: readonly FormatKind[] = ['landscape', 'portrait', 'square'];
 /**
  * Every editor action with its current label and availability. The keyboard shortcuts, the player bar and the
  * timeline's block menus run them, so all agree; each id is stable. Values that change every frame (the playhead) are
- * read when a command runs. The timeline's are in `useTimelineCommands`, the transport's in `useTransportCommands`,
- * the effect stacks' in `useEffectCommands`.
+ * read when a command runs. The timeline's are in `useTimelineCommands`, a recording clip's sounds' in
+ * `useSourceCommands`, the transport's in `useTransportCommands`, the effect stacks' in `useEffectCommands`.
  *
  * Each hook builds its entries once per language and per what they read: a play, a selection or a view change rebuilds
  * only the entries that show it.
@@ -39,6 +40,7 @@ export function useCommands(): Command[] {
   /** The message whose proposal chat has open, if any (Command Enter applies it). */
   const proposalOpen = useChat((s) => openProposal(s.messages)?.message.id ?? null);
   const timeline = useTimelineCommands();
+  const sounds = useSourceCommands();
   const transport = useTransportCommands();
   const effects = useEffectCommands();
 
@@ -169,7 +171,9 @@ export function useCommands(): Command[] {
 
   return useMemo(
     () =>
-      own ? [...own.head, own.remove, ...transport, ...own.view, ...own.projectCommands, ...timeline, ...effects] : [],
-    [own, transport, timeline, effects],
+      own
+        ? [...own.head, own.remove, ...transport, ...own.view, ...own.projectCommands, ...timeline, ...sounds, ...effects]
+        : [],
+    [own, transport, timeline, sounds, effects],
   );
 }
