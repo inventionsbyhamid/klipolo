@@ -3015,6 +3015,16 @@ def test_the_encode_takes_mov_only_two_threads_and_pictures_up_to_4k():
     assert any(after_input[i : i + 2] == ["-threads", "2"] for i in range(len(after_input))), args
 
 
+def test_the_encodes_filters_run_on_one_thread_whatever_the_hosts_cores():
+    from relay import samvideo
+
+    # ffmpeg sizes its filter thread pool from the host's cores, each thread with its own stack under the memory limit.
+    args = samvideo.encode_args(Path("/in/upload"), Path("/out/sam.mp4"))
+    for option in [["-filter_threads", "1"], ["-filter_complex_threads", "1"]]:
+        assert any(args[i : i + 2] == option for i in range(len(args))), (option, args)
+    assert args.index("-filter_threads") < args.index("-i"), args
+
+
 def test_the_child_runs_low_with_a_memory_limit_and_is_reaped_whatever_ends_the_wait():
     from relay import samvideo
 
