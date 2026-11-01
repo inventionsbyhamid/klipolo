@@ -53,7 +53,7 @@ function useOtherRemovals(proposal: ChatProposal): string[] {
     out.push(
       t({
         id: 'chatPanel.proposal.items',
-        message: plural(r.items.length, { one: 'Removes # overlay.', other: 'Removes # overlays.' }),
+        message: plural(r.items.length, { one: 'Removes # layer.', other: 'Removes # layers.' }),
       }),
     );
   if (r.shortened.length > 0)
