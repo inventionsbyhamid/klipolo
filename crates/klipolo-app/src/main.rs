@@ -245,6 +245,10 @@ fn main() {
             commands::export::export_plan,
             commands::export::export_start,
             commands::export::export_cancel,
+            commands::export::export_jobs,
+            commands::export::export_pause,
+            commands::export::export_resume,
+            commands::export::export_discard,
             commands::export::export_reveal,
             commands::export::export_open,
             commands::export::export_share,
@@ -291,8 +295,9 @@ fn main() {
                 if let Some(mcp) = app.try_state::<McpState>() {
                     mcp.stop();
                 }
-                // Every edit is on the disk, then a running export stops, before the app goes. An editing copy being
-                // made keeps its finished segments: its worker sees the app go and is made on at the next launch.
+                // Every edit is on the disk, then a running export pauses to resume next time, before the app goes. An
+                // editing copy being made keeps its finished segments: its worker sees the app go and is made on at the
+                // next launch.
                 commands::export::on_exit(app);
             }
             // The system's appearance changed: the window's colour follows it while the theme is System.
