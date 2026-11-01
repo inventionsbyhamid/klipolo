@@ -2586,8 +2586,6 @@ name = "klipolo-speech-wire"
 version = "0.1.0"
 dependencies = [
  "klipolo-model",
- "libc",
- "windows-sys 0.61.2",
 ]
 
 [[package]]
