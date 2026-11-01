@@ -18,10 +18,13 @@ use klipolo_model::time::{RangeUs, Us};
 use klipolo_model::timeline::{Clip, ClipSource, FramingMode};
 
 use super::SubjectTrack;
-use super::path::{KEY_STEP_US, PathInput, focus_path};
+use super::path::{PathInput, focus_path};
+use crate::providers::TrackedFrame;
 
 /// A Fill crop at least this share of the picture on both sides crops nothing.
 const WHOLE: f64 = 0.999;
+/// The tracked frames read either side of a clip's footage.
+const MARGIN_US: Us = 1_000_000;
 
 /// Where a main clip's footage comes from: a video file and the stretch the clip plays of it, on the file's clock.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -83,41 +86,60 @@ pub fn cropped_formats(p: &Project, clip: &Clip, formats: &[FormatKind]) -> Vec<
         .collect()
 }
 
-/// `clip`'s speaker path in `format` from `track` (which covers its footage), in the clip's source time, its keys kept
-/// to what the clip plays (from the key holding its first frame to a key's step past its end). None when nobody was found, or Fill crops nothing there.
+/// Which of `formats` `clip` may follow its speaker in: where its Fill crops the footage and it is on Fill (its own
+/// framing, else the default). A format the person set to Fit is never turned to Fill by a follow.
+pub fn followable_formats(p: &Project, clip: &Clip, formats: &[FormatKind]) -> Vec<FormatKind> {
+    (cropped_formats(p, clip, formats).into_iter())
+        .filter(|f| effective_framing(p, clip, *f).mode == FramingMode::Fill)
+        .collect()
+}
+
+/// `clip`'s speaker path in `format` from the tracked stretches of its file (`tracks`, from one or several requests,
+/// in any order), over just the footage it plays, in its source time. None when nobody was found there, or Fill crops
+/// nothing.
 pub fn clip_path(
     p: &Project,
     clip: &Clip,
     format: FormatKind,
     footage: &Footage,
-    track: &SubjectTrack,
+    tracks: &[SubjectTrack],
 ) -> Option<FocusPath> {
     let crop = fill_crop(p, clip, format)?;
-    let cuts: Vec<Us> = track.cuts.iter().map(|c| c + footage.shift_us).collect();
+    let shift = footage.shift_us;
+    let (from, to) = (footage.range.start, footage.range.end);
+    let mut frames: Vec<(Us, &TrackedFrame)> = Vec::new();
+    let mut cuts: Vec<Us> = Vec::new();
+    for t in tracks
+        .iter()
+        .filter(|t| t.range.start < to && from < t.range.end)
+    {
+        let fps = if t.fps > 0.0 { t.fps } else { 1.0 };
+        frames.extend((t.frames.iter()).filter_map(|f| {
+            let at = t.range.start + (f64::from(f.frame) / fps * 1e6).round() as Us;
+            // A second either side, so the crop eases in toward the clip's first and last frames.
+            (from - MARGIN_US..to + MARGIN_US)
+                .contains(&at)
+                .then_some((at + shift, f))
+        }));
+        cuts.extend(
+            t.cuts
+                .iter()
+                .filter(|c| (from..to).contains(*c))
+                .map(|c| c + shift),
+        );
+    }
+    frames.sort_by_key(|(at, _)| *at);
+    frames.dedup_by_key(|(at, _)| *at);
+    cuts.sort_unstable();
+    cuts.dedup();
     let input = PathInput {
-        frames: &track.frames,
-        fps: track.fps,
-        start_us: track.range.start + footage.shift_us,
-        end_us: track.range.end + footage.shift_us,
+        frames: &frames,
+        start_us: from + shift,
+        end_us: to + shift,
         cuts: &cuts,
         crop: (crop.w, crop.h),
     };
-    let path = focus_path(&input)?;
-    let to = clip.source_out_us + KEY_STEP_US;
-    // The last key at or before the clip's start holds its first frame.
-    let first = path
-        .keys
-        .partition_point(|k| k.at_us <= clip.source_in_us)
-        .max(1)
-        - 1;
-    let mut keys: Vec<_> = (path.keys.into_iter().enumerate())
-        .filter(|(i, k)| *i >= first && k.at_us <= to)
-        .map(|(_, k)| k)
-        .collect();
-    if let Some(k) = keys.first_mut() {
-        k.cut = false;
-    }
-    Some(FocusPath { keys })
+    focus_path(&input)
 }
 
 /// The op that makes `clip` follow its speaker in each of `paths`' formats: Fill there (the framing's own focus point

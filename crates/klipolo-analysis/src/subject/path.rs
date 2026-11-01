@@ -1,5 +1,5 @@
-//! The speaker's path for one format's crop, from a tracker's boxes (`TrackedFrame`s of one video, frame n at
-//! `start + n / fps` in the clip's source time):
+//! The speaker's path for one format's crop, from a tracker's boxes (`TrackedFrame`s, each with its time in the clip's
+//! source time: from one tracked stretch or several):
 //!
 //! - **Shots** run between the cuts. Each picks its own subject (`main_subject`): the person with the most area near
 //!   the middle over the shot, so the largest, most central one. Someone else who is there for most of the shot and at
@@ -11,8 +11,10 @@
 //!   inside its central dead zone. Once the aim leaves it, the crop moves (critically damped at `OMEGA`, through the
 //!   cursor follow's own filter) until it is back on the aim, never faster than `SPEED` crop widths a second and never
 //!   turning back mid-move, so a tracker's wobble can't make it jitter.
-//! - **Keys** every `KEY_STEP_US` from each shot's start; a shot's first key is a cut, so the crop jumps there and
-//!   never pans from one shot to the next. A shot with nobody in it holds the middle.
+//! - **Keys** every `KEY_STEP_US` from each shot's start while the crop moves, and only the first and last of a hold
+//!   (the crop's centre goes straight between them, so it draws the same), so a long still talk stays a few keys a
+//!   shot. A shot's first key is a cut, so the crop jumps there and never pans from one shot to the next. A shot with
+//!   nobody in it holds the middle.
 
 use klipolo_cursor::smooth::step;
 use klipolo_model::fill_focus::{FocusKey, FocusPath};
@@ -44,10 +46,9 @@ const MAX_GAP_US: Us = 1_000_000;
 /// What a path is made from.
 #[derive(Clone, Copy, Debug)]
 pub struct PathInput<'a> {
-    /// The tracker's frames, frame n at `start_us + n / fps`.
-    pub frames: &'a [TrackedFrame],
-    pub fps: f64,
-    /// Frame 0's time in the clip's source time.
+    /// The tracker's frames, each at its time in the clip's source time, in time order.
+    pub frames: &'a [(Us, &'a TrackedFrame)],
+    /// Where the footage the frames cover starts, in the same time.
     pub start_us: Us,
     /// Where the footage the frames cover ends, in the same time.
     pub end_us: Us,
@@ -59,18 +60,11 @@ pub struct PathInput<'a> {
 
 /// The path, or None when nobody was found on any frame.
 pub fn focus_path(input: &PathInput) -> Option<FocusPath> {
-    if !(input.fps.is_finite() && input.fps > 0.0) || input.end_us <= input.start_us {
+    if input.end_us <= input.start_us {
         return None;
     }
     let crop = (sane_side(input.crop.0), sane_side(input.crop.1));
-    let timed: Vec<(Us, &TrackedFrame)> = (input.frames.iter())
-        .map(|f| {
-            (
-                input.start_us + (f64::from(f.frame) / input.fps * 1e6).round() as Us,
-                f,
-            )
-        })
-        .collect();
+    let timed = input.frames;
     let shots = shots(input.start_us, input.end_us, input.cuts);
     // Fewer keys a second on very long footage, to stay within the path's cap.
     let room = FocusPath::MAX_KEYS.saturating_sub(shots.len()).max(1) as Us;
@@ -314,6 +308,28 @@ fn follow(
         }
         keys.push(key(next_key, (x.c, y.c)));
         next_key += key_step;
+    }
+    let first = keys.len() - shot_keys(keys, start);
+    drop_holds(keys, first);
+}
+
+/// How many of `keys` are this shot's: from `start` on.
+fn shot_keys(keys: &[FocusKey], start: Us) -> usize {
+    keys.iter().rev().take_while(|k| k.at_us >= start).count()
+}
+
+/// Keeps only the first and last key of each run of equal keys from `first` on: the centre goes straight between
+/// them, so the crop draws the same.
+fn drop_holds(keys: &mut Vec<FocusKey>, first: usize) {
+    let same = |a: &FocusKey, b: &FocusKey| a.x == b.x && a.y == b.y;
+    let shot: Vec<FocusKey> = keys.split_off(first);
+    let n = shot.len();
+    for i in 0..n {
+        let inside =
+            i > 0 && i + 1 < n && same(&shot[i - 1], &shot[i]) && same(&shot[i], &shot[i + 1]);
+        if !inside {
+            keys.push(shot[i]);
+        }
     }
 }
 

@@ -4,7 +4,9 @@
 use std::collections::BTreeMap;
 
 use klipolo_analysis::providers::{TrackedBox, TrackedFrame};
-use klipolo_analysis::subject::clips::{clip_path, cropped_formats, follow_op, footage};
+use klipolo_analysis::subject::clips::{
+    clip_path, cropped_formats, follow_op, followable_formats, footage,
+};
 use klipolo_analysis::subject::{FPS, PERSON, SubjectTrack};
 use klipolo_model::fill_focus::{FillFocus, FocusKey, FocusPath};
 use klipolo_model::ops::{ClipPatch, Op};
@@ -195,7 +197,14 @@ fn a_clips_path_is_in_its_source_time_and_trimmed_to_what_it_plays() {
         0.3,
     );
     let clip = &p.timeline.main[0];
-    let path = clip_path(&p, clip, Portrait, &footage(&p, clip).unwrap(), &wide).unwrap();
+    let path = clip_path(
+        &p,
+        clip,
+        Portrait,
+        &footage(&p, clip).unwrap(),
+        std::slice::from_ref(&wide),
+    )
+    .unwrap();
     assert!(path.is_valid());
     let first = path.keys.first().unwrap();
     let last = path.keys.last().unwrap();
@@ -210,7 +219,7 @@ fn a_clips_path_is_in_its_source_time_and_trimmed_to_what_it_plays() {
     // The camera clip's keys are on the take's clock: the file's 11 s is the take's 12 s.
     let clip = &p.timeline.main[1];
     let cam = footage(&p, clip).unwrap();
-    let path = clip_path(&p, clip, Portrait, &cam, &track(cam.range, 0.6)).unwrap();
+    let path = clip_path(&p, clip, Portrait, &cam, &[track(cam.range, 0.6)]).unwrap();
     assert!(
         path.keys.first().unwrap().at_us >= s(11.5),
         "{:?}",
@@ -222,7 +231,7 @@ fn a_clips_path_is_in_its_source_time_and_trimmed_to_what_it_plays() {
         frames: vec![],
         ..track(cam.range, 0.5)
     };
-    assert!(clip_path(&p, clip, Portrait, &cam, &empty).is_none());
+    assert!(clip_path(&p, clip, Portrait, &cam, &[empty]).is_none());
 }
 
 #[test]
@@ -274,4 +283,57 @@ fn the_follow_op_fills_each_format_with_its_path_and_keeps_the_rest() {
     assert!(!framing.contains_key(&Square));
     assert_eq!(focus[&Portrait], FillFocus::Speaker { path });
     assert_eq!(focus[&Landscape], FillFocus::Center);
+}
+
+#[test]
+fn a_clip_covered_by_two_tracked_stretches_reads_both() {
+    let p = project();
+    let clip = &p.timeline.main[0];
+    // The talk's 30 to 40 s: tracked as 20 to 35 s (the speaker at 0.3), then 35 to 50 s (at 0.6).
+    let early = track(
+        RangeUs {
+            start: s(20.0),
+            end: s(35.0),
+        },
+        0.3,
+    );
+    let late = track(
+        RangeUs {
+            start: s(35.0),
+            end: s(50.0),
+        },
+        0.6,
+    );
+    let path = clip_path(
+        &p,
+        clip,
+        Portrait,
+        &footage(&p, clip).unwrap(),
+        &[late, early],
+    )
+    .unwrap();
+    assert!((path.centre_at(s(31.0)).unwrap().0 - 0.3).abs() < 0.02);
+    assert!(path.centre_at(s(39.5)).unwrap().0 > 0.4, "{path:?}");
+}
+
+#[test]
+fn a_format_the_person_set_to_fit_is_never_followed() {
+    let mut p = project();
+    let all = [Landscape, Portrait, Square];
+    let fit = Framing {
+        mode: FramingMode::Fit,
+        focus_x: 0.5,
+        focus_y: 0.5,
+        follow: None,
+    };
+    p.timeline.main[0].framing.insert(Square, fit);
+    // Square crops the picture when it fills, but it doesn't fill: only the vertical version follows.
+    assert_eq!(
+        cropped_formats(&p, &p.timeline.main[0], &all),
+        [Portrait, Square]
+    );
+    assert_eq!(
+        followable_formats(&p, &p.timeline.main[0], &all),
+        [Portrait]
+    );
 }

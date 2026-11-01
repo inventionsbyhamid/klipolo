@@ -35,10 +35,20 @@ fn frames(seconds: f64, at: impl Fn(f64) -> Vec<TrackedBox>) -> Vec<TrackedFrame
         .collect()
 }
 
-fn input<'a>(frames: &'a [TrackedFrame], cuts: &'a [Us], crop: (f64, f64)) -> PathInput<'a> {
+/// Each frame with its time: frame n at n / 2 s from `start_us`.
+fn timed(frames: &[TrackedFrame], start_us: Us) -> Vec<(Us, &TrackedFrame)> {
+    (frames.iter())
+        .map(|f| (start_us + (f64::from(f.frame) / FPS * 1e6) as Us, f))
+        .collect()
+}
+
+fn input<'a>(
+    frames: &'a [(Us, &'a TrackedFrame)],
+    cuts: &'a [Us],
+    crop: (f64, f64),
+) -> PathInput<'a> {
     PathInput {
         frames,
-        fps: FPS,
         start_us: 0,
         end_us: (frames.len() as f64 / FPS * 1e6) as Us,
         cuts,
@@ -58,19 +68,15 @@ fn wobble(t: f64) -> f64 {
 #[test]
 fn a_still_speaker_holds_one_place() {
     let f = frames(10.0, |t| vec![person(1, 0.3 + wobble(t), 0.2, 0.1)]);
-    let path = focus_path(&input(&f, &[], PORTRAIT)).expect("someone is there");
+    let path = focus_path(&input(&timed(&f, 0), &[], PORTRAIT)).expect("someone is there");
     assert!(path.is_valid());
     let x = xs(&path);
     assert!(x.iter().all(|v| (v - x[0]).abs() < 1e-9), "{x:?}");
     assert!((x[0] - 0.3).abs() < 0.02, "{x:?}");
-    // Keys every quarter second from the first frame to the end.
+    // A hold is two keys, its start and its end: a long still talk stays small.
+    assert_eq!(path.keys.len(), 2, "{:?}", path.keys);
     assert_eq!(path.keys[0].at_us, 0);
-    assert!(
-        path.keys
-            .windows(2)
-            .all(|w| w[1].at_us - w[0].at_us <= KEY_STEP_US)
-    );
-    assert!(path.keys.last().unwrap().at_us >= 9_500_000);
+    assert!(path.keys[1].at_us >= 9_750_000 - KEY_STEP_US);
     assert!(!path.keys.iter().any(|k| k.cut));
 }
 
@@ -84,7 +90,7 @@ fn a_cut_jumps_to_the_next_shots_speaker_and_never_pans_across_it() {
         }]
     });
     let cuts = [5_000_000];
-    let path = focus_path(&input(&f, &cuts, PORTRAIT)).unwrap();
+    let path = focus_path(&input(&timed(&f, 0), &cuts, PORTRAIT)).unwrap();
     let at = |us: Us| path.centre_at(us).unwrap().0;
     assert!((at(4_999_999) - 0.3).abs() < 0.02, "{}", at(4_999_999));
     assert!((at(5_000_000) - 0.75).abs() < 0.02, "{}", at(5_000_000));
@@ -108,7 +114,7 @@ fn a_walking_speaker_is_followed_smoothly_under_the_speed_limit() {
     let f = frames(12.0, |t| {
         vec![person(1, 0.2 + 0.05 * t + wobble(t), 0.15, 0.1)]
     });
-    let path = focus_path(&input(&f, &[], PORTRAIT)).unwrap();
+    let path = focus_path(&input(&timed(&f, 0), &[], PORTRAIT)).unwrap();
     let x = xs(&path);
     // It ends near the speaker, and never turns back: no jitter.
     assert!(
@@ -158,7 +164,7 @@ fn two_people_side_by_side_who_fit_in_the_crop_are_framed_together() {
     let f = frames(6.0, |_| {
         vec![person(1, 0.38, 0.12, 0.1), person(2, 0.62, 0.12, 0.1)]
     });
-    let path = focus_path(&input(&f, &[], square)).unwrap();
+    let path = focus_path(&input(&timed(&f, 0), &[], square)).unwrap();
     assert!((path.keys[0].x - 0.5).abs() < 0.02, "{:?}", path.keys[0]);
 }
 
@@ -170,7 +176,7 @@ fn a_lost_speaker_holds_then_eases_back() {
         t if t < 7.0 => vec![],
         _ => vec![person(1, 0.7, 0.2, 0.1)],
     });
-    let path = focus_path(&input(&f, &[], PORTRAIT)).unwrap();
+    let path = focus_path(&input(&timed(&f, 0), &[], PORTRAIT)).unwrap();
     let at = |s: f64| path.centre_at((s * 1e6) as Us).unwrap().0;
     assert!(
         (at(6.5) - 0.3).abs() < 0.02,
@@ -191,7 +197,7 @@ fn headroom_keeps_the_head_near_the_top_of_a_short_crop() {
     // A portrait video filling 16:9 shows this share of its height.
     let landscape = (1.0, (1080.0 / 1920.0) / (1920.0 / 1080.0));
     let f = frames(4.0, |_| vec![person(1, 0.5, 0.4, 0.4)]);
-    let path = focus_path(&input(&f, &[], landscape)).unwrap();
+    let path = focus_path(&input(&timed(&f, 0), &[], landscape)).unwrap();
     let y = path.keys[0].y;
     let top = y - landscape.1 / 2.0;
     // The head is a little below the crop's top edge: inside it, with some room above.
@@ -201,7 +207,7 @@ fn headroom_keeps_the_head_near_the_top_of_a_short_crop() {
 #[test]
 fn nobody_found_gives_no_path_and_a_shot_without_anyone_holds_the_middle() {
     let f = frames(4.0, |_| vec![]);
-    assert!(focus_path(&input(&f, &[], PORTRAIT)).is_none());
+    assert!(focus_path(&input(&timed(&f, 0), &[], PORTRAIT)).is_none());
     // A shot with a person, then one without.
     let f = frames(8.0, |t| {
         if t < 4.0 {
@@ -211,14 +217,15 @@ fn nobody_found_gives_no_path_and_a_shot_without_anyone_holds_the_middle() {
         }
     });
     let cuts = [4_000_000];
-    let path = focus_path(&input(&f, &cuts, PORTRAIT)).unwrap();
+    let path = focus_path(&input(&timed(&f, 0), &cuts, PORTRAIT)).unwrap();
     assert!((path.centre_at(6_000_000).unwrap().0 - 0.5).abs() < 1e-9);
 }
 
 #[test]
 fn keys_are_in_the_clips_source_time() {
     let f = frames(4.0, |_| vec![person(1, 0.3, 0.2, 0.1)]);
-    let mut i = input(&f, &[], PORTRAIT);
+    let at = timed(&f, 30_000_000);
+    let mut i = input(&at, &[], PORTRAIT);
     i.start_us = 30_000_000;
     i.end_us = 34_000_000;
     let path = focus_path(&i).unwrap();
