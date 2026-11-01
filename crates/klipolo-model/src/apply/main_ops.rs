@@ -1,5 +1,6 @@
 //! Main-track edits. Deletions ripple: gaps close and attached layers follow their content. Free layers keep their
-//! time; those a cut leaves past the video's new end are trimmed to it or go.
+//! time; those a cut leaves past the video's new end are trimmed to it or go, and those placed after the end move with
+//! it.
 //!
 //! Layers move by timeline lengths but are re-anchored in source time against the main track as
 //! it was before the cut, so rounding at non-unit speeds can never hand a layer to a neighbouring
@@ -17,7 +18,9 @@ use crate::messages::{code, msg};
 use crate::motion::{self, Motion};
 use crate::ops::{ClipPatch, Edge};
 use crate::project::Project;
-use crate::query::{anchor_at, clip_at, main_track_duration, video_duration, MainIndex};
+use crate::query::{
+    anchor_at, anchored_end, clip_at, main_track_duration, video_duration, MainIndex,
+};
 use crate::time::{
     drifted, kept_parts, merge_ranges, scaled, unscaled, RangeUs, Ripple, Us, MIN_DURATION_US,
 };
@@ -229,66 +232,70 @@ pub(super) fn remove_clip(p: &mut Project, id: &str, places: &mut Places) -> Res
 }
 
 /// Cut `ranges` out of the main track, close the gaps and carry attached layers along. Free layers keep their time,
-/// and those the cut leaves past the video's new end are trimmed to it or go ([`end_free_layers`]). The removed ranges
-/// are indexed once (`Ripple`), so each clip and layer finds its cuts by binary search: O((C + L) log R) plus the
-/// pieces made, not O((C + L) × R).
+/// those the cut leaves past the video's new end are trimmed to it or go, and those placed after the end move with it
+/// ([`end_free_layers`]). The removed ranges are indexed once (`Ripple`), so each clip and layer finds its cuts by
+/// binary search: O((C + L) log R) plus the pieces made, not O((C + L) × R).
 fn ripple_delete(p: &mut Project, ranges: &[RangeUs]) -> Result<()> {
     let merged = merge_ranges(ranges, main_track_duration(&p.timeline.main));
     if merged.is_empty() {
         return Err(invalid(code!("model.clip.nothingToRemove")));
     }
-    let free = FreeOver::before_cut(p);
+    let free = FreeLayers::before_cut(p);
     let removed = Ripple::new(&with_slivers(&p.timeline.main, merged));
     let mut ids = IdPool::of(p);
     let starts = ripple_items(p, &removed, &mut ids);
     let origins = cut_main(&mut p.timeline.main, &removed, &mut ids);
-    let new_end = anchored_end(p);
+    let new_end = anchored_end(&p.timeline);
     reanchor(p, &starts, &origins);
     end_free_layers(p, &free, new_end);
     Ok(())
 }
 
-/// Where the video ends as the clips and the layers that follow them make it: the main track, or a later attached
-/// layer with a picture of its own. Free layers keep their time through a cut, so they don't hold the end.
-fn anchored_end(p: &Project) -> Us {
-    p.timeline
-        .tracks
-        .iter()
-        .flat_map(|t| &t.items)
-        .filter(|i| i.attach.is_some() && i.content.has_own_picture())
-        .map(Item::end_us)
-        .fold(main_track_duration(&p.timeline.main), Us::max)
-}
-
-/// The free layers a cut may leave past the video's new end, read before it: those on unlocked tracks that start before
-/// the video's end then. Music is left to its refit (`media::music`), and a layer placed after the end stays there.
-struct FreeOver {
+/// The free layers on unlocked tracks a cut changes, read before it, with the video's end then (`anchored_end`): those
+/// over the video (starting before the end; music is left to its refit, `media::music`), and those placed after it
+/// (an end card, a closing sound or song), which stay after it.
+struct FreeLayers {
     end: Us,
-    ids: HashSet<Id>,
+    over: HashSet<Id>,
+    after: HashSet<Id>,
 }
 
-impl FreeOver {
+impl FreeLayers {
     fn before_cut(p: &Project) -> Self {
-        let end = anchored_end(p);
-        let ids = (p.timeline.tracks.iter().filter(|t| !t.locked))
+        let end = anchored_end(&p.timeline);
+        let (mut over, mut after) = (HashSet::new(), HashSet::new());
+        let free = (p.timeline.tracks.iter().filter(|t| !t.locked))
             .flat_map(|t| &t.items)
-            .filter(|i| i.attach.is_none() && !is_music(i) && i.start_us < end)
-            .map(|i| i.id.clone())
-            .collect();
-        Self { end, ids }
+            .filter(|i| i.attach.is_none());
+        for item in free {
+            if item.start_us >= end {
+                after.insert(item.id.clone());
+            } else if !is_music(item) {
+                over.insert(item.id.clone());
+            }
+        }
+        Self { end, over, after }
     }
 }
 
-/// After a cut that brought the video's end in to `new_end`: each layer of `free` now wholly past it goes, and one
-/// across it is trimmed to it, as a hand trim of its end does. Nothing changes when the video is now empty: the layers
-/// wait for the footage that comes next, as music does.
-fn end_free_layers(p: &mut Project, free: &FreeOver, new_end: Us) {
-    if free.ids.is_empty() || new_end <= 0 || new_end >= free.end {
+/// After a cut that brought the video's end in to `new_end`: a free layer placed after the end keeps its distance from
+/// it (its new start is the new end plus its old start's distance from the old end), and one over the video now
+/// wholly past the end goes, one across it trimmed to it, as a hand trim of its end does. Nothing changes when the
+/// video is now empty: the layers wait for the footage that comes next, as music does.
+fn end_free_layers(p: &mut Project, free: &FreeLayers, new_end: Us) {
+    if (free.over.is_empty() && free.after.is_empty()) || new_end <= 0 || new_end >= free.end {
         return;
     }
+    let shift = new_end.saturating_sub(free.end);
     for track in &mut p.timeline.tracks {
+        let mut moved = false;
         track.items.retain_mut(|item| {
-            if !free.ids.contains(&item.id) || item.end_us() <= new_end {
+            if free.after.contains(&item.id) {
+                item.start_us = item.start_us.saturating_add(shift);
+                moved = true;
+                return true;
+            }
+            if !free.over.contains(&item.id) || item.end_us() <= new_end {
                 return true;
             }
             if new_end.saturating_sub(item.start_us) < MIN_DURATION_US {
@@ -297,6 +304,9 @@ fn end_free_layers(p: &mut Project, free: &FreeOver, new_end: Us) {
             end_at(item, new_end);
             true
         });
+        if moved {
+            track.items.sort_by_key(|i| i.start_us);
+        }
     }
 }
 
@@ -343,11 +353,11 @@ pub(super) fn trim_clip(
     if let Some(origin) = origins.get_mut(i) {
         origin.1 = kept;
     }
-    let free = FreeOver::before_cut(p);
+    let free = FreeLayers::before_cut(p);
     let mut ids = IdPool::of(p);
     let starts = ripple_items(p, &removed, &mut ids);
     p.timeline.main[i] = trimmed;
-    let new_end = anchored_end(p);
+    let new_end = anchored_end(&p.timeline);
     reanchor(p, &starts, &origins);
     end_free_layers(p, &free, new_end);
     Ok(())

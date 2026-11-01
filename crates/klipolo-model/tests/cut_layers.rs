@@ -207,7 +207,7 @@ fn a_free_title_at_the_start_survives_an_insert_then_a_delete() {
 #[test]
 fn a_free_overlay_across_the_new_end_is_trimmed_to_it() {
     // Cutting 10–20 s ends the video at 20 s: a free title from 15 s is trimmed there, one from 22 s goes, and a card
-    // placed after the end (from 30 s) stays where it is.
+    // placed after the end (from 30 s) moves with it, to 20 s.
     let p = project(vec![
         (
             TrackKind::Overlay,
@@ -236,12 +236,14 @@ fn a_free_overlay_across_the_new_end_is_trimmed_to_it() {
         "it keeps its fade-out, at its new end"
     );
     assert!(!has(&next, "late"));
-    assert_eq!(item_by_id(&next, "card"), item_by_id(&p, "card"));
+    assert_eq!(span(item_by_id(&next, "card")), (20.0, 23.0));
+    assert_eq!(video_duration(&next.timeline), secs(23.0));
 
-    // The proposal names what goes and what is shortened.
+    // The proposal names what goes, what is shortened and what moves.
     let review = tx(ops).review(&p).unwrap();
     assert_eq!(review.removals.items, ["late"]);
     assert_eq!(review.removals.shortened, ["across"]);
+    assert_eq!(review.removals.moved, ["card"]);
 }
 
 #[test]
@@ -285,7 +287,7 @@ fn keeping_only_the_start_leaves_no_sound_past_the_new_end() {
 #[test]
 fn a_sound_running_past_the_end_ends_with_the_video_after_a_cut() {
     // Two sounds run 5 s and 4 s past the 30 s end, never heard there; one is free, one attached. A sound placed after
-    // the end on purpose keeps its place.
+    // the end on purpose keeps its distance from the end.
     let p = project(vec![
         (
             TrackKind::Audio,
@@ -309,7 +311,8 @@ fn a_sound_running_past_the_end_ends_with_the_video_after_a_cut() {
     assert_eq!(tail.attach, None);
     // Attached: it moves back 4 s with its footage and is cut at the new end.
     assert_eq!(span(item_by_id(&p, "tied")), (20.0, 26.0));
-    assert_eq!(span(item_by_id(&p, "parked")), (36.0, 38.0));
+    // Placed after the end: 6 s after it, as before.
+    assert_eq!(span(item_by_id(&p, "parked")), (32.0, 34.0));
 }
 
 #[test]
@@ -375,15 +378,20 @@ fn removing_or_trimming_a_clip_keeps_free_layers_and_ends_those_past_the_end() {
 
 #[test]
 fn free_layers_on_a_locked_track_stay_as_they_are() {
-    // A lock keeps a track's layers from edits: a cut leaves its free ones where they are, even past the new end.
+    // A lock keeps a track's layers from edits: a cut leaves its free ones where they are, even past the new end, and
+    // one placed after the end stays put.
     let mut p = project(vec![(
         TrackKind::Audio,
         "s1",
-        vec![(sound("s", 20.0, 2.0, 0.0), false)],
+        vec![
+            (sound("s", 20.0, 2.0, 0.0), false),
+            (sound("closing", 31.0, 2.0, 0.0), false),
+        ],
     )]);
     p.timeline.tracks[0].locked = true;
     let next = after(&p, &[cut(5.0, 30.0)]);
     assert_eq!(item_by_id(&next, "s"), item_by_id(&p, "s"));
+    assert_eq!(item_by_id(&next, "closing"), item_by_id(&p, "closing"));
 }
 
 #[test]
@@ -392,7 +400,10 @@ fn a_cut_and_what_it_ends_undo_as_one_step() {
         (
             TrackKind::Overlay,
             "free",
-            vec![(text_item("across", 15.0, 10.0), false)],
+            vec![
+                (text_item("across", 15.0, 10.0), false),
+                (still_item("card", 30.0, 3.0), false),
+            ],
         ),
         (
             TrackKind::Audio,
@@ -402,14 +413,17 @@ fn a_cut_and_what_it_ends_undo_as_one_step() {
     ]);
     let mut doc = Document::new(p).unwrap();
     let before = doc.project().clone();
+    let cleaned = |p: &Project| {
+        assert_eq!(span(item_by_id(p, "across")), (15.0, 20.0));
+        assert_eq!(span(item_by_id(p, "card")), (20.0, 23.0));
+        assert!(!has(p, "late"));
+    };
     doc.apply(&tx(vec![cut(10.0, 20.0)])).unwrap();
-    assert_eq!(span(item_by_id(doc.project(), "across")), (15.0, 20.0));
-    assert!(!has(doc.project(), "late"));
+    cleaned(doc.project());
     doc.undo().unwrap();
     assert_eq!(*doc.project(), before);
     doc.redo().unwrap();
-    assert_eq!(span(item_by_id(doc.project(), "across")), (15.0, 20.0));
-    assert!(!has(doc.project(), "late"));
+    cleaned(doc.project());
 }
 
 #[test]
@@ -463,4 +477,104 @@ fn a_recording_clips_separated_sound_follows_its_clip_through_a_cut() {
     let short = after(&freed, &[cut(5.0, 30.0)]);
     assert_eq!(mic(&short), [(0.0, 5.0)]);
     assert_eq!(item_by_id(&short, &id).attach, None);
+}
+
+#[test]
+fn an_end_card_after_the_video_moves_with_its_end_and_the_music_follows() {
+    // A 3:37.5 video, a free end card after it (3:37.5 for 4 s), a free whoosh at 1:40 and music to the video's end
+    // (3:41.5, the card's). Keeping only 0–25.5 s puts the card right after the footage: no black before it.
+    let mut p = project(vec![
+        (
+            TrackKind::Overlay,
+            "Overlay 1",
+            vec![(still_item("card", 217.5, 4.0), false)],
+        ),
+        (
+            TrackKind::Audio,
+            "Audio 1",
+            vec![(sound("whoosh-layer", 100.0, 5.0, 0.0), false)],
+        ),
+    ]);
+    let mut take = p.asset("screen").unwrap().clone();
+    take.id = "take".into();
+    take.duration_us = secs(600.0);
+    p.assets.push(take);
+    let mut clip = Clip::new(ClipSource::Asset { id: "take".into() }, 0, secs(217.5));
+    clip.id = "clipA".into();
+    p.timeline.main = vec![clip];
+    let song = p.asset("music").unwrap().clone();
+    let p = after(&p, &add_music_ops(&p, &song, MusicOpts::default()).unwrap());
+    let music = |p: &Project| -> Vec<(f64, f64)> {
+        let mut m: Vec<&Item> = (p.timeline.tracks.iter().flat_map(|t| &t.items))
+            .filter(|i| is_music(i))
+            .collect();
+        m.sort_by_key(|i| i.start_us);
+        m.into_iter().map(span).collect()
+    };
+    assert_eq!(video_duration(&p.timeline), secs(221.5));
+    assert_eq!(music(&p).last().map(|s| s.1), Some(221.5));
+
+    let ops = with_music_refit(&p, vec![cut(25.5, 217.5)]).unwrap();
+    let next = after(&p, &ops);
+    assert_eq!(span(item_by_id(&next, "card")), (25.5, 29.5));
+    assert_eq!(main_track_duration(&next.timeline.main), secs(25.5));
+    assert_eq!(video_duration(&next.timeline), secs(29.5));
+    assert!(!has(&next, "whoosh-layer"));
+    assert_eq!(
+        music(&next),
+        [(0.0, 29.5)],
+        "the music plays on under the card, to the new end"
+    );
+
+    let review = tx(ops).review(&p).unwrap();
+    assert_eq!(review.removals.moved, ["card"]);
+    assert!(review.removals.items.contains(&"whoosh-layer".to_string()));
+}
+
+#[test]
+fn a_one_second_cut_keeps_what_follows_the_video_one_second_earlier() {
+    // A card and a closing song placed after the 30 s video: removing a 1 s pause brings both 1 s earlier.
+    let p = project(vec![(
+        TrackKind::Overlay,
+        "free",
+        vec![(still_item("card", 30.0, 3.0), false)],
+    )]);
+    let song = p.asset("music").unwrap().clone();
+    let closing = MusicOpts {
+        start_us: secs(30.0),
+        ..MusicOpts::default()
+    };
+    let p = after(&p, &add_music_ops(&p, &song, closing).unwrap());
+    let music_id = (p.timeline.tracks.iter().flat_map(|t| &t.items))
+        .find(|i| is_music(i))
+        .map(|i| i.id.clone())
+        .unwrap();
+    assert_eq!(span(item_by_id(&p, &music_id)), (30.0, 33.0));
+
+    let ops = with_music_refit(&p, vec![cut(10.0, 11.0)]).unwrap();
+    let next = after(&p, &ops);
+    assert_eq!(span(item_by_id(&next, "card")), (29.0, 32.0));
+    assert_eq!(span(item_by_id(&next, &music_id)), (29.0, 32.0));
+    assert_eq!(video_duration(&next.timeline), secs(32.0));
+    assert_eq!(
+        tx(ops).review(&p).unwrap().removals.moved,
+        ["card".to_string(), music_id]
+    );
+}
+
+#[test]
+fn a_card_the_video_grew_under_goes_when_that_footage_is_cut() {
+    // A card placed after the 30 s video, then a 10 s clip added at the end: the card now sits over that clip, so
+    // removing the clip again removes the card with it (undo brings both back).
+    let p = project(vec![(
+        TrackKind::Overlay,
+        "free",
+        vec![(still_item("card", 30.0, 3.0), false)],
+    )]);
+    let mut clip = Clip::new(ClipSource::Asset { id: "broll".into() }, 0, secs(10.0));
+    clip.id = "x".into();
+    let grown = after(&p, &[Op::InsertClip { clip, index: None }]);
+    assert_eq!(item_by_id(&grown, "card"), item_by_id(&p, "card"));
+    let back = after(&grown, &[Op::RemoveClip { id: "x".into() }]);
+    assert!(!has(&back, "card"));
 }
