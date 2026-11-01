@@ -128,6 +128,10 @@
     {
       "request": "make a title card saying Day 1 in Lisbon with trams behind it",
       "calls": [{"name": "makeTitleCard", "call_id": "call_30", "arguments": "{\"prompt\": \"Lisbon trams\", \"title\": \"Day 1 in Lisbon\", \"atSec\": null, \"durationSec\": null}"}]
+    },
+    {
+      "request": "freeze here for two seconds",
+      "calls": [{"name": "freezeFrame", "call_id": "call_31", "arguments": "{\"atSec\": null, \"durationSec\": 2}"}]
     }
   ]
 }

@@ -500,6 +500,7 @@ fn done(call: &ToolCall) -> Option<&'static str> {
         ToolCall::SetCaptions { .. } => "The captions are changed.",
         ToolCall::FixCaptionWords { .. } => "The words are fixed.",
         ToolCall::SplitAt { .. } => "The clip is split.",
+        ToolCall::FreezeFrame { .. } => "The frame holds still there.",
         ToolCall::TrimClip { .. } => "The clip is longer.",
         ToolCall::Undo => "Undone.",
         // Shown on their own (moments, questions), or proposed.
@@ -544,6 +545,7 @@ fn task(tool: &str) -> &'static str {
         "removeFillers" => "remove the filler words",
         "trimClip" => "trim the clip",
         "splitAt" => "split the clip",
+        "freezeFrame" => "hold that frame",
         "setFormat" => "change the format",
         "setCaptions" => "change the captions",
         "fixCaptionWords" => "fix the words",

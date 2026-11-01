@@ -78,6 +78,11 @@ pub enum ToolCall {
     TrimClip { clip: String, edge: Edge, to_us: Us },
     /// Split the clip playing at `at_us` in two.
     SplitAt { at_us: Us },
+    /// Hold the frame shown at `at_us` (None: the playhead) still for `duration_us` (None: `FREEZE_DEFAULT_US`).
+    FreezeFrame {
+        at_us: Option<Us>,
+        duration_us: Option<Us>,
+    },
     /// Make `format` the main format, keeping the others too when `keep_others`.
     SetFormat {
         format: FormatKind,
@@ -189,6 +194,7 @@ impl ToolCall {
             ToolCall::RemoveFillers => "removeFillers",
             ToolCall::TrimClip { .. } => "trimClip",
             ToolCall::SplitAt { .. } => "splitAt",
+            ToolCall::FreezeFrame { .. } => "freezeFrame",
             ToolCall::SetFormat { .. } => "setFormat",
             ToolCall::SetCaptions { .. } => "setCaptions",
             ToolCall::FixCaptionWords { .. } => "fixCaptionWords",
@@ -222,7 +228,8 @@ impl ToolCall {
             | ToolCall::AddText { at_us, .. }
             | ToolCall::AddImage { at_us, .. }
             | ToolCall::MakeSticker { at_us, .. }
-            | ToolCall::MakeTitleCard { at_us, .. } => at_us.is_some(),
+            | ToolCall::MakeTitleCard { at_us, .. }
+            | ToolCall::FreezeFrame { at_us, .. } => at_us.is_some(),
             ToolCall::RemoveSilences { .. }
             | ToolCall::RemoveFillers
             | ToolCall::SetFormat { .. }
@@ -273,6 +280,10 @@ const EDGES: [Edge; 2] = [Edge::Start, Edge::End];
 
 /// The pause lengths `removeSilences` takes, in seconds.
 pub const PAUSE_SECS: RangeInclusive<f64> = 0.3..=10.0;
+
+/// How long `freezeFrame` may hold a frame, in seconds, and how long it holds one when the person gave no length.
+pub const FREEZE_SECS: RangeInclusive<f64> = 0.1..=60.0;
+pub const FREEZE_DEFAULT_US: Us = 2_000_000;
 
 /// The most words a noun phrase for `blurObjects` or `followSubject` may have.
 pub const MAX_PHRASE_WORDS: usize = 8;
@@ -398,6 +409,32 @@ const TOOLS: &[Tool] = &[
         read: |a| {
             Ok(ToolCall::SplitAt {
                 at_us: a.time("atSec")?,
+            })
+        },
+    },
+    Tool {
+        name: "freezeFrame",
+        description: "Freeze the frame at this time: it holds still, silent, then the video plays on.",
+        parameters: || {
+            vec![
+                (
+                    "atSec",
+                    nullable_number("Timeline seconds. Null for the playhead."),
+                ),
+                (
+                    "durationSec",
+                    nullable_number(&format!(
+                        "Seconds it holds, {} to {}. Null for 2.",
+                        FREEZE_SECS.start(),
+                        FREEZE_SECS.end()
+                    )),
+                ),
+            ]
+        },
+        read: |a| {
+            Ok(ToolCall::FreezeFrame {
+                at_us: a.nullable_time("atSec")?,
+                duration_us: a.nullable_length("durationSec", &FREEZE_SECS)?,
             })
         },
     },

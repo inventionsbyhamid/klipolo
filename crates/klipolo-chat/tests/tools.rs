@@ -189,6 +189,7 @@ fn every_tool_schema_is_strict() {
             "removeFillers",
             "trimClip",
             "splitAt",
+            "freezeFrame",
             "setFormat",
             "setCaptions",
             "fixCaptionWords",
@@ -227,6 +228,8 @@ fn every_tool_schema_is_strict() {
         nullable,
         [
             "removeSilences.minPauseSec",
+            "freezeFrame.atSec",
+            "freezeFrame.durationSec",
             "setCaptions.style",
             "addMusic.atSec",
             "addMusic.duck",
@@ -462,6 +465,13 @@ fn parses_each_tool_from_spike_shaped_calls() {
                 prompt: "Lisbon trams".into(),
                 at_us: None,
                 duration_us: None,
+            }],
+        ),
+        (
+            "freeze here for two seconds",
+            vec![FreezeFrame {
+                at_us: None,
+                duration_us: Some(secs_to_us(2.0)),
             }],
         ),
     ];
@@ -743,6 +753,12 @@ fn bad_arguments_name_the_tool_and_the_field() {
             r#"{"atSec": null}"#,
             Some("atSec"),
             "splitAt: atSec must be a number of seconds, not null.",
+        ),
+        (
+            "freezeFrame",
+            r#"{"atSec": 4, "durationSec": 0}"#,
+            Some("durationSec"),
+            "freezeFrame: durationSec must be between 0.1 and 60 seconds, not 0.",
         ),
         (
             "setFormat",
@@ -1228,5 +1244,5 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
     assert!(prompt_tokens <= 900, "prompt {prompt_tokens} tokens");
-    assert!(tools_tokens <= 2_700, "tools {tools_tokens} tokens");
+    assert!(tools_tokens <= 2_800, "tools {tools_tokens} tokens");
 }
