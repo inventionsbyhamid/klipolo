@@ -28,8 +28,8 @@ export interface QueuedCommit {
 export type LateLabel = Label | (() => Label);
 
 /**
- * A change the close waits for instead of dropping it while it waits its turn (`keepAtClose`:
- * every burst's and one-shot press's), with the label said if the close can't wait for it.
+ * A change the close waits for instead of dropping it while it waits its turn (`keepAtClose`: every burst's and
+ * one-shot press's), with the label said if the close can't wait for it.
  */
 export interface KeepAtClose {
   keep?: Label;
@@ -82,7 +82,7 @@ export function queueCommit(
 
 /**
  * One undo step built when it goes in, through the commit queue (`queueCommit`); resolves with whether it went in. With
- * a plain label it is kept at close (every one-shot press, as every burst): the close waits for it in
+ * a plain label it is kept at close (every one-shot press is, as every burst is): the close waits for it in
  * its turn, and says it (by that label) if it can't. `keep: false` lets the close drop it instead; a late (function)
  * label can't be kept, having nothing to say before it goes.
  */

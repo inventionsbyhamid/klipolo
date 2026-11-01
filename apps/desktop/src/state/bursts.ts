@@ -29,8 +29,8 @@ const CLOSING_ROUNDS = 6;
 /**
  * Commits every pending burst now (through the commit queue, so undo, redo and export, which wait their turn after
  * it, come after it); true if any was pending. `closing`: each goes into the commit queue now, kept at close, so the
- * close waits for it in its turn (`landEdits`; never at once, ahead of a commit it waits for, which it
- * would put back). A burst can commit through another (a colour's key settle through its field's `useBurst`) that this
+ * close waits for it in its turn (`landEdits`: never at once, ahead of a commit it waits for, which it would put
+ * back). A burst can commit through another (a colour's key settle through its field's `useBurst`) that this
  * round has already passed: closing goes round again until a round finds nothing pending (a burst with nothing pending
  * does nothing and says false).
  */

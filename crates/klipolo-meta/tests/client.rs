@@ -212,7 +212,7 @@ fn rate_limit_waits_read_like_a_person_wrote_them() {
 // Transcription.
 
 #[tokio::test]
-async fn transcribe_parses_spike_fixture() {
+async fn transcribe_parses_a_real_answer() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/v1/asr/transcribe"))
@@ -860,7 +860,7 @@ async fn respond_extracts_function_calls_and_usage() {
 }
 
 #[tokio::test]
-async fn respond_reads_structured_output_from_spike_fixture() {
+async fn respond_reads_structured_output_from_a_real_answer() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/meta/v1/responses"))
@@ -989,8 +989,8 @@ fn asr_usd_prices_audio_by_the_hour() {
 }
 
 #[test]
-fn spark_video_tokens_match_the_spike_counts() {
-    // The spike measured 42,340 input tokens at the default 2 fps and 22,060
+fn spark_video_tokens_match_the_measured_counts() {
+    // A first trial measured 42,340 input tokens at the default 2 fps and 22,060
     // at 1 fps for 155 s, each with a prompt of about 180 tokens.
     assert_eq!(pricing::spark_video_tokens(155.0, 2.0), 310 * 131 + 1550);
     assert_eq!(pricing::spark_video_tokens(155.0, 1.0), 155 * 131 + 1550);

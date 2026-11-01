@@ -2,8 +2,8 @@ import type { CaptionPunctuation } from '../../bindings/CaptionPunctuation';
 import edgeKept from '../../lib/caption-edge-kept.json';
 
 /**
- * How the captions space two words: the model's rules, mirrored so "Fix the
- * words" can tell how a fix's edges will be drawn. `caption-join-parity.json`, written by Rust, pins them
+ * How the captions space two words: the model's rules, mirrored so "Fix the words" can tell how a fix's edges will
+ * be drawn. `caption-join-parity.json`, written by Rust, pins them
  * (`wordFix.parity.test.ts`); what stays at a word's edge is Rust's own table (`caption-edge-kept.json`).
  */
 
