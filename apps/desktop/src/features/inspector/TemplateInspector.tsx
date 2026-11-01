@@ -8,6 +8,7 @@ import { BUILTINS } from '../../lib/contrib';
 import { clearPreview, dropPendingPreview, previewOps } from '../../state/livePreview';
 import { itemOp } from '../../lib/ops';
 import { TimingField } from './common';
+import { MotionField } from './MotionField';
 import { EffectsButton } from './EffectsButton';
 import { Field, Swatches, type Swatch } from './fields';
 import { commitLatest, contentNow } from '../../state/latest';
@@ -152,6 +153,7 @@ export function TemplateInspector({
         return null;
       })}
       <EffectsButton target={{ type: 'item', id: item.id }} effects={item.effects} />
+      <MotionField item={item} />
       <TimingField item={item} />
     </>
   );

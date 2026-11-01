@@ -9,6 +9,7 @@ import { hasOwnSound, sourceLabel } from '../../lib/timeline';
 import { contentNow, contentOps, editContent } from '../../state/latest';
 import { useProject } from '../../state/project';
 import { PositionField, TimingField } from './common';
+import { MotionField } from './MotionField';
 import { CropField, isNoCrop } from './CropField';
 import { EffectsButton } from './EffectsButton';
 import { Field } from './fields';
@@ -124,6 +125,7 @@ export function VideoInspector({
         />
       </Field>
       <PositionField item={item} format={format} primary={primary} />
+      <MotionField item={item} />
       <TimingField item={item} />
     </>
   );

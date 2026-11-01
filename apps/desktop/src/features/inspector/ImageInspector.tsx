@@ -4,9 +4,13 @@ import type { Item } from '../../bindings/Item';
 import { layoutPatchFor, scaleAbout } from '../../lib/geometry';
 import { resolveRect } from '../../lib/layout';
 import { AnimationField, PositionField, TimingField } from './common';
+import { MotionField } from './MotionField';
 import { EffectsButton } from './EffectsButton';
 import { Field } from './fields';
 import { layoutOps } from '../../state/latest';
+import { keySlackUs } from '../../state/keyEdits';
+import { usePlayback } from '../../state/playback';
+import { opacityWithKeys, placeWithKeys, shownOpacity, shownPlace } from '../../lib/keyedPlace';
 import { ToolSlider } from './ToolSlider';
 
 /** The model's largest corner radius (a share of the shorter side): fully round ends. */
@@ -24,6 +28,7 @@ export function ImageInspector({ item, format, primary }: { item: Item; format: 
       <EffectsButton target={{ type: 'item', id: item.id }} effects={item.effects} />
       <PositionField item={item} format={format} primary={primary} />
       <AnimationField item={item} typewriter={false} />
+      <MotionField item={item} />
       <TimingField item={item} />
     </>
   );
@@ -36,7 +41,11 @@ export function ImageInspector({ item, format, primary }: { item: Item; format: 
  */
 export function PictureFields({ item, format, primary }: { item: Item; format: FormatKind; primary: FormatKind }) {
   const { t } = useLingui();
-  const rect = resolveRect(item.layout, primary, format);
+  // With motion keys, Size and Opacity show the layer as drawn at the playhead and set its key there.
+  const keyed = !!item.layout.motion?.keys;
+  const tUs = usePlayback((s) => (keyed ? s.playheadUs : item.startUs)) - item.startUs;
+  const at = () => usePlayback.getState().playheadUs - item.startUs;
+  const rect = shownPlace(item.layout, tUs, item.durationUs, primary, format).rect;
   const size = t({ id: 'image.size', message: 'Size' });
   const opacity = t({ id: 'media.opacity', message: 'Opacity' });
   const corners = t({ id: 'media.corners', message: 'Corner radius', comment: 'How round the corners are' });
@@ -56,11 +65,21 @@ export function PictureFields({ item, format, primary }: { item: Item; format: F
           step={0.01}
           format={percent}
           ops={(w) =>
-            layoutOps(item, (layout) => {
-              const now = resolveRect(layout, primary, format);
-              const centre = { x: now.x + now.w / 2, y: now.y + now.h / 2 };
-              return layoutPatchFor(layout, scaleAbout(now, w / now.w, centre), format, primary);
-            })
+            layoutOps(item, (layout) =>
+              placeWithKeys(
+                layout,
+                (drawn) => {
+                  const now = resolveRect(drawn, primary, format);
+                  const centre = { x: now.x + now.w / 2, y: now.y + now.h / 2 };
+                  return layoutPatchFor(drawn, scaleAbout(now, w / now.w, centre), format, primary);
+                },
+                at(),
+                item.durationUs,
+                primary,
+                format,
+                keySlackUs(),
+              ),
+            )
           }
         />
       </Field>
@@ -68,12 +87,14 @@ export function PictureFields({ item, format, primary }: { item: Item; format: F
         <ToolSlider
           label={opacity}
           commitLabel="media.opacity.undo"
-          value={item.layout.opacity}
+          value={Math.round(shownOpacity(item.layout, tUs, item.durationUs) * 100) / 100}
           min={0}
           max={1}
           step={0.01}
           format={percent}
-          ops={(value) => layoutOps(item, { opacity: value })}
+          ops={(value) =>
+            layoutOps(item, (layout) => opacityWithKeys(layout, value, at(), item.durationUs, keySlackUs()))
+          }
         />
       </Field>
       <Field label={t({ id: 'media.corners.short', message: 'Corners', comment: 'The corner radius field' })}>
