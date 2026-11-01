@@ -52,7 +52,12 @@ fn parses_person_concept_fixture() {
     let order: Vec<u32> = frames.iter().map(|f| f.frame).collect();
     assert_eq!(order, (0..160).collect::<Vec<_>>());
     for f in &frames {
-        assert!((8..=9).contains(&f.objects.len()), "frame {} has {}", f.frame, f.objects.len());
+        assert!(
+            (8..=9).contains(&f.objects.len()),
+            "frame {} has {}",
+            f.frame,
+            f.objects.len()
+        );
     }
 
     // Ids are stable: the same nine ids across the clip, each present on
@@ -105,7 +110,10 @@ fn parses_box_prompt_fixture_with_lossless_masks() {
         assert_eq!(f.objects.len(), 1, "frame {}", f.frame);
         assert_eq!(f.objects[0].id, 1);
     }
-    let mut cs: Vec<f32> = frames.iter().map(|f| f.objects[0].confidence.unwrap()).collect();
+    let mut cs: Vec<f32> = frames
+        .iter()
+        .map(|f| f.objects[0].confidence.unwrap())
+        .collect();
     cs.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let median = cs[cs.len() / 2];
     assert!((0.96..0.98).contains(&median), "median confidence {median}");
@@ -124,14 +132,30 @@ fn boxes_are_half_open_source_pixels() {
     assert_eq!(frames.len(), 1);
     let objs = &frames[0].objects;
 
-    assert_eq!(objs[0].bbox, BoxPx { x0: 536, y0: 91, x1: 661, y1: 472 });
+    assert_eq!(
+        objs[0].bbox,
+        BoxPx {
+            x0: 536,
+            y0: 91,
+            x1: 661,
+            y1: 472
+        }
+    );
     assert_eq!((objs[0].bbox.width(), objs[0].bbox.height()), (125, 381));
     assert_eq!((objs[0].frame_w, objs[0].frame_h), (854, 480));
     assert!((objs[0].confidence.unwrap() - 0.925_925_9).abs() < 1e-6);
 
     // A full-frame box ends exactly at the frame edge; no confidence without `c`.
     assert_eq!(objs[1].id, 7);
-    assert_eq!(objs[1].bbox, BoxPx { x0: 0, y0: 0, x1: 854, y1: 480 });
+    assert_eq!(
+        objs[1].bbox,
+        BoxPx {
+            x0: 0,
+            y0: 0,
+            x1: 854,
+            y1: 480
+        }
+    );
     assert_eq!(objs[1].confidence, None);
 }
 
@@ -158,7 +182,15 @@ fn mask_payloads_are_skipped_whatever_characters_they_hold() {
         let frames = parse_frames(&text).unwrap_or_else(|e| panic!("{payload}: {e}"));
         let ids: Vec<u32> = frames[0].objects.iter().map(|o| o.id).collect();
         assert_eq!(ids, [2, 3], "{payload}");
-        assert_eq!(frames[0].objects[1].bbox, BoxPx { x0: 10, y0: 20, x1: 13, y1: 24 });
+        assert_eq!(
+            frames[0].objects[1].bbox,
+            BoxPx {
+                x0: 10,
+                y0: 20,
+                x1: 13,
+                y1: 24
+            }
+        );
     }
 }
 
@@ -167,12 +199,7 @@ fn frames_are_returned_in_order_and_repeats_merge() {
     let a = record(0, BOX_A, "!a");
     let b = record(1, BOX_A, "!b");
     let a_moved = record(0, "x1=0;y1=0;x2=1;y2=1;w=854;h=480", "!c");
-    let text = [
-        line(5, &[&a, &b]),
-        line(2, &[&a]),
-        line(5, &[&a_moved]),
-    ]
-    .join("\n");
+    let text = [line(5, &[&a, &b]), line(2, &[&a]), line(5, &[&a_moved])].join("\n");
     let frames = parse_frames(&text).unwrap();
     let order: Vec<u32> = frames.iter().map(|f| f.frame).collect();
     assert_eq!(order, [2, 5]);
@@ -180,7 +207,15 @@ fn frames_are_returned_in_order_and_repeats_merge() {
     let five = &frames[1].objects;
     assert_eq!(five.len(), 2);
     assert_eq!(five[0].id, 0);
-    assert_eq!(five[0].bbox, BoxPx { x0: 0, y0: 0, x1: 2, y1: 2 });
+    assert_eq!(
+        five[0].bbox,
+        BoxPx {
+            x0: 0,
+            y0: 0,
+            x1: 2,
+            y1: 2
+        }
+    );
     assert_eq!(five[1].id, 1);
 }
 
@@ -189,7 +224,11 @@ fn empty_output_and_blank_lines_are_fine() {
     assert_eq!(parse_frames("").unwrap(), vec![]);
     assert_eq!(parse_frames("\n \r\n").unwrap(), vec![]);
 
-    let text = format!("\r\n{}\r\n\r\n{}\r\n", line(0, &[&record(0, BOX_A, "!a")]), line(1, &[&record(0, BOX_A, "!a")]));
+    let text = format!(
+        "\r\n{}\r\n\r\n{}\r\n",
+        line(0, &[&record(0, BOX_A, "!a")]),
+        line(1, &[&record(0, BOX_A, "!a")])
+    );
     let frames = parse_frames(&text).unwrap();
     assert_eq!(frames.len(), 2);
 }
@@ -197,14 +236,28 @@ fn empty_output_and_blank_lines_are_fine() {
 #[test]
 fn frame_line_without_objects_is_an_empty_frame() {
     let frames = parse_frames("<3f>").unwrap();
-    assert_eq!(frames, vec![FrameObjects { frame: 3, objects: vec![] }]);
+    assert_eq!(
+        frames,
+        vec![FrameObjects {
+            frame: 3,
+            objects: vec![]
+        }]
+    );
 }
 
 #[test]
 fn unknown_tokens_and_fields_are_ignored() {
     let text = "<0f>0<|box;x1=1;y1=2;x2=3;y2=4;w=10;h=10;c=0.5;z=9|><|mask;x=0;y=0;data=3,3,!ab|><|label;text=hi|>";
     let frames = parse_frames(text).unwrap();
-    assert_eq!(frames[0].objects[0].bbox, BoxPx { x0: 1, y0: 2, x1: 4, y1: 5 });
+    assert_eq!(
+        frames[0].objects[0].bbox,
+        BoxPx {
+            x0: 1,
+            y0: 2,
+            x1: 4,
+            y1: 5
+        }
+    );
 }
 
 #[test]
