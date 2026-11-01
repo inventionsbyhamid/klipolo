@@ -697,8 +697,9 @@ fn mismatch(expected: &[ExpectedCall], actual: &[(String, Value)]) -> String {
 }
 
 /// Whether `got` matches `want`: a number within 0.01, `{min, max}` a range, a string ignoring case, `{contains}` a
-/// part of it, `{anyOf}` one of several, `{minItems}` a list of at least that many items, a list item by item, anything
-/// else equal.
+/// part of it, `{anyOf}` one of several, `{allOf}` each of several, `{minItems}` a list of at least that many items,
+/// `{has}` a list holding, for each item given, one that matches it (in any order, among others), a list item by item,
+/// anything else equal.
 fn value_matches(want: &Value, got: &Value) -> bool {
     match want {
         Value::Number(n) => {
@@ -722,6 +723,17 @@ fn value_matches(want: &Value, got: &Value) -> bool {
         }
         Value::Object(rule) if rule.contains_key("anyOf") => (rule["anyOf"].as_array())
             .is_some_and(|options| options.iter().any(|w| value_matches(w, got))),
+        Value::Object(rule) if rule.contains_key("allOf") => {
+            (rule["allOf"].as_array()).is_some_and(|all| all.iter().all(|w| value_matches(w, got)))
+        }
+        Value::Object(rule) if rule.contains_key("has") => {
+            let wanted = rule["has"].as_array().cloned().unwrap_or_default();
+            got.as_array().is_some_and(|g| {
+                wanted
+                    .iter()
+                    .all(|w| g.iter().any(|item| value_matches(w, item)))
+            })
+        }
         Value::Object(rule) if rule.contains_key("minItems") => {
             let least = rule["minItems"].as_u64().unwrap_or(0) as usize;
             got.as_array().is_some_and(|g| g.len() >= least)
@@ -1169,6 +1181,25 @@ mod tests {
         assert!(!value_matches(&json!(true), &json!(null)));
         // A list of at least so many items.
         assert!(value_matches(&json!({"minItems": 3}), &json!([1, 2, 3])));
+        // A list holding these, among others, in any order; each of several rules.
+        let keys = json!([{"property": "x", "value": -0.6}, {"property": "y", "value": 0.0}]);
+        assert!(value_matches(
+            &json!({"has": [{"property": "y"}, {"value": {"max": -0.1}}]}),
+            &keys
+        ));
+        assert!(!value_matches(
+            &json!({"has": [{"property": "scale"}]}),
+            &keys
+        ));
+        let said = json!("enter slide left 0.5s spring");
+        assert!(value_matches(
+            &json!({"allOf": [{"contains": "slide left"}, {"contains": "spring"}]}),
+            &said
+        ));
+        assert!(!value_matches(
+            &json!({"allOf": [{"contains": "slide left"}, {"contains": "cubic"}]}),
+            &said
+        ));
         assert!(!value_matches(&json!({"minItems": 3}), &json!([1, 2])));
         assert!(!value_matches(&json!({"minItems": 1}), &json!("a")));
         let range = json!([{"startSec": {"min": 63.0, "max": 68.0}}]);
