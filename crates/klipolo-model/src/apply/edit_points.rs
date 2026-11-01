@@ -81,6 +81,9 @@ pub(super) fn slip(p: &mut Project, clip_id: &str, by: Us, places: &mut Places) 
         return Ok(());
     }
     let clip = &p.timeline.main[i];
+    if clip.is_freeze() {
+        return Err(invalid(code!("model.slip.freeze")));
+    }
     let source = unscaled(by, clip.speed);
     let clips = vec![(i, moved(clip, by, true, true))];
     retime(p, clips, Some((i, source)))
@@ -118,7 +121,9 @@ enum Change {
 fn retime(p: &mut Project, clips: Vec<(usize, Clip)>, slipped: Option<(usize, Us)>) -> Result<()> {
     for (_, c) in &clips {
         let length = source_duration_us(p, &c.source).unwrap_or(c.source_out_us);
-        if c.source_in_us < 0 || c.source_out_us > length.saturating_add(SLACK_US) {
+        // A freeze frame's range is only its length: it may run past its file.
+        let past_end = !c.is_freeze() && c.source_out_us > length.saturating_add(SLACK_US);
+        if c.source_in_us < 0 || past_end {
             return Err(invalid(NO_FOOTAGE));
         }
         if c.duration_us() < MIN_DURATION_US {

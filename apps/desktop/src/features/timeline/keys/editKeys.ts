@@ -35,6 +35,7 @@ function heldSentence(held: EditLimit): string {
   if (held === 'length') return t({ id: 'timeline.edit.tooShort', message: "A clip can't get any shorter." });
   if (held === 'transition')
     return t({ id: 'timeline.edit.transitionHolds', message: 'A transition needs the rest of that footage.' });
+  if (held === 'freeze') return t({ id: 'timeline.edit.freezeHolds', message: 'A freeze frame has no footage to slip.' });
   return t({ id: 'timeline.edit.lockedHolds', message: 'A layer on a locked track would move.' });
 }
 

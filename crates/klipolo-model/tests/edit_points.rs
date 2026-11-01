@@ -333,6 +333,24 @@ fn a_slide_needs_a_clip_each_side_with_room() {
 }
 
 #[test]
+fn a_freeze_frame_has_no_footage_to_slip_and_rolls_past_its_file() {
+    // 8 s of b's frame at 4 s of its file, which has only 6 s after it: a freeze frame's range is only its length.
+    let freeze = Op::FreezeFrame {
+        at_us: secs(20.0),
+        duration_us: secs(8.0),
+    };
+    let p = apply_ops(&abc(), &[freeze]).unwrap();
+    let i = p.timeline.main.iter().position(|c| c.is_freeze()).unwrap();
+    let id = p.timeline.main[i].id.clone();
+    assert_eq!(
+        apply_ops(&p, &[slip(&id, 1.0)]).unwrap_err(),
+        refused("A freeze frame holds one frame, so it has no footage to slip.")
+    );
+    let rolled = apply_ops(&p, &[roll(&id, 1.0)]).unwrap();
+    assert_eq!(rolled.timeline.main[i].duration_us(), secs(9.0));
+}
+
+#[test]
 fn nothing_moves_for_a_zero_and_the_edits_are_judged_as_removals() {
     let p = abc();
     for op in [roll("a", 0.0), slip("b", 0.0), slide("b", 0.0)] {

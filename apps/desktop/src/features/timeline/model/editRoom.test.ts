@@ -99,6 +99,12 @@ describe('the room a roll, slip or slide has', () => {
     });
   });
 
+  it('a freeze frame has no footage to slip', () => {
+    const p = abc();
+    p.timeline.main[1] = { ...p.timeline.main[1], freezeAtUs: 3 * S };
+    expect(editRoom(p, 'slip', 1)).toEqual({ min: 0, max: 0, minBy: 'freeze', maxBy: 'freeze' });
+  });
+
   it('an edit past its room stops at the end it reached, saying what held it', () => {
     const room = editRoom(abc(), 'slip', 1)!;
     expect(heldTo(room, 3 * S)).toEqual({ by: 2 * S, held: 'footage' });

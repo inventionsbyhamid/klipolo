@@ -34,6 +34,7 @@ function limitNote(held: EditLimit, name: string): string {
   if (held === 'length') return t({ id: 'timeline.edit.shortest', message: `${name} can't get shorter` });
   if (held === 'transition')
     return t({ id: 'timeline.edit.transition', message: 'A transition needs the rest of that footage' });
+  if (held === 'freeze') return t({ id: 'timeline.edit.freeze', message: 'A freeze frame has no footage to slip' });
   return t({ id: 'timeline.edit.locked', message: 'A layer on a locked track would move' });
 }
 

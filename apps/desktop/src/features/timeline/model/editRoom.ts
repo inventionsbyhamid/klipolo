@@ -3,7 +3,7 @@ import type { Item } from '../../../bindings/Item';
 import type { Op } from '../../../bindings/Op';
 import type { Project } from '../../../bindings/Project';
 import { frameUs } from '../../../lib/time';
-import { assetById, clipDurationUs } from '../../../lib/timeline';
+import { assetById, clipDurationUs, isFreeze } from '../../../lib/timeline';
 import { fittedTransitionsUs, sourceLength } from '../../../lib/transitions';
 import { mainIndex } from './index';
 
@@ -11,7 +11,7 @@ import { mainIndex } from './index';
 export type EditKind = 'roll' | 'slip' | 'slide';
 
 /** What holds an edit at one end of its room. */
-export type EditLimit = 'footage' | 'length' | 'transition' | 'locked';
+export type EditLimit = 'footage' | 'length' | 'transition' | 'locked' | 'freeze';
 
 /**
  * How far an edit can go, in timeline µs: `min` earlier (0 or less) and `max` later (0 or more), and what holds it at
@@ -98,6 +98,8 @@ export function editRoom(project: Project, kind: EditKind, i: number): EditRoom 
   const clips = changed(kind, main, i);
   if (!clips) return null;
   const frame = frameUs(project.settings.fps);
+  // A freeze frame holds one frame: there is no footage to slip.
+  if (kind === 'slip' && isFreeze(main[i])) return { min: 0, max: 0, minBy: 'freeze', maxBy: 'freeze' };
   const b = new Bounds();
   for (const [k, start, end] of clips) {
     const clip = main[k];

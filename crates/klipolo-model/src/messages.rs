@@ -247,6 +247,7 @@ pub const MESSAGES: Messages = &[
     ("model.clip.minLength", "A clip can't be trimmed shorter than 10 ms."),
     ("model.roll.noCut", "There's no cut after this clip to roll."),
     ("model.slide.alone", "Only a clip with a clip on each side can slide."),
+    ("model.slip.freeze", "A freeze frame holds one frame, so it has no footage to slip."),
     ("model.edit.noFootage", "There's no more footage that way."),
     ("model.edit.transition", "A transition needs the footage this edit would use. Shorten or remove it first."),
     ("model.edit.locked", "A layer on a locked track would move. Unlock its track first."),

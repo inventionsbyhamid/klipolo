@@ -1082,6 +1082,11 @@
     "params": []
   },
   {
+    "code": "model.slip.freeze",
+    "message": "A freeze frame holds one frame, so it has no footage to slip.",
+    "params": []
+  },
+  {
     "code": "model.edit.noFootage",
     "message": "There's no more footage that way.",
     "params": []
