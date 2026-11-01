@@ -56,9 +56,10 @@ describe('colours', () => {
   });
 
   it('the video and what is drawn over it stay dark in both themes', () => {
-    // The layers' outlines, handles, snap guides and safe area over the preview; the caption styles' samples.
-    for (const selector of ['.frame-handles', '.style-frame']) {
-      const found = ALL.filter((r) => r.selector === selector);
+    // The layers' outlines, handles, snap guides and safe area over the preview; a caption style's sample and the
+    // backdrop it is shown on (the frame's own ring, when the style is chosen, follows the panel).
+    for (const selector of ['.frame-handles', '.style-frame::before', '.style-frame > *']) {
+      const found = ALL.filter((r) => r.selector.split(',').some((s) => s.trim() === selector));
       expect(found.length, selector).toBeGreaterThan(0);
       expect(
         found.some(({ body }) => /color-scheme:\s*dark;/.test(body)),
