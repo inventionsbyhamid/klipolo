@@ -1842,6 +1842,29 @@
   cursor: ns-resize;
 }
 
+/* A clip's or sound's volume line (selected), in its block's colour; its keys as points on it. */
+.tl-volume.is-clip .tl-volume-line {
+  stroke: var(--color-paper);
+}
+
+.tl-volume.is-sound .tl-volume-line {
+  stroke: var(--color-paper);
+}
+
+.tl-volume-key {
+  fill: var(--color-paper);
+  stroke: var(--color-bay);
+  stroke-width: 1.5;
+  cursor: move;
+  pointer-events: all;
+}
+
+.tl-volume-key:focus-visible {
+  outline: none;
+  stroke: var(--color-paper);
+  stroke-width: 3;
+}
+
 /* The tag rides the music piece's right edge, or the lanes' visible right while the piece runs past it. The band is
    the block's sibling (sticky inside a button doesn't stick), placed over the piece by its inline left, width and top;
    above the blocks (z-index 1 to 3) and never in the way of a press. */
@@ -3318,10 +3341,12 @@
   gap: var(--space-3);
 }
 
-/* Volume: its slider, and the Mute toggle beside it. */
+/* Volume: its slider, then the Mute toggle and Add volume key beside it. */
 .volume-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-auto-columns: auto;
+  grid-auto-flow: column;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: var(--space-3);
 }
@@ -3548,4 +3573,56 @@
 
 .seg-fill button {
   flex: 1;
+}
+
+/* Motion (keys set by hand): a row per property, its name, the key before, its key at the playhead, the key after and
+   the ease into its key there. */
+.motion-rows {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.motion-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto minmax(0, 1.4fr);
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.motion-name {
+  overflow: hidden;
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.motion-key[aria-pressed="true"] {
+  color: var(--color-paper);
+}
+
+/* A layer's motion keys: small diamonds along the foot of its block, beside it in the lane (they follow its moves). */
+.tl-keys {
+  position: absolute;
+  z-index: 7;
+  pointer-events: none;
+}
+
+.tl-key {
+  position: absolute;
+  bottom: 2px;
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  padding: 0;
+  border: 1px solid var(--color-bay);
+  background: var(--color-paper);
+  cursor: ew-resize;
+  pointer-events: auto;
+  transform: rotate(45deg);
+}
+
+.tl-key:focus-visible {
+  outline: 2px solid var(--color-paper);
+  outline-offset: 2px;
 }
