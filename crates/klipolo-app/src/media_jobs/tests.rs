@@ -25,9 +25,6 @@ use klipolo_engine::session::ProjectFeed;
 use klipolo_model::project::{Asset, AssetKind, Project};
 use tokio::sync::{Notify, mpsc, oneshot, watch};
 
-#[path = "../../../klipolo-engine/tests/support/fixture_set.rs"]
-mod fixture_set;
-
 use super::tidy::tidy_proxies;
 use super::{Command, MediaJobs, NOT_IN_PROJECT, Preview, lock};
 
@@ -1032,7 +1029,7 @@ fn an_export_holds_the_thumbnail_scans_until_it_ends() {
 
     tauri::async_runtime::block_on(async {
         let dir = tempfile::tempdir().unwrap();
-        let video = fixture_set::fixture_dir().join("scan-130s-720p.mp4");
+        let video = crate::media::tests::fixture_set::fixture_dir().join("scan-130s-720p.mp4");
         let worker = Arc::new(StandIn::default());
         let jobs = scheduler(&dir.path().join("media/proxies"), &worker, &Arc::default());
         let thumbs = ThumbStore::new(dir.path().join("thumbs"), Arc::new(Os));
