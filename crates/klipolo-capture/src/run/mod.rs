@@ -9,6 +9,7 @@
 
 mod admit;
 pub mod check;
+mod command_source;
 mod controller;
 pub mod core;
 mod cursor_burn;

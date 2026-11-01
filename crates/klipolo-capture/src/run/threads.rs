@@ -16,7 +16,7 @@
 //! holds no run, is removed.
 
 use std::collections::BTreeMap;
-use std::io::{BufRead, Write};
+use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::sync_channel;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -26,6 +26,8 @@ use klipolo_model::coded::CodedError;
 use klipolo_platform::clock::host_ns;
 use klipolo_platform::qos::{self, Qos};
 
+use super::command_source::CommandFence;
+pub use super::command_source::{CommandSource, Waiting};
 use super::core::{SessionCore, Started};
 use super::driver::Core;
 use super::feeds::{Ending, forward_shell, read_commands, tick, write_events};
@@ -105,7 +107,7 @@ pub fn run_session(
     backend: Box<dyn Backend>,
     dir: SessionDir,
     resume: bool,
-    input: Box<dyn BufRead + Send>,
+    input: Box<dyn CommandSource>,
     output: Box<dyn Write + Send>,
 ) -> i32 {
     let backend: Arc<dyn Backend> = Arc::from(backend);
@@ -113,20 +115,21 @@ pub fn run_session(
     let writer = std::thread::Builder::new()
         .name("klipolo-output".into())
         .spawn(move || write_events(output, events_rx));
-    // The app's commands are read from the start, so a Stop sent while a resumed worker prepares is seen before
-    // anything opens.
+    // The app's commands are read from the start, and a resumed take decides only once every command the app already
+    // sent is read (`CommandFence`), so a Stop sent while it prepares is seen before anything opens.
     let (commands, commands_rx) = sync_channel(COMMAND_QUEUE);
     let stop_seen = Arc::new(AtomicBool::new(false));
+    let fence = Arc::new(CommandFence::new(input.waiting()));
     spawn(
         "klipolo-input",
-        read_commands(input, commands, stop_seen.clone()),
+        read_commands(input, commands, stop_seen.clone(), fence.clone()),
     );
     let ending = Ending {
         events,
         writer,
         dir: dir.clone(),
     };
-    match prepare(&*backend, &dir, resume, &commands_rx, &stop_seen) {
+    match prepare(&*backend, &dir, resume, &commands_rx, &stop_seen, &fence) {
         Prepared::Record(lock, core, early) => {
             let commands = Commands {
                 early,
