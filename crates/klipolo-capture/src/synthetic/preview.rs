@@ -8,11 +8,11 @@ use klipolo_platform::clock::host_ns;
 
 use super::{Worker, wait_until};
 use crate::backend::{PreviewFrame, PreviewPipe};
-use crate::live_view_size::{BIG_PIXEL_RATE, LiveFrame, ViewPixels, live_frame};
+use crate::live_view_size::{BIG_VIEW, LiveFrame, ViewPixels, live_frame};
 use crate::pipe::{PipeError, StopFlag};
 
 /// The display the fake live view shows: 2560 × 1600 pixels, so its small picture is 640 × 400. Its big pictures are
-/// Apple silicon's (`BIG_PIXEL_RATE`), whatever computer runs the tests.
+/// Apple silicon's (`BIG_VIEW`), whatever computer runs the tests.
 pub const FAKE_DISPLAY: (u32, u32) = (2560, 1600);
 
 /// A preview's fake frames, each only a JPEG's start and end markers (not a picture): Check camera's 320×180 at a fixed
@@ -47,7 +47,7 @@ impl FakePreview {
         ends_after_ms: Option<u32>,
         refuses: u32,
     ) -> Box<dyn PreviewPipe> {
-        let small = live_frame(None, FAKE_DISPLAY, BIG_PIXEL_RATE);
+        let small = live_frame(None, FAKE_DISPLAY, BIG_VIEW);
         let mut fake = Self::new(start_error, small, true, ends_after_ms);
         fake.refuses = refuses;
         Box::new(fake)
@@ -128,7 +128,7 @@ impl PreviewPipe for FakePreview {
             self.refuses -= 1;
             return false;
         }
-        let frame = live_frame(view, FAKE_DISPLAY, BIG_PIXEL_RATE);
+        let frame = live_frame(view, FAKE_DISPLAY, BIG_VIEW);
         *self.frame.lock().unwrap_or_else(PoisonError::into_inner) = frame;
         true
     }

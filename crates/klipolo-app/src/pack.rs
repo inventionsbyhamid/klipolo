@@ -202,7 +202,8 @@ mod tests {
         )))
     }
 
-    /// The repository's pack lists its eight sounds, two music beds and six stickers, each with its file.
+    /// The repository's pack lists its 25 sounds, four music beds and 35 pictures (stickers and backgrounds),
+    /// each with its file.
     #[test]
     fn the_bundled_pack_lists_its_sounds_music_and_stickers() {
         let pack = repo_pack();
@@ -218,7 +219,7 @@ mod tests {
                 count(PackCategory::Music),
                 count(PackCategory::Sticker)
             ),
-            (8, 2, 6)
+            (25, 4, 35)
         );
         let whoosh = pack.asset("whoosh").unwrap();
         assert_eq!(
