@@ -611,7 +611,8 @@
 }
 
 /* Full screen preview (F): the preview panel fills the window, which fills the screen. The rest keeps its place under
-   it but isn't drawn, so nothing covers the native layer's hole; the frame paints the night colour around itself. */
+   it but isn't drawn, so nothing covers the native layer's hole; the frame paints the night colour around itself. Dark
+   in both themes, as the video is. */
 .app.is-full > .topbar,
 .app.is-full > .playerbar,
 .app.is-full .workspace > :not(.stage) {
@@ -619,6 +620,7 @@
 }
 
 .app.is-full .stage {
+  color-scheme: dark;
   position: fixed;
   inset: 0;
   z-index: 20;
