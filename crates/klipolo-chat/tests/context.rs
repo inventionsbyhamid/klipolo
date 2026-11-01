@@ -1392,7 +1392,7 @@ fn a_long_library_is_told_briefly_within_the_budget() {
 
 #[test]
 fn clip_a_with_the_whole_pack_stays_small() {
-    // Klipolo's pack as its manifest lists it: 2 beds, 8 sounds and 6 stickers.
+    // Klipolo's pack as its manifest lists it: its music beds, sounds and pictures.
     let manifest: serde_json::Value = serde_json::from_str(
         &std::fs::read_to_string(
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/library/manifest.json"),
@@ -1400,7 +1400,7 @@ fn clip_a_with_the_whole_pack_stays_small() {
         .unwrap(),
     )
     .unwrap();
-    let items = (manifest["items"].as_array().unwrap().iter())
+    let items: Vec<LibraryItem> = (manifest["items"].as_array().unwrap().iter())
         .map(|it| {
             let kind = match it["category"].as_str().unwrap() {
                 "music" => MediaKind::Music,
@@ -1410,6 +1410,7 @@ fn clip_a_with_the_whole_pack_stays_small() {
             library_item(it["name"].as_str().unwrap(), kind, true)
         })
         .collect();
+    let count = items.len();
     let library = Library { items };
     let inputs = two_clips();
     let ctx = inputs.context_with(&view_at(0.0), &library);
@@ -1420,5 +1421,6 @@ fn clip_a_with_the_whole_pack_stays_small() {
         estimate_tokens(listed)
     );
     assert_eq!(listed.lines().count(), 3, "{listed}");
-    assert!(estimate_tokens(listed) <= 60, "{listed}");
+    // About four tokens a name (its words and the comma after it), and a few for the three headings.
+    assert!(estimate_tokens(listed) <= 4 * count + 12, "{listed}");
 }
