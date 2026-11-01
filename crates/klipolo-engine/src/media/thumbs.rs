@@ -1,7 +1,7 @@
 //! A file's thumbnail sprites on disk: `<root>/<stem>/` holds `strip.json` (the tile size), one JPEG per finished
 //! chunk (`c-00012.k.jpg` from keyframes, `c-00012.f.jpg` from an editing copy's full decode), the keyframe index
-//! (`keyframes::KEYS_FILE`) and the poster (`poster-480x270.jpg`: the first picture, bigger than its tile, for the
-//! start screen's cards). Every file is written atomically, so a crash leaves whole chunks only.
+//! (`keyframes::KEYS_FILE`) and the poster (`poster-640x360.v2.jpg`: one picture, bigger than its tile, for the start
+//! screen's cards, `poster::make_poster`). Every file is written atomically, so a crash leaves whole chunks only.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -13,7 +13,7 @@ use ts_rs::TS;
 
 use super::key::{CacheKind, stem};
 use super::sprite::{COLS, PER_CHUNK, SLOT_US, Sprite};
-use super::still::{encode_jpeg, encode_planes};
+use super::still::{POSTER_QSCALE, encode_jpeg, encode_planes};
 
 const STRIP_FILE: &str = "strip.json";
 const VERSION: u32 = 1;
@@ -166,8 +166,9 @@ pub fn strip(root: &Path, path: &str) -> Option<ThumbStrip> {
     })
 }
 
-/// The box a poster fits in: twice a start screen card's 240 × 135 point picture, so it is sharp on a Retina screen.
-pub const POSTER_BOX: (u32, u32) = (480, 270);
+/// The box a poster fits in: a start screen card's picture as wide as cards grow on a wide window, on a Retina screen
+/// (twice its points).
+pub const POSTER_BOX: (u32, u32) = (640, 360);
 
 /// The poster for a picture shown `w × h`: fitted inside `POSTER_BOX`, never bigger than the picture itself, with even
 /// sides (4:2:0). A picture of unknown size gets the whole box.
@@ -189,44 +190,57 @@ pub struct Poster {
     pub path: String,
     pub w: u32,
     pub h: u32,
+    /// Made as posters are made now (`poster_path`); an older one (`poster-480x270.jpg`: the first picture, whatever
+    /// it showed, smaller) is shown until its file's poster is made again.
+    pub current: bool,
 }
 
-/// `<root>/<stem>/poster-480x270.jpg`: the size is in its name, so one atomic write holds both.
+/// What marks a poster made as posters are made now: the `POSTER_BOX` size, playback's colours, a dull first picture
+/// passed over (`poster::make_poster`).
+const POSTER_MARK: &str = "v2";
+
+/// `<root>/<stem>/poster-640x360.v2.jpg`: the size is in its name, so one atomic write holds both.
 pub fn poster_path(root: &Path, stem: &str, (w, h): (u32, u32)) -> PathBuf {
-    root.join(stem).join(format!("poster-{w}x{h}.jpg"))
+    root.join(stem)
+        .join(format!("poster-{w}x{h}.{POSTER_MARK}.jpg"))
 }
 
-/// The size in a poster's file name (`poster-480x270.jpg`).
-fn parse_poster(name: &str) -> Option<(u32, u32)> {
-    let (w, h) = name
-        .strip_prefix("poster-")?
-        .strip_suffix(".jpg")?
-        .split_once('x')?;
-    Some((w.parse().ok()?, h.parse().ok()?))
+/// The size in a poster's file name, and whether it is current: `poster-640x360.v2.jpg`, or an older
+/// `poster-480x270.jpg`.
+fn parse_poster(name: &str) -> Option<((u32, u32), bool)> {
+    let rest = name.strip_prefix("poster-")?.strip_suffix(".jpg")?;
+    let (size, current) = match rest.strip_suffix(&format!(".{POSTER_MARK}")) {
+        Some(size) => (size, true),
+        None => (rest, false),
+    };
+    let (w, h) = size.split_once('x')?;
+    Some(((w.parse().ok()?, h.parse().ok()?), current))
 }
 
-/// The poster in `<root>/<stem>/`; None until a scan has written it.
+/// The poster in `<root>/<stem>/`, a current one first; None until one has been written.
 pub fn poster_in(root: &Path, stem: &str) -> Option<Poster> {
     std::fs::read_dir(root.join(stem))
         .ok()?
         .flatten()
-        .find_map(|entry| {
-            let (w, h) = parse_poster(entry.file_name().to_str()?)?;
+        .filter_map(|entry| {
+            let ((w, h), current) = parse_poster(entry.file_name().to_str()?)?;
             Some(Poster {
                 path: entry.path().to_string_lossy().into_owned(),
                 w,
                 h,
+                current,
             })
         })
+        .max_by_key(|poster| poster.current)
 }
 
-/// `path`'s poster; None until a scan has written it.
+/// `path`'s poster; None until one has been written.
 pub fn poster(root: &Path, path: &str) -> Option<Poster> {
     poster_in(root, &stem(path, &CacheKind::Thumbs)?)
 }
 
 /// Writes the poster: a full-range 4:2:0 picture of `size`, its Y, U and V rows `strides` apart, atomically through
-/// `steps`.
+/// `steps`, at JPEG quality about 90. An older poster beside it goes once it is written.
 pub fn write_poster(
     steps: &dyn Steps,
     root: &Path,
@@ -235,14 +249,18 @@ pub fn write_poster(
     planes: [&[u8]; 3],
     strides: [usize; 3],
 ) -> io::Result<()> {
-    std::fs::create_dir_all(root.join(stem))?;
-    let jpeg = encode_planes(size, planes, strides).map_err(io::Error::other)?;
-    write_atomic_with(
-        steps,
-        &poster_path(root, stem, size),
-        &jpeg,
-        Durability::Ordered,
-    )
+    let dir = root.join(stem);
+    std::fs::create_dir_all(&dir)?;
+    let jpeg = encode_planes(size, planes, strides, POSTER_QSCALE).map_err(io::Error::other)?;
+    let path = poster_path(root, stem, size);
+    write_atomic_with(steps, &path, &jpeg, Durability::Ordered)?;
+    for entry in std::fs::read_dir(&dir)?.flatten() {
+        let old = entry.path();
+        if old != path && entry.file_name().to_str().and_then(parse_poster).is_some() {
+            let _ = std::fs::remove_file(old);
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -252,18 +270,45 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_poster_fits_480_by_270_and_never_grows() {
-        assert_eq!(poster_size(1920, 1080), (480, 270));
-        assert_eq!(poster_size(640, 360), (480, 270));
+    fn a_poster_fits_640_by_360_and_never_grows() {
+        assert_eq!(poster_size(1920, 1080), (640, 360));
+        assert_eq!(poster_size(640, 360), (640, 360));
         // A phone picture, shown upright: as tall as the box.
-        assert_eq!(poster_size(720, 1280), (152, 270));
-        assert_eq!(poster_size(2560, 1600), (432, 270));
+        assert_eq!(poster_size(720, 1280), (202, 360));
+        assert_eq!(poster_size(2560, 1600), (576, 360));
         // Wider than 16:9: as wide as the box, with even sides.
-        assert_eq!(poster_size(3840, 1080), (480, 136));
+        assert_eq!(poster_size(3840, 1080), (640, 180));
         // A small picture keeps its own size.
         assert_eq!(poster_size(320, 180), (320, 180));
         assert_eq!(poster_size(1, 1), (2, 2));
-        assert_eq!(poster_size(0, 0), (480, 270));
+        assert_eq!(poster_size(0, 0), (640, 360));
+    }
+
+    /// The luminance table of a baseline JPEG's first DQT, in zigzag order.
+    fn luma_table(jpeg: &[u8]) -> Vec<u16> {
+        let at = jpeg
+            .windows(2)
+            .position(|w| w == [0xFF, 0xDB])
+            .expect("a DQT");
+        jpeg[at + 5..at + 5 + 64].iter().map(|&q| q.into()).collect()
+    }
+
+    /// The libjpeg quality a luminance table was made at (its scale of the standard table, 50 and up), from its AC
+    /// steps (FFmpeg's encoder sets the DC step by its own precision).
+    fn jpeg_quality(table: &[u16]) -> f64 {
+        const STANDARD: [u16; 64] = [
+            16, 11, 12, 14, 12, 10, 16, 14, 13, 14, 18, 17, 16, 19, 24, 40, 26, 24, 22, 22, 24, 49, 35, 37, 29,
+            40, 58, 51, 61, 60, 57, 51, 56, 55, 64, 72, 92, 78, 64, 68, 87, 69, 55, 56, 80, 109, 81, 87, 95, 98,
+            103, 104, 103, 62, 77, 113, 121, 112, 100, 120, 92, 101, 103, 99,
+        ];
+        let scale: f64 = table
+            .iter()
+            .zip(STANDARD)
+            .skip(1)
+            .map(|(&q, s)| f64::from(q) * 100.0 / f64::from(s))
+            .sum::<f64>()
+            / 63.0;
+        (200.0 - scale) / 2.0
     }
 
     #[test]
@@ -276,7 +321,7 @@ mod tests {
         // A poster cut off mid-write (a crash) isn't one.
         std::fs::create_dir_all(root.path().join("clip")).unwrap();
         std::fs::write(
-            root.path().join("clip").join("poster-16x8.jpg.42.tmp"),
+            root.path().join("clip").join("poster-16x8.v2.jpg.42.tmp"),
             b"half",
         )
         .unwrap();
@@ -292,14 +337,38 @@ mod tests {
         )
         .unwrap();
         let found = poster_in(root.path(), "clip").expect("a poster");
-        assert_eq!((found.w, found.h), (16, 8));
+        assert_eq!((found.w, found.h, found.current), (16, 8, true));
         assert_eq!(
             Path::new(&found.path),
             poster_path(root.path(), "clip", (16, 8))
         );
+        assert!(found.path.ends_with("poster-16x8.v2.jpg"), "{}", found.path);
         let bytes = std::fs::read(&found.path).unwrap();
         assert_eq!(&bytes[..2], &[0xFF, 0xD8], "a JPEG");
+        let quality = jpeg_quality(&luma_table(&bytes));
+        assert!((85.0..=95.0).contains(&quality), "quality {quality}");
         // The chunks beside it are read as before.
-        assert_eq!(parse_chunk("poster-16x8.jpg"), None);
+        assert_eq!(parse_chunk("poster-16x8.v2.jpg"), None);
+    }
+
+    /// A poster from before (`poster-480x270.jpg`) is still shown, as not current, until its file's poster is made
+    /// again; then it goes.
+    #[test]
+    fn an_older_poster_shows_until_a_current_one_replaces_it() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("clip");
+        std::fs::create_dir_all(&dir).unwrap();
+        let old = dir.join("poster-480x270.jpg");
+        std::fs::write(&old, b"older").unwrap();
+        let found = poster_in(root.path(), "clip").expect("the older poster");
+        assert_eq!((found.w, found.h, found.current), (480, 270, false));
+        assert_eq!(Path::new(&found.path), old);
+
+        let (luma, chroma) = (vec![90; 16 * 8], vec![128; 8 * 4]);
+        let planes = [luma.as_slice(), chroma.as_slice(), chroma.as_slice()];
+        write_poster(&Os, root.path(), "clip", (16, 8), planes, [16, 8, 8]).unwrap();
+        let found = poster_in(root.path(), "clip").expect("the current poster");
+        assert_eq!((found.w, found.h, found.current), (16, 8, true));
+        assert!(!old.exists(), "the older one went");
     }
 }
