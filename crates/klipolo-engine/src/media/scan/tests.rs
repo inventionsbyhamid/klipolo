@@ -7,7 +7,7 @@ use klipolo_platform::durable::Os;
 use super::{ScanEnd, scan_thumbs};
 use crate::media::key::{CacheKind, stem};
 use crate::media::store::ThumbStore;
-use crate::media::thumbs::strip;
+use crate::media::thumbs::{poster, strip};
 
 fn fixture(name: &str) -> String {
     let path = crate::fixture_set::fixture_dir().join(name);
@@ -118,4 +118,100 @@ fn a_file_that_cant_be_opened_says_why() {
         scanned.end,
         ScanEnd::Failed(format!("The file can't be opened: {why}"))
     );
+}
+
+/// The mean colour of `picture` within `(x, y, w, h)`.
+fn mean_rgb(picture: &image::RgbImage, (x, y, w, h): (u32, u32, u32, u32)) -> [f64; 3] {
+    let mut sum = [0.0; 3];
+    for py in y..y + h {
+        for px in x..x + w {
+            for (c, value) in picture.get_pixel(px, py).0.iter().enumerate() {
+                sum[c] += f64::from(*value);
+            }
+        }
+    }
+    sum.map(|s| s / f64::from(w * h))
+}
+
+/// A scan writes the file's first picture again as its poster, fitted in 480 × 270 instead of the tile's 72 px tall,
+/// for the start screen's cards: the picture tile 0 shows, in the same colours (an MJPEG file's full range too).
+#[test]
+fn a_scan_writes_a_poster_of_the_first_picture() {
+    for name in ["bars-30fps-0.5gop.mp4", "intra-6s-mjpeg.mov"] {
+        let root = tempfile::tempdir().unwrap();
+        let video = fixture(name);
+        let store = ThumbStore::new(root.path().to_path_buf(), Arc::new(Os));
+        assert_eq!(
+            poster(root.path(), &video),
+            None,
+            "{name}: none before a scan"
+        );
+        let scanned = scan_thumbs(&store.shared(), &video, &[0], &|| true);
+        assert_eq!(scanned.end, ScanEnd::Done, "{name}");
+
+        let found = poster(root.path(), &video).expect("a poster");
+        assert_eq!((found.w, found.h), (480, 270), "{name}");
+        let picture = image::open(&found.path).unwrap().to_rgb8();
+        assert_eq!(picture.dimensions(), (480, 270), "{name}");
+        let strip = strip(root.path(), &video).unwrap();
+        assert_eq!(
+            (strip.tile_w, strip.tile_h),
+            (128, 72),
+            "{name}: the tiles stay as they were"
+        );
+        let sheet = image::open(&strip.chunks[0].path).unwrap().to_rgb8();
+        // Region by region (an 8 × 4 grid over each), so a darker or paler picture shows where it is.
+        for row in 0..4 {
+            for col in 0..8 {
+                let cell = |w: u32, h: u32| (col * w / 8, row * h / 4, w / 8, h / 4);
+                let tile = mean_rgb(&sheet, cell(strip.tile_w, strip.tile_h));
+                let big = mean_rgb(&picture, cell(480, 270));
+                for c in 0..3 {
+                    assert!(
+                        (tile[c] - big[c]).abs() < 12.0,
+                        "{name}, cell {col},{row}: tile 0 {tile:?}, poster {big:?}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// A phone video stored turned has an upright poster: shown 720 × 1280 (red on top, blue below), fitted to 152 × 270.
+#[test]
+fn a_turned_phone_video_has_an_upright_poster() {
+    let root = tempfile::tempdir().unwrap();
+    let video = fixture("phone-portrait.mov");
+    let store = ThumbStore::new(root.path().to_path_buf(), Arc::new(Os));
+    let scanned = scan_thumbs(&store.shared(), &video, &[0], &|| true);
+    assert_eq!(scanned.end, ScanEnd::Done);
+    let found = poster(root.path(), &video).expect("a poster");
+    assert_eq!((found.w, found.h), (152, 270));
+    let picture = image::open(&found.path).unwrap().to_rgb8();
+    let [r, _, b] = mean_rgb(&picture, (0, 0, 152, 100));
+    assert!(r > 150.0 && b < 80.0, "top {r} red, {b} blue");
+    let [r, _, b] = mean_rgb(&picture, (0, 170, 152, 100));
+    assert!(b > 150.0 && r < 80.0, "bottom {r} red, {b} blue");
+}
+
+/// A cache from before posters (chunk 0 and the keyframe index on disk, no poster): a scan asked for chunk 0 cuts it
+/// again for the poster, and keeps the chunk on disk as it was.
+#[test]
+fn a_cache_without_a_poster_gets_one_and_keeps_its_chunk() {
+    let root = tempfile::tempdir().unwrap();
+    let video = fixture("bars-30fps-0.5gop.mp4");
+    let store = ThumbStore::new(root.path().to_path_buf(), Arc::new(Os));
+    assert_eq!(
+        scan_thumbs(&store.shared(), &video, &[0], &|| true).end,
+        ScanEnd::Done
+    );
+    std::fs::remove_file(poster(root.path(), &video).unwrap().path).unwrap();
+    let chunk = strip(root.path(), &video).unwrap().chunks[0].path.clone();
+    let kept = std::fs::metadata(&chunk).unwrap().modified().unwrap();
+
+    let scanned = scan_thumbs(&store.shared(), &video, &[0], &|| true);
+    assert_eq!(scanned.end, ScanEnd::Done);
+    assert!(scanned.decoded > 0, "chunk 0 was cut again");
+    assert!(poster(root.path(), &video).is_some());
+    assert_eq!(std::fs::metadata(&chunk).unwrap().modified().unwrap(), kept);
 }

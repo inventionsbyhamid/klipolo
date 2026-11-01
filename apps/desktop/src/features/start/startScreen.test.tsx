@@ -30,6 +30,7 @@ const ROWS: ProjectRow[] = [
     durationUs: 252_000_000,
     clips: 3,
     thumb: { sprite: '/cache/media/thumbs/tour/c-00000.k.jpg', tileW: 128, tileH: 72, cols: 8 },
+    open: false,
   },
   {
     path: '/Users/me/Movies/Klipolo/Untitled project.klipolo',
@@ -38,6 +39,7 @@ const ROWS: ProjectRow[] = [
     durationUs: 0,
     clips: 0,
     thumb: null,
+    open: false,
   },
   {
     path: '/Users/me/Movies/Klipolo/Kiln vlog.klipolo',
@@ -47,6 +49,7 @@ const ROWS: ProjectRow[] = [
     clips: 1,
     // A phone video: a tall tile, drawn whole in the middle of the 16:9 picture.
     thumb: { sprite: '/cache/media/thumbs/kiln/c-00000.k.jpg', tileW: 40, tileH: 72, cols: 8 },
+    open: false,
   },
 ];
 
@@ -66,6 +69,20 @@ const cards = () =>
     .getAllByRole('button')
     .filter((button) => button.classList.contains('start-card'));
 const card = (name: string) => cards().find((c) => c.textContent?.includes(name))!;
+
+/** The declarations of the rule for exactly `selector` in `start.css` (comments left out). */
+function cssRule(selector: string): Record<string, string> {
+  const css = readFileSync(resolve(__dirname, 'start.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const body = new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+  return Object.fromEntries(
+    body
+      .split(';')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => [line.slice(0, line.indexOf(':')).trim(), line.slice(line.indexOf(':') + 1).trim()]),
+  );
+}
 
 beforeEach(() => {
   vi.spyOn(Date, 'now').mockReturnValue(NOW);
@@ -171,6 +188,43 @@ describe('StartScreen', () => {
     const art = card('Untitled project');
     expect(art.querySelector('.start-tile')).toBeNull();
     expect(art.querySelector('.start-pic svg.ico')).not.toBeNull();
+  });
+
+  it('card_picture_is_a_16_9_box_as_wide_as_the_card', async () => {
+    // The card is a button: its picture takes the card's whole width by its own rule, not by the button's alignment,
+    // so it is the same 16:9 box (240 points wide at 1440, four to a row) in every WebKit.
+    expect(cssRule('.start-card')).toMatchObject({
+      display: 'flex',
+      'flex-direction': 'column',
+      'align-items': 'stretch',
+    });
+    expect(cssRule('.start-pic')).toMatchObject({
+      width: '100%',
+      'aspect-ratio': '16 / 9',
+      'border-radius': 'var(--radius-sm)',
+      background: 'var(--color-clip-deep)',
+    });
+    expect(cssRule('.start-grid')['grid-template-columns']).toBe('repeat(auto-fill, minmax(208px, 1fr))');
+
+    // A picture written for the card (one picture, not a sheet of tiles) is drawn whole.
+    const poster: ProjectRow = {
+      ...ROWS[0],
+      thumb: { sprite: '/cache/media/thumbs/tour/poster-480x270.jpg', tileW: 480, tileH: 270, cols: 1 },
+    };
+    recentAnswers([poster, ROWS[1]]);
+    renderWithProviders(<StartScreen />);
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    const pic = card('Studio tour').querySelector('.start-pic')!;
+    const tile = pic.querySelector<HTMLElement>('.start-tile')!;
+    expect(tile.style.backgroundImage).toBe('url("asset://localhost/cache/media/thumbs/tour/poster-480x270.jpg")');
+    expect(tile.style.backgroundSize).toMatch(/^100%( auto)?$/);
+    expect([tile.style.width, tile.style.height]).toEqual(['100%', '100%']);
+    // None yet: the same box, with the film clip art in its middle.
+    const none = card('Untitled project').querySelector('.start-pic')!;
+    expect(none.querySelector('.start-tile')).toBeNull();
+    expect(none.querySelector('svg.ico')).not.toBeNull();
+    // The picture stays out of the card's name.
+    expect(screen.getByRole('button', { name: 'Studio tour' })).toBeInTheDocument();
   });
 
   it('opening_a_card_opens_its_project', async () => {

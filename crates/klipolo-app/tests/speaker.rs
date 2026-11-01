@@ -27,6 +27,7 @@ fn s(seconds: f64) -> Us {
 struct FakeSam {
     x: Option<f64>,
     calls: AtomicUsize,
+    max_frames: std::sync::atomic::AtomicU64,
 }
 
 impl SubjectTracker for FakeSam {
@@ -35,7 +36,7 @@ impl SubjectTracker for FakeSam {
     }
 
     fn max_frames(&self) -> u64 {
-        15_000
+        self.max_frames.load(Ordering::SeqCst)
     }
 
     fn estimate_usd(&self, frames: u64) -> f64 {
@@ -162,6 +163,7 @@ fn setup(x: Option<f64>) -> Setup {
         sam: Arc::new(FakeSam {
             x,
             calls: AtomicUsize::new(0),
+            max_frames: std::sync::atomic::AtomicU64::new(15_000),
         }),
         copy: Arc::new(FakeCopy::default()),
         progress: Arc::default(),
@@ -396,4 +398,74 @@ async fn a_format_on_fit_is_left_alone() {
     assert!(clip.fill_focus.contains_key(&Portrait));
     assert!(!clip.fill_focus.contains_key(&Square));
     assert_eq!(clip.framing[&Square].mode, FramingMode::Fit);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_format_turned_to_fit_while_tracking_stays_fit() {
+    let setup = setup(Some(0.3));
+    let speaker = speaker(&setup, None, true);
+    let p = &setup.project;
+    let followed = speaker
+        .follow(p, &["c1".to_owned()], &[Portrait], "person")
+        .await
+        .unwrap();
+    // The person turned the vertical version to Fit while it tracked: landing leaves it so.
+    let mut now = p.clone();
+    let fit = klipolo_model::timeline::Framing {
+        mode: FramingMode::Fit,
+        focus_x: 0.5,
+        focus_y: 0.5,
+        follow: None,
+    };
+    now.timeline.main[0].framing.insert(Portrait, fit);
+    assert!(followed.ops(&now).is_empty());
+    assert_eq!(followed.ops(p).len(), 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn footage_longer_than_the_tracker_takes_goes_in_parts_priced_together() {
+    // 15 minutes of the talk, through a tracker that takes 1,180 frames a video (the relay's): two parts.
+    let mut setup = setup(Some(0.3));
+    setup.sam.max_frames.store(1_180, Ordering::SeqCst);
+    setup.project.assets[0].duration_us = s(1_200.0);
+    let clip = &mut setup.project.timeline.main[0];
+    (clip.source_in_us, clip.source_out_us) = (0, s(900.0));
+    let speaker = speaker(&setup, None, true);
+    let p = &setup.project;
+    let ids = vec!["c1".to_owned()];
+    let estimate = speaker.estimate(p, &ids, &[Portrait], "person").await;
+    assert!(
+        (estimate.usd - 1_800.0 * 0.0002).abs() < 1e-9,
+        "{estimate:?}"
+    );
+    let followed = speaker
+        .follow(p, &ids, &[Portrait], "person")
+        .await
+        .unwrap();
+    assert_eq!(
+        *setup.copy.made.lock().unwrap(),
+        [
+            RangeUs {
+                start: 0,
+                end: s(590.0)
+            },
+            RangeUs {
+                start: s(590.0),
+                end: s(900.0)
+            }
+        ]
+    );
+    assert_eq!(setup.sam.calls.load(Ordering::SeqCst), 2);
+    assert!((followed.paid_usd - estimate.usd).abs() < 1e-9);
+    // The parts' tracks make one path across the whole clip.
+    let next = apply_ops(p, &followed.ops(p)).unwrap();
+    let Some(FillFocus::Speaker { path, .. }) = next.timeline.main[0].fill_focus.get(&Portrait) else {
+        panic!()
+    };
+    for at in [10.0, 600.0, 890.0] {
+        assert!(
+            (path.centre_at(s(at)).unwrap().0 - 0.3).abs() < 0.02,
+            "at {at}"
+        );
+    }
 }

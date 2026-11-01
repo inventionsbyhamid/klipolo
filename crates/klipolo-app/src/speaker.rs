@@ -84,13 +84,20 @@ pub struct Followed {
 }
 
 impl Followed {
-    /// The ops that make the clips follow on `p` as it is now, one per clip still there.
+    /// The ops that make the clips follow on `p` as it is now, one per clip still there, each only in the formats it
+    /// may still follow in there: a format turned to Fit while it tracked stays Fit.
     pub fn ops(&self, p: &Project) -> Vec<Op> {
         (self.paths.iter())
             .filter_map(|(id, paths)| {
                 let clip = p.timeline.main.iter().find(|c| &c.id == id)?;
+                let formats: Vec<FormatKind> = paths.keys().copied().collect();
+                let still = followable_formats(p, clip, &formats);
+                let paths: BTreeMap<FormatKind, FocusPath> = (paths.iter())
+                    .filter(|(f, _)| still.contains(f))
+                    .map(|(f, path)| (*f, path.clone()))
+                    .collect();
                 let (keep, people) = self.kept.get(id).cloned().unwrap_or_default();
-                Some(follow_op_keeping(p, clip, paths, &keep, &people))
+                (!paths.is_empty()).then(|| follow_op_keeping(p, clip, &paths, &keep, &people))
             })
             .collect()
     }

@@ -1,4 +1,5 @@
 import { Channel } from '@tauri-apps/api/core';
+import type { CaptionFile } from '../bindings/CaptionFile';
 import type { ExportedFile } from '../bindings/ExportedFile';
 import type { ExportEvent } from '../bindings/ExportEvent';
 import type { ExportPlan } from '../bindings/ExportPlan';
@@ -25,9 +26,20 @@ export const exporter = {
   /** The files an export would write, with its size and time estimate and the folder they go to. */
   plan: (formats: FormatKind[], quality: ExportQuality) =>
     call<ExportPlan>('export_plan', { req: { formats, quality } }),
-  /** Resolves once the export has started; its progress arrives on `onEvent`. */
-  start: (formats: FormatKind[], quality: ExportQuality, onEvent: (event: ExportEvent) => void) =>
-    call<void>('export_start', { req: { formats, quality }, events: channel(onEvent) }),
+  /**
+   * Resolves once the export has started; its progress arrives on `onEvent`. `options.captionFile`: also save the
+   * captions as that kind of file beside the 16:9 video.
+   */
+  start: (
+    formats: FormatKind[],
+    quality: ExportQuality,
+    onEvent: (event: ExportEvent) => void,
+    options?: { captionFile?: CaptionFile },
+  ) =>
+    call<void>('export_start', {
+      req: { formats, quality, ...(options?.captionFile ? { captionFile: options.captionFile } : {}) },
+      events: channel(onEvent),
+    }),
   /**
    * Stops the running export and deletes its job and parts. `job` names it (the run on screen); without it only the
    * open project's export is stopped (another project's is refused by name).

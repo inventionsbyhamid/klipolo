@@ -2,6 +2,7 @@
 
 use std::path::Path;
 
+use reqwest::header::{CONTENT_LENGTH, CONTENT_TYPE};
 use reqwest::multipart::{Form, Part};
 use reqwest::{Body, StatusCode};
 use serde::Deserialize;
@@ -9,6 +10,10 @@ use serde::Deserialize;
 use crate::client::check;
 use crate::error::redact;
 use crate::{MetaClient, MetaError};
+
+/// Said when Klipolo's relay is too old to make SAM's videos.
+pub const SAM_NEEDS_NEWER_RELAY: &str =
+    "Following the speaker needs Klipolo's server to be updated. Try again later.";
 
 /// Meta deletes an upload after a day even if the app never gets to.
 const UPLOAD_EXPIRY_SECONDS: u64 = 24 * 60 * 60;
@@ -43,6 +48,36 @@ impl MetaClient {
             .part("file", file);
         let request = self.http.post(self.meta_url("files")).multipart(form);
         let response = self.send_meta(request).await?;
+        let uploaded: Uploaded = self.read_json(response).await?;
+        Ok(uploaded.id)
+    }
+
+    /// Uploads a video for SAM and returns its id. With the person's key it
+    /// goes to Meta as it is (`upload_file`). Through Klipolo's relay it goes
+    /// to the relay's `sam/videos` as the raw video, streamed: the relay writes
+    /// its own copy for SAM, so it knows the frames Meta will bill, and uploads
+    /// that.
+    pub async fn upload_sam_video(&self, path: &Path) -> Result<String, MetaError> {
+        if !self.is_relay() {
+            return self.upload_file(path, "video/mp4").await;
+        }
+        let unreadable = |_| self.unreadable(path);
+        let file = tokio::fs::File::open(path).await.map_err(unreadable)?;
+        let len = file.metadata().await.map_err(unreadable)?.len();
+        let request = self
+            .http
+            .post(self.meta_url("sam/videos"))
+            .header(CONTENT_TYPE, "video/mp4")
+            .header(CONTENT_LENGTH, len)
+            .body(Body::from(file));
+        let response = self.send_meta_unchecked(request).await?;
+        // A relay from before it made SAM's videos has no such route; nothing was charged.
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(MetaError::NotAllowed {
+                message: Some(SAM_NEEDS_NEWER_RELAY.into()),
+            });
+        }
+        let response = check(response, &self.secrets(), self.short_timeout).await?;
         let uploaded: Uploaded = self.read_json(response).await?;
         Ok(uploaded.id)
     }

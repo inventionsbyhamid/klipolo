@@ -65,8 +65,14 @@ fn answer_ending(text: &str, frames: u64, status: &str) -> ResponseTemplate {
 }
 
 async fn mount_files(server: &MockServer, prefix: &str, id: &str) {
+    // Through the relay a SAM video goes to its `sam/videos`; with a key, to Meta's Files API.
+    let upload = if prefix == "/meta/v1" {
+        "sam/videos"
+    } else {
+        "files"
+    };
     Mock::given(method("POST"))
-        .and(path(format!("{prefix}/files")))
+        .and(path(format!("{prefix}/{upload}")))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": id, "object": "file"})))
         .mount(server)
         .await;
@@ -233,4 +239,13 @@ async fn an_answer_meta_stopped_part_way_is_kept_and_said_to_be_cut_off() {
     // Billed for every frame sent.
     assert!((tracking.cost_usd - 0.032).abs() < 1e-12);
     server.verify().await;
+}
+
+#[test]
+fn through_the_relay_a_request_is_at_most_just_under_ten_minutes() {
+    // The relay makes at most ten minutes of video for SAM: 1,180 frames at 2 a second, with a frame to spare.
+    let relay = Meta::new(MetaClient::relay(SecretString::from(TOKEN)).with_ledger(None));
+    let key = Meta::new(MetaClient::direct(SecretString::from(KEY)).with_ledger(None));
+    assert_eq!(relay.max_frames(), 1_180);
+    assert_eq!(key.max_frames(), 15_000);
 }

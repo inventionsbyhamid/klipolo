@@ -4,6 +4,8 @@ import { cn } from './cn';
 
 export const Popover = P.Root;
 export const PopoverTrigger = P.Trigger;
+/** What the popover lines up with, when not its trigger (a row the trigger sits in). */
+export const PopoverAnchor = P.Anchor;
 
 export function PopoverContent({ className, ...props }: ComponentProps<typeof P.Content>) {
   return (

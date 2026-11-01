@@ -10,6 +10,7 @@ The relay lets people with an access code use Meta's models in Klipolo without t
 | `POST /v1/devices` | Registers a device, with or without an access code. Returns a bearer token. |
 | `GET /v1/devices/me` | Whether relay AI is on, the budget and the spend. |
 | `POST /meta/v1/responses`, `POST /meta/v1/asr/transcribe`, `POST /meta/v1/images/generations`, `POST /meta/v1/files`, `GET` and `DELETE /meta/v1/files/{id}` | Forwarded to Meta for devices with an active code, and charged against the caps. |
+| `POST /meta/v1/sam/videos` | A video for SAM, sent as its raw bytes (at most 64 MB, one a device at a time): the relay decodes it with ffmpeg and writes its own copy (one video track, 2 frames a second, its long side at most 640, no sound, at most 10 minutes), uploads that to Meta and answers with Meta's file. SAM takes only videos made this way, and the relay reserves their frames. ffmpeg reads only MOV/MP4 from a file, on two threads, pictures up to 4K, under a 1.5 GB memory limit at a lower priority; two copies are made at once, a third waits at most 10 s (then 429), and each has 60 s. |
 | `POST /v1/align` | Word timing for transcript turns: multipart `audio` (16 kHz mono 16-bit WAV, at most 10 minutes) and `turns` (JSON). Open to every registered device, 120 minutes a day. |
 
 Errors are always `{"error": "<code>", "message": "<sentence>"}`, except Traefik's rate limit (see Limits to know). Without a Meta key the proxied routes answer 503 `not_configured`.
@@ -45,7 +46,9 @@ All settings come from the environment.
 | `META_API_KEY` | empty | The server's own Meta key. Never logged. |
 | `DEVICE_CAP_USD` | `2.00` | Most a device can spend, all time. |
 | `GLOBAL_CAP_USD` | `40.00` | Most the whole relay can spend, all time. |
-| `ALLOWED_MODELS` | `muse-spark-1.3,muse-spark-1.2,muse-voice-transcribe-1.0,muse-image-1.0,sam-3.1` | Models the proxy forwards. SAM's video calls must stream, on a video uploaded through the relay: its frames are counted from its MP4 index as it goes up, reserved (at least 50 a video), and charged as Meta bills them. Muse Wonder and the contributor tiers are refused even when listed. |
+| `ALLOWED_MODELS` | `muse-spark-1.3,muse-spark-1.2,muse-voice-transcribe-1.0,muse-image-1.0,sam-3.1` | Models the proxy forwards. SAM's video calls must stream, on a video the relay made (`POST /meta/v1/sam/videos`): its frames are reserved (at least 50 a video) and charged as Meta bills them. If Meta bills more frames than were reserved, SAM goes off for that access code until `enable-sam`. Muse Wonder and the contributor tiers are refused even when listed. |
+| `SAM_DAILY_CAP_USD` | `5.00` | Most SAM may cost in a day (UTC), across every device, on top of the other caps. |
+| `SAM_WORK_DIR` | `sam-work` beside the database | Where SAM's uploads and copies are made (not `/tmp`, which word timing uses). Below 192 MB free, SAM uploads get 503. |
 | `ALIGN_MINUTES_PER_DEVICE_PER_DAY` | `120` | Word timing per device per UTC day. |
 | `ALIGN_CONCURRENCY` | `2` | Alignments running at once. More than 2 can run out of memory in 6 GB. |
 | `ALIGN_THREADS` | `3` | Threads per alignment. |
@@ -148,12 +151,14 @@ The admin CLI works on the live database, and changes take effect on the next re
 C=$(docker ps --filter name=^klipolo-relay- --format '{{.Names}}')
 docker exec $C python -m relay.admin add-code <code> --note "who it is for"
 docker exec $C python -m relay.admin deactivate-code <code>
+docker exec $C python -m relay.admin enable-sam <code>
 docker exec $C python -m relay.admin list-codes
 docker exec $C python -m relay.admin spend
 ```
 
 - `add-code` also reactivates a code that was turned off.
 - `deactivate-code` stops relay AI at once for every device that registered with the code.
+- `enable-sam` turns video tracking back on for a code the relay turned it off for (Meta billed more frames than it reserved: look at the log first).
 - `spend` shows the total, the spend per device and the last 20 charges.
 
 Codes are case-sensitive. Make them hard to guess: at least 12 random lowercase letters and digits.

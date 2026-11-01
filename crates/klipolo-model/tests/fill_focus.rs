@@ -209,7 +209,18 @@ fn split_pieces_keep_only_their_own_part_of_the_path() {
         let FillFocus::Speaker { path, .. } = &piece.fill_focus[&FormatKind::Portrait] else {
             panic!()
         };
-        assert!(path.keys.len() <= 32, "{}", path.keys.len());
+        // A few seconds either side are kept too: a piece lengthened a little still follows.
+        for at in [
+            piece.source_in_us - secs(4.0),
+            piece.source_out_us + secs(4.0),
+        ] {
+            if at < 0 || at > secs(600.0) {
+                continue;
+            }
+            let (a, b) = (path.centre_at(at).unwrap(), whole.centre_at(at).unwrap());
+            assert!((a.0 - b.0).abs() < 1e-9, "at {at}: {a:?} vs {b:?}");
+        }
+        assert!(path.keys.len() <= 72, "{}", path.keys.len());
         assert!(!path.keys[0].cut);
         for at in [
             piece.source_in_us,

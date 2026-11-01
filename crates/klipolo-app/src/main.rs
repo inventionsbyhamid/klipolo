@@ -172,6 +172,13 @@ fn main() {
             let exporting = copies.clone();
             app.state::<klipolo_app::export::ExportState>()
                 .on_busy(Arc::new(move |busy| exporting.set_exporting(busy)));
+            // Analysis's decoding makes way for an export too.
+            let holds = app
+                .state::<commands::analysis::AnalysisHandle>()
+                .holds()
+                .clone();
+            app.state::<klipolo_app::export::ExportState>()
+                .on_busy(Arc::new(move |busy| holds.set_exporting(busy)));
             // Analysis is the person's own action: copies wait while it decodes a clip on this Mac.
             let analyzing = copies.clone();
             app.state::<commands::analysis::AnalysisHandle>()
