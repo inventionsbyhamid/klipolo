@@ -6,8 +6,8 @@ use std::collections::BTreeMap;
 use common::*;
 use klipolo_model::layout::{resolve_rect, BoxN, Layout};
 use klipolo_model::media::image::{
-    add_image_ops, add_image_ops_at, corner_rect, image_rect, Spot, IMAGE_MARGIN, IMAGE_SIZE,
-    IMAGE_US,
+    add_image_ops, add_image_ops_at, background_picture_ops, corner_rect, image_rect, Spot,
+    IMAGE_MARGIN, IMAGE_SIZE, IMAGE_US,
 };
 use klipolo_model::media::music::{add_music_ops, is_music, MusicOpts};
 use klipolo_model::media::sound::add_sound_ops;
@@ -16,7 +16,7 @@ use klipolo_model::media::text::{
 };
 use klipolo_model::ops::{ItemPatch, Op};
 use klipolo_model::project::FormatKind::{Landscape, Portrait, Square};
-use klipolo_model::project::{Asset, AssetKind, Project, Settings};
+use klipolo_model::project::{Asset, AssetKind, BackgroundKind, Project, Settings};
 use klipolo_model::query::video_duration;
 use klipolo_model::time::RangeUs;
 use klipolo_model::timeline::{Item, ItemContent, TrackKind};
@@ -167,6 +167,36 @@ fn an_image_is_medium_centred_for_5_s_and_attached() {
     let tall = image_rect(500, 4000, Landscape);
     assert!(tall.y >= 0.04 - 1e-9 && tall.h <= 0.92 + 1e-9);
     assert!(add_image_ops(&p, &whoosh(), 0).is_err());
+}
+
+/// A picture behind the video: the project's background shows it, keeping its padding and colours; a file the project
+/// doesn't have yet comes in with it, and one it has is used as it is. A sound isn't a picture.
+#[test]
+fn a_picture_becomes_the_background_with_its_file() {
+    let mut p = fixture();
+    p.background.padding = 0.1;
+    let logo = p.asset("logo").unwrap().clone();
+    let ops = background_picture_ops(&p, &logo).unwrap();
+    assert!(matches!(ops.as_slice(), [Op::SetBackground { .. }]), "{ops:?}");
+    let shown = apply_ops(&p, &ops).unwrap();
+    assert_eq!(shown.background.kind, BackgroundKind::Image);
+    assert_eq!(shown.background.asset_id.as_deref(), Some("logo"));
+    assert_eq!(shown.background.padding, 0.1);
+    assert!(validate(&shown).is_ok());
+
+    let wall = Asset {
+        id: "wall".into(),
+        path: "/Users/me/Pictures/wall.jpg".into(),
+        name: "wall.jpg".into(),
+        ..logo
+    };
+    let ops = background_picture_ops(&p, &wall).unwrap();
+    assert!(matches!(ops.as_slice(), [Op::AddAssets { .. }, Op::SetBackground { .. }]), "{ops:?}");
+    let shown = apply_ops(&p, &ops).unwrap();
+    assert_eq!(shown.asset("wall").map(|a| a.path.as_str()), Some("/Users/me/Pictures/wall.jpg"));
+    assert_eq!(shown.background.asset_id.as_deref(), Some("wall"));
+    assert!(validate(&shown).is_ok());
+    assert!(background_picture_ops(&p, &whoosh()).is_err());
 }
 
 #[test]
