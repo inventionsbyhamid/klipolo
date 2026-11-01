@@ -1,13 +1,13 @@
 //! What a cut does to the layers over the main track, free and attached alike: a layer inside a removed range goes with
-//! it, one after it moves back with the footage, and one across a cut keeps what stays. Music stays free and is fitted
-//! to the new end (`media::music`).
+//! it, one after it moves back with the footage, and one across a cut keeps what stays. A sound keeps nothing past the
+//! video's end, where it was never heard. Music stays free and is fitted to the new end (`media::music`).
 mod common;
 use common::*;
 use klipolo_model::media::music::{add_music_ops, is_music, with_music_refit, MusicOpts};
 use klipolo_model::ops::Edge;
 use klipolo_model::query::{anchor_at, main_track_duration, video_duration};
 use klipolo_model::timeline::{Item, ItemContent, Track, TrackKind};
-use klipolo_model::{apply_ops, Op, Project, RangeUs};
+use klipolo_model::{apply_ops, Op, Project, RangeUs, Transaction};
 
 /// A track: its kind, its id and its layers, those marked `true` attached to the clip under their start.
 type TrackOf<'a> = (TrackKind, &'a str, Vec<(Item, bool)>);
@@ -217,6 +217,100 @@ fn a_cut_ripples_free_overlays_as_it_does_attached_ones() {
     for id in ["f-across", "f-after", "f-end"] {
         assert_eq!(item_by_id(&p, id).attach, None, "{id} stays free");
     }
+}
+
+#[test]
+fn keeping_only_the_start_leaves_no_sound_past_the_new_end() {
+    // A whoosh from 20 s for 20 s (its last 10 s past the 30 s video, never heard), one attached at 25 s that runs on
+    // 5 s past the end, and a title in the part kept. Keeping only 0–5 s cuts 5–30 s.
+    let p = project(vec![
+        (
+            TrackKind::Audio,
+            "s1",
+            vec![(sound("long", 20.0, 20.0, 0.0), false)],
+        ),
+        (
+            TrackKind::Audio,
+            "s2",
+            vec![(sound("late", 25.0, 10.0, 0.0), true)],
+        ),
+        (
+            TrackKind::Overlay,
+            "ov",
+            vec![(still_item("title", 1.0, 3.0), true)],
+        ),
+    ]);
+    let ops = [cut(5.0, 30.0)];
+    let next = after(&p, &ops);
+
+    assert!(
+        !has(&next, "long"),
+        "the free whoosh went with the footage it played over"
+    );
+    assert!(!has(&next, "late"), "the attached one too");
+    assert_eq!(span(item_by_id(&next, "title")), (1.0, 4.0));
+    assert_eq!(main_track_duration(&next.timeline.main), secs(5.0));
+    assert_nothing_past_the_end(&next);
+
+    // The proposal names both as going.
+    let tx = Transaction {
+        label: "chat.keepOnly".into(),
+        ops: ops.to_vec(),
+        origin: None,
+        ..Default::default()
+    };
+    let review = tx.review(&p).unwrap();
+    assert!(
+        review.removals.items.contains(&"long".to_string()),
+        "{:?}",
+        review.removals
+    );
+    assert!(
+        review.removals.items.contains(&"late".to_string()),
+        "{:?}",
+        review.removals
+    );
+}
+
+#[test]
+fn a_sound_running_past_the_end_ends_with_the_video_after_a_cut() {
+    // Two sounds run 5 s and 4 s past the 30 s end, never heard there; one is free, one attached. A sound placed after
+    // the end on purpose keeps its place after the video's end.
+    let p = project(vec![
+        (
+            TrackKind::Audio,
+            "s1",
+            vec![
+                (sound("tail", 25.0, 10.0, 1.0), false),
+                (sound("parked", 36.0, 2.0, 0.0), false),
+            ],
+        ),
+        (
+            TrackKind::Audio,
+            "s2",
+            vec![(sound("tied", 24.0, 10.0, 0.0), true)],
+        ),
+    ]);
+    let p = after(&p, &[cut(2.0, 6.0)]);
+
+    let tail = item_by_id(&p, "tail");
+    assert_eq!(
+        span(tail),
+        (21.0, 26.0),
+        "moved back 4 s, cut at the new end"
+    );
+    assert_eq!(
+        sound_of(tail),
+        (0.0, 1.0, 0.0),
+        "its own end went, so no fade-out"
+    );
+    assert_eq!(tail.attach, None);
+    assert_eq!(span(item_by_id(&p, "tied")), (20.0, 26.0));
+    assert_eq!(
+        span(item_by_id(&p, "parked")),
+        (32.0, 34.0),
+        "6 s after the end, as before"
+    );
 }
 
 #[test]

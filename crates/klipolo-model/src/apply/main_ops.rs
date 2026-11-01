@@ -15,7 +15,7 @@ use crate::messages::{code, msg};
 use crate::motion::{self, Motion};
 use crate::ops::{ClipPatch, Edge};
 use crate::project::Project;
-use crate::query::{anchor_at, clip_at, main_track_duration, MainIndex};
+use crate::query::{anchor_at, clip_at, main_track_duration, video_duration, MainIndex};
 use crate::time::{
     drifted, kept_parts, merge_ranges, scaled, unscaled, RangeUs, Ripple, Us, MIN_DURATION_US,
 };
@@ -590,6 +590,7 @@ fn cut_main(main: &mut Vec<Clip>, removed: &Ripple, ids: &mut IdPool) -> Origins
 fn ripple_items(p: &mut Project, removed: &Ripple, ids: &mut IdPool) -> Vec<Option<LayerStart>> {
     let layers: usize = p.timeline.tracks.iter().map(|t| t.items.len()).sum();
     let mut starts = Vec::with_capacity(layers);
+    let video_end = video_duration(&p.timeline);
     let main = MainIndex::new(&p.timeline.main);
     for track in p.timeline.tracks.iter_mut() {
         let mut next = Vec::with_capacity(track.items.len());
@@ -601,7 +602,7 @@ fn ripple_items(p: &mut Project, removed: &Ripple, ids: &mut IdPool) -> Vec<Opti
                     continue;
                 }
                 // Free: it moves in timeline time and stays free.
-                let pieces = ripple_item(item, removed, ids);
+                let pieces = ripple_item(item, removed, video_end, ids);
                 next.reserve(pieces.len());
                 starts.reserve(pieces.len());
                 for (piece, _) in pieces {
@@ -622,7 +623,7 @@ fn ripple_items(p: &mut Project, removed: &Ripple, ids: &mut IdPool) -> Vec<Opti
             };
             // Start from where the anchor puts the layer (stored starts can be stale).
             item.start_us = at;
-            let pieces = ripple_item(item, removed, ids);
+            let pieces = ripple_item(item, removed, video_end, ids);
             // A long video layer can be cut into thousands of pieces: room for them at once.
             next.reserve(pieces.len());
             starts.reserve(pieces.len());
@@ -640,11 +641,26 @@ fn ripple_items(p: &mut Project, removed: &Ripple, ids: &mut IdPool) -> Vec<Opti
 /// Static layers (text, image, zoom) map their start and end through the ripple; video and audio
 /// layers keep only the footage that stays, split into pieces. Pieces under 10 ms are dropped.
 /// Each piece comes with the old timeline moment it now starts at.
-fn ripple_item(item: Item, removed: &Ripple, ids: &mut IdPool) -> Vec<(Item, Us)> {
+///
+/// A sound that plays before `video_end` (the video's end before the cut) keeps nothing past it, where it was never
+/// heard, so no cut leaves one running past the new end. Music keeps its own rules (`media::music`), and a sound
+/// placed after the end only moves.
+fn ripple_item(item: Item, removed: &Ripple, video_end: Us, ids: &mut IdPool) -> Vec<(Item, Us)> {
     let (s, e) = (item.start_us, item.end_us());
+    let heard_to =
+        (matches!(item.content, ItemContent::Audio { .. }) && !is_music(&item) && s < video_end)
+            .then_some(video_end);
     let parts: Vec<RangeUs> = removed
         .kept(s, e)
         .into_iter()
+        .filter_map(|r| match heard_to {
+            Some(end) if r.start >= end => None,
+            Some(end) => Some(RangeUs {
+                start: r.start,
+                end: r.end.min(end),
+            }),
+            None => Some(r),
+        })
         .filter(|r| r.len() >= MIN_DURATION_US)
         .collect();
     if parts.is_empty() {
