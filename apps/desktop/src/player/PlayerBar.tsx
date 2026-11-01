@@ -6,7 +6,7 @@ import { Tooltip } from '../design/Tooltip';
 import { useCommands } from '../features/command-palette/useCommands';
 import { Timecode } from '../features/preview/Timecode';
 import { useZoomTarget, zoomRange, zoomTo, zoomViewUs } from '../features/timeline/commands';
-import { useIntlLocale } from '../i18n/react';
+import { useIntlLocale, useLocale } from '../i18n/react';
 import { Icon } from '../layout/Icon';
 import { formatNumber } from '../lib/format';
 import { useEngine } from '../state/engine';
@@ -162,6 +162,8 @@ function BarButton({
  * looks live and does nothing. While J or L plays backward or faster, the play button shows which way and how fast.
  */
 export function PlayerBar() {
+  // The Snapping switch's name comes from the core `t`: a language switch re-renders the bar.
+  useLocale();
   const duration = useDurationUs();
   const playing = usePlayback((s) => s.playing);
   const snapping = useUi((s) => s.snapping);
