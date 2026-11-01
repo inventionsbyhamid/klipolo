@@ -1,6 +1,6 @@
-//! A half-size generator judged against Heavy, the budget counted from the
-//! request's arrival and clamped to the server's, notes that name their real cause, and a failure
-//! that names its step and size, or a timer whose reading failed made again.
+//! A half-size generator judged against Heavy, the budget counted from the request's arrival and clamped to the
+//! server's, notes that name their real cause, and a failure that names its step and size, or a timer whose reading
+//! failed made again.
 
 use std::time::{Duration, Instant};
 

@@ -1,5 +1,4 @@
-//! The test helpers for shader safety, the render worker and the library
-//! and in its submodules.
+//! Test helpers for shader safety, the render worker and the library: helpers for these go here and in its submodules.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;

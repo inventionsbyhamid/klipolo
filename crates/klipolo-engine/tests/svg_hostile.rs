@@ -79,10 +79,10 @@ fn what_comes_out_fits_a_stored_scene() {
     }
 }
 
-/// The review's own five, at full size: each refused by the pre-pass, plainly and quickly (they would otherwise drive
+/// Crafted files, at full size: each refused by the pre-pass, plainly and quickly (they would otherwise drive
 /// usvg past the worker's memory cap or its deadline).
 #[test]
-fn the_reviews_hostile_svgs_are_refused_plainly() {
+fn crafted_hostile_svgs_are_refused_plainly() {
     assert_eq!(
         refused(&nest(RECT, 6, |l| format!(" #l{l}"))),
         "svg.tooLarge"

@@ -1,5 +1,5 @@
-//! A caption page's layout: its lines (the model's pure breaker, shared with the
-//! caption files), where its block sits, a word wider than the line, and the faces the renderer shapes with.
+//! A caption page's layout: its lines (the model's pure breaker, shared with the caption files), where its block sits,
+//! a word wider than the line, and the faces the renderer shapes with.
 
 use klipolo_engine::plan::captions::place::{block_centre, max_width_share};
 use klipolo_model::captions::lines::{LineInput, break_lines};
@@ -185,9 +185,9 @@ fn a_word_wider_than_the_line_autofits_and_is_never_cut() {
     assert!(w.cell[2] as f32 >= w.size[0] + 2.0 * layout.pad - 1.0);
 }
 
-/// An emoji in a heavy caption finds the emoji face
-/// at the caption's own weight at once (cosmic-text no longer loads the computer's fonts one by one to reach it), and a
-/// condensed face keeps the system's script faces, so its Thai never draws as boxes.
+/// An emoji in a heavy caption finds the emoji face at the caption's own weight at once (cosmic-text no longer loads
+/// the computer's fonts one by one to reach it), and a condensed face keeps the system's script faces, so its Thai
+/// never draws as boxes.
 #[test]
 fn an_emoji_at_900_finds_its_face_and_a_condensed_face_keeps_the_script_fallbacks() {
     use klipolo_engine::render::fonts::{configure_for_tests, test_index, test_installed_shape};

@@ -1,7 +1,8 @@
 //! Where the generated test media are: the set `scripts/gen-engine-fixtures.sh` makes for this checkout's version of
 //! itself, `target/engine-fixtures/<version>/`. The version is the script's POSIX `cksum` (its CRC and its length), as
-//! the script names the set, so a checkout reads the set its own script makes while lanes and branches share the folder
-//! (the build server). One copy, included with `#[path]` by the engine's tests and examples and by the app's tests.
+//! the script names the set, so a checkout reads the set its own script makes while checkouts and branches share the
+//! folder (a shared build server). One copy, included with `#[path]` by the engine's tests and examples and by the
+//! app's tests.
 
 use std::path::{Path, PathBuf};
 

@@ -1,5 +1,5 @@
-//! The engine's side of the one face answer: it shapes with exactly the face
-//! the resolver picks, its fallbacks answer at every weight and style, CJK follows the text's language and draws
+//! The engine's side of the one face answer: it shapes with exactly the face the resolver picks, its fallbacks answer
+//! at every weight and style, CJK follows the text's language and draws
 //! Adobe NotDef's boxes until its Noto Sans is downloaded, and a download resolves through the engine's own index.
 
 use klipolo_engine::render::fonts::{
@@ -90,9 +90,8 @@ fn cjk_without_its_noto_draws_notdefs_boxes_at_every_weight() {
     assert_ne!(thai, "kl:fallback:notdef");
 }
 
-/// A download registered with the engine reaches the engine's own
-/// index, with its exact version and its coverage, and draws for real: the app's preflight passes only when the engine
-/// will draw.
+/// A download registered with the engine reaches the engine's own index, with its exact version and its coverage, and
+/// draws for real: the app's preflight passes only when the engine will draw.
 #[test]
 fn a_download_resolves_through_the_engines_own_index() {
     use klipolo_fonts::index::{Downloaded, DownloadedFace};
@@ -205,8 +204,8 @@ fn an_italic_only_face_keeps_the_systems_script_fallbacks() {
     );
 }
 
-/// Punctuation standing alone ("Hello！") asks for the text language's Noto Sans, else Adobe
-/// NotDef, as the webview's stack does; never cosmic-text's last stage, where the engine and WebKit would each pick a
+/// Punctuation standing alone ("Hello！") asks for the text language's Noto Sans, else Adobe NotDef, as the webview's
+/// stack does; never cosmic-text's last stage, where the engine and WebKit would each pick a different system face. It
 /// needs no download: no frame code.
 #[test]
 fn punctuation_standing_alone_draws_the_same_box_as_the_webview_until_its_noto() {
@@ -262,8 +261,8 @@ fn the_scan_groups_faces_by_family_with_their_coverage() {
     assert_eq!(rubik.coverage & (ARABIC | HEBREW), ARABIC | HEBREW);
 }
 
-/// An installed face that isn't normal width (Impact, DIN Condensed) draws itself, never the Latin
-/// fallback: cosmic-text keeps only faces of the asked width, so the drawer asks for its width twin, the same face
+/// An installed face that isn't normal width (Impact, DIN Condensed) draws itself, never the Latin fallback:
+/// cosmic-text keeps only faces of the asked width, so the drawer asks for its width twin, the same face registered at
 /// normal width under its own alias (it keeps the system's script fallbacks too).
 #[test]
 fn a_condensed_only_family_draws_its_face_not_inter() {

@@ -1,9 +1,8 @@
-//! The budget classes: time and memory both decide the class, the time class being the
-//! measurement's own (decided per point, never taken again from figures that leave out what
-//! wasn't measured); Heavy only for what may run at half size; a padded filter's grown targets its own; the
-//! advice names the loop that costs most; and the contribution's key covers what is drawn. Also, the
-//! advice measures against what could run (`advice`), the cost says what decided it (`decided`), and
-//! the measurement version is pinned (`version`).
+//! The budget classes: time and memory both decide the class, the time class being the measurement's own (decided per
+//! point, never taken again from figures that leave out what wasn't measured); Heavy only for what may run at half
+//! size; a padded filter's grown targets its own; the advice names the loop that costs most; and the contribution's key
+//! covers what is drawn. Also: the advice measures against what could run (`advice`), the cost says what decided it
+//! (`decided`), and the measurement version is pinned (`version`).
 
 #[path = "budget/advice.rs"]
 mod advice;

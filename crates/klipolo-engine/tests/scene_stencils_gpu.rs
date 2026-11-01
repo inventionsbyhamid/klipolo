@@ -1,7 +1,6 @@
-//! The scene pass's stencils on the GPU (lavapipe in CI): six moving scene layers of
-//! six sizes keep a stencil each, and the stencils, under their own bound, never push scene instances out of
-//! theirs, counted at the Mac's 1 byte a pixel as well as the emulated 4. Now
-//! only a pass that draws a translucent stroke has a stencil: these layers each draw one.
+//! The scene pass's stencils on the GPU (lavapipe in CI): six moving scene layers of six sizes keep a stencil each, and
+//! the stencils, under their own bound, never push scene instances out of theirs, counted at the Mac's 1 byte a pixel
+//! as well as the emulated 4. Only a pass that draws a translucent stroke has a stencil: these layers each draw one.
 
 mod support;
 use std::sync::Arc;

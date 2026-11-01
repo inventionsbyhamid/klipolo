@@ -1,8 +1,8 @@
-//! Scene text kept and stood in for in the preview (lavapipe in CI): text on screen is never
-//! pushed out by a build that lands, so five lower thirds, or two heavy texts, settle; a build that lands is
-//! kept even while no scene is drawn; while a build is on its way, the stand-in is the latest of the same text,
-//! scaled evenly, never squashed, never magnified from a size far off, and a setting's edit keeps the
-//! old text showing. Every test takes the GPU turn (`gpu_turn`): they count layouts and texts.
+//! Scene text kept and stood in for in the preview (lavapipe in CI): text on screen is never pushed out by a build that
+//! lands, so five lower thirds, or two heavy texts, settle; a build that lands is kept even while no scene is drawn;
+//! while a build is on its way, the stand-in is the latest of the same text, scaled evenly, never squashed, never
+//! magnified from a size far off, and a setting's edit keeps the old text showing. Every test takes the GPU turn
+//! (`gpu_turn`): they count layouts and texts.
 
 mod support;
 use std::sync::Arc;
@@ -95,7 +95,7 @@ async fn five_lower_thirds_in_one_format_settle() {
     assert_eq!(h.scene_stats().texts, 5);
 }
 
-/// Two heavy texts on screen (120 three-letter words split by word at size 200 at 1080p, about 11 MB each:
+/// Two heavy texts on screen (120 three-letter words split by word at size 200 at 1080p, about 11 MB each: words share
 /// no cell, where repeated letters do) both stay, past the format's 16 MiB while both show,
 /// and settle.
 #[tokio::test(flavor = "multi_thread")]

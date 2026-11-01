@@ -125,7 +125,6 @@ impl InProcessWorker {
     }
 
     /// `Verify` of `id` from `files`, written into the session's `in/` as the app writes them: every line of its reply.
-    /// of its reply.
     pub async fn verify(
         &mut self,
         id: &klipolo_model::contrib::ContribId,

@@ -158,7 +158,7 @@ fn a_projects_copies_are_capped_in_number_and_bytes() {
     )));
 }
 
-/// R2-1 (at the loader, where crafted projects first arrive): a setting key the worker's taming would change, or one
+/// At the loader, where crafted projects first arrive: a setting key the worker's taming would change, or one
 /// over 64 characters, is refused; the same text as a label loads.
 #[test]
 fn a_setting_key_the_worker_would_tame_is_refused() {

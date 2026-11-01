@@ -223,7 +223,7 @@ fn shown_from_waits_for_the_enter_preset() {
     );
 }
 
-/// A preset's eased overshoot stays inside `reach`: pop's back.out grows the logo past its own size
+/// A preset's eased overshoot stays inside `reach`: pop's back.out grows the logo past its own size for a few frames,
 /// and so does a springy pop's first swing, and the box never passes what effect
 /// targets and decodes are sized for.
 #[test]

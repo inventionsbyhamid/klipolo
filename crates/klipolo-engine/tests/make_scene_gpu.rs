@@ -1,6 +1,6 @@
 //! Scenes in the render worker (lavapipe in CI, `FakeMeter`): `CheckScene` answers a cost with the scene's CPU time and
-//! CPU time and a thumbnail; a submitted `svg` node is stored as paths the main process's loader accepts; a fill names
-//! a library generator only when `contribs.json` hands it over; and frames of a project placing the draft the
+//! a thumbnail; a submitted `svg` node is stored as paths the main process's loader accepts; a fill names a library
+//! generator only when `contribs.json` hands it over; and frames of a project placing the draft the worker checked draw
 //! it over the still, while a draft it never checked draws nothing, noted as being checked.
 
 mod support;
@@ -194,8 +194,8 @@ fn patch(img: &image::RgbImage, (x, y): (f64, f64)) -> [f64; 3] {
     sum
 }
 
-/// Frames of a project placing the draft the worker just checked draw it over the still: the lower third's plate
-/// shows dark where the bare still is light, as the draft's own thumbnail shows it (its plate made opaque here, so the
+/// Frames of a project placing the draft the worker just checked draw it over the still: the lower third's plate shows
+/// dark where the bare still is light, as the draft's own thumbnail shows it (its plate made opaque here, so the two
 /// match whatever is under them: within 8/255), with no "checking" note. A draft whose
 /// bytes it never checked draws nothing and says so.
 #[tokio::test(flavor = "multi_thread")]

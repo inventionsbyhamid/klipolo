@@ -123,7 +123,7 @@ async fn analysing_reaches_the_ui_before_the_first_frame_and_a_cancel_then_leave
     assert!(matches!(outcome, Outcome::Cancelled), "{outcome:?}");
     assert!(events.contains(&ExportEvent::Analysing { done: 0.1 }));
     // A cancelled job leaves the list at once and its folder is deleted in the background (as a discard is: set aside,
-    // aside, then removed), so the folder is waited for.
+    // then removed), so the folder is waited for.
     let root = dir.path().join(".jobs");
     assert!(
         klipolo_engine::export::jobs::list_jobs(&root).is_empty(),
