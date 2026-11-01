@@ -1112,6 +1112,7 @@ fn layer_said(c: &klipolo_chat::tools::LayerChange) -> Vec<Value> {
 /// `styleText`'s keys as the model writes them.
 fn style_said(st: &klipolo_chat::tools::StyleChange) -> Vec<Value> {
     let mut out = Vec::new();
+    out.extend(st.text.as_ref().map(|t| pair("text", json!(t))));
     out.extend(st.look.map(|l| pair("look", json!(l.key))));
     out.extend(st.size.map(|v| pair("size", json!(v))));
     out.extend(st.font.as_ref().map(|f| pair("font", json!(f))));

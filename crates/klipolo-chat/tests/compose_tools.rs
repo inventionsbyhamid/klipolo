@@ -1412,3 +1412,42 @@ fn a_colour_angle_or_point_that_doesnt_fit_says_what_does() {
         assert_eq!(refused_to_model(&out, 0), said, "{name}.{key}");
     }
 }
+
+fn run_said(p: &Project, message: &str, calls: &[(&str, Value)]) -> Compiled {
+    let calls: Vec<ToolCall> = calls.iter().map(|(n, a)| call(n, a.clone())).collect();
+    compile(p, &inputs(p, message), &calls)
+}
+
+/// "Change the title to Launch day": styleText's text key gives words new words, the person's own (as addText takes
+/// them), on a text layer and on animated words alike.
+#[test]
+fn style_text_changes_the_words_to_the_persons_own() {
+    let p = project();
+    let message = "change the title to Launch day";
+    let launch = set("t1", json!([{"key": "text", "value": "Launch day"}]));
+    let after = applied(&p, &run_said(&p, message, &[("styleText", launch.clone())]));
+    let ItemContent::Text { text, .. } = &words(&after).content else {
+        panic!()
+    };
+    assert_eq!(text, "Launch day");
+    let out = run_said(&p, "change the title", &[("styleText", launch.clone())]);
+    assert!(refused_to_model(&out, 0).contains("the person's own or said in the video"));
+    let animated = applied(
+        &p,
+        &run(
+            &p,
+            &[(
+                "animateText",
+                json!({"layer": "t1", "set": [{"key": "opacity", "value": 0}]}),
+            )],
+        ),
+    );
+    let relabelled = applied(
+        &animated,
+        &run_said(&animated, message, &[("styleText", launch)]),
+    );
+    let ItemContent::Generator { params, .. } = &words(&relabelled).content else {
+        panic!()
+    };
+    assert_eq!(text_motion::read(params).0, "Launch day");
+}

@@ -132,6 +132,8 @@ pub const SIZES: std::ops::RangeInclusive<f64> = 4.0..=400.0;
 /// What `styleText` changes; None keeps each.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct StyleChange {
+    /// New words, not yet checked as the person's own.
+    pub text: Option<String>,
     pub look: Option<Look>,
     pub font: Option<String>,
     pub size: Option<f64>,
@@ -152,7 +154,8 @@ pub fn is_hex(text: &str) -> bool {
 }
 
 /// The keys `styleText` takes.
-pub const STYLE_KEYS: [&str; 11] = [
+pub const STYLE_KEYS: [&str; 12] = [
+    "text",
     "look",
     "font",
     "size",
@@ -201,6 +204,7 @@ fn word_of<T: Word>(p: &Pair, a: &Args, all: &[T]) -> Result<T, ToolError> {
 /// One `setLayer` pair of the words' style (a key of `STYLE_KEYS`) into `change`.
 pub(super) fn read_style(p: &Pair, a: &Args, change: &mut StyleChange) -> Result<(), ToolError> {
     match p.key {
+        "text" => change.text = Some(p.text(a)?),
         "look" => change.look = Some(word_of(p, a, &LOOKS)?),
         "font" => change.font = Some(p.text(a)?),
         "size" => change.size = Some(p.number(a, (*SIZES.start(), *SIZES.end()))?),
@@ -222,7 +226,8 @@ pub(super) fn read_style(p: &Pair, a: &Args, change: &mut StyleChange) -> Result
 
 pub(super) const STYLE_TEXT: Tool = Tool {
     name: "styleText",
-    description: "Style words on screen. Keys: look (clean, boldOutline, highlight, box, pop) first, then font, size \
+    description: "Words on screen: their text, and their style. Keys: text, look (clean, boldOutline, highlight, box, \
+                  pop) first, then font, size \
                   (px at 1080p), color, highlight and outline (#hex or none), outlineWidth (thin, medium, thick), \
                   shadow, align, bold, italic.",
     parameters: || vec![layer_field(), ("set", schema("Keys to set."))],

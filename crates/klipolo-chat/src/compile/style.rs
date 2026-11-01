@@ -123,23 +123,70 @@ pub(super) fn restyled_content(
     if *change == StyleChange::default() {
         return Ok((item.content.clone(), None));
     }
+    // New words, as addText takes them; the look keys go on top, when any is set.
+    let words = (change.text.as_deref())
+        .map(|t| super::media::screen_words(c, ("styleText", "text"), t))
+        .transpose()?;
+    let looks = (StyleChange {
+        text: None,
+        ..change.clone()
+    }) != StyleChange::default();
+    let restyle = |style: &TextStyle| {
+        if looks {
+            restyled(c, style, change, said)
+        } else {
+            Ok((style.clone(), None))
+        }
+    };
     match &item.content {
         ItemContent::Text { text, style } => {
-            let (style, download) = restyled(c, style, change, said)?;
-            let text = text.clone();
+            let (style, download) = restyle(style)?;
+            let text = words.unwrap_or_else(|| text.clone());
             Ok((ItemContent::Text { text, style }, download))
         }
         ItemContent::Generator { source, params, .. } if source.as_str() == text_motion::SOURCE => {
             let (text, style, motion) = text_motion::read(params);
-            let (style, download) = restyled(c, &style, change, said)?;
+            let (style, download) = restyle(&style)?;
+            let text = words.unwrap_or(text);
+            if let Some(why) = text_motion::problem(&text, &motion) {
+                return Err(to_model(format!("styleText: {why}")));
+            }
             let mut content = item.content.clone();
             if let ItemContent::Generator { params, .. } = &mut content {
                 *params = text_motion::params(&text, &style, &motion);
             }
             Ok((content, download))
         }
+        // A title template keeps its own look, but takes new words for its title.
+        ItemContent::Generator { source, params, .. } if !looks && params.contains_key("title") => {
+            let text = words.unwrap_or_default();
+            let most = (klipolo_model::contrib::Catalog::builtin().get(source))
+                .and_then(|def| def.param("title"))
+                .and_then(|spec| match &spec.kind {
+                    klipolo_model::params::ParamKind::Text { max_len, .. } => {
+                        Some(*max_len as usize)
+                    }
+                    _ => None,
+                })
+                .unwrap_or(60);
+            let n = text.chars().count();
+            if n > most {
+                return Err(to_model(format!(
+                    "styleText: {said}'s title holds at most {most} characters, and these are {n}. Use fewer words."
+                )));
+            }
+            let mut content = item.content.clone();
+            if let ItemContent::Generator { params, .. } = &mut content {
+                params.insert(
+                    "title".to_owned(),
+                    klipolo_model::params::ParamValue::Text(text),
+                );
+            }
+            Ok((content, None))
+        }
         ItemContent::Generator { .. } => Err(to_model(format!(
-            "styleText: {said} is a title template with its own look. Style words added with addText instead."
+            "styleText: {said} is a title template with its own look: it takes only text. Style words added with \
+             addText instead."
         ))),
         _ => Err(to_model(format!(
             "styleText: {said} is not words. Name words by their ref, such as t1."
