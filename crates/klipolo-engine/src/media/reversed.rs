@@ -504,10 +504,13 @@ fn reversed_sound(
             return Ok(None);
         }
     }
-    // Last frame first: reverse the frames, keeping each frame's two channels in order.
-    let mut frames: Vec<[f32; 2]> = out.chunks_exact(2).map(|f| [f[0], f[1]]).collect();
-    frames.reverse();
-    Ok(Some(frames.into_iter().flatten().collect()))
+    // Last frame first, in place (the sound is held once): every sample reversed, then each frame's two channels put
+    // back in order.
+    out.reverse();
+    for frame in out.chunks_exact_mut(2) {
+        frame.swap(0, 1);
+    }
+    Ok(Some(out))
 }
 
 impl Writer {
@@ -691,20 +694,22 @@ fn decode_window(
             }
         }
     }
-    // Damaged stretches: the frame before, else the next one decoded.
-    let mut out = Vec::with_capacity(got.len());
-    let mut before: Option<usize> = None;
+    // Each picture moves into the window (held once); a damaged stretch takes a copy of the frame before, else of the
+    // next one decoded.
+    let mut out: Vec<ffmpeg::frame::Video> = Vec::with_capacity(got.len());
     for k in 0..got.len() {
-        if got[k].is_some() {
-            before = Some(k);
-        }
-        let take = before.or_else(|| (k..got.len()).find(|&n| got[n].is_some()));
-        let Some(n) = take else {
-            return Err(ReverseError::Failed(
-                "no picture could be decoded here".into(),
-            ));
+        let picture = match got[k].take() {
+            Some(picture) => picture,
+            None => match out.last().or_else(|| got[k..].iter().flatten().next()) {
+                Some(near) => near.clone(),
+                None => {
+                    return Err(ReverseError::Failed(
+                        "no picture could be decoded here".into(),
+                    ));
+                }
+            },
         };
-        out.push(got[n].as_ref().expect("found above").clone());
+        out.push(picture);
     }
     Ok(out)
 }
