@@ -3024,6 +3024,25 @@ mod follow {
     }
 
     #[tokio::test]
+    async fn focus_chat_named_that_isnt_used_is_told_in_the_follow_note() {
+        // One person on screen: P3 isn't there; and a range past the video's end touches no clip.
+        let guest = fc(
+            "s",
+            "followSubject",
+            r#"{"description": "person", "focus": [{"fromSec": 2, "toSec": 8, "person": "P3"}, {"fromSec": 50, "toSec": 60, "person": "P1"}]}"#,
+        );
+        let f = following(vec![answer("Done.", vec![portrait(), guest])]);
+        f.chat
+            .session
+            .send(request("keep the third person in frame"))
+            .await
+            .unwrap();
+        let note = &f.chat.session.turns()[0].note;
+        assert!(note.contains("P3 isn't on screen"), "{note}");
+        assert!(note.contains("outside the video"), "{note}");
+    }
+
+    #[tokio::test]
     async fn the_reply_says_when_who_speaks_could_not_be_told() {
         let dir = tempfile::tempdir().unwrap();
         let mut project = talk();

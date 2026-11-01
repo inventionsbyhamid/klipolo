@@ -29,7 +29,7 @@ use klipolo_model::time::{Us, unscaled};
 use klipolo_model::{Project, Transaction};
 
 use super::project::ProjectNow;
-use crate::speaker::{Speaker, about};
+use crate::speaker::{Followed, Speaker, about};
 
 /// Said when no format crops the footage: there is nowhere for a crop to follow.
 pub const NO_CROP: &str =
@@ -158,6 +158,11 @@ pub(super) async fn follow_jobs(
                         dollars(followed.paid_usd)
                     );
                 }
+                // Focus chat named that isn't used: the model is told, so it doesn't say otherwise.
+                for unused in unused_focus(&now.project, focus, &followed) {
+                    follows.note.push(' ');
+                    follows.note.push_str(&unused);
+                }
                 // Who speaks couldn't be told: the person hears why the crop follows the main person.
                 if let Some(why) = &followed.note {
                     follows.said.push(why.clone());
@@ -261,6 +266,39 @@ pub fn keeps_for(p: &Project, focus: &[FollowFocus]) -> BTreeMap<Id, Keep> {
             _ => Keep::Ranges { ranges },
         };
         out.insert(clip.id.clone(), keep);
+    }
+    out
+}
+
+/// What of chat's `focus` (timeline ranges on `p`) the follow couldn't use, one sentence each: a person no followed
+/// clip has (whoever speaks is kept there), a range that touches no clip, and ranges past what a clip keeps.
+fn unused_focus(p: &Project, focus: &[FollowFocus], followed: &Followed) -> Vec<String> {
+    let mut out = Vec::new();
+    let most = (followed.kept.values())
+        .map(|(_, people)| people.len())
+        .max()
+        .unwrap_or(0);
+    let mut missing: Vec<u8> = (focus.iter())
+        .filter_map(|f| match f.who {
+            Who::Person { person } if usize::from(person) > most => Some(person),
+            _ => None,
+        })
+        .collect();
+    missing.sort_unstable();
+    missing.dedup();
+    for person in missing {
+        out.push(format!(
+            "P{person} isn't on screen in these clips, so whoever speaks is kept there."
+        ));
+    }
+    let end = p.timeline.main.iter().map(|c| c.duration_us()).sum::<Us>();
+    if focus.iter().any(|f| f.range.start >= end) {
+        out.push("A focus range outside the video was left out.".to_owned());
+    }
+    if focus.len() > MAX_KEEP_RANGES {
+        out.push(format!(
+            "Only the first {MAX_KEEP_RANGES} focus ranges of a clip are kept."
+        ));
     }
     out
 }
