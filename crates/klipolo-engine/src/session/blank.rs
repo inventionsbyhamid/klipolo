@@ -18,6 +18,7 @@ pub struct BlankBackend {
     log: Option<Arc<Mutex<Vec<RenderRequest>>>>,
     resets: Arc<AtomicU32>,
     audio: Arc<Mutex<Vec<&'static str>>>,
+    volumes: Arc<Mutex<Vec<f32>>>,
     warmed: Arc<Mutex<Vec<(VideoRole, String)>>>,
     frames: FramePool,
     /// A sound device that fails as soon as it is asked to play (tests of the fallback).
@@ -56,6 +57,11 @@ impl BlankBackend {
     /// The (role, asset id) of every source handed to `warm`.
     pub fn warm_log(&self) -> Arc<Mutex<Vec<(VideoRole, String)>>> {
         self.warmed.clone()
+    }
+
+    /// Every listening volume set (`set_volume`), in order.
+    pub fn volume_log(&self) -> Arc<Mutex<Vec<f32>>> {
+        self.volumes.clone()
     }
 }
 
@@ -133,5 +139,12 @@ impl PreviewBackend for BlankBackend {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .push("stop");
+    }
+
+    fn set_volume(&mut self, volume: f32) {
+        self.volumes
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(volume);
     }
 }

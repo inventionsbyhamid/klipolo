@@ -13,6 +13,7 @@ mod apps;
 mod chat;
 mod create;
 mod disk;
+mod duplicate;
 mod library;
 mod recent;
 mod saver;
@@ -167,6 +168,16 @@ pub fn project_create(
 #[tauri::command(async)]
 pub fn project_open(state: State<'_, ProjectSessionState>, path: String) -> Result<Snapshot, Said> {
     open_in(&state, Path::new(&path))
+}
+
+/// Duplicates a project into the library and opens the copy, "<name> copy" (`duplicate`): the open project as it stands
+/// (`path` left out), or the project file at `path` (a start screen card). The open one is saved and closed first.
+#[tauri::command(async)]
+pub fn project_duplicate(
+    state: State<'_, ProjectSessionState>,
+    path: Option<String>,
+) -> Result<Snapshot, Said> {
+    duplicate::duplicate_in(&state, &library_dir()?, path.as_deref().map(Path::new))
 }
 
 /// The start screen's recent projects (`recent::recent_in`): the library's project files, last opened first. Nothing is

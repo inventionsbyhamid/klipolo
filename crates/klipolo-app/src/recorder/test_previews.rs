@@ -244,6 +244,7 @@ pub(super) fn nothing() -> Previews {
     Previews {
         thumbs: false,
         live: None,
+        live_pixels: None,
         camera: None,
         mic: None,
         ask: None,
@@ -255,6 +256,7 @@ pub(super) fn everything() -> Previews {
     Previews {
         thumbs: true,
         live: Some(screen()),
+        live_pixels: None,
         camera: Some("camera-1".into()),
         mic: Some("mic-1".into()),
         ask: None,
