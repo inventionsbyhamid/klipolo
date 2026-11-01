@@ -3360,6 +3360,14 @@
   line-height: var(--lh-xs);
 }
 
+/* "Custom by chat" under the clip card's Keep row, with its reset beside it. */
+.keep-custom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
 .input {
   display: flex;
   align-items: center;

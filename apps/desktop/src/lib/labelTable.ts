@@ -328,6 +328,11 @@ export const TABLE = {
     message: 'Follow the speaker',
     comment: 'Undo history entry: a filled video keeps the person talking in view',
   }),
+  'clip.focus.keep.undo': msg({
+    id: 'clip.focus.keep.undo',
+    message: 'Change who stays in frame',
+    comment: 'Undo history entry: which of the people a filled video follows stays in view',
+  }),
   'clip.focus.fixed.undo': msg({
     id: 'clip.focus.fixed.undo',
     message: 'Fix the fill focus',

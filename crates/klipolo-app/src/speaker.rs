@@ -7,6 +7,11 @@
 //! - **The run** (`Speaker::follow`): each stretch copied small, sent, cached, its progress told (`SpeakerProgress`),
 //!   its cost counted into the session's spend (`spent_usd`); then each clip's path in each format whose Fill crops
 //!   it. A used-up credit stops it with the relay's sentence.
+//! - **Who speaks** (`klipolo_analysis::subject::voices`): following a person in a clip whose people don't all fit
+//!   the crop, each voice of its file's transcript (`Voices`) is matched to one of them by Muse Spark (`Trackers::
+//!   matcher`), priced with the tracking (at most, before anything is tracked) and cached beside it, so the crop keeps
+//!   whoever is speaking. Who the card or chat keeps instead (`Keep`) is made from the cache at no charge. A matcher
+//!   that fails leaves the follow as it was, framing each shot's main subject.
 //! - **Landing** is the caller's: the paths are in the clips' source time, so `Followed::ops` builds the ops on the
 //!   project as it is once the run is done (a hand edit meanwhile is kept), as one undo step.
 
@@ -16,12 +21,15 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use klipolo_analysis::cache::{Dir, content_key};
-use klipolo_analysis::providers::{BoxFuture, SubjectTracker};
+use klipolo_analysis::providers::{BoxFuture, Heard, SubjectTracker, VoiceMatcher};
 use klipolo_analysis::subject::clips::{
-    Footage, clip_path, follow_op, followable_formats, footage,
+    Footage, Speech, clip_people, follow_op_keeping, followable_formats, footage, speaker_path,
+    voice_windows,
 };
-use klipolo_analysis::subject::{self, Ask, FPS, SubjectCopy, SubjectTrack};
-use klipolo_model::fill_focus::FocusPath;
+use klipolo_analysis::subject::voices::{self, Asking, MAX_WINDOWS, VoiceTurn, Window};
+use klipolo_analysis::subject::{self, Ask, FPS, PERSON, SubjectCopy, SubjectTrack};
+use klipolo_model::fill_focus::{FocusPath, Keep, Person, Voice};
+use klipolo_model::history::SnapshotPatch;
 use klipolo_model::ids::Id;
 use klipolo_model::ops::Op;
 use klipolo_model::project::{FormatKind, Project};
@@ -29,13 +37,24 @@ use klipolo_model::time::RangeUs;
 use serde::Serialize;
 use ts_rs::TS;
 
-use crate::analysis::NEEDS_KEY;
+use crate::analysis::{AnalysisState, NEEDS_KEY};
 use crate::credentials::{AiMode, CODE_INACTIVE, Credentials};
 
 /// The event a follow's progress goes out on.
 pub const PROGRESS_EVENT: &str = "speaker://progress";
 /// Said when the footage has nobody in it to follow.
 pub const NO_ONE: &str = "Klipolo couldn't find a person to follow in this clip.";
+/// Said when matching voices to people stopped partway: no voice is used.
+pub const UNMATCHED: &str =
+    "Klipolo couldn't tell who is speaking, so the crop follows the main person.";
+/// Said when an access code has too little credit left for the relay to take a call with video.
+pub const LOW_CREDIT_VOICES: &str = "Your access code has too little credit left to tell who is speaking, so the crop follows the main person.";
+/// Said when who to keep can't be made from what was tracked before: the tracking isn't in the cache any more.
+pub const NOT_TRACKED: &str =
+    "This footage isn't tracked any more. Follow the speaker again first.";
+/// What the relay holds back of an access code's credit for each call with a video until it is answered: Muse Spark
+/// isn't asked whose a voice is with less than this left.
+pub const MEDIA_RESERVE_USD: f64 = 0.76;
 
 /// What following the speaker costs before it runs.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, TS)]
@@ -54,6 +73,18 @@ pub struct SpeakerEstimate {
     pub refusal: Option<String>,
 }
 
+/// What a follow from the clip card changed (as `project_apply` gives it), and why the crop follows the main person
+/// when who speaks couldn't be told (`Followed::note`), to say.
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SpeakerFollowed {
+    pub change: SnapshotPatch,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub note: Option<String>,
+}
+
 /// `speaker://progress`: how far a follow is.
 #[derive(Clone, Debug, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -68,10 +99,14 @@ pub struct SpeakerProgress {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Followed {
     pub paths: Vec<(Id, BTreeMap<FormatKind, FocusPath>)>,
+    /// Each clip's keep and the people its crop chose between.
+    pub kept: BTreeMap<Id, (Keep, Vec<Person>)>,
     /// The clips with nobody to follow.
     pub not_found: Vec<Id>,
     /// What the run cost (0 for footage tracked before).
     pub paid_usd: f64,
+    /// Why no voice could be matched to the people (`UNMATCHED`, `LOW_CREDIT_VOICES`), to say to the person.
+    pub note: Option<String>,
 }
 
 impl Followed {
@@ -87,10 +122,18 @@ impl Followed {
                     .filter(|(f, _)| still.contains(f))
                     .map(|(f, path)| (*f, path.clone()))
                     .collect();
-                (!paths.is_empty()).then(|| follow_op(p, clip, &paths))
+                let (keep, people) = self.kept.get(id).cloned().unwrap_or_default();
+                (!paths.is_empty()).then(|| follow_op_keeping(p, clip, &paths, &keep, &people))
             })
             .collect()
     }
+}
+
+/// A file's voices as its transcript heard them.
+pub trait Voices: Send + Sync {
+    /// The speaker turns of `asset_id`'s transcript, in its sound time (`Asset::lead_us` before its picture's), each
+    /// with its part and label; none when it has no transcript yet.
+    fn turns(&self, asset_id: &str) -> Vec<VoiceTurn>;
 }
 
 /// The tracker as the saved credentials allow it, and an access code's credit.
@@ -104,6 +147,11 @@ pub trait Trackers: Send + Sync {
     /// `credit_left`, or why nothing can be paid for now (an access code that was turned off), in one sentence.
     fn credit(&self) -> BoxFuture<'_, Result<Option<f64>, String>> {
         Box::pin(async move { Ok(self.credit_left().await) })
+    }
+
+    /// What tells whose a voice is, when there is one: without it, the crop frames each shot's main subject.
+    fn matcher(&self) -> BoxFuture<'_, Option<Arc<dyn VoiceMatcher>>> {
+        Box::pin(async move { None })
     }
 }
 
@@ -134,6 +182,13 @@ impl Trackers for MetaTrackers {
         Box::pin(async move { self.credit().await.ok().flatten() })
     }
 
+    fn matcher(&self) -> BoxFuture<'_, Option<Arc<dyn VoiceMatcher>>> {
+        Box::pin(async move {
+            let meta = self.credentials.ready().await.meta?;
+            Some(Arc::new(meta) as Arc<dyn VoiceMatcher>)
+        })
+    }
+
     fn credit(&self) -> BoxFuture<'_, Result<Option<f64>, String>> {
         Box::pin(async move {
             let status = self.credentials.status().await;
@@ -152,6 +207,27 @@ impl Trackers for MetaTrackers {
     }
 }
 
+/// The voices of each file's analysis: its transcript's turns that have a label.
+impl Voices for AnalysisState {
+    fn turns(&self, asset_id: &str) -> Vec<VoiceTurn> {
+        let Some(found) = self.analysis_for(asset_id) else {
+            return Vec::new();
+        };
+        (found.turns.iter())
+            .filter_map(|t| {
+                Some(VoiceTurn {
+                    start_us: t.start_us,
+                    end_us: t.end_us,
+                    voice: Voice {
+                        part: t.chunk,
+                        label: t.speaker.clone()?,
+                    },
+                })
+            })
+            .collect()
+    }
+}
+
 /// The app's speaker following.
 pub struct Speaker {
     trackers: Arc<dyn Trackers>,
@@ -164,6 +240,15 @@ pub struct Speaker {
     spent: Mutex<f64>,
     /// One follow at a time: a second one then finds what the first tracked in the cache, and pays nothing for it.
     running: tokio::sync::Mutex<()>,
+    /// The files' voices; none follows each shot's main subject.
+    voices: Option<Arc<dyn Voices>>,
+}
+
+/// Whether a run may pay (a follow), or only reads what was tracked and matched before (who to keep).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Pay,
+    CacheOnly,
 }
 
 /// A clip that can follow, and where.
@@ -195,7 +280,15 @@ impl Speaker {
             progress,
             spent: Mutex::new(0.0),
             running: tokio::sync::Mutex::new(()),
+            voices: None,
         }
+    }
+
+    /// Keeps whoever speaks in frame, from `voices`' transcripts (see the module notes).
+    #[must_use]
+    pub fn with_voices(mut self, voices: Arc<dyn Voices>) -> Self {
+        self.voices = Some(voices);
+        self
     }
 
     /// The app's: SAM through `credentials`, the engine's small copy, the analysis cache under `cache_root`.
@@ -241,8 +334,17 @@ impl Speaker {
             }
         };
         let to_send = self.uncached(&*tracker, &targets, phrase).await;
-        estimate.usd = price(&*tracker, &to_send);
-        estimate.cached = to_send.is_empty() && !targets.is_empty();
+        let (matcher, _) = self.matcher(phrase).await;
+        let voices_usd = match &matcher {
+            Some(m) => {
+                let cached = to_send.is_empty();
+                self.voices_usd(m, &*tracker, p, &targets, phrase, cached)
+                    .await
+            }
+            None => 0.0,
+        };
+        estimate.usd = price(&*tracker, &to_send) + voices_usd;
+        estimate.cached = to_send.is_empty() && voices_usd <= 0.0 && !targets.is_empty();
         estimate.refusal = self.over_credit(estimate.usd).await;
         estimate
     }
@@ -256,20 +358,85 @@ impl Speaker {
         formats: &[FormatKind],
         phrase: &str,
     ) -> Result<Followed, String> {
+        self.follow_keeping(p, clip_ids, formats, phrase, &BTreeMap::new())
+            .await
+    }
+
+    /// [`Self::follow`], each clip of `keeps` keeping who it names (the rest whoever speaks).
+    pub async fn follow_keeping(
+        &self,
+        p: &Project,
+        clip_ids: &[Id],
+        formats: &[FormatKind],
+        phrase: &str,
+        keeps: &BTreeMap<Id, Keep>,
+    ) -> Result<Followed, String> {
+        self.run(p, clip_ids, formats, phrase, keeps, Mode::Pay)
+            .await
+    }
+
+    /// Who `keeps` names kept in frame for its clips in `formats`, made only from what earlier follows tracked and
+    /// matched: nothing is sent, so it never pays (voices the cache doesn't settle are left unmatched). Refused
+    /// (`NOT_TRACKED`) when any of the footage isn't tracked in the cache any more.
+    pub async fn keep(
+        &self,
+        p: &Project,
+        clip_ids: &[Id],
+        formats: &[FormatKind],
+        keeps: &BTreeMap<Id, Keep>,
+    ) -> Result<Followed, String> {
+        self.run(p, clip_ids, formats, PERSON, keeps, Mode::CacheOnly)
+            .await
+    }
+
+    async fn run(
+        &self,
+        p: &Project,
+        clip_ids: &[Id],
+        formats: &[FormatKind],
+        phrase: &str,
+        keeps: &BTreeMap<Id, Keep>,
+        mode: Mode,
+    ) -> Result<Followed, String> {
+        let paying = mode == Mode::Pay;
         let targets = targets(p, clip_ids, formats);
         let tracker = self.trackers.tracker().await?;
         let _one_at_a_time = self.running.lock().await;
         let stretches = stretches(&targets, tracker.max_frames());
         let to_send = self.uncached(&*tracker, &targets, phrase).await;
-        if let Some(refusal) = self.over_credit(price(&*tracker, &to_send)).await {
-            return Err(refusal);
+        if !paying && !to_send.is_empty() {
+            return Err(NOT_TRACKED.to_owned());
+        }
+        let (matcher, short_credit) = if paying {
+            self.matcher(phrase).await
+        } else {
+            (self.cache_matcher(phrase).await, false)
+        };
+        if paying {
+            let voices_usd = match &matcher {
+                Some(m) => {
+                    let cached = to_send.is_empty();
+                    self.voices_usd(m, &*tracker, p, &targets, phrase, cached)
+                        .await
+                }
+                None => 0.0,
+            };
+            if let Some(refusal) = self
+                .over_credit(price(&*tracker, &to_send) + voices_usd)
+                .await
+            {
+                return Err(refusal);
+            }
         }
         let ids: Vec<String> = targets.iter().map(|t| t.id.clone()).collect();
+        // Who to keep changes with no progress to show: nothing is sent.
         let tell = |pct: u8| {
-            (self.progress)(SpeakerProgress {
-                clip_ids: ids.clone(),
-                pct,
-            })
+            if paying {
+                (self.progress)(SpeakerProgress {
+                    clip_ids: ids.clone(),
+                    pct,
+                })
+            }
         };
         tell(0);
         // Each file's tracked stretches: a clip reads only its own file's.
@@ -301,10 +468,65 @@ impl Speaker {
             }
             tell((((i + 1) * 100) / stretches.len().max(1)).min(99) as u8);
         }
+        // Each file's voices, matched to its people where they don't all fit.
+        let mut heard: BTreeMap<String, (Vec<VoiceTurn>, BTreeMap<Voice, Heard>)> = BTreeMap::new();
+        let mut note: Option<String> = None;
+        if matcher.is_some() || short_credit {
+            for (file, asset_id) in files(&targets) {
+                let turns = self.file_turns(p, &asset_id);
+                let own = tracks.get(&file).map_or(&[][..], Vec::as_slice);
+                let windows = windows_of(p, &targets, &file, own, &turns);
+                let mut matched = BTreeMap::new();
+                if !windows.is_empty() && note.is_none() {
+                    let src = PathBuf::from(&file);
+                    let dir = cache_dir(&self.cache_root, &src).await;
+                    match (&matcher, paying) {
+                        (None, _) => note = Some(LOW_CREDIT_VOICES.to_owned()),
+                        (Some(m), false) => {
+                            let model = m.model().to_owned();
+                            matched = tokio::task::spawn_blocking(move || {
+                                voices::cached_voices(dir.as_ref(), &model, &windows)
+                            })
+                            .await
+                            .unwrap_or_default();
+                        }
+                        (Some(m), true) => {
+                            let asking = Asking {
+                                src: &src,
+                                cache: dir.as_ref(),
+                                work: &self.work_root,
+                                cancel: Arc::new(AtomicBool::new(false)),
+                            };
+                            let found =
+                                voices::match_voices(&**m, self.copier.clone(), &asking, &windows)
+                                    .await;
+                            paid += found.paid_usd;
+                            self.count(found.paid_usd);
+                            match &found.stopped {
+                                // No half state: a voice matched before the stop would hold the crop on its person.
+                                Some(why) => {
+                                    tracing::warn!(%why, "matching voices stopped; the crop follows each shot's main person");
+                                    note = Some(UNMATCHED.to_owned());
+                                }
+                                None => matched = found.voices,
+                            }
+                        }
+                    }
+                }
+                heard.insert(file, (turns, matched));
+            }
+            if note.is_some() {
+                for (_, matched) in heard.values_mut() {
+                    matched.clear();
+                }
+            }
+        }
         let mut followed = Followed {
             paid_usd: paid,
+            note,
             ..Followed::default()
         };
+        let none = (Vec::new(), BTreeMap::new());
         for target in &targets {
             let Some(clip) = p.timeline.main.iter().find(|c| c.id == target.id) else {
                 continue;
@@ -312,17 +534,128 @@ impl Speaker {
             let own = tracks
                 .get(&target.footage.path)
                 .map_or(&[][..], Vec::as_slice);
+            let (turns, voices) = heard.get(&target.footage.path).unwrap_or(&none);
+            let keep = keeps.get(&target.id).cloned().unwrap_or_default();
+            let speech = Speech {
+                turns,
+                voices,
+                keep: &keep,
+            };
             let paths: BTreeMap<FormatKind, FocusPath> = (target.formats.iter())
-                .filter_map(|f| Some((*f, clip_path(p, clip, *f, &target.footage, own)?)))
+                .filter_map(|f| {
+                    let path = speaker_path(p, clip, *f, &target.footage, own, &speech)?;
+                    Some((*f, path))
+                })
                 .collect();
             if paths.is_empty() {
                 followed.not_found.push(target.id.clone());
             } else {
+                // People to choose between only when following a person: two of a named thing aren't.
+                let people = if phrase == PERSON {
+                    clip_people(clip, &target.footage, own, turns, voices)
+                } else {
+                    Vec::new()
+                };
+                followed.kept.insert(target.id.clone(), (keep, people));
                 followed.paths.push((target.id.clone(), paths));
             }
         }
         tell(100);
         Ok(followed)
+    }
+
+    /// The matcher, when following a person and there are voices to match; none, and true, when an access code has
+    /// less credit left than the relay holds back for a call with video (`MEDIA_RESERVE_USD`).
+    async fn matcher(&self, phrase: &str) -> (Option<Arc<dyn VoiceMatcher>>, bool) {
+        let Some(matcher) = self.cache_matcher(phrase).await else {
+            return (None, false);
+        };
+        match self.trackers.credit().await {
+            Ok(Some(left)) if left < MEDIA_RESERVE_USD => (None, true),
+            _ => (Some(matcher), false),
+        }
+    }
+
+    /// The matcher whose cached answers count, when following a person and there are voices: never called by a keep.
+    async fn cache_matcher(&self, phrase: &str) -> Option<Arc<dyn VoiceMatcher>> {
+        if phrase != PERSON || self.voices.is_none() {
+            return None;
+        }
+        self.trackers.matcher().await
+    }
+
+    /// `asset_id`'s voice turns on its file's clock.
+    fn file_turns(&self, p: &Project, asset_id: &str) -> Vec<VoiceTurn> {
+        let Some(voices) = &self.voices else {
+            return Vec::new();
+        };
+        let lead = p.asset(asset_id).map_or(0, |a| a.lead_us());
+        (voices.turns(asset_id).into_iter())
+            .map(|t| VoiceTurn {
+                start_us: t.start_us + lead,
+                end_us: t.end_us + lead,
+                ..t
+            })
+            .collect()
+    }
+
+    /// What matching `targets`' voices may cost now: the windows the cache doesn't settle once the footage is tracked
+    /// (`cached`), else the most it can be.
+    async fn voices_usd(
+        &self,
+        matcher: &Arc<dyn VoiceMatcher>,
+        tracker: &dyn SubjectTracker,
+        p: &Project,
+        targets: &[Target],
+        phrase: &str,
+        cached: bool,
+    ) -> f64 {
+        let mut usd = 0.0;
+        for (file, asset_id) in files(targets) {
+            let turns = self.file_turns(p, &asset_id);
+            if turns.is_empty() {
+                continue;
+            }
+            let src = PathBuf::from(&file);
+            let dir = cache_dir(&self.cache_root, &src).await;
+            if !cached {
+                // Once for the file, over the footage all its clips play.
+                let plays: Vec<RangeUs> = (targets.iter())
+                    .filter(|t| t.footage.path == file)
+                    .map(|t| t.footage.range)
+                    .collect();
+                usd += voices::most_usd(&**matcher, &turns, &plays);
+                continue;
+            }
+            let own: Vec<SubjectTrack> = match &dir {
+                Some(dir) => {
+                    let mut own = Vec::new();
+                    for stretch in stretches(targets, tracker.max_frames()) {
+                        if stretch.path != file {
+                            continue;
+                        }
+                        let (dir, model, phrase) =
+                            (dir.clone(), tracker.model().to_owned(), phrase.to_owned());
+                        let cover = tokio::task::spawn_blocking(move || {
+                            subject::cover(&dir, &model, &phrase, FPS, stretch.range).tracks
+                        })
+                        .await
+                        .unwrap_or_default();
+                        own.extend(cover);
+                    }
+                    own
+                }
+                None => Vec::new(),
+            };
+            let windows = windows_of(p, targets, &file, &own, &turns);
+            let matcher = matcher.clone();
+            usd += tokio::task::spawn_blocking(move || {
+                voices::uncached_usd(&*matcher, dir.as_ref(), &windows)
+            })
+            .await
+            .unwrap_or_default();
+        }
+        usd
     }
 
     /// The parts of `targets`' stretches the cache doesn't hold yet: what a follow sends.
@@ -423,6 +756,53 @@ fn stretches(targets: &[Target], max_frames: u64) -> Vec<Stretch> {
         }
     }
     out
+}
+
+/// Each file `targets` play, once, with its asset's id.
+fn files(targets: &[Target]) -> Vec<(String, Id)> {
+    let mut out: Vec<(String, Id)> = (targets.iter())
+        .map(|t| (t.footage.path.clone(), t.footage.asset_id.clone()))
+        .collect();
+    out.sort();
+    out.dedup_by(|a, b| a.0 == b.0);
+    out
+}
+
+/// The windows of `file`'s clips among `targets` (`voice_windows`), each once, at most `MAX_WINDOWS` a voice.
+fn windows_of(
+    p: &Project,
+    targets: &[Target],
+    file: &str,
+    tracks: &[SubjectTrack],
+    turns: &[VoiceTurn],
+) -> Vec<Window> {
+    let mut out: Vec<Window> = Vec::new();
+    for target in targets.iter().filter(|t| t.footage.path == file) {
+        let Some(clip) = p.timeline.main.iter().find(|c| c.id == target.id) else {
+            continue;
+        };
+        for w in voice_windows(p, clip, &target.formats, &target.footage, tracks, turns) {
+            if !out.iter().any(|o| o.voice == w.voice && o.range == w.range) {
+                out.push(w);
+            }
+        }
+    }
+    // A voice's windows together, longest first, as `voices::windows` gives them.
+    out.sort_by(|a, b| {
+        a.voice.cmp(&b.voice).then(
+            (b.range.end - b.range.start)
+                .cmp(&(a.range.end - a.range.start))
+                .then(a.range.start.cmp(&b.range.start)),
+        )
+    });
+    // At most `MAX_WINDOWS` a voice for the whole file, however many clips play it.
+    let mut kept: Vec<Window> = Vec::new();
+    for w in out {
+        if kept.iter().filter(|k| k.voice == w.voice).count() < MAX_WINDOWS {
+            kept.push(w);
+        }
+    }
+    kept
 }
 
 /// The analysis cache folder of the file at `path`; None when it can't be read.

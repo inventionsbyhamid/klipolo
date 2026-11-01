@@ -152,7 +152,7 @@ describe('Settings: Other apps', () => {
 
   it('connected_apps_are_listed', async () => {
     const section = await openOn({ ...on, connected: ['Example Client', 'Muse Spark agent'] });
-    expect(section).toHaveTextContent('On. Recently used by Example Client and Cursor.');
+    expect(section).toHaveTextContent('On. Recently used by Example Client and Muse Spark agent.');
     act(() => tellApps(['Muse Spark agent']));
     expect(section).toHaveTextContent('On. Recently used by Muse Spark agent.');
     act(() => tellApps([]));

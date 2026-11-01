@@ -253,6 +253,7 @@ fn every_tool_schema_is_strict() {
             "setBackground.kind",
             "setBackground.padding",
             "setCaptions.style",
+            "followSubject.focus",
             "addMusic.atSec",
             "addMusic.duck",
             "addMusic.volume",
@@ -334,6 +335,7 @@ fn parses_each_tool_from_spike_shaped_calls() {
                 portrait,
                 FollowSubject {
                     description: "woman astronaut".into(),
+                    focus: vec![],
                 },
             ],
         ),
@@ -1378,9 +1380,79 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let prompt_tokens = klipolo_chat::estimate_tokens(prompt);
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
-    // 914 measured with the clip tools' line and the recordings' line.
-    assert!(prompt_tokens <= 920, "prompt {prompt_tokens} tokens");
-    // 4,438 measured with the clip tools (setClip, setTransition), setBackground (about 210), freezeFrame (about 105),
-    // addText's font (about 25) and the recording tools (the camera's three and the recorded sounds' three, about 1,010).
-    assert!(tools_tokens <= 4_490, "tools {tools_tokens} tokens");
+    // The caps every lane's prompt lines and tools share: 914 prompt tokens measured with the clip tools' line and the
+    // recordings' line; 4,555 tools tokens with the clip tools (setClip, setTransition), setBackground (about 210),
+    // freezeFrame (about 105), addText's font (about 25), the recording tools (about 1,010) and followSubject's focus
+    // (about 117).
+    assert!(prompt_tokens <= 1_800, "prompt {prompt_tokens} tokens");
+    assert!(tools_tokens <= 6_500, "tools {tools_tokens} tokens");
+}
+
+#[test]
+fn follow_subject_keeps_who_chat_names_over_parts_of_the_timeline() {
+    use klipolo_chat::tools::FollowFocus;
+    use klipolo_model::fill_focus::Who;
+    let read = |args: &str| ToolCall::parse(&call("followSubject", args));
+    let focus = |from: f64, to: f64, who: Who| FollowFocus {
+        range: RangeUs {
+            start: secs_to_us(from),
+            end: secs_to_us(to),
+        },
+        who,
+    };
+    assert_eq!(
+        read(
+            r#"{"description": "person", "focus": [
+                {"fromSec": 2, "toSec": 9.5, "person": "P2"},
+                {"fromSec": 12, "toSec": 14, "person": "both"},
+                {"fromSec": 20, "toSec": 30, "person": "speaker"}
+            ]}"#
+        )
+        .unwrap(),
+        ToolCall::FollowSubject {
+            description: "person".into(),
+            focus: vec![
+                focus(2.0, 9.5, Who::Person { person: 2 }),
+                focus(12.0, 14.0, Who::Both),
+                focus(20.0, 30.0, Who::Speaker),
+            ],
+        }
+    );
+    // None, null, or left out as an older call does: whoever speaks.
+    for args in [
+        r#"{"description": "person", "focus": []}"#,
+        r#"{"description": "person", "focus": null}"#,
+        r#"{"description": "person"}"#,
+    ] {
+        assert_eq!(
+            read(args).unwrap(),
+            ToolCall::FollowSubject {
+                description: "person".into(),
+                focus: vec![],
+            }
+        );
+    }
+    // Someone not on the list, or an end before its start, is said back.
+    let bad =
+        read(r#"{"description": "person", "focus": [{"fromSec": 1, "toSec": 2, "person": "P9"}]}"#)
+            .unwrap_err();
+    assert_eq!(bad.field.as_deref(), Some("focus[0].person"), "{bad}");
+    let bad =
+        read(r#"{"description": "person", "focus": [{"fromSec": 5, "toSec": 2, "person": "P1"}]}"#)
+            .unwrap_err();
+    assert_eq!(bad.field.as_deref(), Some("focus[0].toSec"), "{bad}");
+    // The schema offers each person by number, both, and the speaker.
+    let tools = tools();
+    let follow = (tools.as_array().unwrap().iter())
+        .find(|t| t["name"] == "followSubject")
+        .unwrap();
+    let person = &follow["parameters"]["properties"]["focus"]["items"]["properties"]["person"];
+    assert_eq!(
+        person["enum"],
+        json!(["speaker", "both", "P1", "P2", "P3", "P4"])
+    );
+    assert_eq!(
+        follow["parameters"]["required"],
+        json!(["description", "focus"])
+    );
 }

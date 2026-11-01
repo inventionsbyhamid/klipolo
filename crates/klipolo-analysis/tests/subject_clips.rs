@@ -3,13 +3,15 @@
 
 use std::collections::BTreeMap;
 
-use klipolo_analysis::providers::{TrackedBox, TrackedFrame};
+use klipolo_analysis::providers::{Heard, TrackedBox, TrackedFrame};
 use klipolo_analysis::subject::clips::{
-    clip_path, cropped_formats, follow_op, followable_formats, footage,
+    Speech, clip_path, clip_people, cropped_formats, follow_op, follow_op_keeping,
+    followable_formats, footage, speaker_path, voice_windows,
 };
+use klipolo_analysis::subject::voices::VoiceTurn;
 use klipolo_analysis::subject::{FPS, PERSON, SubjectTrack};
 use klipolo_model::crop::Crop;
-use klipolo_model::fill_focus::{FillFocus, FocusKey, FocusPath};
+use klipolo_model::fill_focus::{FillFocus, FocusKey, FocusPath, Keep, Person, Voice};
 use klipolo_model::ops::{ClipPatch, Op};
 use klipolo_model::project::FormatKind::{Landscape, Portrait, Square};
 use klipolo_model::project::{Asset, AssetKind, Project};
@@ -282,7 +284,7 @@ fn the_follow_op_fills_each_format_with_its_path_and_keeps_the_rest() {
         }
     );
     assert!(!framing.contains_key(&Square));
-    assert_eq!(focus[&Portrait], FillFocus::Speaker { path });
+    assert_eq!(focus[&Portrait], FillFocus::speaker(path));
     assert_eq!(focus[&Landscape], FillFocus::Center);
 }
 
@@ -407,5 +409,156 @@ fn a_format_the_person_set_to_fit_is_never_followed() {
     assert_eq!(
         followable_formats(&p, &p.timeline.main[0], &all),
         [Portrait]
+    );
+}
+
+fn voice(label: &str) -> Voice {
+    Voice {
+        part: 0,
+        label: label.into(),
+    }
+}
+
+fn turn(from: f64, to: f64, label: &str) -> VoiceTurn {
+    VoiceTurn {
+        start_us: s(from),
+        end_us: s(to),
+        voice: voice(label),
+    }
+}
+
+/// Two people far apart on every frame of a stretch: tracked as 7 on the left and 3 on the right.
+fn two(range: RangeUs) -> SubjectTrack {
+    let mut t = track(range, 0.25);
+    for f in &mut t.frames {
+        let left = f.boxes[0];
+        f.boxes = vec![
+            TrackedBox {
+                id: 3,
+                left: 0.65,
+                right: 0.85,
+                ..left
+            },
+            TrackedBox { id: 7, ..left },
+        ];
+    }
+    t
+}
+
+/// The talk's clip plays 30 to 40 s: A (on the left) speaks to 35 s, then B (on the right); C is off camera.
+fn interview() -> (Vec<VoiceTurn>, BTreeMap<Voice, Heard>) {
+    let turns = vec![
+        turn(30.0, 35.0, "A"),
+        turn(35.0, 39.0, "B"),
+        turn(39.0, 40.0, "C"),
+    ];
+    let heard = BTreeMap::from([
+        (voice("A"), Heard::Person { person: 1 }),
+        (voice("B"), Heard::Person { person: 2 }),
+        (voice("C"), Heard::Nobody),
+    ]);
+    (turns, heard)
+}
+
+#[test]
+fn a_two_person_clip_follows_whoever_speaks_in_its_own_time() {
+    let p = project();
+    let clip = &p.timeline.main[0];
+    let foot = footage(&p, clip).unwrap();
+    let tracks = [two(RangeUs {
+        start: s(20.0),
+        end: s(50.0),
+    })];
+    let (turns, heard) = interview();
+    let speech = Speech {
+        turns: &turns,
+        voices: &heard,
+        keep: &Keep::Speaker,
+    };
+    let path = speaker_path(&p, clip, Portrait, &foot, &tracks, &speech).unwrap();
+    let x = |at: f64| path.centre_at(s(at)).unwrap().0;
+    assert!((x(32.0) - 0.25).abs() < 0.03, "{path:?}");
+    assert!((x(37.0) - 0.75).abs() < 0.03, "{path:?}");
+    assert!(
+        path.keys.iter().any(|k| k.cut && k.at_us == s(35.0)),
+        "{path:?}"
+    );
+    // Without voices it frames the main subject, as before.
+    assert_eq!(
+        speaker_path(&p, clip, Portrait, &foot, &tracks, &Speech::none()),
+        clip_path(&p, clip, Portrait, &foot, &tracks)
+    );
+}
+
+#[test]
+fn a_clips_people_are_named_left_to_right_with_their_voices_and_share() {
+    let p = project();
+    let clip = &p.timeline.main[0];
+    let foot = footage(&p, clip).unwrap();
+    let tracks = [two(foot.range)];
+    let (turns, heard) = interview();
+    let people = clip_people(clip, &foot, &tracks, &turns, &heard);
+    assert_eq!(
+        people,
+        [
+            Person {
+                voices: vec![voice("A")],
+                share: 50,
+            },
+            Person {
+                voices: vec![voice("B")],
+                share: 40,
+            },
+        ]
+    );
+    // One person: nobody to choose between.
+    assert!(clip_people(clip, &foot, &[track(foot.range, 0.4)], &turns, &heard).is_empty());
+}
+
+#[test]
+fn a_clips_windows_are_only_in_the_footage_it_plays() {
+    let p = project();
+    let clip = &p.timeline.main[0];
+    let foot = footage(&p, clip).unwrap();
+    let tracks = [two(RangeUs {
+        start: s(20.0),
+        end: s(50.0),
+    })];
+    let turns = [turn(20.0, 33.0, "A"), turn(33.0, 50.0, "B")];
+    let windows = voice_windows(&p, clip, &[Portrait, Square], &foot, &tracks, &turns);
+    assert!(!windows.is_empty());
+    assert!(
+        (windows.iter()).all(|w| w.range.start >= s(30.0) && w.range.end <= s(40.0)),
+        "{windows:?}"
+    );
+}
+
+#[test]
+fn the_follow_op_keeps_who_it_frames_and_the_people() {
+    let p = project();
+    let clip = &p.timeline.main[0];
+    let path = FocusPath {
+        keys: vec![FocusKey {
+            at_us: s(30.0),
+            x: 0.3,
+            y: 0.5,
+            cut: false,
+        }],
+    };
+    let people = vec![Person::default(), Person::default()];
+    let keep = Keep::Person { person: 2 };
+    let op = follow_op_keeping(
+        &p,
+        clip,
+        &BTreeMap::from([(Portrait, path.clone())]),
+        &keep,
+        &people,
+    );
+    let Op::UpdateClip { patch, .. } = op else {
+        panic!("{op:?}")
+    };
+    assert_eq!(
+        patch.fill_focus.unwrap()[&Portrait],
+        FillFocus::Speaker { path, keep, people }
     );
 }

@@ -251,8 +251,8 @@ fn host_commits_through_the_one_apply_path_and_publishes() {
     let r = Rig::new();
     let base = r.base();
     assert_eq!(base, 1, "the first opening's revision 0");
-    let tx = from_app(&rename("Day one"), "Example Client");
-    let applied = r.host.apply("Example Client", base, &tx).unwrap();
+    let tx = from_app(&rename("Day one"), "Muse Spark agent");
+    let applied = r.host.apply("Muse Spark agent", base, &tx).unwrap();
     assert_eq!(
         applied,
         Applied {
@@ -265,19 +265,19 @@ fn host_commits_through_the_one_apply_path_and_publishes() {
     assert_eq!(
         r.newest_step(),
         Some((
-            Maker::App("Example Client".into()),
+            Maker::App("Muse Spark agent".into()),
             "Rename".to_owned(),
-            json!({"client": "Example Client"})
+            json!({"client": "Muse Spark agent"})
         )),
         "one undo step the app made, named after it"
     );
     let told = r.told();
     assert_eq!(told.len(), 1, "{told:#?}");
-    assert_eq!(told[0]["reply"]["client"], "Example Client");
+    assert_eq!(told[0]["reply"]["client"], "Muse Spark agent");
     let reply = &told[0]["reply"]["reply"];
     assert_eq!(
         reply["applied"]["undo"],
-        json!({"code": "Rename", "params": {"client": "Example Client"}})
+        json!({"code": "Rename", "params": {"client": "Muse Spark agent"}})
     );
     assert_eq!(reply["applied"]["change"]["baseRevision"], 0);
     assert_eq!(reply["revision"], 1);
@@ -286,12 +286,18 @@ fn host_commits_through_the_one_apply_path_and_publishes() {
     assert_eq!(reply["proposal"], serde_json::Value::Null);
 
     // A base the project moved on from, or nothing to change: refused, or nothing told.
-    assert_eq!(r.host.apply("Example Client", base, &tx), Err(HostError::Moved));
+    assert_eq!(
+        r.host.apply("Muse Spark agent", base, &tx),
+        Err(HostError::Moved)
+    );
     r.hand_edit("Mine");
-    assert_eq!(r.host.apply("Example Client", base + 1, &tx), Err(HostError::Moved));
+    assert_eq!(
+        r.host.apply("Muse Spark agent", base + 1, &tx),
+        Err(HostError::Moved)
+    );
     assert_eq!(r.project().name, "Mine", "the person's edit stays");
-    let same = from_app(&rename("Mine"), "Example Client");
-    let unchanged = r.host.apply("Example Client", r.base(), &same).unwrap();
+    let same = from_app(&rename("Mine"), "Muse Spark agent");
+    let unchanged = r.host.apply("Muse Spark agent", r.base(), &same).unwrap();
     assert_eq!(unchanged.revision, r.base());
     assert!(r.told().is_empty(), "nothing changed, nothing told");
     // Checked again on the project as it is: a batch that takes footage away never applies here.
@@ -306,10 +312,10 @@ fn host_commits_through_the_one_apply_path_and_publishes() {
             }],
             ..Default::default()
         },
-        "Example Client",
+        "Muse Spark agent",
     );
     assert_eq!(
-        r.host.apply("Example Client", r.base(), &cuts),
+        r.host.apply("Muse Spark agent", r.base(), &cuts),
         Err(HostError::Refused(REMOVES.to_owned()))
     );
     // Judged by what its ops take away, never by its origin: one with none is refused all the same.
@@ -318,7 +324,7 @@ fn host_commits_through_the_one_apply_path_and_publishes() {
         ..cuts.clone()
     };
     assert_eq!(
-        r.host.apply("Example Client", r.base(), &plain),
+        r.host.apply("Muse Spark agent", r.base(), &plain),
         Err(HostError::Refused(REMOVES.to_owned()))
     );
     assert_eq!(r.project().timeline.main.len(), 2);
@@ -328,26 +334,26 @@ fn host_commits_through_the_one_apply_path_and_publishes() {
 fn host_proposal_fills_the_chat_slot_and_names_the_client() {
     let r = Rig::new();
     let base = r.base();
-    let id = r.propose("Example Client", None).unwrap();
+    let id = r.propose("Muse Spark agent", None).unwrap();
     assert_eq!(
         r.host.open_proposal(),
         Some(OpenProposal {
             id: id.clone(),
             base_revision: base,
-            from: Some("Example Client".into()),
+            from: Some("Muse Spark agent".into()),
         })
     );
     // Chat's own slot holds it: the panel's one proposal.
     let waiting = r.chat.slot().waiting().unwrap();
     assert_eq!(
         (waiting.id.as_str(), waiting.from.as_deref()),
-        (id.as_str(), Some("Example Client"))
+        (id.as_str(), Some("Muse Spark agent"))
     );
     // The person chose nothing: the card says the parts were suggested (the page names who under it).
     assert_eq!(waiting.title, "Keep only the suggested parts");
     let told = r.told();
     assert_eq!(told.len(), 1, "{told:#?}");
-    assert_eq!(told[0]["reply"]["client"], "Example Client");
+    assert_eq!(told[0]["reply"]["client"], "Muse Spark agent");
     let card = &told[0]["reply"]["reply"]["proposal"];
     assert_eq!(card["id"], id.as_str());
     assert_eq!(card["title"], "Keep only the suggested parts");
@@ -355,16 +361,16 @@ fn host_proposal_fills_the_chat_slot_and_names_the_client() {
     assert_eq!(told[0]["reply"]["reply"]["revision"], 0);
     let expected = ProposalOutcome::Waiting {
         id: id.clone(),
-        from: "Example Client".into(),
+        from: "Muse Spark agent".into(),
         title: "Keep only the suggested parts".into(),
         removed_sec: 1.0,
         ranges: vec![[0.0, 1.0]],
     };
-    assert_eq!(r.host.outcome("Example Client"), expected);
-    // Another app sees it waiting from Example Client, and its own changes wait for the person.
+    assert_eq!(r.host.outcome("Muse Spark agent"), expected);
+    // Another app sees it waiting from Muse Spark agent, and its own changes wait for the person.
     assert!(matches!(
         r.host.outcome("Example Client"),
-        ProposalOutcome::Waiting { from, .. } if from == "Example Client"
+        ProposalOutcome::Waiting { from, .. } if from == "Muse Spark agent"
     ));
     let rename_by = |client| from_app(&rename("Theirs"), client);
     assert_eq!(
@@ -379,9 +385,9 @@ fn host_proposal_fills_the_chat_slot_and_names_the_client() {
         Err(HostError::Moved)
     );
     assert_eq!(r.project().name, "Space station Q&A");
-    // Cursor's next proposal takes its place only in place of the one it names.
-    assert_eq!(r.propose("Example Client", None), Err(HostError::Moved));
-    let again = r.propose("Example Client", Some(&id)).unwrap();
+    // Muse Spark agent's next proposal takes its place only in place of the one it names.
+    assert_eq!(r.propose("Muse Spark agent", None), Err(HostError::Moved));
+    let again = r.propose("Muse Spark agent", Some(&id)).unwrap();
     assert_ne!(again, id);
     assert_eq!(r.host.open_proposal().unwrap().id, again);
     assert!(r.chat.apply(&id).is_err(), "the one replaced is gone");
@@ -390,11 +396,11 @@ fn host_proposal_fills_the_chat_slot_and_names_the_client() {
 #[test]
 fn hand_edit_drops_the_external_proposal_and_outcome_says_dropped() {
     let r = Rig::new();
-    let id = r.propose("Example Client", None).unwrap();
+    let id = r.propose("Muse Spark agent", None).unwrap();
     r.hand_edit("Mine");
     assert_eq!(r.host.open_proposal(), None);
     assert_eq!(
-        r.host.outcome("Example Client"),
+        r.host.outcome("Muse Spark agent"),
         ProposalOutcome::Dropped {
             id: id.clone(),
             why: DROPPED_CHANGED.to_owned()
@@ -409,36 +415,45 @@ fn hand_edit_drops_the_external_proposal_and_outcome_says_dropped() {
 #[test]
 fn person_apply_records_applied_and_is_the_persons_step() {
     let r = Rig::new();
-    let id = r.propose("Example Client", None).unwrap();
+    let id = r.propose("Muse Spark agent", None).unwrap();
     let length = |p: &Project| klipolo_model::query::main_track_duration(&p.timeline.main);
     let before = length(&r.project());
     let applied = r.chat.apply(&id).unwrap();
     assert_eq!(applied.undo.code, "chat.keepOnly");
     assert_eq!(length(&r.project()), before - 1_000_000, "one second cut");
-    assert_eq!(r.host.outcome("Example Client"), ProposalOutcome::Applied { id });
+    assert_eq!(
+        r.host.outcome("Muse Spark agent"),
+        ProposalOutcome::Applied { id }
+    );
     assert_eq!(
         r.newest_step().map(|(maker, ..)| maker),
         Some(Maker::Person),
         "the person applied it: their step"
     );
-    assert_eq!(r.host.undo_own("Example Client"), Err(HostError::NotYours));
+    assert_eq!(
+        r.host.undo_own("Muse Spark agent"),
+        Err(HostError::NotYours)
+    );
     assert_eq!(length(&r.project()), before - 1_000_000);
 }
 
 #[test]
 fn discard_records_discarded_and_changes_nothing() {
     let r = Rig::new();
-    let id = r.propose("Example Client", None).unwrap();
+    let id = r.propose("Muse Spark agent", None).unwrap();
     r.chat.discard("another");
     assert!(r.host.open_proposal().is_some(), "only by its id");
     r.chat.discard(&id);
-    assert_eq!(r.host.outcome("Example Client"), ProposalOutcome::Discarded { id });
+    assert_eq!(
+        r.host.outcome("Muse Spark agent"),
+        ProposalOutcome::Discarded { id }
+    );
     assert_eq!(r.project().timeline.main.len(), 2);
     // New chat drops the one waiting.
-    let next = r.propose("Example Client", None).unwrap();
+    let next = r.propose("Muse Spark agent", None).unwrap();
     r.chat.reset();
     assert!(matches!(
-        r.host.outcome("Example Client"),
+        r.host.outcome("Muse Spark agent"),
         ProposalOutcome::Dropped { id, .. } if id == next
     ));
 }
@@ -447,14 +462,18 @@ fn discard_records_discarded_and_changes_nothing() {
 #[test]
 fn an_apps_change_names_its_own_proposal_it_dropped() {
     let r = Rig::new();
-    let id = r.propose("Example Client", None).unwrap();
+    let id = r.propose("Muse Spark agent", None).unwrap();
     let applied = r
         .host
-        .apply("Example Client", r.base(), &from_app(&rename("Day one"), "Example Client"))
+        .apply(
+            "Muse Spark agent",
+            r.base(),
+            &from_app(&rename("Day one"), "Muse Spark agent"),
+        )
         .unwrap();
     assert_eq!(applied.dropped.as_deref(), Some(id.as_str()));
     assert_eq!(
-        r.host.outcome("Example Client"),
+        r.host.outcome("Muse Spark agent"),
         ProposalOutcome::Dropped {
             id,
             why: DROPPED_CHANGED.to_owned()
@@ -463,7 +482,11 @@ fn an_apps_change_names_its_own_proposal_it_dropped() {
     // With nothing waiting, nothing is dropped.
     let applied = r
         .host
-        .apply("Example Client", r.base(), &from_app(&rename("Day two"), "Example Client"))
+        .apply(
+            "Muse Spark agent",
+            r.base(),
+            &from_app(&rename("Day two"), "Muse Spark agent"),
+        )
         .unwrap();
     assert_eq!(applied.dropped, None);
 }
@@ -476,24 +499,34 @@ fn a_redo_of_the_persons_waits() {
     r.hand_edit("Mine");
     with_open(&r.state, |open| step(open, false)).unwrap();
     let base = r.base();
-    let tx = from_app(&rename("Day one"), "Example Client");
-    assert_eq!(r.host.apply("Example Client", base, &tx), Err(HostError::RedoWaits));
+    let tx = from_app(&rename("Day one"), "Muse Spark agent");
+    assert_eq!(
+        r.host.apply("Muse Spark agent", base, &tx),
+        Err(HostError::RedoWaits)
+    );
     assert_eq!(r.base(), base);
     // Once the person redoes it, the app's change goes in.
     with_open(&r.state, |open| step(open, true)).unwrap();
-    assert!(r.host.apply("Example Client", r.base(), &tx).is_ok());
+    assert!(r.host.apply("Muse Spark agent", r.base(), &tx).is_ok());
 }
 
 #[test]
 fn an_app_undoes_only_its_own_newest_step() {
     let r = Rig::new();
-    assert_eq!(r.host.undo_own("Example Client"), Err(HostError::NothingToUndo));
+    assert_eq!(
+        r.host.undo_own("Muse Spark agent"),
+        Err(HostError::NothingToUndo)
+    );
     r.host
-        .apply("Example Client", r.base(), &from_app(&rename("Day one"), "Example Client"))
+        .apply(
+            "Muse Spark agent",
+            r.base(),
+            &from_app(&rename("Day one"), "Muse Spark agent"),
+        )
         .unwrap();
     r.told();
     assert_eq!(r.host.undo_own("Example Client"), Err(HostError::NotYours));
-    let undone = r.host.undo_own("Example Client").unwrap();
+    let undone = r.host.undo_own("Muse Spark agent").unwrap();
     assert_eq!(
         undone,
         Applied {
@@ -507,7 +540,10 @@ fn an_app_undoes_only_its_own_newest_step() {
     assert!(told[0]["reply"]["reply"]["undone"].is_object(), "{told:#?}");
     // The person's own step is never an app's to undo.
     r.hand_edit("Mine");
-    assert_eq!(r.host.undo_own("Example Client"), Err(HostError::NotYours));
+    assert_eq!(
+        r.host.undo_own("Muse Spark agent"),
+        Err(HostError::NotYours)
+    );
 }
 
 /// Another project opening drops the waiting proposal, and a revision read on the old one never names the new one,
@@ -516,25 +552,28 @@ fn an_app_undoes_only_its_own_newest_step() {
 fn another_opening_drops_the_proposal_and_its_revisions() {
     let r = Rig::new();
     let old = r.base();
-    let id = r.propose("Example Client", None).unwrap();
+    let id = r.propose("Muse Spark agent", None).unwrap();
     let library = tempfile::tempdir().unwrap();
     create_in(&r.state, library.path(), two_clips()).unwrap();
     assert_eq!(r.host.open_proposal(), None);
     assert_eq!(
-        r.host.outcome("Example Client"),
+        r.host.outcome("Muse Spark agent"),
         ProposalOutcome::Dropped {
             id,
             why: DROPPED_CLOSED.to_owned()
         }
     );
-    let tx = from_app(&rename("Day one"), "Example Client");
-    assert_eq!(r.host.apply("Example Client", old, &tx), Err(HostError::Moved));
+    let tx = from_app(&rename("Day one"), "Muse Spark agent");
+    assert_eq!(
+        r.host.apply("Muse Spark agent", old, &tx),
+        Err(HostError::Moved)
+    );
     assert!(
         r.base() > old,
         "the new opening reads above every old revision"
     );
     r.told();
-    assert!(r.host.apply("Example Client", r.base(), &tx).is_ok());
+    assert!(r.host.apply("Muse Spark agent", r.base(), &tx).is_ok());
     let told = r.told();
     assert_eq!(told[0]["reply"]["opening"], 2, "the new opening's");
     assert_eq!(told[0]["reply"]["reply"]["revision"], 1);
@@ -576,7 +615,7 @@ fn moments_never_touch_the_slot() {
         },
         label: "The launch".into(),
     };
-    r.host.show_moments("Example Client", &[moment]);
+    r.host.show_moments("Muse Spark agent", &[moment]);
     assert_eq!(r.host.open_proposal().unwrap().id, id, "the card stays");
     let told = r.told();
     assert_eq!(told.len(), 1);
@@ -617,7 +656,8 @@ fn start_paid_without_key_or_code_is_no_credit() {
     let r = Rig::new();
     let started = Instant::now();
     assert_eq!(
-        r.host.start_paid("Example Client", &sticker("paper plane")),
+        r.host
+            .start_paid("Muse Spark agent", &sticker("paper plane")),
         Err(HostError::NoCredit)
     );
     let title = Job::MakeTitleBackground {
@@ -626,7 +666,7 @@ fn start_paid_without_key_or_code_is_no_credit() {
         title_id: "title".into(),
     };
     assert_eq!(
-        r.host.start_paid("Example Client", &title),
+        r.host.start_paid("Muse Spark agent", &title),
         Err(HostError::NoCredit)
     );
     assert!(
@@ -637,16 +677,17 @@ fn start_paid_without_key_or_code_is_no_credit() {
     // Following and blurring answer as chat does, whatever pays.
     let follow = Job::Follow {
         description: "the dog".into(),
+        focus: vec![],
     };
     let blur = Job::Blur {
         description: "faces".into(),
     };
     assert_eq!(
-        r.host.start_paid("Example Client", &follow),
+        r.host.start_paid("Muse Spark agent", &follow),
         Err(HostError::Refused(FOLLOW_COMING.to_owned()))
     );
     assert_eq!(
-        r.host.start_paid("Example Client", &blur),
+        r.host.start_paid("Muse Spark agent", &blur),
         Err(HostError::Refused(BLUR_COMING.to_owned()))
     );
     assert!(r.host.estimate_usd(&sticker("x")) > 0.0);
@@ -754,12 +795,14 @@ fn an_apps_follow_subject_tracks_and_lands_as_its_own_step() {
         )));
     let follow = Job::Follow {
         description: "the speaker".into(),
+        focus: vec![],
     };
     // Two stretches of one file 11 s apart: 13 s (billed as 50 frames) and 131.04 s (263 frames).
     let usd = r.host.estimate_usd(&follow);
     assert!((usd - (50.0 + 263.0) * 0.0002).abs() < 1e-9, "{usd}");
     // Done at once: the app is told what it cost and the revision it left.
-    let Ok(Started::Done { said, revision }) = r.host.start_paid("Example Client", &follow) else {
+    let Ok(Started::Done { said, revision }) = r.host.start_paid("Muse Spark agent", &follow)
+    else {
         panic!("not done at once")
     };
     assert_eq!(
@@ -768,7 +811,7 @@ fn an_apps_follow_subject_tracks_and_lands_as_its_own_step() {
     );
     assert_eq!(revision, r.base());
     let (maker, label, params) = r.newest_step().unwrap();
-    assert_eq!(maker, Maker::App("Example Client".into()));
+    assert_eq!(maker, Maker::App("Muse Spark agent".into()));
     assert_eq!(label, "chat.followSubject");
     assert_eq!(params, json!({"description": "person"}));
     let p = r.project();
@@ -822,7 +865,7 @@ fn low_relay_credit_is_refused_and_a_prompt_is_capped() {
                 .await;
         });
         let long = format!("paper\u{202E} plane {}", "x".repeat(400));
-        let said = r.host.start_paid("Example Client", &sticker(&long));
+        let said = r.host.start_paid("Muse Spark agent", &sticker(&long));
         if refused {
             assert_eq!(said, Err(HostError::LowCredit));
             assert!(r.told().is_empty());
@@ -839,7 +882,8 @@ fn low_relay_credit_is_refused_and_a_prompt_is_capped() {
     }
     // A prompt with no words left once cleaned asks for one.
     assert_eq!(
-        r.host.start_paid("Example Client", &sticker("\u{200B}\u{202E}")),
+        r.host
+            .start_paid("Muse Spark agent", &sticker("\u{200B}\u{202E}")),
         Err(HostError::Refused(NO_PROMPT.to_owned()))
     );
 }
@@ -874,15 +918,21 @@ fn the_persons_own_proposal_wins() {
     assert_eq!(r.host.open_proposal().unwrap().id, id);
     assert_eq!(r.host.open_proposal().unwrap().from, None);
     assert!(matches!(
-        r.host.outcome("Example Client"),
+        r.host.outcome("Muse Spark agent"),
         ProposalOutcome::Waiting { from, title, .. }
             if from == KLIPOLO_CHAT && title == "Keep only the parts you chose"
     ));
-    let tx = from_app(&rename("Day one"), "Example Client");
-    assert_eq!(r.host.apply("Example Client", r.base(), &tx), Err(HostError::Moved));
-    assert_eq!(r.host.undo_own("Example Client"), Err(HostError::Moved));
-    assert_eq!(r.propose("Example Client", None), Err(HostError::Moved));
-    assert_eq!(r.propose("Example Client", Some(&id)), Err(HostError::Moved));
+    let tx = from_app(&rename("Day one"), "Muse Spark agent");
+    assert_eq!(
+        r.host.apply("Muse Spark agent", r.base(), &tx),
+        Err(HostError::Moved)
+    );
+    assert_eq!(r.host.undo_own("Muse Spark agent"), Err(HostError::Moved));
+    assert_eq!(r.propose("Muse Spark agent", None), Err(HostError::Moved));
+    assert_eq!(
+        r.propose("Muse Spark agent", Some(&id)),
+        Err(HostError::Moved)
+    );
     assert_eq!(r.project().name, "Space station Q&A");
 }
 
@@ -944,7 +994,7 @@ fn switch_off_removes_the_connection_file() {
     assert_eq!(written.port, port);
     assert_eq!(written.pid, std::process::id());
     let hello = json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-        "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "Example Client", "version": "1"}}})
+        "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "Muse Spark agent", "version": "1"}}})
     .to_string();
     assert_eq!(post(port, &[], &hello), 401, "no token");
     let wrong = format!("Bearer {}", "0".repeat(64));
@@ -960,7 +1010,7 @@ fn switch_off_removes_the_connection_file() {
     let token = [("Authorization", bearer.as_str())];
     assert_eq!(post_as(port, &rebound, &token, &hello), 403, "another Host");
     assert_eq!(post(port, &[("Authorization", &bearer)], &hello), 200);
-    assert_eq!(state.status().connected, ["Example Client"]);
+    assert_eq!(state.status().connected, ["Muse Spark agent"]);
     // On again changes nothing: the same server, the same file.
     state.set_enabled(true).unwrap();
     assert_eq!(state.port(), Some(port));
@@ -981,14 +1031,14 @@ fn switch_off_removes_the_connection_file() {
         assert!(closed.elapsed() < Duration::from_secs(5), "nothing listens");
         std::thread::sleep(Duration::from_millis(20));
     }
-    // The page heard Cursor come and go.
+    // The page heard Muse Spark agent come and go.
     let apps: Vec<serde_json::Value> = (told.lock().unwrap().iter())
         .filter_map(|t| match t {
             Told::Apps(apps) => Some(json!(apps)),
             Told::Reply(_) => None,
         })
         .collect();
-    assert_eq!(apps, [json!(["Example Client"]), json!([])]);
+    assert_eq!(apps, [json!(["Muse Spark agent"]), json!([])]);
     // The config names this executable.
     let exe = std::env::current_exe().unwrap();
     assert_eq!(off.config, klipolo_app::mcp_config::config_json(&exe));
@@ -1084,10 +1134,14 @@ fn a_second_klipolo_doesnt_take_over() {
     let bearer = format!("Bearer {token}");
     let port = first.port().unwrap();
     assert_eq!(
-        post(port, &[("Authorization", &bearer)], &hello("Example Client")),
+        post(
+            port,
+            &[("Authorization", &bearer)],
+            &hello("Muse Spark agent")
+        ),
         200
     );
-    assert_eq!(first.status().connected, ["Example Client"]);
+    assert_eq!(first.status().connected, ["Muse Spark agent"]);
 }
 
 /// The second Klipolo switched off, then quitting, leaves the first's file: the apps still reach the first. Once the
@@ -1110,7 +1164,11 @@ fn quitting_the_second_leaves_the_firsts_file() {
     let bearer = format!("Bearer {token}");
     let port = first.port().unwrap();
     assert_eq!(
-        post(port, &[("Authorization", &bearer)], &hello("Example Client")),
+        post(
+            port,
+            &[("Authorization", &bearer)],
+            &hello("Muse Spark agent")
+        ),
         200
     );
 

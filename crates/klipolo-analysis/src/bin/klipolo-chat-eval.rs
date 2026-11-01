@@ -663,9 +663,27 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
                 r
             }).collect::<Vec<_>>(),
         }),
-        ToolCall::FollowSubject { description } | ToolCall::BlurObjects { description } => {
-            json!({"description": description})
+        ToolCall::FollowSubject { description, focus } => {
+            // No focus is written as null, as the model leaves it: whoever speaks.
+            let focus: Vec<Value> = (focus.iter())
+                .map(|f| {
+                    json!({
+                        "fromSec": s(f.range.start),
+                        "toSec": s(f.range.end),
+                        "person": match f.who {
+                            klipolo_model::fill_focus::Who::Speaker => "speaker".to_owned(),
+                            klipolo_model::fill_focus::Who::Both => "both".to_owned(),
+                            klipolo_model::fill_focus::Who::Person { person } => format!("P{person}"),
+                        },
+                    })
+                })
+                .collect();
+            json!({
+                "description": description,
+                "focus": (!focus.is_empty()).then_some(focus),
+            })
         }
+        ToolCall::BlurObjects { description } => json!({"description": description}),
         ToolCall::AddMusic {
             file,
             volume,
@@ -906,7 +924,14 @@ mod tests {
                 json!({"format": "portrait", "keepOthers": true}),
             ),
             ("setCaptions", json!({"on": true, "style": "karaoke"})),
-            ("followSubject", json!({"description": "woman astronaut"})),
+            (
+                "followSubject",
+                json!({"description": "woman astronaut", "focus": null}),
+            ),
+            (
+                "followSubject",
+                json!({"description": "person", "focus": [{"fromSec": 2.0, "toSec": 8.5, "person": "P2"}]}),
+            ),
             (
                 "addMusic",
                 json!({"file": "lofi", "volume": null, "duck": true, "atSec": 0.0}),
