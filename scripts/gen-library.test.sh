@@ -87,10 +87,13 @@ def _():
                   "shutter", "typing", "notification", "success", "error", "pop-high", "bubbles", "boing", "drum-hit",
                   "tick-tock"],
         "music": ["soft-ambient", "upbeat-loop"],
-        "sticker": ["heart", "star", "arrow", "circle", "check", "bubble"],
+        "sticker": ["heart", "star", "arrow", "circle", "check", "bubble",
+                    "arrow-curved", "arrow-pointer", "circle-drawn", "underline", "x-mark", "question", "exclamation",
+                    "number-1", "number-2", "number-3", "number-4", "number-5", "thought-bubble", "shout-bubble",
+                    "thumbs-up", "fire", "sparkles", "lightbulb", "new-tag", "subscribe", "cursor-hand"],
     }
     assert {k: [i["id"] for i in of(k)] for k in want} == want, [i["id"] for i in items]
-    assert len(items) == 33 and manifest["license"] == "CC0-1.0" and manifest["creator"] == "Klipolo"
+    assert len(items) == 54 and manifest["license"] == "CC0-1.0" and manifest["creator"] == "Klipolo"
     for i in items:
         assert i["license"] == "CC0-1.0", i["id"]
         assert i["name"] and not any(d in i["name"] for d in "–—"), i["id"]

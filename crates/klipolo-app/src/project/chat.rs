@@ -246,7 +246,7 @@ mod tests {
                 count(MediaKind::Sound),
                 count(MediaKind::Image)
             ),
-            (2, 25, 6)
+            (2, 25, 27)
         );
         for item in &pack {
             assert!(item.pack);
