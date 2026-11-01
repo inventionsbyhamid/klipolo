@@ -246,7 +246,7 @@ pub(crate) struct PageRect {
 
 /// Shows the Mac's share menu (AirDrop, Messages, Mail and the person's other apps) for the last export's files, beside
 /// `anchor` (the Share… button): only files it put in place that are still there (`exports.revealGone` when none is),
-/// and `exports.shareFailed` when the menu can't show. Resolves once the menu has closed.
+/// and `exports.shareFailed` when the menu can't show. Resolves once the menu shows.
 #[tauri::command]
 pub(crate) async fn export_share(
     window: WebviewWindow,

@@ -37,7 +37,7 @@ export const exporter = {
   reveal: (index?: number) => call<void>('export_reveal', index === undefined ? {} : { index }),
   /**
    * Shows the Mac's share menu (AirDrop, Messages, Mail and the like) for the last export's files, beside `anchor` (the
-   * button pressed, in page px). Resolves once the menu has closed.
+   * button pressed, in page px). Resolves once the menu shows.
    */
   share: (anchor: PageRect) => call<void>('export_share', { anchor }),
   /** Opens file `index` of the last export in its app. */
