@@ -119,6 +119,9 @@ describe('the folded library’s thumbnails', () => {
     // As the Clips tab lists them: the recording as one, then broll.
     expect(clips.map((b) => b.getAttribute('aria-label'))).toEqual(['Recording 1', 'broll.mp4']);
     expect(clips.map((b) => b.getAttribute('title'))).toEqual(['Recording 1', 'broll.mp4']);
+    // A screen reader hears what a press does, which the name alone doesn't say.
+    for (const clip of clips)
+      expect(clip).toHaveAttribute('aria-description', 'Press to add it to the end, or drag it onto the timeline.');
     const rail = railClips().closest('.library-rail')!;
     const buttons = within(rail as HTMLElement).getAllByRole('button');
     expect(buttons.slice(0, 2).map((b) => b.getAttribute('aria-label'))).toEqual(['Open library', 'Add files']);

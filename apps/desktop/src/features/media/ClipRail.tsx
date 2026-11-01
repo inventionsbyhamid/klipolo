@@ -19,6 +19,7 @@ const MAC = typeof navigator !== 'undefined' && /^Mac/.test(navigator.platform);
  * that let go of a drag (wherever it was let go, or put down with Escape) adds nothing more.
  */
 function RailClip({ clip }: { clip: ShelfClip }) {
+  const { t } = useLingui();
   const art = useRef<HTMLSpanElement>(null);
   const tile = useClipPicture(clip.asset.path, useNearView(art));
   /** The press under way: where it began, and whether it went past the slop (so it lifted into a drag). */
@@ -57,6 +58,12 @@ function RailClip({ clip }: { clip: ShelfClip }) {
         tabIndex={0}
         className="rail-clip"
         aria-label={clip.name}
+        // What a press does, which the name alone doesn't say (VoiceOver reads it after the name).
+        aria-description={t({
+          id: 'library.rail.clip.does',
+          message: 'Press to add it to the end, or drag it onto the timeline.',
+          comment: 'Screen-reader note on a clip thumbnail of the folded library',
+        })}
         title={clip.name}
         data-recording-id={clip.source.type === 'recording' ? clip.source.id : undefined}
         onPointerDown={onPointerDown}
