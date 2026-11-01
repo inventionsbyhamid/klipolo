@@ -36,6 +36,8 @@ function RailClip({ clip }: { clip: ShelfClip }) {
   const onClick = (e: MouseEvent<HTMLButtonElement>) => {
     const from = pressedAt.current;
     pressedAt.current = null;
+    // Control-click on a Mac is a right-click: it adds nothing.
+    if (MAC && e.ctrlKey) return;
     // From the keyboard (no pointer), or a press that never became a drag.
     const dragged = e.detail > 0 && from !== null && Math.hypot(e.clientX - from.x, e.clientY - from.y) >= DRAG_SLOP_PX;
     if (!dragged) add(toTheEnd);
