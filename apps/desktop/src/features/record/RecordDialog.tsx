@@ -27,6 +27,7 @@ import { LivePreview } from './LivePreview';
 import { MicMeter } from './MicMeter';
 import { cameraNote, notesBefore, notReady, refusedPage } from './notes';
 import { DeniedNote, ScreenStep, STEP_BUTTON_ID } from './PermissionStep';
+import { useLivePixels } from './useLivePixels';
 import { CARDS_ID, WhatToRecord } from './WhatToRecord';
 import './record.css';
 
@@ -292,14 +293,17 @@ function chosenName(setup: RecorderSetup | null, picks: Picks): string {
 }
 
 /**
- * The preview box: 16:9 over the full width, black behind. The live picture of what is chosen, with the camera's
- * bubble over its bottom right; the clip art until a picture comes. What is said in it (the Screen Recording step, why
- * a press didn't go, the countdown) sits over both.
+ * The preview box: 16:9 over the full width, black behind. The live picture of what is chosen, made for the box's own
+ * pixels so it is as sharp as the box (`useLivePixels`), with the camera's bubble over its bottom right; the clip art
+ * until a picture comes. What is said in it (the Screen Recording step, why a press didn't go, the countdown) sits
+ * over both.
  */
 function Preview({ children }: { children?: ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
   const name = useRecorder((s) => chosenName(s.setup, s.picks));
+  useLivePixels(box);
   return (
-    <div className="record-preview">
+    <div className="record-preview" ref={box}>
       <span className="record-art" aria-hidden>
         <Icon name="film" />
       </span>
