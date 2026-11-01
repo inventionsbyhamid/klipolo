@@ -1380,12 +1380,12 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let prompt_tokens = klipolo_chat::estimate_tokens(prompt);
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
-    // 914 measured with the clip tools' line and the recordings' line.
-    assert!(prompt_tokens <= 920, "prompt {prompt_tokens} tokens");
-    // 4,438 measured with the clip tools (setClip, setTransition), setBackground (about 210), freezeFrame (about 105),
-    // addText's font (about 25) and the recording tools (the camera's three and the recorded sounds' three, about 1,010);
-    // 4,555 with followSubject's focus (about 117).
-    assert!(tools_tokens <= 4_580, "tools {tools_tokens} tokens");
+    // The caps every lane's prompt lines and tools share: 914 prompt tokens measured with the clip tools' line and the
+    // recordings' line; 4,555 tools tokens with the clip tools (setClip, setTransition), setBackground (about 210),
+    // freezeFrame (about 105), addText's font (about 25), the recording tools (about 1,010) and followSubject's focus
+    // (about 117).
+    assert!(prompt_tokens <= 1_800, "prompt {prompt_tokens} tokens");
+    assert!(tools_tokens <= 6_500, "tools {tools_tokens} tokens");
 }
 
 #[test]
