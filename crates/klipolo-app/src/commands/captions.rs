@@ -1,11 +1,13 @@
 //! The Captions panel's commands: thin layers over `klipolo_app::captions`, on the engine's feed (so the panel shows
-//! the pages the video shows). New speech on the feed goes to the page as a `speech-changed` event: it asks its pages
-//! again. In debug builds, `dev_fixture_speech` gives the open project's clips a sample transcript, for checking the
+//! the pages the video shows). New speech on the feed goes to the page as a `speech-changed` event naming the files
+//! whose words changed (`words_changed`): it asks its pages again, and drops a chat proposal whose cuts stand on them. In debug builds, `dev_fixture_speech` gives the open project's clips a sample transcript, for checking the
 //! panel by hand before analysis has run.
 
 use std::sync::Arc;
 
-use klipolo_app::captions::{CaptionPagesView, CaptionsCache, PagesQuery, WordView, answer, find};
+use klipolo_app::captions::{
+    CaptionPagesView, CaptionsCache, PagesQuery, WordView, answer, find, words_changed,
+};
 use klipolo_model::project::{AssetKind, FormatKind, Project};
 use klipolo_model::speech::{Speech, Transcript, Word, WordKind};
 use klipolo_model::time::{Us, secs_to_us};
@@ -16,8 +18,8 @@ use crate::project::ProjectSessionState;
 /// The event a new speech on the feed goes out on.
 pub(crate) const SPEECH_CHANGED_EVENT: &str = "speech-changed";
 
-/// Tells the page each time the feed's speech changes (not when only the revision does): its caption pages were made
-/// again.
+/// Tells the page each time the feed's speech changes (not when only the revision does), with the files whose words
+/// changed: its caption pages were made again.
 pub(crate) fn follow_speech(app: &AppHandle, projects: &ProjectSessionState) {
     let mut feed = projects.subscribe();
     let app = app.clone();
@@ -30,10 +32,14 @@ pub(crate) fn follow_speech(app: &AppHandle, projects: &ProjectSessionState) {
                 (None, Some(b)) => !b.transcripts.is_empty(),
                 _ => false,
             };
+            let words = match &now {
+                Some(now) if changed => words_changed(last.as_deref(), now),
+                _ => Vec::new(),
+            };
             if now.is_some() {
                 last = now;
             }
-            if changed && let Err(error) = app.emit(SPEECH_CHANGED_EVENT, ()) {
+            if changed && let Err(error) = app.emit(SPEECH_CHANGED_EVENT, words) {
                 tracing::warn!(%error, "speech event");
             }
         }

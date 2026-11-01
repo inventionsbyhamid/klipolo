@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use klipolo_app::captions::{CaptionsCache, PagesQuery, WordView, answer, find};
+use klipolo_app::captions::{CaptionsCache, PagesQuery, WordView, answer, find, words_changed};
 use klipolo_engine::registry::Registry;
 use klipolo_engine::session::ProjectFeed;
 use klipolo_model::apply_ops;
@@ -12,7 +12,7 @@ use klipolo_model::captions::looks::{Look, WordLook};
 use klipolo_model::contrib::ContribId;
 use klipolo_model::ops::Op;
 use klipolo_model::project::{Asset, AssetKind, FormatKind, Project};
-use klipolo_model::speech::{Speech, Transcript, Word, WordFix, WordKind};
+use klipolo_model::speech::{Levels, Speech, Transcript, Word, WordFix, WordKind};
 use klipolo_model::time::{RangeUs, secs_to_us as s};
 use klipolo_model::timeline::{Clip, ClipSource};
 
@@ -620,4 +620,34 @@ fn find_names_each_place_a_word_shows_once() {
             .unwrap()
             .is_empty()
     );
+}
+
+#[test]
+fn speech_changed_names_the_files_whose_words_changed() {
+    let said = || transcript(words_at(0.5, "so today we look at the module"), "en");
+    let speech = |files: &[(&str, &Arc<Transcript>)]| Speech {
+        transcripts: (files.iter())
+            .map(|(id, t)| ((*id).to_owned(), Arc::clone(t)))
+            .collect(),
+        ..Speech::default()
+    };
+    let (a, b, b_again, c) = (said(), said(), said(), said());
+    let was = speech(&[("a", &a), ("b", &b)]);
+    // The first speech the page hears: every file with words.
+    assert_eq!(words_changed(None, &was), ["a", "b"]);
+    // "b" timed again (new words, even the same ones) and "c" heard: "a" is the same transcript.
+    let mut now = speech(&[("a", &a), ("b", &b_again), ("c", &c)]);
+    assert_eq!(words_changed(Some(&was), &now), ["b", "c"]);
+    // Only a file's loudness came: no words changed.
+    let mut louder = now.clone();
+    louder.levels.insert(
+        "a".into(),
+        Arc::new(Levels {
+            db: vec![-20.0; 10].into(),
+        }),
+    );
+    assert!(words_changed(Some(&now), &louder).is_empty());
+    // A file that left the project takes its words with it.
+    now.transcripts.remove("a");
+    assert_eq!(words_changed(Some(&louder), &now), ["a"]);
 }
