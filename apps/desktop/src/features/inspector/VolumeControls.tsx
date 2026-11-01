@@ -7,6 +7,8 @@ import clipSettings from '../../lib/clip-settings.json';
 import { commitToggle } from '../../state/commit';
 import { keyIndexAt, levelAt, nextKey, previousKey, withKey } from '../../lib/keys';
 import { keySlackUs, levelNow, levelValue, toggleVolumeKey, volumeKeyOps, type Leveled } from '../../state/keyEdits';
+import { useShallow } from 'zustand/react/shallow';
+import { countRender } from '../../lib/renderCount';
 import { usePlayback } from '../../state/playback';
 import { muteLabel } from '../preview';
 import { Field } from './fields';
@@ -46,20 +48,31 @@ interface VolumeControlsProps {
  * toggle beside it.
  */
 export function VolumeControls({ volume, volumeOps, mute: muting, noun, line }: VolumeControlsProps) {
+  countRender(`volume:${line?.target.id ?? muting?.id ?? ''}`);
   const { t } = useLingui();
   const label = t({ id: 'volume.label', message: 'Volume' });
   const mute = t({ id: 'volume.mute', message: 'Mute' });
   const muted = muting?.muted ?? false;
   const keyed = !!line?.keys?.length;
-  // The playhead in the clip's or sound's time: it follows the playhead only while it has keys or a key can go there.
-  const playheadUs = usePlayback((s) => (line ? s.playheadUs : 0));
-  const tUs = line ? playheadUs - line.startUs : 0;
-  const inside = !!line && tUs >= 0 && tUs <= line.lenUs;
-  const here = keyed && keyIndexAt(line!.keys, tUs, keySlackUs()) >= 0;
-  const shown = keyed ? levelAt(line!.keys, Math.min(Math.max(0, tUs), line!.lenUs), volume) : volume;
-  const times = line?.keys?.map((k) => k.tUs) ?? [];
-  const before = previousKey(times, tUs, keySlackUs());
-  const after = nextKey(times, tUs, keySlackUs());
+  // What it shows at the playhead (in the clip's or sound's time): whether it is inside, whether a key is there, the
+  // level the slider shows (to the hundredth) and the keys before and after it. Only a change of those renders it
+  // again, not every frame of playback.
+  const [inside, here, shown, before, after] = usePlayback(
+    useShallow((s): [boolean, boolean, number, number | null, number | null] => {
+      if (!line) return [false, false, volume, null, null];
+      const t = s.playheadUs - line.startUs;
+      const slack = keySlackUs();
+      const times = line.keys?.map((k) => k.tUs) ?? [];
+      const level = keyed ? levelAt(line.keys, Math.min(Math.max(0, t), line.lenUs), volume) : volume;
+      return [
+        t >= 0 && t <= line.lenUs,
+        keyed && keyIndexAt(line.keys, t, slack) >= 0,
+        Math.round(level * 100) / 100,
+        previousKey(times, t, slack),
+        nextKey(times, t, slack),
+      ];
+    }),
+  );
   const seek = (keyUs: number) => usePlayback.getState().seek(line!.startUs + keyUs);
   /** With keys: the key at the playhead holds the level the slider sets (built then, on the keys as they are). */
   const levelOps = (v: number): Op[] => {
@@ -77,7 +90,7 @@ export function VolumeControls({ volume, volumeOps, mute: muting, noun, line }: 
           <ToolSlider
             label={label}
             commitLabel="volume.undo"
-            value={Math.round(shown * 100) / 100}
+            value={shown}
             min={VOLUME.min}
             max={VOLUME.max}
             step={VOLUME.step}
@@ -124,7 +137,7 @@ export function VolumeControls({ volume, volumeOps, mute: muting, noun, line }: 
               }
               active={here}
               disabled={!inside}
-              onClick={() => void toggleVolumeKey(line.target, tUs)}
+              onClick={() => void toggleVolumeKey(line.target, usePlayback.getState().playheadUs - line.startUs)}
             />
             <IconButton
               className="icon-btn-sm"

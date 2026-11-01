@@ -4,6 +4,8 @@ import type { Ease } from '../../bindings/Ease';
 import type { Item } from '../../bindings/Item';
 import { IconButton } from '../../design/IconButton';
 import { PROPERTY_KEYS, SPRING, propertyTimes, nextKey, previousKey, type MotionProperty } from '../../lib/keys';
+import { countRender } from '../../lib/renderCount';
+import { useShallow } from 'zustand/react/shallow';
 import { usePlayback } from '../../state/playback';
 import { keySlackUs, setKeyEase, toggleKey } from '../../state/keyEdits';
 import { Field, Select } from './fields';
@@ -27,14 +29,27 @@ const PROPERTIES: MotionProperty[] = ['position', 'scale', 'rotation', 'opacity'
  * playhead; without them they set the layer as before.
  */
 export function MotionField({ item }: { item: Item }) {
+  countRender(`motion:${item.id}`);
   // An adjustment layer's box stays upright (the engine draws it so): it has no Rotation.
   const properties = item.content.type === 'adjustment' ? PROPERTIES.filter((p) => p !== 'rotation') : PROPERTIES;
   const { t } = useLingui();
-  // The playhead in the layer's time; the row's buttons are off while it is outside the layer.
-  const playheadUs = usePlayback((s) => s.playheadUs);
-  const tUs = playheadUs - item.startUs;
-  const inside = tUs >= 0 && tUs <= item.durationUs;
   const slack = keySlackUs();
+  const motion = item.layout.motion;
+  // What the rows show at the playhead (in the layer's time): whether it is inside the layer, and each row's key there,
+  // and the keys before and after it. Only a change of those renders the card again, not every frame of playback.
+  const view = usePlayback(
+    useShallow((s) => {
+      const t = s.playheadUs - item.startUs;
+      const out: (number | boolean | null)[] = [t >= 0 && t <= item.durationUs];
+      for (const prop of properties) {
+        const times = propertyTimes(motion, prop);
+        out.push(times.find((k) => Math.abs(k - t) <= slack) ?? null, previousKey(times, t, slack), nextKey(times, t, slack));
+      }
+      return out;
+    }),
+  );
+  const inside = view[0] as boolean;
+  const now = () => usePlayback.getState().playheadUs - item.startUs;
   const names: Record<MotionProperty, string> = {
     position: t({ id: 'motion.position', message: 'Position' }),
     scale: t({ id: 'motion.scale', message: 'Scale' }),
@@ -50,15 +65,13 @@ export function MotionField({ item }: { item: Item }) {
   ];
   const other = { value: 'other' as const, label: t({ id: 'motion.ease.other', message: 'Other', comment: 'An ease set from chat' }) };
   const seek = (layerUs: number) => usePlayback.getState().seek(item.startUs + layerUs);
-  const motion = item.layout.motion;
   return (
     <Field label={t({ id: 'motion.label', message: 'Motion', comment: 'Keys set by hand on a layer' })} stack>
       <div className="motion-rows">
-        {properties.map((prop) => {
-          const times = propertyTimes(motion, prop);
-          const here = times.find((k) => Math.abs(k - tUs) <= slack);
-          const before = previousKey(times, tUs, slack);
-          const after = nextKey(times, tUs, slack);
+        {properties.map((prop, i) => {
+          const here = (view[1 + 3 * i] as number | null) ?? undefined;
+          const before = view[2 + 3 * i] as number | null;
+          const after = view[3 + 3 * i] as number | null;
           // The key there (Position's x key, else its y key) gives the ease shown.
           const key =
             here === undefined
@@ -88,7 +101,7 @@ export function MotionField({ item }: { item: Item }) {
                 }
                 active={here !== undefined}
                 disabled={!inside}
-                onClick={() => void toggleKey(item, prop, here ?? tUs)}
+                onClick={() => void toggleKey(item, prop, here ?? now())}
               />
               <IconButton
                 className="icon-btn-sm"

@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Clip } from '../../bindings/Clip';
@@ -8,6 +8,7 @@ import type { Op } from '../../bindings/Op';
 import type { LabelParams } from '../../lib/labels';
 import { fixtureSnapshot } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
+import { renderCounts } from '../../lib/renderCount';
 import { FORMAT_SIZE } from '../../lib/layout';
 import { positionedLayout } from './inspectorOps';
 
@@ -120,6 +121,34 @@ describe('Motion keys in the card', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Next Opacity key' }));
     expect(usePlayback.getState().playheadUs).toBe(3.5 * S);
     expect(screen.getByRole('button', { name: 'Next Opacity key' })).toBeDisabled();
+  });
+});
+
+describe('the cards during playback', () => {
+  it('re-render only where what they show changes, not on every frame between keys', () => {
+    title({ scale: [key(0, 1), key(2, 2)] });
+    renderWithProviders(<Inspector format="landscape" />);
+    const motion = renderCounts.get('motion:title') ?? 0;
+    act(() => usePlayback.setState({ playheadUs: 2.1 * S }));
+    act(() => usePlayback.setState({ playheadUs: 2.2 * S }));
+    expect(renderCounts.get('motion:title')).toBe(motion);
+    // Onto the key at 2 s into the title: its button and ease show.
+    act(() => usePlayback.setState({ playheadUs: 3 * S }));
+    expect(renderCounts.get('motion:title')).toBeGreaterThan(motion);
+  });
+
+  it('Volume with keys re-renders when the level it shows changes', () => {
+    const snapshot = fixtureSnapshot();
+    snapshot.project.timeline.main[1].volumeKeys = [key(0, 1), key(4, 0)];
+    useProject.setState({ snapshot, pending: 0, apply });
+    useSelection.setState({ selectedId: 'b', selectedIds: ['b'] });
+    usePlayback.setState({ playheadUs: 21 * S });
+    renderWithProviders(<Inspector format="landscape" />);
+    const volume = renderCounts.get('volume:b') ?? 0;
+    act(() => usePlayback.setState({ playheadUs: 21 * S + 1_000 }));
+    expect(renderCounts.get('volume:b')).toBe(volume);
+    act(() => usePlayback.setState({ playheadUs: 22 * S }));
+    expect(renderCounts.get('volume:b')).toBeGreaterThan(volume);
   });
 });
 
