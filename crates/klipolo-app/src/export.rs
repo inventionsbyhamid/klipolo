@@ -61,6 +61,8 @@ pub struct ExportPlan {
     pub seconds: f64,
     /// Where the files go, as the dialog says it: "Movies / Klipolo".
     pub folder: String,
+    /// Master's ProRes is encoded on the CPU here (no media engine: an Intel Mac, Windows, Linux), so it is slower.
+    pub slow_master: bool,
 }
 
 /// A file the last export put in place, as the finished dialog lists it.
@@ -115,6 +117,7 @@ pub fn plan(project: &Project, req: &ExportRequest, dir: &Path, apple_silicon: b
         bytes: cost.bytes,
         seconds: cost.seconds,
         folder: folder_label(dir),
+        slow_master: !apple_silicon,
     }
 }
 
@@ -259,6 +262,20 @@ mod tests {
         assert_eq!(planned.folder, folder_label(dir.path()));
         // Nothing is written by a plan.
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn master_is_slower_on_a_computer_without_a_media_engine() {
+        let (project, _) = klipolo_engine::test_support::captions_project("caption.bold", &[]);
+        let dir = tempfile::tempdir().unwrap();
+        let master = request(&[FormatKind::Landscape], ExportQuality::Master);
+        let intel = plan(&project, &master, dir.path(), false);
+        assert!(intel.slow_master, "the CPU encodes ProRes here");
+        assert!(intel.files[0].name.ends_with(".mov"), "Master writes .mov");
+        assert!(
+            !plan(&project, &master, dir.path(), true).slow_master,
+            "a media engine encodes it"
+        );
     }
 
     #[test]

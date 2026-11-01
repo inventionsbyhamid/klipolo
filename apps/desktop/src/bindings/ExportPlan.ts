@@ -16,4 +16,8 @@ seconds: number,
 /**
  * Where the files go, as the dialog says it: "Movies / Klipolo".
  */
-folder: string, };
+folder: string, 
+/**
+ * Master's ProRes is encoded on the CPU here (no media engine: an Intel Mac, Windows, Linux), so it is slower.
+ */
+slowMaster: boolean, };

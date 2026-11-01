@@ -24,6 +24,7 @@ const planned = vi.hoisted(
       bytes: (quality === 'standard' ? 80_000_000 : 140_000_000) * formats.length,
       seconds: 30,
       folder: 'Movies / Klipolo',
+      slowMaster: true,
     }),
 );
 vi.mock('../../bridge/exporter', () => ({
@@ -171,7 +172,13 @@ describe('export dialog', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Export' }));
     expect(await within(dialog()).findByText('Movies / Klipolo')).toBeInTheDocument();
     vi.mocked(exporter.plan).mockImplementation((formats) =>
-      Promise.resolve({ files: [], bytes: 140_000_000 * formats.length, seconds: 30, folder: 'Desktop / Clips' }),
+      Promise.resolve({
+        files: [],
+        bytes: 140_000_000 * formats.length,
+        seconds: 30,
+        folder: 'Desktop / Clips',
+        slowMaster: false,
+      }),
     );
     await userEvent.click(screen.getByRole('button', { name: 'Change folder' }));
     expect(exporter.pickFolder).toHaveBeenCalled();
