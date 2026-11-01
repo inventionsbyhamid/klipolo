@@ -2,11 +2,11 @@
 //! the first one this FFmpeg build has, and the probe tries each.
 //! - macOS: VideoToolbox, exactly as before.
 //! - Windows and Linux: `prores_ks` (software) for ProRes, and nothing for H.264 or HEVC yet: Klipolo's LGPL FFmpeg has
-//!   no software H.264 encoder, so an export there says this computer has no H.264 encoder. W adds NVENC, AMF, QSV,
-//!   D3D12 and Media Foundation; L adds VA-API, NVENC and Vulkan.
+//!   no software H.264 encoder, so an export there says this computer has no H.264 encoder. Windows is to add NVENC,
+//!   AMF, QSV, D3D12 and Media Foundation; Linux VA-API, NVENC and Vulkan.
 //! - Every OS: FFmpeg's own `mjpeg` (LGPL, software) for stills (thumbnail sprites).
 
-/// What an encoder is for (the codecs).
+/// What an encoder is for (the export qualities' codecs).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CodecRole {
     /// H.264 High, 8-bit 4:2:0.

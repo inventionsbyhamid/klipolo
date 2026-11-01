@@ -22,7 +22,7 @@ use super::{ActivityError, ActivityFrames, LUMA_BYTES};
 use crate::media::scan::{next_packet, set_discards, start_us};
 // **The file's clock**, the one origin of every tick, seek and length here: where the video stream starts, in its time
 // base (its first pts, or 0 when the file doesn't say), so tick 0 is its first frame: the rule from which every
-// every decoder numbers frames (the FFmpeg decoders, AVAssetReader, the thumbnail tiles), and the cursor timeline maps ticks on it.
+// decoder numbers frames (the FFmpeg decoders, AVAssetReader, the thumbnail tiles), and on which ticks are mapped.
 // Sound that starts before the picture is the recording's `audioLeadUs`, never a shift of this clock.
 use crate::render::probe::stream_start;
 use luma::{Hardware, Picture};

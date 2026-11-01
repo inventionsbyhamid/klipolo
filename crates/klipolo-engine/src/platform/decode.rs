@@ -17,7 +17,7 @@ pub fn hw_device_type() -> Option<AVHWDeviceType> {
 /// macOS: VideoToolbox decodes H.264 and HEVC everywhere and ProRes on Apple silicon with media engines (treated as
 /// software on Intel). VideoToolbox itself is asked (`VTIsHardwareDecodeSupported`), so an Intel Mac
 /// without HEVC hardware, ProRes without a ProRes engine, VP9 or AV1 without a decoder for them, and a VM without a
-/// media engine all answer false. Windows (W): D3D12/DXVA by probe. Linux (L): VA-API by probe. Stubs: false.
+/// media engine all answer false. Windows: D3D12/DXVA by probe. Linux: VA-API by probe. Stubs: false.
 pub fn hw_decodes(codec: ffmpeg::codec::Id) -> bool {
     #[cfg(target_os = "macos")]
     {
@@ -43,8 +43,8 @@ pub fn hw_decodes(codec: ffmpeg::codec::Id) -> bool {
 
 /// Whether this computer's preview decoder reads `codec` frames stored as `pixel` (more than 8 bits) on the hardware
 /// path, so a 10-bit source scrubs like an 8-bit one. macOS: VideoToolbox through the vendored AVAssetReader takes
-/// 10-bit 4:2:0 HEVC (phones' Main 10; its table is `avassetreader::output_pixel_format`);
-/// H.264 High 10, 4:2:2 and ProRes go through FFmpeg's software decoder. W/L: false (their decoders are software).
+/// 10-bit 4:2:0 HEVC (phones' Main 10; its table is `avassetreader::output_pixel_format`); H.264 High 10, 4:2:2 and
+/// ProRes go through FFmpeg's software decoder. Windows and Linux: false (their decoders are software).
 pub fn hw_reads_deep(codec: ffmpeg::codec::Id, pixel: ffmpeg::format::Pixel) -> bool {
     #[cfg(target_os = "macos")]
     {
