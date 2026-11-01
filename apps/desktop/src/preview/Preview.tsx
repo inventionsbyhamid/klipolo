@@ -13,6 +13,7 @@ import { Icon } from '../layout/Icon';
 import { useDockHold } from '../state/dockHold';
 import { useEngine } from '../state/engine';
 import { useProject } from '../state/project';
+import { useSelection } from '../state/selection';
 import { useUi } from '../state/ui';
 
 /** The format the preview shows (it lives with the format switch). */
@@ -63,7 +64,8 @@ function useSteadyDock(wanted: boolean): boolean {
  * editable (`Stage`), under the analysis banner; the inspector shows at the right under the banner while a main clip, a
  * transition or a layer it has fields for is selected (never mid-press or mid-walk on the timeline: `useSteadyDock`).
  * Selecting never resizes or moves the frame: the card goes in a slot of its own beside it, or over its right side when
- * a slot would cost the frame too much of its size (`stageLayout`). With no clip yet, the drop zone.
+ * a slot would cost the frame too much of its size (`stageLayout`). An empty slot says what goes there. With no clip
+ * yet, the drop zone.
  * `filesOver`: files from Finder are held over the window.
  */
 export function Preview({ filesOver = false }: { filesOver?: boolean }) {
@@ -79,6 +81,7 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
   const transition = useInspectedTransition();
   const native = useEngine((s) => s.presenter === 'native' && !!s.info);
   const docked = useSteadyDock(inspected !== null || transition !== null) && hasVideo;
+  const nothingSelected = useSelection((s) => s.selectedId === null);
   return (
     <main className={native && hasVideo ? 'panel stage has-hole' : 'panel stage'} aria-label="Preview">
       <div className="stage-head">
@@ -109,6 +112,12 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
         <div className="stage-main">
           {hasVideo ? <Stage /> : <DropZone over={filesOver} />}
           {docked && <Inspector format={format} />}
+          {/* Drawn in the slot only (app.css): over the frame it would cover the video. */}
+          {hasVideo && !docked && nothingSelected && (
+            <p className="stage-hint">
+              {t({ id: 'preview.hint.select', message: 'Select something on the video to change it.' })}
+            </p>
+          )}
         </div>
       </div>
     </main>

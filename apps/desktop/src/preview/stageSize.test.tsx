@@ -90,6 +90,7 @@ function stageBox() {
 }
 
 const card = () => screen.queryByRole('complementary');
+const hint = () => screen.queryByText('Select something on the video to change it.');
 
 describe('selecting never resizes the video', () => {
   it('a 16:9 video keeps its size and place as a clip is selected, deselected and selected again', () => {
@@ -119,7 +120,7 @@ describe('selecting never resizes the video', () => {
     expect(card()).toBeInTheDocument();
   });
 
-  it('a 9:16 video has the slot beside it: the card shows there', () => {
+  it('a 9:16 video has the slot beside it: the card shows there, and with nothing selected a note says what goes there', () => {
     useUi.setState({ previewFormat: 'portrait' });
     Object.assign(frame, { width: 253, height: 450 });
     renderWithProviders(<Preview />);
@@ -127,9 +128,11 @@ describe('selecting never resizes the video', () => {
     expect(stage).toHaveAttribute('data-card', 'slot');
     // Moved left only as far as the 264 px card and its 16 px gap need.
     expect(stage.style.paddingRight).toBe('13px');
+    expect(hint()).toBeInTheDocument();
     const before = stageBox();
     act(() => useSelection.getState().select('title'));
     expect(card()).toHaveAccessibleName('Title settings');
+    expect(hint()).toBeNull();
     expect(stageBox()).toEqual(before);
   });
 
