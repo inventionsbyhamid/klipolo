@@ -871,6 +871,25 @@ fn music_crossing_the_new_end_is_cut_there_with_its_fade_out() {
 }
 
 #[test]
+fn music_left_past_the_new_end_goes() {
+    // A bed from 1:40 to 3:20 of a 3:37.5 video doesn't reach the end. Keeping only 0–25.5 s leaves it past the new
+    // end, so it goes in the cut's own step, and the proposal names it.
+    let opts = MusicOpts {
+        start_us: secs(100.0),
+        end_us: Some(secs(200.0)),
+        ..MusicOpts::default()
+    };
+    let p = with_music(&video(217.5), "song", opts);
+    let bed = music(&p)[0].id.clone();
+    assert_eq!(spans(&music(&p)), [(100.0, 200.0)]);
+    let ops = with_music_refit(&p, vec![cut(25.5, 217.5)]).unwrap();
+    let short = apply_ops(&p, &ops).unwrap();
+    assert_eq!(video_duration(&short.timeline), secs(25.5));
+    assert!(music(&short).is_empty(), "{:?}", spans(&music(&short)));
+    assert_eq!(tx(ops).review(&p).unwrap().removals.items, [bed]);
+}
+
+#[test]
 fn a_refit_leaves_hand_set_fades_on_pieces_it_does_not_move() {
     // A 5 s fade-in set by hand on the first 8 s piece: more than half of it, which a person may choose.
     let mut p = with_music(&video(30.0), "loop", MusicOpts::default());
