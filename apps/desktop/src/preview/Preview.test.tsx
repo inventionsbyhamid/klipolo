@@ -70,6 +70,20 @@ describe('the preview’s header', () => {
     expect(screen.getByRole('button', { name: 'Safe area: Instagram Reels' })).toHaveAttribute('data-on');
   });
 
+  it('the safe area button keeps the keyboard focus as the format changes', () => {
+    useUi.setState({ previewFormat: 'portrait' });
+    renderWithProviders(<Preview />);
+    const button = screen.getByRole('button', { name: 'Safe area: Off' });
+    act(() => button.focus());
+    act(() => useUi.setState({ previewFormat: 'landscape' }));
+    expect(screen.getByRole('button', { name: 'Safe area' })).toBe(button);
+    expect(button).toHaveFocus();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    act(() => useUi.setState({ previewFormat: 'portrait' }));
+    expect(button).toHaveFocus();
+    expect(button).not.toHaveAttribute('aria-disabled');
+  });
+
   it('Off from the menu hides the guide, and the next drag shows the area chosen last', async () => {
     useUi.setState({ previewFormat: 'portrait', safeArea: 'shorts', lastSafeArea: 'shorts' });
     renderWithProviders(<Preview />);

@@ -1,4 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
+import { useState } from 'react';
 import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '../../design/Menu';
 import { Icon } from '../../layout/Icon';
 import { SAFE_AREA_IDS, type SafeAreaId } from '../../lib/safeAreas';
@@ -7,27 +8,16 @@ import { useShownFormat } from '../editor/formats';
 
 /**
  * The 9:16 safe area, in the preview's header: off, every platform's combined area, or one app's, drawn over the video
- * (`SafeArea`). Its menu is there while the preview shows 9:16; elsewhere the button is off and says where it shows,
- * and the choice waits for 9:16. Kept on this Mac; never in the project or an export.
+ * (`SafeArea`). Its menu opens while the preview shows 9:16; elsewhere the same button is off and says where it shows
+ * (so a format change never takes the keyboard's focus off it), and the choice waits for 9:16. Kept on this Mac; never
+ * in the project or an export.
  */
 export function SafeAreaMenu() {
   const { t } = useLingui();
   const portrait = useShownFormat() === 'portrait';
   const area = useUi((s) => s.safeArea);
   const setSafeArea = useUi((s) => s.setSafeArea);
-  if (!portrait)
-    return (
-      // Focusable, so its tooltip says why it's off.
-      <button
-        type="button"
-        className="icon-btn"
-        aria-label={t({ id: 'safeArea.label', message: 'Safe area' })}
-        title={t({ id: 'preview.safeArea.off', message: 'Shows in 9:16' })}
-        aria-disabled
-      >
-        <Icon name="safe" />
-      </button>
-    );
+  const [open, setOpen] = useState(false);
   const names: Record<SafeAreaId, string> = {
     off: t({
       id: 'safeArea.off',
@@ -45,22 +35,32 @@ export function SafeAreaMenu() {
   };
   const name = names[area];
   return (
-    <Menu>
+    <Menu open={portrait && open} onOpenChange={(next) => setOpen(portrait && next)}>
       <MenuTrigger asChild>
         <button
           type="button"
           className="icon-btn"
-          aria-label={t({
-            id: 'safeArea.menu',
-            message: `Safe area: ${name}`,
-            comment: 'The safe area menu button; {name} is the choice shown, e.g. Off or TikTok',
-          })}
-          title={t({
-            id: 'safeArea.tooltip',
-            message: `Safe area: ${name}. Show where each app's buttons cover the video.`,
-            comment: 'Tooltip of the safe area menu button: the choice shown ({name}), then what the menu does',
-          })}
-          data-on={area !== 'off' || undefined}
+          aria-label={
+            portrait
+              ? t({
+                  id: 'safeArea.menu',
+                  message: `Safe area: ${name}`,
+                  comment: 'The safe area menu button; {name} is the choice shown, e.g. Off or TikTok',
+                })
+              : t({ id: 'safeArea.label', message: 'Safe area' })
+          }
+          title={
+            portrait
+              ? t({
+                  id: 'safeArea.tooltip',
+                  message: `Safe area: ${name}. Show where each app's buttons cover the video.`,
+                  comment: 'Tooltip of the safe area menu button: the choice shown ({name}), then what the menu does',
+                })
+              : t({ id: 'preview.safeArea.off', message: 'Shows in 9:16' })
+          }
+          // Focusable while off, so its tooltip says why.
+          aria-disabled={!portrait || undefined}
+          data-on={(portrait && area !== 'off') || undefined}
         >
           <Icon name="safe" />
         </button>
