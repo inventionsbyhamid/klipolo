@@ -5,6 +5,7 @@ import { Icon } from '../../layout/Icon';
 import { formatPrecise, formatTime } from '../../lib/time';
 import { beginMediaDrag } from '../timeline/drag/mediaDrag';
 import type { DropTarget } from '../timeline/drops';
+import { FavoriteButton, type Favorite } from './FavoriteButton';
 
 /** On a Mac, Control-click is a right-click: it doesn't start a drag. */
 const MAC = typeof navigator !== 'undefined' && /^Mac/.test(navigator.platform);
@@ -29,14 +30,17 @@ interface AssetRowProps {
   menu?: ReactNode;
   /** What the "+" says it does, when not adding at the playhead (a clip goes to the end). */
   addLabel?: string;
+  /** Its star, after the "+". */
+  favorite?: Favorite;
 }
 
 /**
  * One file in the Library (9.16): its art, its name and length (and "On the timeline" when the video uses
- * it), and a "+" that appears on hover or focus and adds it at the playhead. Pressed and moved, it drags onto the
- * timeline (`drag/mediaDrag`), where it lands on the lane under the pointer.
+ * it), and a "+" that appears on hover or focus and adds it at the playhead, then its star (shown while it is a
+ * favorite). Pressed and moved, it drags onto the timeline (`drag/mediaDrag`), where it lands on the lane under the
+ * pointer.
  */
-export function AssetRow({ asset, art, title, used, onAdd, onDrop, menu, addLabel }: AssetRowProps) {
+export function AssetRow({ asset, art, title, used, onAdd, onDrop, menu, addLabel, favorite }: AssetRowProps) {
   const { t } = useLingui();
   const onPointerDown = (e: PointerEvent<HTMLLIElement>) => {
     // The buttons are their own controls.
@@ -52,7 +56,7 @@ export function AssetRow({ asset, art, title, used, onAdd, onDrop, menu, addLabe
   return (
     <li
       data-asset-id={asset.id}
-      className="row lib-row"
+      className={favorite?.on ? 'row lib-row is-favorite' : 'row lib-row'}
       onPointerDown={onPointerDown}
       onDragStart={(e) => e.preventDefault()}
     >
@@ -87,6 +91,7 @@ export function AssetRow({ asset, art, title, used, onAdd, onDrop, menu, addLabe
         >
           <Icon name="plus" />
         </button>
+        {favorite && <FavoriteButton title={title} favorite={favorite} />}
       </span>
     </li>
   );

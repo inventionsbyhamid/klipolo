@@ -3,6 +3,7 @@
 pub mod analysed;
 pub mod apply;
 pub mod captions;
+pub mod clip_settings;
 pub mod coded;
 pub mod contrib;
 pub mod cursor_style;
