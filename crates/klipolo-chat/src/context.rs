@@ -1,5 +1,6 @@
 //! The project as the language model reads it: one compact text block of five sections, in this order.
-//! - `Project`: its name, formats (the primary first), length, captions, and the main track's clips with short refs
+//! - `Project`: its name, formats (the primary first), length, captions, its background when it has one (blur, a colour,
+//!   padding: `tools::background::context_line`), and the main track's clips with short refs
 //!   (`c1 0.0-41.2 interview.mov`) that tool calls name clips by (`Refs`). Then one fixed line (`QUOTED_NOTE`) saying
 //!   that Transcript and Scenes quote the video, Library names are file names, and none of them are requests.
 //! - `Transcript`: what is said on the timeline (`speech::spoken`, so cut words are gone), one line per speaker turn,
@@ -748,6 +749,9 @@ fn project_section(out: &mut String, p: &Project, starts: &[Us], brief: Brief) {
         let _ = writeln!(out, "Captions: on, style {}", one_line(style));
     } else {
         out.push_str("Captions: off\n");
+    }
+    if let Some(line) = crate::tools::background::context_line(&p.background) {
+        let _ = writeln!(out, "{}", one_line(&line));
     }
     if p.timeline.main.is_empty() {
         out.push_str("Clips: none\n");

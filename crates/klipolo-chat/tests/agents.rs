@@ -10,7 +10,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use klipolo_chat::context::QUOTED_NOTE;
-use klipolo_chat::tools::{PictureSize, Position, TextPreset};
+use klipolo_chat::tools::{BackgroundChoice, PictureSize, Position, TextPreset};
 use klipolo_chat::{
     ChatContext, FullTranscript, Library, LibraryItem, MediaKind, Moment, SceneLog, SpeakerTurn,
     ToolCall, View, build_context, full_transcript, timeline_key, tools,
@@ -491,6 +491,15 @@ fn every_call() -> Vec<(ToolCall, bool)> {
             ToolCall::SetCaptions {
                 on: true,
                 style: Some(BuiltinCaptionStyle::Karaoke),
+            },
+            false,
+        ),
+        (
+            ToolCall::SetBackground {
+                kind: Some(BackgroundChoice::Blur),
+                color: None,
+                color_end: None,
+                padding: None,
             },
             false,
         ),

@@ -10,8 +10,8 @@
 use std::collections::BTreeSet;
 
 use klipolo_chat::tools::{
-    CHAT_CAPTION_STYLES, FunctionCall, Moment, PictureSize, Position, Problem, TextPreset,
-    ToolCall, tools,
+    BackgroundChoice, CHAT_CAPTION_STYLES, FunctionCall, Moment, PictureSize, Position, Problem,
+    TextPreset, ToolCall, tools,
 };
 use klipolo_model::captions::styles::{BuiltinCaptionStyle, CaptionStyles};
 use klipolo_model::ops::Edge;
@@ -201,6 +201,7 @@ fn every_tool_schema_is_strict() {
             "addImage",
             "makeSticker",
             "makeTitleCard",
+            "setBackground",
             "undo",
             "askUser",
             "cannotDo",
@@ -242,6 +243,10 @@ fn every_tool_schema_is_strict() {
             "makeSticker.position",
             "makeTitleCard.atSec",
             "makeTitleCard.durationSec",
+            "setBackground.color",
+            "setBackground.colorEnd",
+            "setBackground.kind",
+            "setBackground.padding",
         ]
     );
 }
@@ -462,6 +467,15 @@ fn parses_each_tool_from_spike_shaped_calls() {
                 prompt: "Lisbon trams".into(),
                 at_us: None,
                 duration_us: None,
+            }],
+        ),
+        (
+            "put a blurred background behind it",
+            vec![SetBackground {
+                kind: Some(BackgroundChoice::Blur),
+                color: None,
+                color_end: None,
+                padding: None,
             }],
         ),
     ];
@@ -1228,5 +1242,6 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
     assert!(prompt_tokens <= 900, "prompt {prompt_tokens} tokens");
-    assert!(tools_tokens <= 2_700, "tools {tools_tokens} tokens");
+    // 2,890 measured with setBackground (every value nullable and described).
+    assert!(tools_tokens <= 2_900, "tools {tools_tokens} tokens");
 }

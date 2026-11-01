@@ -1,10 +1,10 @@
 //! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's
 //! context was built from, out as edits.
-//! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, a trim that makes a clip longer, and the
-//!   media: `addMusic`, `addSound`, `addText`, `addImage` and `makeTitleCard`'s title) are one `Transaction` the app
-//!   applies at once: one undo step. An addition is judged by what its part does, not by its tool: one that takes
-//!   something away (the model's own `removals`, as a format dropped with what was placed in it) is compiled again with
-//!   the removals and proposed.
+//! - Additions (`setFormat`, `setCaptions`, `setBackground`, `fixCaptionWords`, `splitAt`, a trim that makes a clip
+//!   longer, and the media: `addMusic`, `addSound`, `addText`, `addImage` and `makeTitleCard`'s title) are one
+//!   `Transaction` the app applies at once: one undo step. An addition is judged by what its part does, not by its
+//!   tool: one that takes something away (the model's own `removals`, as a format dropped with what was placed in it)
+//!   is compiled again with the removals and proposed.
 //! - Removals (`cutRange`, `keepOnly`, `removeSilences`, `removeFillers`, a trim that makes a clip shorter) are one
 //!   `Proposal`: a `Transaction` for the project as the additions leave it, judged by the model's own review (what it
 //!   takes away, on the timeline), applied as one undo step when the person says so.
@@ -36,6 +36,7 @@
 //! (both), `media` (the library's music, sounds, words and pictures, and the pictures to draw), `map`.
 
 mod additions;
+mod background;
 mod map;
 mod media;
 mod removals;
@@ -548,6 +549,7 @@ impl Compiler<'_> {
                 ToolCall::SplitAt { .. }
                 | ToolCall::SetFormat { .. }
                 | ToolCall::SetCaptions { .. }
+                | ToolCall::SetBackground { .. }
                 | ToolCall::FixCaptionWords { .. } => {
                     (self.addition(&adding.work, call), Removal::Moved(call))
                 }
@@ -687,6 +689,17 @@ impl Compiler<'_> {
                 keep_others,
             } => Ok(additions::set_format(work, *format, *keep_others)),
             ToolCall::SetCaptions { on, style } => Ok(additions::set_captions(work, *on, *style)),
+            ToolCall::SetBackground {
+                kind,
+                color,
+                color_end,
+                padding,
+            } => Ok(background::set_background(
+                work,
+                *kind,
+                (color.as_deref(), color_end.as_deref()),
+                *padding,
+            )),
             ToolCall::FixCaptionWords { find, replace } => {
                 additions::fix_caption_words(self, work, find, replace)
             }

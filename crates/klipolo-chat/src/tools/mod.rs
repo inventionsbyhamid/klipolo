@@ -18,9 +18,11 @@
 //! Adding a tool is one `ToolCall` variant and one entry in `TOOLS`, where its name, description, parameters and reader
 //! sit together; the tests check every schema is strict and every reader reads the fields its schema lists. Splitting
 //! by concern: `schema` (the pieces of a schema, and the words a tool takes), `args` (a call's arguments read field by
-//! field), `error` (why a call couldn't be read), `media` (the media tools and their words).
+//! field), `error` (why a call couldn't be read), `media` (the media tools and their words), `background` (the
+//! background tool and its words).
 
 mod args;
+pub mod background;
 mod error;
 pub mod media;
 mod schema;
@@ -35,6 +37,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use args::{Args, kind};
+pub use background::BackgroundChoice;
 pub use error::{Problem, ToolError};
 pub use media::{PictureSize, Position, TextPreset};
 use schema::{boolean, list, nullable_number, nullable_words, object, seconds, string, words};
@@ -87,6 +90,14 @@ pub enum ToolCall {
     SetCaptions {
         on: bool,
         style: Option<BuiltinCaptionStyle>,
+    },
+    /// Set what shows behind the video where it doesn't fill the frame, and the inset round it (`padding`, a share of
+    /// the frame's shorter side); None keeps each as the project has it.
+    SetBackground {
+        kind: Option<BackgroundChoice>,
+        color: Option<String>,
+        color_end: Option<String>,
+        padding: Option<f64>,
     },
     /// Make every shown word matching `find` read `replace` in captions and the transcript.
     FixCaptionWords { find: String, replace: String },
@@ -191,6 +202,7 @@ impl ToolCall {
             ToolCall::SplitAt { .. } => "splitAt",
             ToolCall::SetFormat { .. } => "setFormat",
             ToolCall::SetCaptions { .. } => "setCaptions",
+            ToolCall::SetBackground { .. } => "setBackground",
             ToolCall::FixCaptionWords { .. } => "fixCaptionWords",
             ToolCall::FindMoments { .. } => "findMoments",
             ToolCall::FollowSubject { .. } => "followSubject",
@@ -227,6 +239,7 @@ impl ToolCall {
             | ToolCall::RemoveFillers
             | ToolCall::SetFormat { .. }
             | ToolCall::SetCaptions { .. }
+            | ToolCall::SetBackground { .. }
             | ToolCall::FixCaptionWords { .. }
             | ToolCall::FollowSubject { .. }
             | ToolCall::BlurObjects { .. }
@@ -547,6 +560,7 @@ const TOOLS: &[Tool] = &[
     media::ADD_IMAGE,
     media::MAKE_STICKER,
     media::MAKE_TITLE_CARD,
+    background::SET_BACKGROUND,
     Tool {
         name: "undo",
         description: "Undo the last change.",
