@@ -29,7 +29,7 @@ export function CaptionFileChoice() {
   return (
     <div className="ex-captions">
       <span className="ex-switch">
-        <Toggle id={id} checked={save} onChange={(on) => setCaptionFile({ save: on })} />
+        <Toggle id={id} checked={save} onCheckedChange={(on) => setCaptionFile({ save: on })} />
         <label htmlFor={id}>Also save captions as a file</label>
       </span>
       <div className="seg" role="radiogroup" aria-label="Captions file type" onKeyDown={onKeyDown}>
