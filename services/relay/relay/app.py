@@ -5,6 +5,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import anyio
 from fastapi import FastAPI
 
 from relay import align, db, devices, proxy
@@ -58,6 +59,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.in_flight = proxy.InFlight()
     app.state.video_frames = proxy.VideoFrames()
+    # SAM's copies are made at most two at once.
+    app.state.sam_videos = anyio.CapacityLimiter(2)
     app.state.aligner = align.MmsAligner(settings.align_threads)
     app.state.align_in_flight = proxy.InFlight(
         per_device=align.MAX_REQUESTS_PER_DEVICE,

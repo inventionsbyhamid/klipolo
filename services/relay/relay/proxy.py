@@ -27,10 +27,10 @@ the most it could cost: for Spark, one input token per request byte plus its
 whole max_output_tokens (set to 8192 when missing, at most 16384) at the
 output price, plus $0.75 unless the call is text only (any image or
 reasoning item, media or files by link or id, stored items by reference, or
-any type the relay doesn't know all count as media); for SAM on a video, the
-frames its upload holds (at least 50), counted from the MP4's index as it went
-up through the relay (`mp4`), so SAM is refused on a video the relay didn't
-count; for transcription, the
+any type the relay doesn't know all count as media); for SAM, the frames of the
+videos the relay made for it (`POST sam/videos`: the upload decoded and written
+again by the relay, `samvideo`), at least 50 a video, and SAM is refused on any
+other video; for transcription, the
 audio's data at 32,000 bytes a second, the lowest rate Meta takes; for Muse
 Image, two images ($0.02), the most a call may ask for. The call
 is refused with 402 when the spend alone leaves the device or the relay no
@@ -52,9 +52,16 @@ client that stops reading for 60 s is treated as gone the same way. If a
 charge can't be written, capped calls are refused (503) until a quick retry
 at admission writes it.
 
+SAM is held to what the relay made: its requests may name video only in
+`input`, only by a file id the relay made for that device, with no `fps` and
+no links but data URLs. If Meta ever bills more frames than were reserved, SAM
+is turned off for the device's access code (logged) until the owner turns it
+back on (`admin enable-sam`). SAM also has its own daily cap
+(SAM_DAILY_CAP_USD), on top of the device and global caps.
+
 Nothing from a proxied request is stored except the ledger row and, in
-memory only, an uploaded video's frame count by device and file id; request or
-response headers and bodies are never logged.
+memory only, the frames of each video the relay made for SAM, by device and
+file id; request or response headers and bodies are never logged.
 """
 
 import json
@@ -62,6 +69,7 @@ import logging
 import math
 import re
 import sqlite3
+import tempfile
 import time
 import urllib.parse
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
@@ -83,7 +91,7 @@ from relay.config import Settings
 from relay.deps import AppSettings, Conn
 from relay.devices import Device, has_relay_ai
 from relay.errors import RelayError, error_response
-from relay.mp4 import FrameCounter
+from relay import samvideo
 from relay.pricing import (
     DEFAULT_MAX_OUTPUT_TOKENS,
     IMAGES_KEY,
@@ -161,6 +169,15 @@ NOT_ENOUGH_CREDIT_MESSAGE = (
     "This device does not have enough Klipolo credit left for this request. Add your own Meta key in Settings."
 )
 GLOBAL_BUDGET_MESSAGE = "Klipolo's shared AI credit is used up for now. Add your own Meta key in Settings."
+SAM_TODAY_MESSAGE = (
+    "Klipolo's video tracking is used up for today. Try again tomorrow, or add your own Meta key in Settings."
+)
+SAM_OFF_MESSAGE = "Video tracking is off for this access code. Add your own Meta key in Settings to use it."
+SAM_VIDEO_MESSAGE = "Video tracking works on a video Klipolo's relay prepared for this device. Prepare it again."
+# How long making SAM's copy of an upload may take, in all.
+SAM_VIDEO_TIMEOUT_S = 60.0
+# Meta may bill a frame or two more than the copy holds; past this share over the reservation, SAM is turned off.
+SAM_OVERBILL_MARGIN = 1.02
 DEVICE_BUSY_MESSAGE = "Other AI requests from this device are still running. Try again when they finish."
 GLOBAL_BUSY_MESSAGE = "Klipolo AI is busy. Try again in a moment."
 BUSY_RETRY_AFTER_S = 5
@@ -193,6 +210,8 @@ class InFlight:
         self._count = 0
         self._reserved_by_device: dict[str, float] = {}
         self._reserved_total = 0.0
+        # What SAM calls in flight have reserved, for SAM's daily cap.
+        self.sam_reserved = 0.0
         # Admissions run one at a time, so two can't both claim the same room.
         self.admission = anyio.Lock()
         # Charges that could not be written. While any is held, capped calls
@@ -248,16 +267,21 @@ class Slot:
         self.owner = owner
         self.device_id = device_id
         self.reserved = 0.0
+        self.sam_reserved = 0.0
         self._released = False
 
-    def reserve(self, amount: float) -> None:
+    def reserve(self, amount: float, *, sam: bool = False) -> None:
         self.owner._reserve(self.device_id, amount)
         self.reserved += amount
+        if sam:
+            self.owner.sam_reserved += amount
+            self.sam_reserved += amount
 
     def release(self) -> None:
         if not self._released:
             self._released = True
             self.owner._release(self.device_id, self.reserved)
+            self.owner.sam_reserved = max(self.owner.sam_reserved - self.sam_reserved, 0.0)
 
 
 def relay_device(device: Device, conn: Conn, settings: AppSettings) -> sqlite3.Row:
@@ -285,7 +309,7 @@ def _spend(conn: sqlite3.Connection, device_id: str) -> tuple[float, float]:
     return (math.inf if row is None else row["spent_usd"]), total
 
 
-async def admit(conn: sqlite3.Connection, slot: Slot, settings: Settings, amount: float) -> None:
+async def admit(conn: sqlite3.Connection, slot: Slot, settings: Settings, amount: float, *, sam: bool = False) -> None:
     """Reserve `amount` for the call, or refuse it when the device or the relay
     has no room for it on top of what is spent and what calls in flight have
     reserved: 402 when the spend alone leaves no room, 429 when the calls in
@@ -312,7 +336,12 @@ async def admit(conn: sqlite3.Connection, slot: Slot, settings: Settings, amount
         device_reserved, total_reserved = in_flight.reserved(slot.device_id)
         spent, total = await run_in_threadpool(_spend, conn, slot.device_id)
         _check_room(spent, device_reserved, total, total_reserved, amount, settings)
-        slot.reserve(amount)
+        if sam:
+            # SAM's own daily cap, on top: what it cost today and what its calls in flight hold.
+            today = await run_in_threadpool(_sam_today, conn)
+            if today + in_flight.sam_reserved + amount > settings.sam_daily_cap_usd:
+                raise RelayError(402, "budget", SAM_TODAY_MESSAGE)
+        slot.reserve(amount, sam=sam)
 
 
 def _no_room(used: float, cap: float, amount: float) -> bool:
@@ -474,6 +503,7 @@ async def charge(settings: Settings, slot: Slot, meter: Meter, candidates: list[
         logger.warning("Could not price Meta's usage for %s, charging the reservation", meter.endpoint, exc_info=True)
         usage, cost = meter.reservation()
     entry = Charge(slot.device_id, meter.endpoint, meter.model, usage, cost)
+    await _check_sam_billing(settings, slot, meter, usage)
     try:
         await anyio.to_thread.run_sync(record_charge, settings.db_path, entry)
     except Exception:
@@ -490,6 +520,27 @@ async def charge(settings: Settings, slot: Slot, meter: Meter, candidates: list[
         meter.model,
         " (reservation)" if usage.get("reserved") else "",
     )
+
+
+async def _check_sam_billing(settings: Settings, slot: Slot, meter: Meter, usage: Mapping[str, Any]) -> None:
+    """The breaker: Meta billing more frames than were reserved means the relay's
+    count was wrong somewhere, so SAM goes off for the device's access code."""
+    if meter.model != SAM_MODEL or not meter.has_video or usage.get("reserved"):
+        return
+    billed = usage.get("video_frames_processed")
+    reserved = max(meter.video_frames, SAM_MIN_FRAMES)
+    if not isinstance(billed, int | float) or billed <= reserved * SAM_OVERBILL_MARGIN:
+        return
+    logger.error(
+        "Meta billed %s SAM frames against %s reserved for device %s: SAM is off for its code",
+        billed,
+        reserved,
+        slot.device_id[:8],
+    )
+    try:
+        await anyio.to_thread.run_sync(_turn_sam_off, settings.db_path, slot.device_id)
+    except Exception:
+        logger.exception("Could not turn SAM off for device %s", slot.device_id[:8])
 
 
 @dataclass
@@ -528,8 +579,9 @@ async def create_response(request: Request, device: RelayDevice, conn: Conn, set
             # relay reads it to its final usage.
             raise RelayError(400, "unsupported", "SAM video calls must stream through the relay.")
         frames = 0
-        if model == SAM_MODEL and has_video:
-            frames = _sam_frames(request.app.state.video_frames, device["device_id"], inputs)
+        if model == SAM_MODEL:
+            await run_in_threadpool(_check_sam_on, conn, device)
+            frames = _sam_frames(request.app.state.video_frames, device["device_id"], payload)
         meter = Meter(
             "responses",
             model,
@@ -556,21 +608,45 @@ async def upload_file(request: Request, device: RelayDevice, conn: Conn, setting
         headers = {"content-type": content_type}
         if declared is not None:
             headers["content-length"] = str(declared)
-        counter = FrameCounter()
-        frames: VideoFrames = request.app.state.video_frames
-
-        def remember(body: bytes) -> None:
-            # A video's frames, by the id Meta gave it, for a SAM call on it later.
-            file_id = _uploaded_id(body)
-            if file_id is not None and counter.frames is not None:
-                frames.remember(device["device_id"], file_id, counter.frames)
-
-        # Streamed: an upload is never held whole in memory; its first bytes are read for its frames as they pass.
-        return Call(
-            "POST", "files", content=_counted(_limited_stream(request, limit), counter), headers=headers, on_success=remember
-        )
+        # Streamed: an upload is never held whole in memory.
+        return Call("POST", "files", content=_limited_stream(request, limit), headers=headers)
 
     return await _proxy(request, device, conn, settings, prepare)
+
+
+@router.post("/meta/v1/sam/videos")
+async def make_sam_video(request: Request, device: RelayDevice, conn: Conn, settings: AppSettings) -> Response:
+    """An upload meant for SAM, as the raw video: decoded and written again by
+    the relay (`samvideo`), uploaded to Meta, and its frames kept for a SAM call
+    on it by this device. Meta's answer (with the file id) is passed back."""
+    _check_model("responses", SAM_MODEL, settings)
+    await run_in_threadpool(_check_sam_on, conn, device)
+    device_id = device["device_id"]
+    known: VideoFrames = request.app.state.video_frames
+    with tempfile.TemporaryDirectory(prefix="klipolo-sam-") as work:
+        src, out = Path(work) / "upload", Path(work) / "sam.mp4"
+
+        async def prepare() -> Call:
+            _declared_length(request, MAX_UPLOAD_BYTES, "The file is larger than 1 GiB.")
+            async with await anyio.open_file(src, "wb") as file:
+                async for chunk in _limited_stream(request, MAX_UPLOAD_BYTES):
+                    await file.write(chunk)
+            async with request.app.state.sam_videos:
+                frames = await samvideo.make(src, out, SAM_VIDEO_TIMEOUT_S)
+            data = await anyio.Path(out).read_bytes()
+
+            def remember(body: bytes) -> None:
+                file_id = _uploaded_id(body)
+                if file_id is not None:
+                    known.remember(device_id, file_id, frames)
+
+            files = {
+                "purpose": (None, b"user_data", "text/plain"),
+                "file": ("video.mp4", data, "video/mp4"),
+            }
+            return Call("POST", "files", files=files, on_success=remember)
+
+        return await _proxy(request, device, conn, settings, prepare)
 
 
 # Reading or deleting a file costs nothing, so it works over the cap.
@@ -587,6 +663,8 @@ async def read_file(
 async def delete_file(
     file_id: str, request: Request, device: RelayDevice, conn: Conn, settings: AppSettings
 ) -> Response:
+    # A video the relay made for SAM is forgotten with it.
+    request.app.state.video_frames.forget(device["device_id"], file_id)
     return await _proxy(request, device, conn, settings, _file_call("DELETE", file_id), capped=False)
 
 
@@ -674,7 +752,8 @@ async def _proxy(
         call = await prepare()
         if call.meter is not None:
             # The call's worst case, held until its charge is written.
-            await admit(conn, slot, settings, call.meter.reservation()[1])
+            sam = call.meter.model == SAM_MODEL
+            await admit(conn, slot, settings, call.meter.reservation()[1], sam=sam)
         response = await _forward(request, settings, call, slot, params)
         # A streamed response frees its slot when the stream ends.
         handed_off = isinstance(response, MeteredStream)
@@ -1136,13 +1215,6 @@ async def _limited_stream(request: Request, limit: int) -> AsyncIterator[bytes]:
         yield chunk
 
 
-async def _counted(chunks: AsyncIterator[bytes], counter: FrameCounter) -> AsyncIterator[bytes]:
-    """`chunks` as they are, each shown to `counter` on the way."""
-    async for chunk in chunks:
-        counter.feed(chunk)
-        yield chunk
-
-
 def _uploaded_id(body: bytes) -> str | None:
     """The file id in Meta's answer to an upload."""
     try:
@@ -1154,44 +1226,96 @@ def _uploaded_id(body: bytes) -> str | None:
 
 
 class VideoFrames:
-    """The frames of each video a device uploaded through the relay, by file
-    id, in memory: the most recent `MAX_VIDEOS`. A relay that restarted has
-    none, and SAM on a video uploaded before is refused (upload it again)."""
+    """The frames of each video the relay made for SAM, by device and file id,
+    in memory: each device keeps its `PER_DEVICE` newest, so one device's
+    uploads never push out another's, and `MAX_DEVICES` devices at most. A relay
+    that restarted has none: SAM on a video made before is refused (made again).
+    """
 
-    MAX_VIDEOS = 10_000
+    PER_DEVICE = 32
+    MAX_DEVICES = 10_000
 
     def __init__(self) -> None:
-        self._frames: dict[tuple[str, str], int] = {}
+        self._devices: dict[str, dict[str, int]] = {}
 
     def remember(self, device_id: str, file_id: str, frames: int) -> None:
-        key = (device_id, file_id)
-        self._frames.pop(key, None)
-        self._frames[key] = frames
-        while len(self._frames) > self.MAX_VIDEOS:
-            del self._frames[next(iter(self._frames))]
+        mine = self._devices.pop(device_id, {})
+        mine.pop(file_id, None)
+        mine[file_id] = frames
+        while len(mine) > self.PER_DEVICE:
+            del mine[next(iter(mine))]
+        self._devices[device_id] = mine
+        while len(self._devices) > self.MAX_DEVICES:
+            del self._devices[next(iter(self._devices))]
 
     def frames(self, device_id: str, file_id: str) -> int | None:
-        return self._frames.get((device_id, file_id))
+        return self._devices.get(device_id, {}).get(file_id)
+
+    def forget(self, device_id: str, file_id: str) -> None:
+        self._devices.get(device_id, {}).pop(file_id, None)
 
 
-def _sam_frames(known: VideoFrames, device_id: str, inputs: Any) -> int:
-    """What SAM can bill for the videos in `inputs`: each one's frames, at least
-    the 50-frame minimum. A video sent by link, or one this device didn't upload
-    through the relay, is refused: its frames are unknown."""
+_VIDEO_PARTS = ("input_video", "input_file")
+
+
+def _sam_frames(known: VideoFrames, device_id: str, payload: dict[str, Any]) -> int:
+    """What SAM can bill for `payload`: each video's frames, at least the 50-frame
+    minimum. Video may only be in `input`, as `{"type", "file_id"}` naming a video
+    the relay made for this device; a file id on any other part, an `fps`, or a
+    link that isn't a data URL anywhere is refused: its cost would be unknown.
+    """
+
+    def refuse(message: str = SAM_VIDEO_MESSAGE) -> RelayError:
+        return RelayError(400, "unsupported", message)
+
+    for key, value in payload.items():
+        if key != "input" and any(_type(item) in _VIDEO_PARTS for item in _objects(value)):
+            raise refuse("Video tracking takes its video only in input.")
     total = 0
-    for item in _objects(inputs):
-        if _type(item) not in ("input_video", "input_file"):
-            continue
-        file_id = item.get("file_id")
-        frames = known.frames(device_id, file_id) if isinstance(file_id, str) else None
-        if frames is None:
-            raise RelayError(
-                400,
-                "unsupported",
-                "SAM works on a video uploaded through Klipolo's relay. Upload it again, then try again.",
-            )
-        total += max(frames, SAM_MIN_FRAMES)
+    for item in _objects(payload):
+        if "fps" in item:
+            raise refuse("Video tracking sets its own frame rate: leave out fps.")
+        for key, value in item.items():
+            if (key == "url" or key.endswith("_url")) and not (isinstance(value, str) and value.startswith("data:")):
+                raise refuse("Video tracking takes no links: send the picture itself.")
+        if _type(item) in _VIDEO_PARTS:
+            file_id = item.get("file_id")
+            frames = known.frames(device_id, file_id) if isinstance(file_id, str) else None
+            if set(item) - {"type", "file_id"} or frames is None:
+                raise refuse()
+            total += max(frames, SAM_MIN_FRAMES)
+        elif "file_id" in item:
+            raise refuse()
     return total
+
+
+def _check_sam_on(conn: sqlite3.Connection, device: sqlite3.Row) -> None:
+    """Refuse SAM for a device whose access code has SAM turned off."""
+    row = conn.execute("SELECT sam_off FROM codes WHERE code = ?", (device["code"],)).fetchone()
+    if row is not None and row["sam_off"]:
+        raise RelayError(403, "sam_off", SAM_OFF_MESSAGE)
+
+
+def _turn_sam_off(db_path: Path, device_id: str) -> None:
+    """SAM off for every device on `device_id`'s access code."""
+    conn = db.connect(db_path)
+    try:
+        with db.transaction(conn):
+            conn.execute(
+                "UPDATE codes SET sam_off = 1 WHERE code = (SELECT code FROM devices WHERE device_id = ?)",
+                (device_id,),
+            )
+    finally:
+        conn.close()
+
+
+def _sam_today(conn: sqlite3.Connection) -> float:
+    """What SAM has cost today (UTC), across every device."""
+    today = datetime.now(UTC).date().isoformat()
+    row = conn.execute(
+        "SELECT COALESCE(SUM(cost_usd), 0) FROM ledger WHERE model = ? AND at >= ?", (SAM_MODEL, today)
+    ).fetchone()
+    return float(row[0])
 
 
 def _json_object(raw: bytes) -> dict[str, Any]:

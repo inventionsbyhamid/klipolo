@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from os import PathLike
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 _BUSY_TIMEOUT_S = 10.0
 
 _SCHEMA = (
@@ -111,4 +111,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         if _user_version(conn) < 1:
             for statement in _SCHEMA:
                 conn.execute(statement)
+        if _user_version(conn) < 2:
+            # SAM turned off for a code by the relay's breaker, until the owner turns it back on.
+            conn.execute("ALTER TABLE codes ADD COLUMN sam_off INTEGER NOT NULL DEFAULT 0")
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")

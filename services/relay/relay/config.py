@@ -26,6 +26,8 @@ class Settings:
     align_threads: int
     meta_api_key: str = field(default="", repr=False)
     allowed_models: frozenset[str] = frozenset(DEFAULT_ALLOWED_MODELS.split(","))
+    # SAM's own cap on what it may cost in a day (UTC), across every device.
+    sam_daily_cap_usd: float = 5.0
     # Load the alignment model at startup instead of on the first request.
     align_warmup: bool = False
 
@@ -60,6 +62,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         db_path=Path(env.get("RELAY_DB_PATH", "./data/relay.db")),
         device_cap_usd=_number(env, "DEVICE_CAP_USD", "2.00", float, 0),
         global_cap_usd=_number(env, "GLOBAL_CAP_USD", "40.00", float, 0),
+        sam_daily_cap_usd=_number(env, "SAM_DAILY_CAP_USD", "5.00", float, 0),
         align_minutes_per_device_per_day=_number(
             env, "ALIGN_MINUTES_PER_DEVICE_PER_DAY", "120", float, 0
         ),
