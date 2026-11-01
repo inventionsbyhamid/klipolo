@@ -6,9 +6,10 @@
 //! ("soft-ambient" is "Soft ambient", "lofi" is "lofi.mp3"), then a name holding the words asked for, or held in them
 //! ("lofi" is "lofi-beat.mp3"), when only one does. The last word asked for may be cut short, as Library shows a long
 //! name, when at least `MIN_PREFIX` of its characters are left ("holiday in lis" is "Holiday in Lisbon.jpg"). When no
-//! name fits, a pack item's tags do, whole, read as names are ("boom" and "a boom sound" are the sound tagged boom), again
-//! only when one item has them. "The song" and the like (`is_generic`) are the person's one music file, when they have
-//! exactly one.
+//! name fits, a pack item's tags do: every word asked for, but for words that name no item ("a", "song", "sound"), is one
+//! of its tags' words ("boom" and "a boom sound" are the sound tagged boom; "a soft thud" isn't the chime tagged soft),
+//! again only when one item has them. "The song" and the like (`is_generic`) are the person's one music file, when they
+//! have exactly one.
 
 use klipolo_model::project::Asset;
 
@@ -84,6 +85,11 @@ const GENERIC: [&str; 9] = [
 const FILLER: [&str; 11] = [
     "the", "my", "our", "this", "that", "a", "an", "your", "her", "his", "their",
 ];
+/// Words for a kind of item, not which one ("a boom sound", "a heart sticker"): a tag match leaves them out.
+const KINDS: [&str; 12] = [
+    "sound", "sounds", "sfx", "effect", "effects", "sticker", "stickers", "image", "images",
+    "picture", "pictures", "photo",
+];
 
 /// `name` as names are compared: lowercase, without a file's extension, punctuation read as a space, one space
 /// between words.
@@ -142,7 +148,7 @@ impl Library {
 
     /// The item `asked` names among `kinds`, tried in that order: one whose name reads the same (the person's own over
     /// the pack's when both do), else the one name holding those words or held in them; when no name of any of those
-    /// kinds does, the one item with a tag that reads the same or that `asked` holds whole (`tagged`).
+    /// kinds does, the one item whose tags hold every word asked for that names something (`tagged`).
     pub(crate) fn find(&self, asked: &str, kinds: &[MediaKind]) -> Found<'_> {
         let want = plain(asked);
         if want.is_empty() {
@@ -174,15 +180,23 @@ impl Library {
         self.tagged(&want, kinds)
     }
 
-    /// The item of `kinds` (tried in that order) with a tag that reads as `want` (`plain`) or that `want` holds, whole:
-    /// "a boom sound" holds "boom". More than one such item: all of them, for the person to pick.
+    /// The item of `kinds` (tried in that order) whose tags' words hold each word of `want` (`plain`) that names
+    /// something: "a boom sound" is "boom"; "a soft thud" needs both soft and thud. Words that name nothing ("the
+    /// song", `FILLER`, `GENERIC`, `KINDS`) alone find nothing. More than one such item: all of them, for the person to
+    /// pick.
     fn tagged(&self, want: &str, kinds: &[MediaKind]) -> Found<'_> {
+        let words: Vec<&str> = (want.split(' '))
+            .filter(|w| !FILLER.contains(w) && !GENERIC.contains(w) && !KINDS.contains(w))
+            .collect();
+        if words.is_empty() {
+            return Found::None;
+        }
         for &kind in kinds {
             let found: Vec<&LibraryItem> = (self.of_kind(kind, false).into_iter())
                 .filter(|i| {
-                    (i.tags.iter())
-                        .map(|tag| plain(tag))
-                        .any(|tag| tag == want || holds(want, &tag, false))
+                    let tags: Vec<String> = i.tags.iter().map(|tag| plain(tag)).collect();
+                    let has = |word: &str| tags.iter().any(|tag| tag.split(' ').any(|t| t == word));
+                    words.iter().all(|&w| has(w))
                 })
                 .collect();
             match found.as_slice() {
@@ -252,6 +266,7 @@ mod tests {
                 tagged("Impact", MediaKind::Sound, &["boom", "hit"]),
                 tagged("Thud", MediaKind::Sound, &["hit", "low"]),
                 tagged("Burst", MediaKind::Image, &["boom", "comic"]),
+                tagged("Chime", MediaKind::Sound, &["chime", "soft", "magic"]),
             ],
         };
         let found = |asked: &str| match library.find(asked, &[MediaKind::Sound]) {
@@ -273,6 +288,15 @@ mod tests {
         // A tag is never cut short, and a picture's tag doesn't find a sound.
         assert_eq!(found("boo"), Err(vec![]));
         assert_eq!(found("comic"), Err(vec![]));
+        // Every word left must be a tag word of the one item: one adjective among others picks nothing.
+        assert_eq!(found("a soft crash"), Err(vec![]));
+        // A name in what was asked still comes first.
+        assert_eq!(found("a soft thud"), Ok("Thud"));
+        assert_eq!(found("soft magic"), Ok("Chime"));
+        assert_eq!(found("a soft sound"), Ok("Chime"));
+        // Words that name no item ("the", "song", "sound") alone find nothing.
+        assert_eq!(found("the sound"), Err(vec![]));
+        assert_eq!(found("my song"), Err(vec![]));
     }
 
     #[test]

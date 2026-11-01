@@ -623,6 +623,101 @@ fn a_sound_asked_for_by_a_tag_is_the_pack_sound_tagged_so() {
 }
 
 #[test]
+fn one_tag_word_among_others_picks_nothing() {
+    let p = project();
+    let mut i = inputs(&p, "add a soft thud");
+    let tagged = |name: &str, kind: MediaKind, asset: Asset, tags: &[&str]| LibraryItem {
+        tags: tags.iter().map(|&t| t.to_owned()).collect(),
+        ..item(name, kind, asset, true)
+    };
+    let chime = asset("pack-chime", "audio", "chime.wav", 1.2, (0, 0), true);
+    let ding = asset("pack-ding", "audio", "ding.wav", 0.8, (0, 0), true);
+    let star = asset("pack-star", "image", "star.png", 5.0, (512, 512), false);
+    i.library.items.extend([
+        tagged(
+            "Chime",
+            MediaKind::Sound,
+            chime,
+            &["chime", "bells", "soft", "magic"],
+        ),
+        tagged("Ding", MediaKind::Sound, ding, &["bell", "bright", "alert"]),
+        tagged(
+            "Star",
+            MediaKind::Image,
+            star,
+            &["star", "favourite", "gold"],
+        ),
+    ]);
+    let sound = |name: &str| call("addSound", json!({"name": name, "atSec": [12.0]}));
+    let picture = |file: &str| {
+        call(
+            "addImage",
+            json!({"file": file, "size": null, "position": null, "atSec": 12.0, "durationSec": null}),
+        )
+    };
+    // Only one of the words is a tag: Chime is soft but no thud, Ding bright but no crash, Star gold but no coin.
+    for asked in [
+        sound("a soft thud"),
+        sound("a bright crash"),
+        picture("a gold coin"),
+    ] {
+        let out = compile(&p, &i, &[asked]);
+        assert_eq!(out.additions, None, "{out:?}");
+        assert!(
+            refused_to_model(&out, 0).contains("in Library is called"),
+            "{out:?}"
+        );
+    }
+    // Every word a tag of one item: that item.
+    let out = compile(
+        &p,
+        &i,
+        &[call(
+            "addSound",
+            json!({"name": "a soft magic sound", "atSec": [12.0]}),
+        )],
+    );
+    let tx = out.additions.as_ref().expect("additions");
+    assert_eq!(assets_added(&tx.ops), ["pack-chime"]);
+}
+
+#[test]
+fn the_song_is_the_persons_own_even_when_a_bed_is_tagged_song() {
+    let p = project();
+    let mut i = inputs(&p, "add the song");
+    let upbeat = asset(
+        "pack-upbeat",
+        "audio",
+        "upbeat-loop.wav",
+        60.0,
+        (0, 0),
+        true,
+    );
+    i.library.items.push(LibraryItem {
+        tags: vec!["upbeat".into(), "song".into(), "background".into()],
+        ..item("Upbeat loop", MediaKind::Music, upbeat, true)
+    });
+    for said in ["the song", "my music", "background music"] {
+        let out = compile(
+            &p,
+            &i,
+            &[call(
+                "addMusic",
+                json!({"file": said, "volume": null, "duck": null, "atSec": 0.0}),
+            )],
+        );
+        let music = layers(&applied(&p, &out), TrackKind::Audio);
+        assert!(
+            !music.is_empty()
+                && music
+                    .iter()
+                    .all(|m| m.content.played().unwrap().0 == "lofi"),
+            "{said}"
+        );
+    }
+}
+
+#[test]
 fn an_unknown_name_is_refused_with_what_the_library_has() {
     let p = project();
     let i = inputs(&p, "add a boing");
