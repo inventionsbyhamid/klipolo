@@ -2476,6 +2476,22 @@
   }
 }
 
+/* An effect's or generator's setting: its control, and Reset beside it once it differs from its default. */
+.param-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* A colour with its Opacity, and a point's Across and Down: rows of their own under one setting. */
+.param-rows,
+.param-point {
+  display: grid;
+  gap: var(--space-4);
+}
+
 .field-note {
   margin: 0;
   color: var(--color-ink-soft);
