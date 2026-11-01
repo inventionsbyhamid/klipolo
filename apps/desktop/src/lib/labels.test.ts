@@ -84,10 +84,11 @@ describe('undo labels as message ids', () => {
     expect(note(2, 1)).toBe('Undo change speed. 2 transitions are removed and one is shortened.');
     const cut = (change: string, count: number) =>
       historyAction('undo', 'chat.setTransition', { after: 'all', change, count });
-    expect([cut('add', 1), cut('add', 3), cut('change', 1), cut('remove', 2)]).toEqual([
+    expect([cut('add', 1), cut('add', 3), cut('change', 1), cut('length', 1), cut('remove', 2)]).toEqual([
       'Undo add transition',
       'Undo add 3 transitions',
       'Undo change transition',
+      'Undo change transition length',
       'Undo remove 2 transitions',
     ]);
   });
