@@ -3,14 +3,64 @@ import { msg } from '@lingui/core/macro';
 import type { CSSProperties } from 'react';
 import type { TextStyle } from '../bindings/TextStyle';
 
+const round2 = (v: number) => Math.round(v * 100) / 100;
+
+/** The part of a text style the look fields change: colour, highlight, outline and shadow. */
+export type TextLook = Pick<TextStyle, 'color' | 'background' | 'outline' | 'shadow'>;
+
+/** Outline widths as a share of the text size, so a step stays the same when the text grows or shrinks. */
+export type OutlineStep = 'thin' | 'medium' | 'thick';
+const OUTLINE_EM: Record<OutlineStep, number> = { thin: 0.04, medium: 0.07, thick: 0.1 };
+export const OUTLINE_STEPS: { value: OutlineStep; label: MessageDescriptor }[] = [
+  { value: 'thin', label: msg({ id: 'text.outline.thin', message: 'Thin', comment: 'Outline width' }) },
+  { value: 'medium', label: msg({ id: 'text.outline.medium', message: 'Medium', comment: 'Outline width' }) },
+  { value: 'thick', label: msg({ id: 'text.outline.thick', message: 'Thick', comment: 'Outline width' }) },
+];
+
+/** The outline width of `step` for text of `size` (both in pixels at a 1080-pixel short side). */
+export const outlineWidth = (size: number, step: OutlineStep) => round2(size * OUTLINE_EM[step]);
+
+/** The step nearest the outline's width (a width set elsewhere lands on the closest), or null without one. */
+export function outlineStep(style: TextStyle): OutlineStep | null {
+  if (!style.outline) return null;
+  const em = style.outline.width / style.size;
+  const off = (step: OutlineStep) => Math.abs(OUTLINE_EM[step] - em);
+  return OUTLINE_STEPS.map((s) => s.value).reduce((best, step) => (off(step) < off(best) ? step : best));
+}
+
+const sameColor = (a: string | null, b: string | null) => (a ?? '').toUpperCase() === (b ?? '').toUpperCase();
+
+/** Whether two styles look the same: colour, highlight, outline and shadow. */
+export function sameLook(a: TextLook, b: TextLook): boolean {
+  return (
+    sameColor(a.color, b.color) &&
+    sameColor(a.background, b.background) &&
+    sameColor(a.outline?.color ?? null, b.outline?.color ?? null) &&
+    a.outline?.width === b.outline?.width &&
+    a.shadow === b.shadow
+  );
+}
+
+/** The box behind the words: the design's navy at 86 %. */
+export const BOX_COLOR = '#121A33DB';
+
 /**
- * The caption looks a text layer can wear, by key and name. Undo labels name a look by its message id
- * (`{ style: { code: 'text.look.box' } }`, `labels.ts`); the look's colours and outline come with the text tools.
+ * A one-click caption look: colour, highlight, outline (its width a step, so it suits any size) and shadow. Undo labels
+ * name a look by its message id (`{ style: { code: 'text.look.box' } }`, `labels.ts`).
  */
 export interface TextLookPreset {
+  /** A stable key for lists and bursts. */
   key: string;
   name: MessageDescriptor;
+  color: string;
+  background: string | null;
+  outline: { color: string; step: OutlineStep } | null;
+  shadow: boolean;
 }
+
+const WHITE = '#FFFFFF';
+const BLACK = '#000000';
+const YELLOW = '#FFD02E';
 
 export const CAPTION_LOOKS: TextLookPreset[] = [
   {
@@ -20,10 +70,18 @@ export const CAPTION_LOOKS: TextLookPreset[] = [
       message: 'Clean',
       comment: 'Caption style: white text with a shadow',
     }),
+    color: WHITE,
+    background: null,
+    outline: null,
+    shadow: true,
   },
   {
     key: 'boldOutline',
     name: msg({ id: 'text.look.boldOutline', message: 'Bold outline', comment: 'Caption style' }),
+    color: WHITE,
+    background: null,
+    outline: { color: BLACK, step: 'thick' },
+    shadow: false,
   },
   {
     key: 'highlight',
@@ -32,18 +90,50 @@ export const CAPTION_LOOKS: TextLookPreset[] = [
       message: 'Highlight',
       comment: 'Caption style: text on a yellow band',
     }),
+    color: BLACK,
+    background: YELLOW,
+    outline: null,
+    shadow: false,
   },
   {
     key: 'box',
-    name: msg({ id: 'text.look.box', message: 'Box', comment: 'Caption style: white text in a black box' }),
+    name: msg({ id: 'text.look.box', message: 'Box', comment: 'Caption style: white text in a dark box' }),
+    color: WHITE,
+    background: BOX_COLOR,
+    outline: null,
+    shadow: false,
   },
   {
     key: 'pop',
     name: msg({ id: 'text.look.pop', message: 'Pop', comment: 'Caption style: yellow text with an outline' }),
+    color: YELLOW,
+    background: null,
+    outline: { color: BLACK, step: 'medium' },
+    shadow: false,
   },
 ];
 
-const round2 = (v: number) => Math.round(v * 100) / 100;
+/** What `look` sets on text of `size`. */
+export function lookPatch(look: TextLookPreset, size: number): TextLook {
+  const { color, background, outline, shadow } = look;
+  return {
+    color,
+    background,
+    outline: outline && { color: outline.color, width: outlineWidth(size, outline.step) },
+    shadow,
+  };
+}
+
+/** Whether the style wears `look` (an outline counts by its nearest step). */
+export function wearsLook(style: TextStyle, look: TextLookPreset): boolean {
+  return (
+    sameColor(style.color, look.color) &&
+    sameColor(style.background, look.background) &&
+    sameColor(style.outline?.color ?? null, look.outline?.color ?? null) &&
+    outlineStep(style) === (look.outline?.step ?? null) &&
+    style.shadow === look.shadow
+  );
+}
 
 /** The style at font `size`, its outline scaled with it. */
 export function scaledStyle(style: TextStyle, size: number): TextStyle {
