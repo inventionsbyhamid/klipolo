@@ -63,6 +63,17 @@ function useOtherRemovals(proposal: ChatProposal): string[] {
         message: plural(r.shortened.length, { one: 'Shortens # layer.', other: 'Shortens # layers.' }),
       }),
     );
+  // An end card or a closing sound placed after the video moves with its end.
+  if (r.moved.length > 0)
+    out.push(
+      t({
+        id: 'chatPanel.proposal.moved',
+        message: plural(r.moved.length, {
+          one: 'Moves # layer to the video’s new end.',
+          other: 'Moves # layers to the video’s new end.',
+        }),
+      }),
+    );
   if (r.assets.length > 0)
     out.push(
       t({
