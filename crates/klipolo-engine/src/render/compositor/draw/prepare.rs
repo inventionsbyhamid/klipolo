@@ -145,8 +145,7 @@ impl Compositor {
                 let captions = self
                     .captions
                     .get_or_insert_with(|| CaptionDrawer::new(dev, Some(redraw.clone()), wait));
-                if let Some(slot) =
-                    captions.prepare(device, queue, f.encoder, c, f.size, f.warnings, wait)
+                if let Some(slot) = captions.prepare(device, f.encoder, c, f.size, f.warnings, wait)
                 {
                     draws.push(Draw::Caption(slot));
                 }
