@@ -275,7 +275,7 @@
       },
       "portrait": {
         "seam": null,
-        "y": 0.62
+        "y": 0.69
       }
     },
     "punctuation": "questionAndExclamation",
@@ -902,10 +902,10 @@
     "enter": {
       "motion": {
         "dyEm": 0.12,
-        "from": 0.6,
+        "from": 0.7,
         "kind": "pop",
         "ms": 160,
-        "peak": 1.15
+        "peak": 1.06
       },
       "per": "word"
     },
@@ -951,7 +951,7 @@
       },
       "portrait": {
         "seam": null,
-        "y": 0.62
+        "y": 0.69
       }
     },
     "punctuation": "questionAndExclamation",

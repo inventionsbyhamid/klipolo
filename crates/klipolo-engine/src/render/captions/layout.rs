@@ -26,7 +26,7 @@ use klipolo_model::project::FormatKind;
 use super::cells::{pack_cells, pad, place_words};
 use super::measure::space_width;
 use super::shaping::measure_words;
-use crate::plan::captions::place::{active_scale, edge_em};
+use crate::plan::captions::place::{active_scale, edge_em, word_growth};
 use crate::render::fonts::FaceChoice;
 
 /// The most words a page holds (`klipolo_model::captions::pages::MAX_PAGE_WORDS`).
@@ -140,11 +140,16 @@ pub fn lay_out_page(
         0.0
     };
     let max_width = (max_width_share * f64::from(out.0)) as f32;
+    // Lines break with the gaps words take where they grow (`place_words`): a space at the growth, and the average
+    // word's growth into it.
+    let grow = word_growth(style) as f32;
+    let mean = words.widths.iter().sum::<f32>() / words.widths.len() as f32;
+    let space_between = space * grow + (grow - 1.0) * mean;
     // Clean's bottom-heavy lines, as its caption files break them.
     let pyramid = pyramid(style);
     let input = |max_lines: usize| LineInput {
         widths: &words.widths,
-        space,
+        space: space_between,
         max_width,
         max_lines,
         forced: &words.forced,

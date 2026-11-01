@@ -61,7 +61,7 @@ fn range(start: f64, end: f64) -> Value {
 }
 
 fn sticker(file: &str, at: f64) -> Value {
-    json!({"file": file, "size": "small", "position": "top-right", "atSec": at, "durationSec": 2.5})
+    json!({"file": file, "size": "medium", "position": "top-right", "atSec": at, "durationSec": 2.5})
 }
 
 fn animate(enter: &str, sound: &str) -> Value {
@@ -69,7 +69,8 @@ fn animate(enter: &str, sound: &str) -> Value {
 }
 
 /// A short of the talk's first 155 s as the recipe plans it: four turns kept (about 60 s), vertical, following the
-/// astronaut, word pop captions, a hook quoting the video, two pack stickers popping in with sounds, music under it.
+/// astronaut, word pop captions, a hook quoting a later line, two medium pack stickers popping in with sounds, music
+/// under it.
 fn talk_plan() -> Vec<(&'static str, Value)> {
     vec![
         (
@@ -88,8 +89,8 @@ fn talk_plan() -> Vec<(&'static str, Value)> {
         ("setCaptions", json!({"on": true, "style": "word-pop"})),
         (
             "addText",
-            json!({"text": "it's also super rewarding", "preset": "title", "atSec": 0.06, "durationSec": 2.0,
-                   "animation": "pop"}),
+            json!({"text": "how to fix problems", "preset": "title", "atSec": 0.06, "durationSec": 2.0,
+                   "animation": "kinetic"}),
         ),
         ("addImage", sticker("Sparkles", 30.0)),
         ("animate", animate("pop", "Pop")),

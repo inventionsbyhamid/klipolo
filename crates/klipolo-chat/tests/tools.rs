@@ -1456,7 +1456,9 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "word-pop or bold-box",
         "a hook title with addText, kinetic or pop",
         "in the first 2 s of what you keep",
-        "a line said in the video",
+        "a striking later line said in the video, never the opening words",
+        "medium pack stickers",
+        "at a top corner",
         "animate last",
         "a sound",
         "addMusic",
@@ -1532,7 +1534,7 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let prompt_tokens = klipolo_chat::estimate_tokens(prompt);
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
-    // 914 measured with the clip tools' line and the recordings' line; 1,093 with autoZoom's line and the short's
+    // 914 measured with the clip tools' line and the recordings' line; 1,098 with autoZoom's line and the short's
     // recipe.
     assert!(prompt_tokens <= 1_100, "prompt {prompt_tokens} tokens");
     // 4,438 measured with the clip tools (setClip, setTransition), setBackground (about 210), freezeFrame (about 105),

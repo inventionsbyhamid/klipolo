@@ -11,8 +11,8 @@ description = "Clip analysis: the 16 kHz mono WAV Meta's speech models take, its
 futures = "0.3"
 # Chat's provider-neutral `LanguageModel`, which `providers::meta_chat` implements for Meta (a pure crate: no vendor).
 klipolo-chat = { path = "../klipolo-chat" }
-# The follower the cursor's vertical crop moves with (`smooth::step`), which the speaker's path moves with too (pure).
-# The chat eval's made-up clicks, as a take's cursor facts (`klipolo-chat-eval`).
+# The follower the cursor's vertical crop moves with (`smooth::step`), which the speaker's path moves with too (pure),
+# and the chat eval's made-up clicks, as a take's cursor facts (`klipolo-chat-eval`).
 klipolo-cursor = { path = "../klipolo-cursor" }
 # Sound decode (`audio::decode::{probe, decode}`: 48 kHz f32, streamed), every frame of a video as a small grey picture
 # (`media::luma_frames`, for the cut finder) and the scene log's small copy (`media::small_copy`); no FFmpeg calls of our

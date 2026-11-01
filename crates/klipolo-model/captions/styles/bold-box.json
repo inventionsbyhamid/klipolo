@@ -20,7 +20,7 @@
              "glideMs": 0, "growMs": 0 },
   "pages": { "reveal": "page", "maxWords": 3, "maxLines": 2, "maxLineWidth": { "portrait": 0.72, "landscape": 0.60 },
              "breakSilenceMs": 350, "minPageMs": 500, "maxPageMs": 2200, "lingerMs": 200 },
-  "position": { "portrait": { "y": 0.62 }, "landscape": { "y": 0.80 } },
+  "position": { "portrait": { "y": 0.69 }, "landscape": { "y": 0.80 } },
   "active": {},
   "keyword": null,
   "enter": { "per": "page", "motion": { "kind": "pop", "ms": 140, "from": 0.8, "peak": 1.05, "dyEm": 0 } },
