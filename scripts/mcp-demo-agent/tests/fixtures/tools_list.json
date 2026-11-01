@@ -361,7 +361,7 @@
             "type": "boolean"
           },
           "style": {
-            "description": "clean: calm subtitles, a sentence at a time. bold: up to three big uppercase words that pop in one by one; no word lights up. karaoke: a line of words where each word lights up as it is said, word by word. highlight: up to four big uppercase words where a coloured box lights up each word as it is said, word by word. boxed: sentences on rounded boxes. word-pop: for shorts: big words pop in as said, the said one coloured. bold-box: for shorts: heavy words on a rounded box. Null keeps the current style.",
+            "description": "clean: calm subtitles, a sentence at a time. bold: up to three big uppercase words that pop in one by one; no word lights up. karaoke: a line of words where each word lights up as it is said, word by word. highlight: up to four big uppercase words where a coloured box lights up each word as it is said, word by word. boxed: sentences on rounded boxes. word-pop: for shorts: words pop in as said, the said one coloured. bold-box: for shorts: heavy words on a rounded box. Null keeps the current style.",
             "enum": [
               "clean",
               "bold",
@@ -581,7 +581,7 @@
         "additionalProperties": false,
         "properties": {
           "animation": {
-            "description": "How they come in. Null: fade.",
+            "description": "Null: fade.",
             "enum": [
               "pop",
               "fade",
@@ -805,7 +805,7 @@
       "annotations": {
         "readOnlyHint": false
       },
-      "description": "How a layer comes in, goes out and moves while shown, with a sound. Null keeps; none removes.",
+      "description": "Animate a layer, with a sound. Null keeps; none removes.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -846,7 +846,7 @@
             ]
           },
           "exit": {
-            "description": "How it goes out.",
+            "description": "How it leaves.",
             "enum": [
               "pop",
               "fade",
@@ -864,11 +864,11 @@
             ]
           },
           "layer": {
-            "description": "last (added by the call before), or a ref from Layers: t1, i1, v1.",
+            "description": "last for the layer just added, or a ref: t1, i1, v1.",
             "type": "string"
           },
           "sound": {
-            "description": "A sound from Library, as it comes in.",
+            "description": "A Library sound, as it comes in.",
             "type": [
               "string",
               "null"
@@ -1228,16 +1228,16 @@
       "annotations": {
         "readOnlyHint": false
       },
-      "description": "Zoom in on the clicks of the screen recordings, or take those zooms away.",
+      "description": "Zoom in on screen recordings' clicks, or take those zooms away.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
           "on": {
-            "description": "False takes the auto zooms away.",
+            "description": "False removes them.",
             "type": "boolean"
           },
           "scale": {
-            "description": "How far, 1.25 to 3. Null for 2.",
+            "description": "How far: 1.25 to 3. Null: 2.",
             "type": [
               "number",
               "null"

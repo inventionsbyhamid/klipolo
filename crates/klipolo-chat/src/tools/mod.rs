@@ -386,7 +386,7 @@ pub const CHAT_CAPTION_STYLES: [(BuiltinCaptionStyle, &str); 7] = [
     (BuiltinCaptionStyle::Boxed, "sentences on rounded boxes"),
     (
         BuiltinCaptionStyle::WordPop,
-        "for shorts: big words pop in as said, the said one coloured",
+        "for shorts: words pop in as said, the said one coloured",
     ),
     (
         BuiltinCaptionStyle::BoldBox,

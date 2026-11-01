@@ -175,23 +175,20 @@ impl Args {
 
 pub(super) const ANIMATE: Tool = Tool {
     name: "animate",
-    description: "How a layer comes in, goes out and moves while shown, with a sound. Null keeps; none removes.",
+    description: "Animate a layer, with a sound. Null keeps; none removes.",
     parameters: || {
         vec![
             (
                 "layer",
-                string("last (added by the call before), or a ref from Layers: t1, i1, v1."),
+                string("last for the layer just added, or a ref: t1, i1, v1."),
             ),
             (
                 "enter",
                 nullable_words(&ENTRANCES, "typewriter: words only. kinetic: addText only."),
             ),
-            ("exit", nullable_words(&EXITS, "How it goes out.")),
+            ("exit", nullable_words(&EXITS, "How it leaves.")),
             ("emphasis", nullable_words(&EMPHASES, "While shown.")),
-            (
-                "sound",
-                nullable_string("A sound from Library, as it comes in."),
-            ),
+            ("sound", nullable_string("A Library sound, as it comes in.")),
         ]
     },
     read: |a| {

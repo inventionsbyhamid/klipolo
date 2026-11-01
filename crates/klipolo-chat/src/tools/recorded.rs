@@ -430,11 +430,11 @@ pub const ZOOM_SCALES: RangeInclusive<f64> = 1.25..=3.0;
 
 pub(super) const AUTO_ZOOM: Tool = Tool {
     name: "autoZoom",
-    description: "Zoom in on the clicks of the screen recordings, or take those zooms away.",
+    description: "Zoom in on screen recordings' clicks, or take those zooms away.",
     parameters: || {
         vec![
-            ("on", boolean("False takes the auto zooms away.")),
-            ("scale", nullable_number("How far, 1.25 to 3. Null for 2.")),
+            ("on", boolean("False removes them.")),
+            ("scale", nullable_number("How far: 1.25 to 3. Null: 2.")),
         ]
     },
     read: |a| {

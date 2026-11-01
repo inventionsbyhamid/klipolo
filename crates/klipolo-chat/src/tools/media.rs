@@ -257,10 +257,7 @@ pub(super) const ADD_TEXT: Tool = Tool {
             ),
             at_sec(),
             duration_sec(TEXT_SECS),
-            (
-                "animation",
-                nullable_words(&ENTRANCES, "How they come in. Null: fade."),
-            ),
+            ("animation", nullable_words(&ENTRANCES, "Null: fade.")),
         ]
     },
     read: |a| {
