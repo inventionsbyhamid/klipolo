@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Klipolo's bundled pack: sound effects, music beds and stickers, all made here from code and dedicated to the public
-domain (CC0 1.0). No recordings, samples or outside media go in.
+"""Klipolo's bundled pack: sound effects, music beds, stickers and backgrounds, all made here from code and dedicated to
+the public domain (CC0 1.0). No recordings, samples or outside media go in.
 
 Python 3 standard library only, and deterministic: fixed seeds, no clocks, and nothing but IEEE arithmetic and square
 roots (sines and exponentials are computed here, never by the platform's maths library), so every machine writes the
@@ -8,6 +8,7 @@ same bytes. It writes, into assets/library or --out DIR:
   sounds/<id>.wav     48 kHz 16-bit mono, each under 3 s, starting and ending at silence
   music/<id>.wav      24 kHz 16-bit mono beds of 16 s, drawn exactly periodic so they loop without a click
   stickers/<id>.png   1024 x 1024 RGBA, the shape with a border on a transparent canvas
+  backgrounds/<id>.png  1920 x 1080 or 1080 x 1920 RGB, to fill a 16:9 or 9:16 frame (listed as stickers: pictures)
   manifest.json       each item's id, name, category, file, length or size, tags, sha256 and licence
   LICENSE.txt         the CC0 dedication
 Usage: python3 scripts/gen-library.py [--out DIR]
@@ -1312,6 +1313,182 @@ def cursor_hand():
     return outlined(hand, WHITE) + [(creases, 0.0, NAVY)]
 
 
+# ------------------------------------------------------------------------------------------------- backgrounds
+#
+# Pictures that fill a 16:9 frame (1920 x 1080) or a 9:16 one (1080 x 1920), as opaque RGB PNGs. Each is worked out on
+# a grid of points 8 px apart (two more past every edge), drawn up to full size by a cubic B-spline (smooth, and never
+# past the points' own colours), and dithered so its slow gradients don't band.
+
+STEP = 8
+BAYER = [[0, 32, 8, 40, 2, 34, 10, 42], [48, 16, 56, 24, 50, 18, 58, 26], [12, 44, 4, 36, 14, 46, 6, 38],
+         [60, 28, 52, 20, 62, 30, 54, 22], [3, 35, 11, 43, 1, 33, 9, 41], [51, 19, 59, 27, 49, 17, 57, 25],
+         [15, 47, 7, 39, 13, 45, 5, 37], [63, 31, 55, 23, 61, 29, 53, 21]]
+
+
+def spline_weights():
+    """For each of a cell's 8 pixels: which grid point its 4 start at (past the cell's first), and their weights."""
+    out = []
+    for p in range(STEP):
+        f = (p - 3.5) / STEP
+        start, f = (0, f + 1) if f < 0 else (1, f)
+        g, cube = 1 - f, f * f * f
+        weights = (g * g * g / 6, (3 * cube - 6 * f * f + 4) / 6, (-3 * cube + 3 * f * f + 3 * f + 1) / 6, cube / 6)
+        out.append((start, weights))
+    return out
+
+
+def full_size(paint, width, height, extra):
+    """Rows of `width` x `height` RGB bytes: `paint(u, v)` (u and v from 0 to 1 across and down the frame) on the grid,
+    drawn up to full size. `extra` are rows of a number for each byte, added before rounding down (a dither, or a dither
+    and grain), used in turn."""
+    weights, cols = spline_weights(), width // STEP
+
+    def point(j, size):
+        return (STEP * (j - 2) + 4) / size
+
+    across = []
+    for i in range(height // STEP + 4):
+        row = [paint(point(j, width), point(i, height)) for j in range(cols + 4)]
+        channels = []
+        for c in range(3):
+            line = [clamp(px[c], 0.0, 255.0) for px in row]
+            full = [0.0] * width
+            for p, (s, (w0, w1, w2, w3)) in enumerate(weights):
+                full[p::STEP] = [a * w0 + b * w1 + d * w2 + e * w3
+                                 for a, b, d, e in zip(line[s:], line[s + 1:], line[s + 2:], line[s + 3:])][:cols]
+            channels.append(full)
+        across.append(channels)
+    out = []
+    for i in range(height // STEP):
+        for p, (s, (w0, w1, w2, w3)) in enumerate(weights):
+            a, b, d, e = across[i + s:i + s + 4]
+            row = [0.0] * (3 * width)
+            for c in range(3):
+                row[c::3] = [q * w0 + r * w1 + t * w2 + u * w3 for q, r, t, u in zip(a[c], b[c], d[c], e[c])]
+            add = extra[len(out) % len(extra)]
+            out.append(bytes([min(255, max(0, int(v + k))) for v, k in zip(row, add)]))
+    return out
+
+
+def png_rgb(rows, width, height):
+    """An RGB PNG of `rows`, each filtered as the difference from the pixel to its left."""
+    raw = bytearray()
+    for row in rows:
+        raw.append(1)
+        raw.extend(row[:3])
+        raw.extend(bytes([(a - b) & 255 for a, b in zip(row[3:], row)]))
+    return png_file(width, height, 2, raw)
+
+
+def dither(width):
+    """An 8 x 8 ordered dither: for each row, a number in (0, 1) for each byte, the same for a pixel's three."""
+    return [[(BAYER[y][x % 8] + 0.5) / 64 for x in range(width) for _ in range(3)] for y in range(8)]
+
+
+def mix(a, b, t):
+    return [x + (y - x) * t for x, y in zip(a, b)]
+
+
+def blobs(base, spots, u, v, width, height):
+    """`base` with soft round `spots` (u, v, radius as a share of the frame's shorter side, colour, strength) laid
+    over it in turn, each fading out from its middle like a blur."""
+    short = min(width, height)
+    colour = list(base)
+    for su, sv, radius, spot, strength in spots:
+        dx, dy = (u - su) * width / short, (v - sv) * height / short
+        colour = mix(colour, spot, strength * exp(-(dx * dx + dy * dy) / (radius * radius)))
+    return colour
+
+
+def sunset(width, height):
+    """A warm gradient from the top left to the bottom right, gold through coral to violet, with a soft glow of sun."""
+    stops = [(0.0, hex_rgb("#FFB547")), (0.5, hex_rgb("#FF5C7A")), (1.0, hex_rgb("#6B4BFF"))]
+
+    def paint(u, v):
+        t = clamp((u * width * width + v * height * height) / (width * width + height * height), 0.0, 1.0)
+        (t0, a), (t1, b) = (stops[0], stops[1]) if t < 0.5 else (stops[1], stops[2])
+        s = (t - t0) / (t1 - t0)
+        return blobs(mix(a, b, s * s * (3 - 2 * s)), [(0.8, 0.16, 0.42, hex_rgb("#FFE6A8"), 0.5)], u, v, width, height)
+
+    return png_rgb(full_size(paint, width, height, dither(width)), width, height)
+
+
+def soft_shapes(width, height):
+    """Pastel blurs of peach, lilac, mint, sky and apricot on cream."""
+    spots = [(0.12, 0.18, 0.55, hex_rgb("#FFB49A"), 0.85), (0.88, 0.22, 0.5, hex_rgb("#C8B6FF"), 0.85),
+             (0.25, 0.92, 0.5, hex_rgb("#A6E8D2"), 0.85), (0.8, 0.85, 0.55, hex_rgb("#A9D4FF"), 0.85),
+             (0.55, 0.5, 0.35, hex_rgb("#FFD9A0"), 0.6)]
+
+    def paint(u, v):
+        return blobs(hex_rgb("#F8F2EA"), spots, u, v, width, height)
+
+    return png_rgb(full_size(paint, width, height, dither(width)), width, height)
+
+
+def night_glow(width, height):
+    """Deep navy with blurred glows of violet, teal and pink, for white words to stand out on."""
+    spots = [(0.18, 0.22, 0.6, hex_rgb("#6C4DFF"), 0.8), (0.88, 0.78, 0.65, hex_rgb("#18B6C8"), 0.55),
+             (0.72, 0.02, 0.4, hex_rgb("#FF4D9D"), 0.5)]
+
+    def paint(u, v):
+        return blobs(mix(hex_rgb("#0B1030"), hex_rgb("#151C48"), clamp(v, 0.0, 1.0)), spots, u, v, width, height)
+
+    return png_rgb(full_size(paint, width, height, dither(width)), width, height)
+
+
+def scrambled(n):
+    """`n` scrambled into a number in [-1, 1) (a 32-bit integer hash): the same on every machine."""
+    n &= 0xFFFFFFFF
+    n ^= n >> 16
+    n = (n * 0x7FEB352D) & 0xFFFFFFFF
+    n ^= n >> 15
+    n = (n * 0x846CA68B) & 0xFFFFFFFF
+    n ^= n >> 16
+    return n / 2147483648.0 - 1.0
+
+
+def smooth_noise(x, y, seed):
+    """Noise that changes smoothly: a scrambled number at each whole (x, y), eased between them."""
+    i, j = math.floor(x), math.floor(y)
+    fx, fy = x - i, y - j
+    fx, fy = fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy)
+
+    def at(a, b):
+        return scrambled(a * 73856093 ^ b * 19349663 ^ seed * 83492791)
+
+    top = at(i, j) + (at(i + 1, j) - at(i, j)) * fx
+    bottom = at(i, j + 1) + (at(i + 1, j + 1) - at(i, j + 1)) * fx
+    return top + (bottom - top) * fy
+
+
+def paper(width, height):
+    """Warm off-white paper: faint blotches, edges a touch darker, and a fine grain. The grain is whole steps of
+    brightness from a 256 px tile, so most rows repeat every 256 px and the file stays small."""
+    noise = Noise(211)
+    raw = [[noise() for _ in range(257)] for _ in range(257)]
+    grain = [[round(4.0 * (raw[y][x] + raw[y][x + 1] + raw[y + 1][x] + raw[y + 1][x + 1]) / 4) for x in range(256)]
+             for y in range(256)]
+    extra = [[0.5 + grain[y][x % 256] for x in range(width) for _ in range(3)] for y in range(256)]
+    base = hex_rgb("#F3ECDE")
+
+    def paint(u, v):
+        x, y = u * width, v * height
+        blotch = 0.7 * smooth_noise(x / 160, y / 160, 1) + 0.3 * smooth_noise(x / 55, y / 55, 2)
+        dx, dy = (u - 0.5) * 2, (v - 0.5) * 2
+        shade = 1.0 - 0.03 * (dx * dx + dy * dy) + 0.012 * blotch
+        return [c * shade for c in base]
+
+    return png_rgb(full_size(paint, width, height, extra), width, height)
+
+
+BACKGROUNDS = [
+    ("sunset", "Sunset gradient", ["background", "gradient", "sunset", "warm"], sunset),
+    ("soft", "Soft shapes", ["background", "pastel", "soft", "blur"], soft_shapes),
+    ("night", "Night glow", ["background", "dark", "glow", "night"], night_glow),
+    ("paper", "Paper", ["background", "paper", "texture", "light"], paper),
+]
+
+
 # ---------------------------------------------------------------------------------------------------------- the pack
 
 SOUNDS = [
@@ -1385,14 +1562,12 @@ DRAWN = [  # drawn as layers (`painted`), after the speech bubble
     ("cursor-hand", "Cursor hand", ["cursor", "hand", "click", "pointer", "tap"], cursor_hand),
 ]
 
-LICENSE = """Klipolo pack: sound effects, music beds and stickers made from code by scripts/gen-library.py.
-No recordings, samples or outside media were used.
+CC0 = ("To the extent possible under law, Klipolo has waived all copyright and related or neighbouring rights to these "
+       "files.\nThey are dedicated to the public domain under CC0 1.0 Universal:\n"
+       "https://creativecommons.org/publicdomain/zero/1.0/\n")
 
-To the extent possible under law, Klipolo has waived all copyright and related or neighbouring rights to these files.
-They are dedicated to the public domain under CC0 1.0 Universal:
-https://creativecommons.org/publicdomain/zero/1.0/
-"""
 
+SHAPES = ((1920, 1080, "16:9", "wide"), (1080, 1920, "9:16", "vertical"))
 SPEECH_TAGS = ["speech", "talk", "say", "quote", "white"]
 
 
@@ -1410,7 +1585,10 @@ def made(key):
     if kind == "speech":
         return png_bytes(layered(bubble, [(BORDER, WHITE), (0.0, NAVY), (-18.0, WHITE)]), 470), dict(width=SIZE,
                                                                                                     height=SIZE)
-    return painted(DRAWN[k][3]()), dict(width=SIZE, height=SIZE)
+    if kind == "drawn":
+        return painted(DRAWN[k][3]()), dict(width=SIZE, height=SIZE)
+    design, (width, height) = k
+    return BACKGROUNDS[design][3](width, height), dict(width=width, height=height)
 
 
 def build(workers=None):
@@ -1425,8 +1603,13 @@ def build(workers=None):
     listed.append(("bubble", "Speech bubble", "sticker", "stickers/bubble.png", SPEECH_TAGS, ("speech", 0)))
     listed += [(id_, name, "sticker", f"stickers/{id_}.png", tags, ("drawn", k))
                for k, (id_, name, tags, _) in enumerate(DRAWN)]
+    for k, (id_, name, tags, _) in enumerate(BACKGROUNDS):  # listed as stickers: the pack's pictures, on the Images tab
+        for width, height, ratio, shape in SHAPES:
+            key = f"{id_}-{ratio.replace(':', 'x')}"
+            listed.append((key, f"{name} {ratio}", "sticker", f"backgrounds/{key}.png", tags + [ratio, shape],
+                           ("background", (k, (width, height)))))
 
-    keys = sorted((entry[-1] for entry in listed), key=lambda key: key[0] != "music")
+    keys = sorted((entry[-1] for entry in listed), key=lambda key: key[0] not in ("music", "background"))
     with concurrent.futures.ProcessPoolExecutor(workers or min(os.cpu_count() or 1, 8)) as pool:
         made_by = {key: pool.submit(made, key) for key in keys}
         results = [made_by[entry[-1]].result() for entry in listed]
@@ -1439,7 +1622,11 @@ def build(workers=None):
     manifest = dict(version=1, id="klipolo-pack", name="Klipolo pack", license="CC0-1.0", creator="Klipolo",
                     items=items)
     files["manifest.json"] = (json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode()
-    files["LICENSE.txt"] = LICENSE.encode()
+    stickers = len(STICKERS) + 1 + len(DRAWN)  # with the speech bubble
+    holds = (f"{len(SOUNDS)} sound effects, {len(MUSIC)} music beds, {stickers} stickers and "
+             f"{len(BACKGROUNDS) * len(SHAPES)} backgrounds")
+    files["LICENSE.txt"] = (f"Klipolo pack: {holds},\nmade from code by scripts/gen-library.py. No recordings, "
+                            f"samples or outside media were used.\n\n{CC0}").encode()
     return files
 
 

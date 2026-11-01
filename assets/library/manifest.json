@@ -896,6 +896,150 @@
       ],
       "sha256": "aa8025b0b989abc9e20e9bd586ba4e183a7da2a0fdfbff0099f77c16a8fe5b5d",
       "license": "CC0-1.0"
+    },
+    {
+      "id": "sunset-16x9",
+      "name": "Sunset gradient 16:9",
+      "category": "sticker",
+      "file": "backgrounds/sunset-16x9.png",
+      "width": 1920,
+      "height": 1080,
+      "tags": [
+        "background",
+        "gradient",
+        "sunset",
+        "warm",
+        "16:9",
+        "wide"
+      ],
+      "sha256": "3bcb1447d5a7b38810cc184d2fb7d70fc210f84eeed4895603c9eab44880d316",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "sunset-9x16",
+      "name": "Sunset gradient 9:16",
+      "category": "sticker",
+      "file": "backgrounds/sunset-9x16.png",
+      "width": 1080,
+      "height": 1920,
+      "tags": [
+        "background",
+        "gradient",
+        "sunset",
+        "warm",
+        "9:16",
+        "vertical"
+      ],
+      "sha256": "aca4a5263cc1825596ac80cf606462386b53da5f06725e16af258063d29a731b",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "soft-16x9",
+      "name": "Soft shapes 16:9",
+      "category": "sticker",
+      "file": "backgrounds/soft-16x9.png",
+      "width": 1920,
+      "height": 1080,
+      "tags": [
+        "background",
+        "pastel",
+        "soft",
+        "blur",
+        "16:9",
+        "wide"
+      ],
+      "sha256": "b376227e80fb81300096380ca13bb89e82d5ba4b680a1cc6069e6ff3cf566a82",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "soft-9x16",
+      "name": "Soft shapes 9:16",
+      "category": "sticker",
+      "file": "backgrounds/soft-9x16.png",
+      "width": 1080,
+      "height": 1920,
+      "tags": [
+        "background",
+        "pastel",
+        "soft",
+        "blur",
+        "9:16",
+        "vertical"
+      ],
+      "sha256": "3ce5c37c4cf8787d35b01b16b265d95414629e2a82f7f35b13242242504291d6",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "night-16x9",
+      "name": "Night glow 16:9",
+      "category": "sticker",
+      "file": "backgrounds/night-16x9.png",
+      "width": 1920,
+      "height": 1080,
+      "tags": [
+        "background",
+        "dark",
+        "glow",
+        "night",
+        "16:9",
+        "wide"
+      ],
+      "sha256": "176ec10c1fd4a28e835f9822030974f114bcc0be2963d798a3bc003c413c9803",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "night-9x16",
+      "name": "Night glow 9:16",
+      "category": "sticker",
+      "file": "backgrounds/night-9x16.png",
+      "width": 1080,
+      "height": 1920,
+      "tags": [
+        "background",
+        "dark",
+        "glow",
+        "night",
+        "9:16",
+        "vertical"
+      ],
+      "sha256": "f0e688691fa2e1d7aa9202e8768bc5257c0b58d39d5041edcac87ac58ee6fa2a",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "paper-16x9",
+      "name": "Paper 16:9",
+      "category": "sticker",
+      "file": "backgrounds/paper-16x9.png",
+      "width": 1920,
+      "height": 1080,
+      "tags": [
+        "background",
+        "paper",
+        "texture",
+        "light",
+        "16:9",
+        "wide"
+      ],
+      "sha256": "19f56f74f87e0ccdd5f3b651f7336adc348b23c7a83332aadc69f9853b740bde",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "paper-9x16",
+      "name": "Paper 9:16",
+      "category": "sticker",
+      "file": "backgrounds/paper-9x16.png",
+      "width": 1080,
+      "height": 1920,
+      "tags": [
+        "background",
+        "paper",
+        "texture",
+        "light",
+        "9:16",
+        "vertical"
+      ],
+      "sha256": "ad7e2b09b016792c98c8dbcdddd3489f47507e8d6e4aac25b9b75ae3915846f0",
+      "license": "CC0-1.0"
     }
   ]
 }
