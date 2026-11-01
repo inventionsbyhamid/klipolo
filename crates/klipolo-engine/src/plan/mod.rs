@@ -77,6 +77,11 @@ pub fn camera_layer_id(clip_id: &str) -> String {
     format!("camera:{clip_id}")
 }
 
+/// Id of a clip's blurred footage behind it (never selected: a click there picks the clip).
+pub fn backdrop_layer_id(clip_id: &str) -> String {
+    format!("backdrop:{clip_id}")
+}
+
 pub fn frame_plan(ctx: &PlanContext, at_us: Us, format: FormatKind) -> FramePlan {
     let p = &*ctx.project;
     let registry = &*ctx.registry;

@@ -1,7 +1,9 @@
 //! A main clip's footage at an instant: the screen, the camera or the imported video, cut by the clip's crop and framed
 //! for the format (its effective framing: `klipolo_model::framing::effective_framing`), and a recording's camera bubble
 //! or split pane. The crop is the clip's in every format: Fit shows what it leaves whole, Fill covers its area from
-//! it, and the focus and the follow-crop move inside it. A camera bubble keeps its whole picture. A screen whose framing is Fill with `follow` crops where its take's follow path is at that instant:
+//! it, and the focus and the follow-crop move inside it. A camera bubble keeps its whole picture. With the blurred video
+//! background, the main footage covers the frame again under itself, blurred and dimmed, wherever it leaves some of the
+//! frame uncovered (`backdrop`). A screen whose framing is Fill with `follow` crops where its take's follow path is at that instant:
 //! the path built from the raw cursor for that crop (`follow_crop_for`), found in the context's snapshot (`Follows`),
 //! or the Fill crop at its focus until it is built (preview only: export loads it first). Follow on a Fit framing is
 //! ignored: it follows the Fill crop.
@@ -12,13 +14,16 @@ use klipolo_model::crop::{Crop, within};
 use klipolo_model::framing::effective_framing;
 use klipolo_model::layout::BoxN;
 use klipolo_model::motion::{Blend, sample};
-use klipolo_model::project::{Asset, AssetKind, FormatKind, Project, Recording, RecordingSource};
+use klipolo_model::project::{
+    Asset, AssetKind, BackgroundKind, FormatKind, Project, Recording, RecordingSource,
+};
 use klipolo_model::time::Us;
 use klipolo_model::timeline::{CameraMode, Clip, ClipSource, Framing, FramingMode};
 
+use super::super::effects::{self, Clock};
 use super::super::framing::{
-    self, area_aspect, as_shown, aspect_of, camera_rect_for, content_box, cover_crop, fit_rect,
-    follow_crop_in, follow_crop_key, split_panes,
+    self, FULL, area_aspect, as_shown, aspect_of, camera_rect_for, content_box, cover_crop,
+    fit_rect, follow_crop_in, follow_crop_key, split_panes,
 };
 use super::super::strings::Table;
 use super::super::takes::Follows;
@@ -32,6 +37,11 @@ const CENTRE_FILL: Framing = Framing {
     focus_y: 0.5,
     follow: None,
 };
+
+/// How blurred the footage behind a clip is: the built-in blur's largest radius, in 1080p pixels.
+const BACKDROP_BLUR_PX: f64 = 64.0;
+/// How bright it shows over the black under it.
+const BACKDROP_OPACITY: f64 = 0.6;
 
 /// The main footage and, for recordings, the camera.
 #[allow(clippy::too_many_arguments)]
@@ -53,7 +63,7 @@ pub(super) fn main_layers(
         ClipSource::Asset { id } => {
             if let Some(asset) = video(id) {
                 let framing = effective_framing(p, clip, format);
-                out.push(Layer::Video(framed(
+                let main = framed(
                     VideoRole::Main,
                     main_id,
                     source_at(asset, source_us, media, registry, s),
@@ -61,7 +71,9 @@ pub(super) fn main_layers(
                     (framing, crop),
                     format,
                     false,
-                )));
+                );
+                backdrop(p, registry, (clip, &main, content), format, s, out);
+                out.push(Layer::Video(main));
             }
         }
         ClipSource::Recording { id } => {
@@ -74,7 +86,7 @@ pub(super) fn main_layers(
                 if let Some((camera, camera_us)) = footage(p, rec.primary_source(), source_us) {
                     let mirror = clip.camera.as_ref().is_some_and(|c| c.mirror);
                     let framing = effective_framing(p, clip, format);
-                    out.push(Layer::Video(framed(
+                    let main = framed(
                         VideoRole::Main,
                         main_id,
                         source_at(camera, camera_us, media, registry, s),
@@ -82,7 +94,9 @@ pub(super) fn main_layers(
                         (framing, crop),
                         format,
                         mirror,
-                    )));
+                    );
+                    backdrop(p, registry, (clip, &main, content), format, s, out);
+                    out.push(Layer::Video(main));
                 }
                 return;
             };
@@ -123,6 +137,7 @@ pub(super) fn main_layers(
                 let base = (main.crop, crop.kept());
                 main.crop = followed(follows, rec, base, follow.closer, source_us);
             }
+            backdrop(p, registry, (clip, &main, area), format, s, out);
             out.push(Layer::Video(main));
             if let Some((asset, camera_us, layout, rect)) = shown {
                 // The bubble's keys are in the recording's source time (the clip's, not the camera file's), so cuts
@@ -166,6 +181,65 @@ pub(super) fn main_layers(
             }
         }
     }
+}
+
+/// With the blurred video background (`BackgroundKind::Blur`), `main` (`clip`'s footage, framed in `area`) again under
+/// it, onto `out`: covering the frame from the middle of what the clip's crop leaves, mirrored as `main` is, blurred
+/// and dimmed over the black under it. Only where `main` leaves some of the frame uncovered: the background's padding,
+/// or Fit's bars in `area` (a split's camera pane covers the rest). The same frame of the same file as `main`, so the
+/// decoder reads it once; `clip_layers` gives it the clip's look, never its effects or the zoom.
+fn backdrop(
+    p: &Project,
+    registry: &Registry,
+    (clip, main, area): (&Clip, &VideoLayer, BoxN),
+    format: FormatKind,
+    s: &mut Table,
+    out: &mut Vec<Layer>,
+) {
+    if p.background.kind != BackgroundKind::Blur
+        || (p.background.padding <= 0.0 && covers(main.dest, area))
+    {
+        return;
+    }
+    let crop = clip.crop.unwrap_or_default();
+    let frame = area_aspect(FULL, format);
+    let aspect = crop.aspect_of(aspect_of(main.source.width, main.source.height, frame));
+    let shown = within(crop.kept(), cover_crop(aspect, frame, 0.5, 0.5));
+    let id = s.backdrop(&clip.id);
+    // A still blur: its pass reads no time. The effect stage samples past the frame's edge as the edge, so the blur
+    // reaches the edges at full strength.
+    let clock = Clock {
+        local_us: 0,
+        duration_us: 0,
+        fps: p.settings.fps,
+    };
+    let blur = effects::blur_pass(registry, &id, BACKDROP_BLUR_PX, clock);
+    out.push(Layer::Video(VideoLayer {
+        role: VideoRole::Backdrop,
+        id,
+        source: main.source.clone(),
+        dest: FULL,
+        crop: as_shown(main.mirror, shown),
+        rotation: 0.0,
+        opacity: BACKDROP_OPACITY,
+        radius: 0.0,
+        mirror: main.mirror,
+        border: false,
+        look: None,
+        effects: blur.into_iter().collect(),
+        pad_px: 0.0,
+        blend: Blend::Normal,
+        reach: 1.0,
+    }));
+}
+
+/// Whether `rect` covers all of `area` (to a hair: framing's floating point).
+fn covers(rect: BoxN, area: BoxN) -> bool {
+    const EPS: f64 = 1e-6;
+    rect.x <= area.x + EPS
+        && rect.y <= area.y + EPS
+        && rect.x + rect.w >= area.x + area.w - EPS
+        && rect.y + rect.h >= area.y + area.h - EPS
 }
 
 /// The y share where a portrait split's two halves meet at `at_us` (the screen above, the camera below), or None when

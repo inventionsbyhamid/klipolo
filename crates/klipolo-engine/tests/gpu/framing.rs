@@ -1,5 +1,6 @@
 //! A video layer showing part of its picture (cropped, or filling its box) is drawn with only that part, in preview
-//! and in export, upright from a phone's turned frames, with or without effects and through its blend.
+//! and in export, upright from a phone's turned frames, with or without effects and through its blend; and a clip
+//! fitted in a frame of another shape has its own picture blurred round it with the blurred video background.
 //!
 //! The layer is the phone fixture (shown 720×1280: red on top, blue below) in the left half of a 16:9 frame over grey:
 //! contained, it is a tall picture with grey either side, red above the middle and blue below.
@@ -127,5 +128,71 @@ async fn a_video_layer_draws_only_the_part_of_its_picture_it_shows() {
         // Filling the box: the middle of the picture covers it, the grey beside it gone.
         let filled = render(phone_layer(true, None, Vec::new(), None)).await;
         check(&filled, "filled", &[((20, 60), RED), ((300, 300), BLUE), ((340, 180), GREY)]);
+    }
+}
+
+/// The blurred video background: a 16:9 clip fitted in 9:16 has its own picture, dimmed, above and below it to the
+/// frame's edges, where the plain background would leave black.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "needs a GPU and scripts/gen-engine-fixtures.sh"]
+async fn a_fitted_clip_has_its_own_picture_blurred_and_dimmed_round_it() {
+    use klipolo_model::timeline::{Clip, ClipSource, Framing, FramingMode};
+    let blue = [0x1E, 0x64, 0xDC];
+    let fitted = |kind: BackgroundKind| {
+        let mut p = project();
+        use_fixture(&mut p, "broll", "solid-blue.mp4", 2.0);
+        let mut clip = Clip::new(ClipSource::Asset { id: "broll".into() }, 0, secs(2.0));
+        clip.framing.insert(
+            FormatKind::Portrait,
+            Framing {
+                mode: FramingMode::Fit,
+                focus_x: 0.5,
+                focus_y: 0.5,
+                follow: None,
+            },
+        );
+        p.timeline.main = vec![clip];
+        p.timeline.tracks.clear();
+        p.background.kind = kind;
+        p
+    };
+    for export in [false, true] {
+        let mut backend = if export {
+            GpuBackend::for_export().await.unwrap()
+        } else {
+            GpuBackend::new(klipolo_engine::render::mode::RenderMode::Contained)
+                .await
+                .unwrap()
+                .wait_for_assets()
+        };
+        let mut render = async |p: Project| {
+            let plan = frame_plan(&PlanContext::new(Arc::new(p)), secs(1.0), FormatKind::Portrait);
+            let request = RenderRequest {
+                plan,
+                width: 360,
+                height: 640,
+                output: Output::Rgba,
+            };
+            let frame = backend.render(request).await.unwrap().finish().await.unwrap();
+            assert!(frame.warnings.is_empty(), "{:?}", frame.warnings);
+            frame
+        };
+        let side = if export { "export" } else { "preview" };
+        let plain = render(fitted(BackgroundKind::None)).await;
+        let at = |f: &klipolo_engine::session::RenderedRgba, x, y| pixel(&f.bytes, f.stride, x, y);
+        // The 16:9 picture is 202 px tall in the middle; black above and below it.
+        assert!(near(at(&plain, 180, 320), blue, 6), "{side}: {:?}", at(&plain, 180, 320));
+        assert!(near(at(&plain, 180, 60), [0, 0, 0], 2), "{side}: {:?}", at(&plain, 180, 60));
+        let blurred = render(fitted(BackgroundKind::Blur)).await;
+        assert!(near(at(&blurred, 180, 320), blue, 6), "{side}: the clip itself");
+        // Above, below and in the corners: the blue, dimmed, never black or bright.
+        for (x, y) in [(180, 60), (180, 600), (1, 1), (358, 638)] {
+            let [r, g, b] = at(&blurred, x, y);
+            assert!(
+                b > 40 && b + 30 < blue[2] && b > r && b > g,
+                "{side}: ({x}, {y}) is {:?}",
+                [r, g, b]
+            );
+        }
     }
 }
