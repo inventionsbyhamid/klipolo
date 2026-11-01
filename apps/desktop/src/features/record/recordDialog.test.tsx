@@ -29,6 +29,7 @@ const rec = () => useRecorder.getState();
 const state = (s: WorkerState): CaptureEvent => ({ ev: 'state', state: s, elapsedUs: 0 });
 const countdown = (leftS: number): CaptureEvent => ({ ev: 'countdown', leftS });
 const gate = (...missing: string[]): CaptureEvent => ({ ev: 'gate', missing });
+const systemAlert = (up: boolean): CaptureEvent => ({ ev: 'systemAlert', up });
 const meter = (source: string, peakDbfs: number): CaptureEvent => ({ ev: 'meter', source, peakDbfs });
 const failed = (code: string): CaptureEvent => ({ ev: 'failed', error: { code, params: {} } });
 
@@ -712,6 +713,30 @@ describe('countdown, saving and failure', () => {
     expect(fake.sent.at(-1)).toEqual({ take: 'take-1', command: { cmd: 'withoutSource', source: 'camera' } });
     expect(dialog).not.toHaveTextContent("Camera isn't sending anything yet.");
     expect(dialog).toHaveTextContent("Mic isn't sending anything yet.");
+  });
+
+  it('macos_asking_holds_the_countdown_until_it_is_answered', async () => {
+    const dialog = await pressRecord();
+    emit('take-1', countdown(2));
+    emit('take-1', systemAlert(true));
+    emit('take-1', countdown(2));
+    const asking = 'macOS is asking you something. Answer it, and the countdown starts again.';
+    // The question is said in the countdown's place, and no number shows while it holds.
+    expect(dialog).toHaveTextContent(asking);
+    expect(within(dialog).getAllByRole('status').some((s) => s.textContent === asking)).toBe(true);
+    expect(dialog).not.toHaveTextContent('Recording starts in');
+    expect(dialog.querySelector('.record-count')).toBeNull();
+    // Nothing to press but Cancel, which keeps the keyboard.
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    expect(yellows(dialog)).toEqual([]);
+    // Answered: the countdown starts again from the top (the worker says its number first), and is said again.
+    emit('take-1', countdown(3));
+    emit('take-1', systemAlert(false));
+    expect(dialog).not.toHaveTextContent(asking);
+    expect(dialog.querySelector('.record-count')).toHaveTextContent('3');
+    expect(within(dialog).getAllByRole('status').some((s) => s.textContent === 'Recording starts in 3 s.')).toBe(true);
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(fake.calls.at(-1)).toBe('send:cancel');
   });
 
   it('the_dialog_hides_while_recording_and_saving', async () => {

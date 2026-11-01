@@ -36,6 +36,7 @@ const phase = () => phaseOf(rec());
 const state = (s: WorkerState): CaptureEvent => ({ ev: 'state', state: s, elapsedUs: 0 });
 const countdown = (leftS: number): CaptureEvent => ({ ev: 'countdown', leftS });
 const gate = (...missing: string[]): CaptureEvent => ({ ev: 'gate', missing });
+const systemAlert = (up: boolean): CaptureEvent => ({ ev: 'systemAlert', up });
 const meter = (source: string, peakDbfs: number): CaptureEvent => ({ ev: 'meter', source, peakDbfs });
 const failed = (code: string): CaptureEvent => ({ ev: 'failed', error: { code, params: {} } });
 
@@ -361,6 +362,30 @@ describe('the take', () => {
     expect(rec().gate).toEqual(['camera']);
     await rec().recordWithout('camera');
     expect(rec().gate).toBeNull();
+  });
+
+  it('a_system_alert_holds_until_the_worker_says_it_went', async () => {
+    const take = await pressed();
+    expect(rec().systemAlert).toBe(false);
+    fake.emit(take, countdown(3));
+    fake.emit(take, systemAlert(true));
+    fake.emit(take, countdown(3));
+    expect(rec()).toMatchObject({ countdown: 3, systemAlert: true });
+    // Unlike the gate's question, the countdown moving on doesn't end it: only the worker's word does.
+    fake.emit(take, countdown(2));
+    expect(rec().systemAlert).toBe(true);
+    fake.emit(take, systemAlert(false));
+    expect(rec().systemAlert).toBe(false);
+    fake.emit(take, systemAlert(true));
+    fake.emit(take, state('recording'));
+    expect(rec().systemAlert).toBe(false);
+  });
+
+  it('a_new_press_forgets_the_last_take_s_system_alert', async () => {
+    const take = await pressed();
+    fake.emit(take, systemAlert(true));
+    await rec().cancel();
+    expect(rec().systemAlert).toBe(false);
   });
 
   it('events_for_another_take_are_ignored', async () => {
