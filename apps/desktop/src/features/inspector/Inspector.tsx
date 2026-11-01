@@ -41,8 +41,8 @@ export type Inspected =
   | 'adjustment'
   | 'generator';
 
-/** The kind of `item` the inspector has fields for: every layer has a card. */
-export function inspectedKind(item: Item): Inspected {
+/** The kind of `item` the inspector has fields for: every layer has a card; null for a kind it doesn't know. */
+export function inspectedKind(item: Item): Inspected | null {
   const c = item.content;
   if (c.type === 'text') return 'text';
   if (c.type === 'image') return 'image';
@@ -50,7 +50,11 @@ export function inspectedKind(item: Item): Inspected {
   if (c.type === 'generator') return c.source.includes('/scene.') ? 'template' : 'generator';
   if (c.type === 'audio') return typeof c.duck === 'number' ? 'music' : 'sound';
   if (c.type === 'zoom') return 'zoom';
-  return 'adjustment';
+  if (c.type === 'adjustment') return 'adjustment';
+  // A kind the bindings gain fails `tsc` here; at run time (a project from a newer version) it gets no card.
+  const unknown: never = c;
+  void unknown;
+  return null;
 }
 
 /** A selected main-track clip: the clip card shows it (it has no layer or track). */

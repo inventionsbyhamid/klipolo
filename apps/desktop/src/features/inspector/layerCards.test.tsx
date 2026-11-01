@@ -200,4 +200,10 @@ describe('zoom and other layers', () => {
     await userEvent.click(await screen.findByRole('radio', { name: 'Smart' }));
     expect(lastTx().ops).toEqual([zoomOp({ scale: 2, target: { type: 'auto', using: ['pauses'] } })]);
   });
+
+  it('a kind of layer this card has no fields for gets no card', async () => {
+    const { inspectedKind } = await import('./Inspector');
+    const future = { ...titleItem, content: { type: 'hologram' } } as unknown as Item;
+    expect(inspectedKind(future)).toBeNull();
+  });
 });
