@@ -4,6 +4,9 @@
 //! of it is muted so it isn't heard twice. Layer ids are `{clip}-{source}`, then `-2`, `-3` (derived, so repeating
 //! the edit repeats them). With the batch's indexes every step is O(runs × log layers) or O(media), so separating
 //! 1,500 cameras in one batch is linear.
+//!
+//! `DetachSound` does the same for an imported video clip's own sound: one sound layer `{clip}-sound` over the clip,
+//! and the clip muted.
 
 use crate::error::{invalid, not_found, Result};
 use crate::ids::Id;
@@ -121,6 +124,65 @@ pub(super) fn detach_source(
         places.file_added(&file, start, end);
     }
     Ok(ids)
+}
+
+/// Separates imported video clip `clip_id`'s own sound (`DetachSound`): one sound layer of its file over the whole
+/// clip, attached at its in point, at the clip's volume (within the model's 200 %), mute and edge fades, so nothing
+/// heard changes; the clip is muted. Refused for a recording clip (its sounds go one by one), a file without sound, a
+/// speed other than 1×, and a clip whose file already plays in a sound layer over it. Returns the new layer's id.
+pub(super) fn detach_sound(p: &mut Project, clip_id: &str, places: &mut Places) -> Result<Vec<Id>> {
+    let i = places
+        .clip(&p.timeline.main, clip_id)
+        .ok_or_else(|| not_found("clip", clip_id))?;
+    let clip = &p.timeline.main[i];
+    let ClipSource::Asset { id: file } = &clip.source else {
+        return Err(invalid(code!("model.sound.recording")));
+    };
+    if !p.asset(file).is_some_and(|a| a.has_audio) {
+        return Err(invalid(code!("model.sound.none")));
+    }
+    if clip.speed != 1.0 {
+        return Err(invalid(code!("model.source.detachSpeed")));
+    }
+    let start = places.start(&p.timeline.main, i);
+    let end = start.saturating_add(clip.duration_us());
+    let heard_already = p.timeline.tracks.iter().flat_map(|t| &t.items).any(|item| {
+        matches!(&item.content, ItemContent::Audio { asset_id, .. } if asset_id == file)
+            && item.start_us < end
+            && item.end_us() > start
+    });
+    if heard_already {
+        return Err(invalid(code!("model.sound.alreadySeparate")));
+    }
+    let (fade_in, fade_out) = edge_fades(&p.timeline.main, i);
+    let duration = end - start;
+    let fade_in = fade_in.clamp(0, duration);
+    let id = fresh_id(format!("{clip_id}-sound"), |id| taken(p, id, places));
+    let item = Item {
+        id: id.clone(),
+        start_us: start,
+        duration_us: duration,
+        attach: anchor(clip, clip.source_in_us),
+        layout: whole_frame(),
+        content: ItemContent::Audio {
+            asset_id: file.clone(),
+            source_in_us: clip.source_in_us,
+            volume: clip.volume.min(2.0),
+            muted: clip.muted,
+            fade_in_us: fade_in,
+            fade_out_us: fade_out.clamp(0, duration - fade_in),
+            effect: None,
+            drift_ppm: 0.0,
+            centre_from: None,
+            tie: None,
+            duck: None,
+        },
+        effects: Vec::new(),
+    };
+    // Heard from its layer now, not twice.
+    p.timeline.main[i].muted = true;
+    add(p, &TrackTarget::Auto, item, places)?;
+    Ok(vec![id])
 }
 
 /// Where each run of `source` plays inside `clip`, at least 10 ms of it, no further than its file reaches: the run's

@@ -167,6 +167,12 @@ pub enum Op {
         clip_id: Id,
         source_id: Id,
     },
+    /// Put an imported video clip's own sound in a sound layer of its own, attached under the clip (id `{clip}-sound`,
+    /// then `-2`, `-3`), and mute the clip so it isn't heard twice: the layer takes the clip's volume, mute and fades,
+    /// so nothing heard changes (only at normal speed). A recording's sounds go one by one (`DetachSource`).
+    DetachSound {
+        clip_id: Id,
+    },
     /// Change a recording source's name, default mix, sync nudge or timing (its runs, re-timed by Sync); unset patch
     /// fields are left alone.
     UpdateRecordingSource {
@@ -479,6 +485,7 @@ impl Op {
             Op::RemoveItem { .. } => "removeItem",
             Op::SetAttach { .. } => "setAttach",
             Op::DetachSource { .. } => "detachSource",
+            Op::DetachSound { .. } => "detachSound",
             Op::UpdateRecordingSource { .. } => "updateRecordingSource",
             Op::SetClipSourceMix { .. } => "setClipSourceMix",
             Op::UseRecording { .. } => "useRecording",

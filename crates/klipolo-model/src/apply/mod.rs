@@ -284,6 +284,10 @@ fn apply_one(p: &mut Project, op: &Op, places: &mut Places) -> Result<Touched> {
         Op::DetachSource { clip_id, source_id } => {
             detach::detach_source(p, clip_id, source_id, places).map(Touched::Layers)
         }
+        // The clip's mute changes too, which is no timing.
+        Op::DetachSound { clip_id } => {
+            detach::detach_sound(p, clip_id, places).map(Touched::Layers)
+        }
         // A source's mix, name or sync: no timing; a sync change slips its separated sound layers, and those cut back
         // at their start have new starts and anchors.
         Op::UpdateRecordingSource {

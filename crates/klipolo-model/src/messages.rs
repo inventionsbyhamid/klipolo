@@ -142,6 +142,10 @@ pub const MESSAGES: Messages = &[
     ("model.source.speedSeparated", "The clip at {atUs} has its sound on its own track, and separated sound can't change speed yet."),
     ("model.source.alreadySeparate", "This source is already in its own layer here."),
     ("model.source.noFootage", "This source recorded nothing during this clip."),
+    // `DetachSound`: an imported video clip's own sound on a layer of its own.
+    ("model.sound.recording", "Separate a recording's sounds one by one from its menu."),
+    ("model.sound.none", "This clip's file has no sound."),
+    ("model.sound.alreadySeparate", "This clip's sound is already in its own layer."),
     ("model.settings.fps", "fps must be 24, 25, 30, 50 or 60."),
     ("model.settings.formatCount", "Pick between one and three formats."),
     ("model.settings.duplicateFormat", "Each format can only be added once."),
