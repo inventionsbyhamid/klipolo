@@ -757,3 +757,32 @@ fn kinetic_words_are_the_kinetic_title_template() {
     );
     assert!(refused_to_model(&out, 0).starts_with("animate: kinetic is a title of its own"));
 }
+
+#[test]
+fn animate_last_never_reaches_past_a_layer_that_was_not_added() {
+    let p = project();
+    let out = run(
+        &p,
+        "a heart at 10 s, then a missing star, popping in",
+        &[
+            (
+                "addImage",
+                json!({"file": "Heart", "size": null, "position": null, "atSec": 10.0, "durationSec": null}),
+            ),
+            (
+                "addImage",
+                json!({"file": "Star", "size": null, "position": null, "atSec": 20.0, "durationSec": null}),
+            ),
+            ("animate", animate("last", json!({"enter": "pop"}))),
+        ],
+    );
+    assert_eq!(out.refusals.len(), 2, "{:#?}", out.refusals);
+    assert_eq!(out.refusals[1].call_index, 2);
+    assert_eq!(
+        out.refusals[1].reason,
+        "animate: addImage was not done, so there is no layer to animate."
+    );
+    // The heart keeps the motion it came with.
+    let after = apply_ops(&p, &out.additions.unwrap().ops).unwrap();
+    assert_eq!(layers(&after, TrackKind::Overlay)[0].layout.motion, None);
+}

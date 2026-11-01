@@ -704,7 +704,7 @@ impl Compiler<'_> {
                     exit: *exit,
                     emphasis: *emphasis,
                 };
-                let target = self.animated_layer(layer, i, &added);
+                let target = self.animated_layer(calls, layer, i, &added);
                 let edit = match target {
                     Ok(Added::Sticker(j)) => {
                         match self.animate_sticker(calls, j, &change, sound.as_deref(), &animated) {
@@ -884,31 +884,52 @@ impl Compiler<'_> {
         out
     }
 
-    /// The layer `animate` call `i` names: by its ref from the context, or the one the last call before it added
-    /// (`added`, by call index).
+    /// The layer `animate` call `i` names: by its ref from the context, or the one the last call before it that adds a
+    /// layer (`addText`, `addImage`, `makeTitleCard`, `makeSticker`) added (`added`, by call index): none when that call
+    /// was refused, never an earlier one.
     fn animated_layer(
         &self,
+        calls: &[ToolCall],
         layer: &LayerRef,
         i: usize,
         added: &[(usize, Added)],
     ) -> Result<Added, Refused> {
         match layer {
-            LayerRef::Last => (added.iter())
-                .filter(|(j, _)| *j < i)
-                .max_by_key(|(j, _)| *j)
-                .map(|(_, a)| a.clone())
-                .ok_or_else(|| {
-                    to_model(
-                        "animate: no layer was added before it in this answer. Name one by its ref from Layers, such \
-                         as t1 or i1."
-                            .to_owned(),
+            LayerRef::Last => {
+                let adds = |c: &ToolCall| {
+                    matches!(
+                        c,
+                        ToolCall::AddText { .. }
+                            | ToolCall::AddImage { .. }
+                            | ToolCall::MakeTitleCard { .. }
+                            | ToolCall::MakeSticker { .. }
                     )
-                }),
+                };
+                let Some(j) = (0..i).rev().find(|&j| calls.get(j).is_some_and(adds)) else {
+                    return Err(to_model(
+                        "animate: no layer was added before it in this answer. Name one by its ref from Layers, \
+                         such as t1 or i1."
+                            .to_owned(),
+                    ));
+                };
+                (added.iter())
+                    .find(|(k, _)| *k == j)
+                    .map(|(_, a)| a.clone())
+                    .ok_or_else(|| {
+                        to_model(format!(
+                            "animate: {} was not done, so there is no layer to animate.",
+                            calls[j].name()
+                        ))
+                    })
+            }
             LayerRef::One(r) => {
                 let refs = &self.inputs.refs;
-                (refs.text(r).or_else(|| refs.picture(r)).or_else(|| refs.video(r)))
-                    .map(|id| Added::Item(id.to_owned()))
-                    .ok_or_else(|| to_model(format!("animate: there is no layer {r}.")))
+                (refs
+                    .text(r)
+                    .or_else(|| refs.picture(r))
+                    .or_else(|| refs.video(r)))
+                .map(|id| Added::Item(id.to_owned()))
+                .ok_or_else(|| to_model(format!("animate: there is no layer {r}.")))
             }
         }
     }
