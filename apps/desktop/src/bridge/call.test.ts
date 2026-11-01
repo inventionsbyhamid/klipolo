@@ -37,6 +37,9 @@ describe('call', () => {
       "A clip couldn't be decoded with hardware. Resume to try again, or finish in compatibility mode.",
     );
     expect(said('exports.unreadable')).toBe("This export's files can't be read. Discard it and export again.");
+    expect(said('exports.otherBuild')).toBe(
+      'Another version of Klipolo made this export, so it can’t resume. Start over or discard it.',
+    );
     expect(said('project.createFailed')).toBe("Klipolo couldn't create the project. Check the disk, then try again.");
   });
 

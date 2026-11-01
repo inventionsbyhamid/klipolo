@@ -40,6 +40,7 @@ const APP_CODES: Record<string, string> = {
   'exports.unreadable': "This export's files can't be read. Discard it and export again.",
   'exports.discardFailed': "The export couldn't be discarded. Try again.",
   'exports.gone': "That export isn't there any more. Export again.",
+  'exports.otherBuild': 'Another version of Klipolo made this export, so it can’t resume. Start over or discard it.',
   'exports.revealGone': "That video isn't there any more.",
   'exports.shareFailed': "Klipolo couldn't open the share menu. Show the videos in Finder and share them from there.",
   'exports.diskFull': 'The disk is full. Free up space, then resume.',
