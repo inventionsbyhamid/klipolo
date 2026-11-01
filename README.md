@@ -6,6 +6,110 @@ proposal you approve, with the removed parts shown in red on the timeline.
 
 It runs on Apple Silicon and Intel Macs and is free while in beta.
 
+## What Klipolo does
+
+- **Talk to edit.** Type what you want in the chat, like "cut the ums and long
+  pauses". Captions, music or a new format apply at once, with Undo. Cuts come
+  back as a proposal, drawn in red on the timeline, and wait for your Apply.
+- **Captions in five styles**, including karaoke, where each word lights up as
+  it is said. Fix any word by hand.
+- **Vertical and square versions.** Keep 16:9, 9:16 and 1:1 versions in one
+  project, and export one MP4 for each.
+- **Stickers and title cards drawn by Muse Image.** Klipolo cuts each sticker
+  out of its background, and sets your exact title over a background with no
+  lettering.
+- **Edit by hand too.** Split and trim clips, add transitions, change a clip's
+  speed and volume, pick Fit or Fill, and add video layers over your clips.
+- **Export** MP4s drawn by the same engine as the preview, captions included,
+  so the file matches what you saw.
+
+## Meta models in Klipolo
+
+Every model Klipolo calls is a Meta model. It calls no other company's model,
+and ships none.
+
+| Model | What it does in Klipolo | Where it's called |
+| --- | --- | --- |
+| Muse Spark 1.3 (`muse-spark-1.3`) | Chat: reads the project, its transcript and scene log, and edits through strict function tools. Klipolo checks every call before anything changes. | `crates/klipolo-analysis/src/providers/meta_chat.rs`, with the tools and checks in `crates/klipolo-chat` |
+| Muse Spark 1.3 (`muse-spark-1.3`) | Scene log: watches a 360p copy of each clip, with its sound, and logs shots, actions, reactions, text on screen and topic changes, with times. | `crates/klipolo-analysis/src/providers/meta.rs` |
+| Muse Spark 1.3 (`muse-spark-1.3`) | The MCP demo agent: edits the open project through Klipolo's MCP tools. | `scripts/mcp-demo-agent/agent.py` |
+| Muse Voice Transcribe (`muse-voice-transcribe-1.0`) | Speech to text, in speaker turns with times. | `crates/klipolo-meta/src/asr.rs`, called from `crates/klipolo-analysis/src/providers/meta.rs` |
+| Muse Image (`muse-image-1.0`) | Draws stickers and title card backgrounds. | `crates/klipolo-meta/src/images.rs`, called from `crates/klipolo-analysis/src/providers/meta_images.rs` |
+| MMS forced aligner (torchaudio's `MMS_FA`) | Meta's open model, run on CPU on Klipolo's server. Times every word of each speaker turn, for word by word captions and cuts that land between words. | `services/relay/relay/align.py`, asked for from `crates/klipolo-meta/src/relay.rs` |
+
+The app reaches Meta's models through one client, `crates/klipolo-meta`: with
+your own key it calls Meta directly, and with an access code it goes through
+the relay.
+
+## How it fits together
+
+- **The app** (`crates/klipolo-app`, `apps/desktop`): Tauri 2, with the work
+  in Rust crates and the editor's page in React.
+- **The engine** (`crates/klipolo-engine`): Rust on wgpu (Metal on the Mac)
+  and FFmpeg. It draws the preview and the export on the GPU.
+- **Analysis on the Mac** (`crates/klipolo-analysis`): turns each clip's sound
+  into a 16 kHz mono WAV, makes a small 360p copy for Muse Spark, finds hard
+  cuts from every frame, and caches the results by file content, so the same
+  clip never costs a second Meta call.
+- **Chat** (`crates/klipolo-chat`): the prompt, the tools, and a compiler that
+  holds every cut to something the model was shown, like a word, a pause or a
+  scene change.
+- **The relay** (`services/relay`, at `api.klipolo.com`): registers each
+  device, gives an access code its capped budget, forwards only an allowlist of
+  Meta models, and runs the MMS aligner for every device.
+- **The MCP server** (`crates/klipolo-mcp`): lets other apps edit with chat's
+  tools. `scripts/mcp-demo-agent` is a Muse Spark agent that drives it.
+
+## Try it
+
+**You need** a Mac with Apple Silicon or Intel, macOS 15 or later, and an
+internet connection for the AI features.
+
+**Download** Klipolo from klipolo.com once the first build is out (Nov 4).
+
+**Turn on the AI features.** Open Settings (the Settings button at the top
+right, or Command comma) and pick one of two ways:
+
+- **Access code.** Choose Access code, type the code and click Use code. No
+  Meta account needed. Judges: use the code given in the submission. Klipolo
+  shows the credit left, and before each analysis it says what it will cost.
+- **My Meta API key.** Choose My Meta API key, paste your key and click Save
+  key. Klipolo checks it with Meta first, then keeps it in your Mac's
+  Keychain. Meta bills your key. Get a key at dev.meta.ai.
+
+Editing and export work without either.
+
+**Then** click New project, drag in a short clip of someone talking, click
+Analyze, and type a request in the chat.
+
+## Let other apps edit with Klipolo (MCP)
+
+Klipolo is also an MCP server. In Settings, under Other apps, turn on **Let
+other apps edit with Klipolo**. AI agents and other MCP apps can then edit the
+open project with the tools chat uses. Additions apply at once, as one undo
+step. Cuts always wait for your Apply in the chat panel.
+
+**Copy config** puts the setup for an MCP app on the clipboard. It starts
+Klipolo's stdio bridge, `klipolo-app --mcp`. Klipolo listens on 127.0.0.1 only,
+with a new token each run.
+
+The demo agent is a small script where Muse Spark edits the open project
+through these tools. With Klipolo open on an analyzed project and the switch
+on:
+
+```sh
+cd scripts/mcp-demo-agent
+python3.12 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python agent.py "In Klipolo, make a 30 second vertical teaser of the best moment, with karaoke captions."
+```
+
+It needs your own Meta API key in the `MODEL_API_KEY` environment variable,
+and sends it only to Meta. It finds Klipolo in Applications (`--klipolo
+<path>` for another copy), takes at most 8 model turns, and stops once Muse
+Spark's tokens have cost $0.10 (`--max-usd` changes that). Run it again after
+you click Apply, and it reads what became of the proposal.
+
 ## Repo layout
 
 ```
