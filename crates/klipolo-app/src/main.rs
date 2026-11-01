@@ -113,8 +113,12 @@ fn main() {
                 sounds,
             );
             // Following the speaker, its tracked footage kept beside the analysis's in the same cache.
-            let speaker =
-                commands::speaker::load(app.handle(), credentials.clone(), analysis.cache_root());
+            let speaker = commands::speaker::load(
+                app.handle(),
+                credentials.clone(),
+                analysis.cache_root(),
+                analysis.clone(),
+            );
             // Chat over the open project, what analysis found and the same credentials.
             let chat = commands::chat::load(app.handle(), credentials.clone(), analysis.clone());
             // Chat's followSubject follows with the same speaker following, so its spend counts once.

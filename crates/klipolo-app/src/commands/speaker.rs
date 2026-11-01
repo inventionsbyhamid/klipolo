@@ -8,7 +8,9 @@ use std::sync::Arc;
 
 use klipolo_analysis::subject::PERSON;
 use klipolo_app::chat::Projects;
-use klipolo_app::speaker::{NO_ONE, PROGRESS_EVENT, Speaker, SpeakerEstimate, SpeakerProgress};
+use klipolo_app::speaker::{
+    NO_ONE, PROGRESS_EVENT, Speaker, SpeakerEstimate, SpeakerProgress, Voices,
+};
 use klipolo_model::coded::Said;
 use klipolo_model::history::SnapshotPatch;
 use klipolo_model::project::FormatKind;
@@ -24,11 +26,13 @@ pub(crate) type SpeakerHandle = Arc<Speaker>;
 const UNDO: &str = "clip.focus.speaker.undo";
 
 /// The app's speaker following: SAM through the saved credentials, tracked footage kept in the analysis cache under
-/// `cache_root`, the small copies made in the app's cache folder.
+/// `cache_root`, the small copies made in the app's cache folder, and whoever speaks kept in frame from `voices` (the
+/// clips' analysis).
 pub(crate) fn load(
     app: &AppHandle,
     credentials: CredentialsState,
     cache_root: &Path,
+    voices: Arc<dyn Voices>,
 ) -> SpeakerHandle {
     let work_root = app.path().app_cache_dir().map_or_else(
         |_| std::env::temp_dir().join("klipolo").join("speaker-work"),
@@ -42,12 +46,10 @@ pub(crate) fn load(
             }
         })
     };
-    Arc::new(Speaker::for_app(
-        credentials,
-        cache_root.to_path_buf(),
-        work_root,
-        progress,
-    ))
+    Arc::new(
+        Speaker::for_app(credentials, cache_root.to_path_buf(), work_root, progress)
+            .with_voices(voices),
+    )
 }
 
 /// What following the speaker costs for clip `clip_id` in `format`, before it runs: free for footage tracked before,
