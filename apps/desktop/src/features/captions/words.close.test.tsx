@@ -12,9 +12,9 @@ import { fixField, pagesOf, said, setWordLooks, wordList as list } from '../../t
 import { CaptionWords } from './CaptionWords';
 
 /**
- * Closing the project never loses a caption edit still on its way: a fix
- * waiting its turn behind another commit, and the presses kept while the words are being updated, go in before the
- * close and are there when the project opens again; a press that can't go any more is said, never dropped silently.
+ * Closing the project never loses a caption edit still on its way: a fix waiting its turn behind another commit, and
+ * the presses kept while the words are being updated, go in before the close and are there when the project opens
+ * again; a press that can't go any more is said, never dropped silently.
  */
 
 beforeEach(async () => {
