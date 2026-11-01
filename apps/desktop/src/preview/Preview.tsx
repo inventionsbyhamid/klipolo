@@ -38,12 +38,17 @@ function DropZone({ over }: { over: boolean }) {
           <Icon name="plus" />
         </b>
       </div>
-      <h1 className="drop-title">Drop videos here</h1>
-      <p className="drop-text">MOV, MP4 or M4V. Add several at once and they line up in the order you drop them.</p>
+      <h1 className="drop-title">{t({ id: 'preview.empty.title', message: 'Drop videos here' })}</h1>
+      <p className="drop-text">
+        {t({
+          id: 'preview.empty.text',
+          message: 'MOV, MP4 or M4V. Add several at once and they line up in the order you drop them.',
+        })}
+      </p>
       <div className="drop-actions">
         {/* WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable. */}
         <button type="button" tabIndex={0} className="btn btn-primary btn-lg" onClick={() => void importMedia()}>
-          Choose files
+          {t({ id: 'preview.empty.choose', message: 'Choose files' })}
         </button>
         <button type="button" tabIndex={0} className="btn btn-secondary btn-lg" onClick={recordYourScreen}>
           <Icon name="record" />
