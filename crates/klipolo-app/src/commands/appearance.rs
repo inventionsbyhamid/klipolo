@@ -11,7 +11,8 @@ use klipolo_app::prefs::{self, Theme};
 use tauri::window::Color;
 use tauri::{AppHandle, Manager, State, Window};
 
-/// The theme in use, and the support folder it is saved in (none without a home folder: it lasts this run).
+/// The theme in use, and the folder it is saved in (`appearance::theme_dir`; none without a home folder: it lasts this
+/// run).
 pub(crate) struct AppearanceState {
     dir: Option<PathBuf>,
     theme: Mutex<Theme>,
@@ -39,7 +40,8 @@ fn main_window(app: &AppHandle) -> Option<Window> {
 
 /// At launch, from the setup hook: the window exists and hasn't drawn yet. Reads the saved theme and paints.
 pub(crate) fn at_launch(app: &AppHandle) {
-    let dir = klipolo_mcp::connection::support_dir();
+    let dir = klipolo_mcp::connection::support_dir()
+        .map(|support| appearance::theme_dir(&support, tauri::is_dev()));
     let theme = dir
         .as_deref()
         .map(|dir| prefs::load(dir).theme)

@@ -3,6 +3,8 @@
 //! tokens. The theme is the person's pick in Settings (`prefs::Theme`), or the system's appearance while that is
 //! System.
 
+use std::path::{Path, PathBuf};
+
 use crate::prefs::Theme;
 
 /// `--color-night` in the light theme (0xRRGGBB).
@@ -28,4 +30,18 @@ pub fn canvas(theme: Theme, system_dark: bool) -> [u8; 3] {
     };
     let [_, r, g, b] = rgb.to_be_bytes();
     [r, g, b]
+}
+
+/// The folder inside Klipolo's support folder where a development build keeps its theme.
+pub const DEVELOPMENT_DIR: &str = "Development";
+
+/// Where the theme is saved for the window, inside Klipolo's support folder `support`. A development build's page is
+/// served from another address and keeps its own pick, so the build keeps its own file too (`DEVELOPMENT_DIR`): a
+/// development run never changes the colour a release build launches with.
+pub fn theme_dir(support: &Path, development: bool) -> PathBuf {
+    if development {
+        support.join(DEVELOPMENT_DIR)
+    } else {
+        support.to_path_buf()
+    }
 }
