@@ -33,6 +33,7 @@ vi.mock('../bridge/framing', () => ({
 const { engine } = await import('../bridge/engine');
 const { releaseDock, useDockHold } = await import('../state/dockHold');
 const { useEngine } = await import('../state/engine');
+const { useFullScreen } = await import('../state/fullScreen');
 const { useProject } = await import('../state/project');
 const { usePlayback } = await import('../state/playback');
 const { useSelection } = await import('../state/selection');
@@ -57,6 +58,7 @@ let unstub: (() => void)[] = [];
 
 beforeEach(() => {
   releaseDock();
+  useFullScreen.setState({ on: false });
   useDockHold.setState({ walk: false });
   const snapshot = fixtureSnapshot();
   snapshot.project.settings.formats = ['landscape', 'portrait'];
@@ -134,6 +136,16 @@ describe('selecting never resizes the video', () => {
     expect(card()).toHaveAccessibleName('Title settings');
     expect(hint()).toBeNull();
     expect(stageBox()).toEqual(before);
+  });
+
+  it('full screen keeps no slot: the 9:16 video is centred, with no note beside it', () => {
+    useUi.setState({ previewFormat: 'portrait' });
+    useFullScreen.setState({ on: true });
+    renderWithProviders(<Preview />);
+    expect(screen.getByTestId('stage-area').style.paddingRight).toBe('');
+    expect(screen.queryByText('Select something on the video to change it.')).toBeNull();
+    act(() => useSelection.getState().select('title'));
+    expect(card()).toBeNull();
   });
 
   it('walking the lanes with the arrows never moves the video', async () => {

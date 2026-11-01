@@ -7,6 +7,7 @@ import type { Size } from '../../lib/preview';
 import { ASPECT, holeRect, previewPixels } from '../../preview/viewSize';
 import { SocketCanvas } from '../../preview/SocketCanvas';
 import { useEngine } from '../../state/engine';
+import { useFullScreen } from '../../state/fullScreen';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
@@ -176,8 +177,9 @@ export function Stage() {
       on && !fitsAs(width - pad, height, FORMAT_SIZE[format], canvas),
     ),
   );
-  // The tokens change with the window's width, which changes the area too.
-  const slot = useMemo(() => cardSlot(areaRef.current), [area]);
+  // The tokens change with the window's width, which changes the area too. Full screen shows no card: no slot.
+  const full = useFullScreen((s) => s.on);
+  const slot = useMemo(() => (full ? 0 : cardSlot(areaRef.current)), [area, full]);
   const { card, pad, canvas } = stageLayout(area, FORMAT_SIZE[format], slot);
   const dpr = useDevicePixelRatio();
   useViewSync(videoRef, info, format, dpr);
