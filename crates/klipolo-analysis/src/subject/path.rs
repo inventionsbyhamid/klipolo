@@ -642,7 +642,7 @@ fn sane_side(side: f64) -> f64 {
 }
 
 /// The shots between `start` and `end`, split at the cuts strictly inside.
-fn shots(start: Us, end: Us, cuts: &[Us]) -> Vec<(Us, Us)> {
+pub fn shots(start: Us, end: Us, cuts: &[Us]) -> Vec<(Us, Us)> {
     let mut edges = vec![start];
     edges.extend(cuts.iter().copied().filter(|c| *c > start && *c < end));
     edges.sort_unstable();
