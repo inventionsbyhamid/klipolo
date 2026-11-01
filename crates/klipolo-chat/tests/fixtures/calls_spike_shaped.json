@@ -171,6 +171,10 @@
     {
       "request": "separate the sound",
       "calls": [{"name": "separateSound", "call_id": "call_37", "arguments": "{\"source\": \"mic\", \"which\": null, \"clips\": null}"}]
+    },
+    {
+      "request": "freeze here for two seconds",
+      "calls": [{"name": "freezeFrame", "call_id": "call_38", "arguments": "{\"atSec\": null, \"durationSec\": 2}"}]
     }
   ]
 }

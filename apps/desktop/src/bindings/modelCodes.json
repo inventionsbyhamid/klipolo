@@ -607,6 +607,76 @@
     "params": []
   },
   {
+    "code": "model.sound.recording",
+    "message": "Separate a recording's sounds one by one from its menu.",
+    "params": []
+  },
+  {
+    "code": "model.sound.none",
+    "message": "This clip's file has no sound.",
+    "params": []
+  },
+  {
+    "code": "model.sound.alreadySeparate",
+    "message": "This clip's sound is already in its own layer.",
+    "params": []
+  },
+  {
+    "code": "model.freeze.noClip",
+    "message": "There's no clip at that time to freeze.",
+    "params": []
+  },
+  {
+    "code": "model.freeze.length",
+    "message": "A freeze frame must be between 10 ms and 10 minutes long.",
+    "params": []
+  },
+  {
+    "code": "model.freeze.separate",
+    "message": "A freeze frame has nothing to separate.",
+    "params": []
+  },
+  {
+    "code": "model.freeze.outside",
+    "message": "A freeze frame holds a frame outside its file.",
+    "params": []
+  },
+  {
+    "code": "model.reverse.freeze",
+    "message": "A freeze frame can't play backward.",
+    "params": []
+  },
+  {
+    "code": "model.reverse.recording",
+    "message": "Only imported video clips can play backward.",
+    "params": []
+  },
+  {
+    "code": "model.reverse.outside",
+    "message": "That reversed copy doesn't hold this clip's footage.",
+    "params": []
+  },
+  {
+    "code": "model.reverse.noCopy",
+    "message": "This clip needs a reversed copy of its footage first.",
+    "params": []
+  },
+  {
+    "code": "model.reverse.already",
+    "message": "This clip already plays backward. Reverse it again to play it forward.",
+    "params": []
+  },
+  {
+    "code": "model.reverse.lost",
+    "message": "A reversed clip still needs this file to play forward again. Play it forward or remove the clip first.",
+    "params": []
+  },
+  {
+    "code": "model.reverse.sound",
+    "message": "This clip's sound plays in its own layer. Remove that layer before reversing the clip.",
+    "params": []
+  },
+  {
     "code": "model.settings.fps",
     "message": "fps must be 24, 25, 30, 50 or 60.",
     "params": []

@@ -18,11 +18,12 @@ pub mod library_marks;
 pub mod mcp_config;
 pub mod prefs;
 
-/// Pictures made for a project: stickers (cut out of their white background) and title card backgrounds drawn by an
-/// `ImageMaker`, saved in the project's media folder. Importing files is the binary's own `media` module
-/// (`src/media.rs`), which this shares a folder with.
+/// Files made for a project: stickers (cut out of their white background) and title card backgrounds drawn by an
+/// `ImageMaker`, and clips' footage written backward (`reverse`), saved in the project's media folder. Importing files is
+/// the binary's own `media` module (`src/media.rs`), which this shares a folder with.
 pub mod media {
     pub mod generated;
     pub mod media_folder;
+    pub mod reverse;
     pub mod sticker;
 }

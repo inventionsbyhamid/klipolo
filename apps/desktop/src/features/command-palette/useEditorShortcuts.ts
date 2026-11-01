@@ -42,13 +42,13 @@ export const CONTROL_COMMAND: Readonly<Record<string, string>> = { i: 'toggle-ch
  * ⌘Z undo; ⇧⌘Z redo; ⌘O add files; ⌘E export; ⌘T add a transition (after the selected clip, at a focused cut, else
  * at the cut nearest the playhead); S split; Space play/pause; J / L play backward / forward (pressed again while
  * playing that way: double speed); K pause; with K held, J / L one frame; Delete or Backspace delete (the selected
- * time range, else the selected transition, clip or layer); I / O the time range's start or end at the playhead; ← / →
- * one frame (⇧ one second); ↑ / ↓ the previous or next edit; Home / End the start or end; ⌘= / ⌘− timeline zoom; ⇧Z
- * fit the timeline; 1 / 2 / 3 the format the preview shows; N snapping on or off; M a marker at the playhead (on a
- * recording); Escape clears the selection. With a clip or layer selected: Q / W trim its start or end to the playhead;
- * , and . move it a frame (⇧ ten) or a clip a place; ⌘C ⌘X ⌘V ⌘D copy, cut, paste, duplicate; ⌥⌘V paste effects;
- * ⌥↑ / ⌥↓ the track above or below. ⌘L turns Loop on or off; F shows the preview full screen, and Escape leaves it
- * (before it clears anything).
+ * time range, else the selected transition, clip or layer); ⌥F freeze the frame at the playhead; I / O the time range's
+ * start or end at the playhead; ← / → one frame (⇧ one second); ↑ / ↓ the previous or next edit; Home / End the start
+ * or end; ⌘= / ⌘− timeline zoom; ⇧Z fit the timeline; 1 / 2 / 3 the format the preview shows; N snapping on or off;
+ * M a marker at the playhead (on a recording); Escape clears the selection. With a clip or layer selected: Q / W trim
+ * its start or end to the playhead; , and . move it a frame (⇧ ten) or a clip a place; ⌘C ⌘X ⌘V ⌘D copy, cut, paste,
+ * duplicate; ⌥⌘V paste effects; ⌥↑ / ⌥↓ the track above or below. ⌘L turns Loop on or off; F shows the preview full
+ * screen, and Escape leaves it (before it clears anything).
  * (On a focused timeline block the arrows, Home, End, Enter and Space move between blocks: `useRovingFocus`.)
  * Everything but ⌘K, ⌘↩ and the ⌃⌘ keys (`CONTROL_COMMAND`) is ignored while typing in a field; everything while a
  * menu, list or dialog is open, and when a focused control already handled the key.
@@ -96,13 +96,16 @@ export function useEditorShortcuts() {
     const fromList = mod && FROM_PAGE_LIST.has(key) && within(e.target, PAGE_LIST);
     if (e.defaultPrevented || typing(e.target) || (within(e.target, OWNS_KEYS) && !fromList)) return;
 
-    // ⌥⌘V and ⌥↑ / ⌥↓ (`code` for V: ⌥ turns it into "√" on a Mac).
+    // ⌥⌘V, ⌥↑ / ⌥↓ and ⌥F (`code` for the letters: ⌥ turns V into "√" and F into "ƒ" on a Mac).
     if (e.altKey) {
       if (mod && !e.shiftKey && e.code === 'KeyV') {
         if (run('paste-effects')) e.preventDefault();
       } else if (!mod && !e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault();
         run(e.key === 'ArrowUp' ? 'track-up' : 'track-down');
+      } else if (!mod && !e.shiftKey && e.code === 'KeyF') {
+        e.preventDefault();
+        if (!e.repeat) run('freeze-frame');
       }
       return;
     }

@@ -41,7 +41,7 @@ pub fn encoder_name(codec: VideoCodec) -> Option<&'static str> {
 }
 
 /// The builder for `codec` on its first available encoder (None: there is none).
-pub(super) fn builder(info: VideoInfo, codec: VideoCodec) -> Option<H264EncoderBuilder> {
+pub(crate) fn builder(info: VideoInfo, codec: VideoCodec) -> Option<H264EncoderBuilder> {
     Some(
         H264Encoder::builder(info)
             .with_codec(vt_codec(codec))

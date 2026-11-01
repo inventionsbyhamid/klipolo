@@ -7,7 +7,7 @@ import { codedMessage } from '../../bridge/call';
 import { labelText } from '../../lib/labels';
 import { isVideoRole, mixFor, runInClip, soundSources } from '../../lib/recording';
 import { soundName, soundParam } from '../../lib/sourceNames';
-import { findClip, itemEndUs } from '../../lib/timeline';
+import { findClip, isFreeze, itemEndUs } from '../../lib/timeline';
 import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
 import { searchWords, type Command } from '../command-palette/command';
@@ -59,7 +59,8 @@ export function useSourceCommands(): Command[] {
     const clip: Clip | null = project && selectedId ? findClip(project, selectedId) : null;
     const source = clip?.source;
     const rec = source?.type === 'recording' ? project!.recordings.find((r) => r.id === source.id) : undefined;
-    if (!project || !clip || !rec) return [];
+    // A freeze frame plays none of its sounds.
+    if (!project || !clip || !rec || isFreeze(clip)) return [];
     const i = project.timeline.main.indexOf(clip);
     const start = mainIndex(project.timeline.main).starts[i];
     // Each sound the clip can be heard from (`soundSources`: a camera's own sound too), named as its row in Sounds

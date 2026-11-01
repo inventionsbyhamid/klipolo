@@ -75,6 +75,8 @@ interface ItemBlockProps {
   /** Its row within the lane (px). */
   top: number;
   height: number;
+  /** A sound layer playing an imported clip's own sound (its file is a video: Separate sound). */
+  clipSound?: boolean;
   /** The lane it draws on; by kind when not given (sound layers on Sounds, the rest on Overlays). */
   look?: ItemLook;
   /** A keyboard click (Enter, Space) picks; a pointer picks on press, which also starts a drag. */
@@ -107,6 +109,7 @@ export const ItemBlock = memo(function ItemBlock({
   top,
   height,
   look = kind === 'audio' ? 'sound' : 'overlay',
+  clipSound = false,
   onPick,
   onPress,
   onTrimPress,
@@ -124,9 +127,9 @@ export const ItemBlock = memo(function ItemBlock({
   const ref = useCallback((el: HTMLButtonElement | null) => registerBlock(id, el), [id]);
   // Muted by its own switch: an icon before its name (which gives way first as the block narrows), its sound faded.
   const soundMuted = content.type === 'audio' && !!content.muted;
-  // A recording's own sound on a layer of its own (Separate): part of the footage, not an effect, so it draws as the
-  // clip did, its waveform in the clip's blue, to be cut and moved by what it says.
-  const recorded = look === 'sound' && content.type === 'audio' && content.tie !== undefined;
+  // A recording's or an imported clip's own sound on a layer of its own (Separate): part of the footage, not an effect,
+  // so it draws as the clip did, its waveform in the clip's blue, to be cut and moved by what it says.
+  const recorded = look === 'sound' && content.type === 'audio' && (content.tie !== undefined || clipSound);
   const layer = t(soundMuted ? MUTED_SOUND : KIND_NAME[kind]);
   const duration = formatTime(durationUs);
   const start = formatTime(startUs);
