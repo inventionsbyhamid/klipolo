@@ -10,9 +10,10 @@ import { Icon, type IconName } from '../../layout/Icon';
 import { contribLabel } from '../../lib/contrib';
 import { findClip, findItem } from '../../lib/timeline';
 import { useProject } from '../../state/project';
-import { useSelection } from '../../state/selection';
+import { cameraClipId, useSelection } from '../../state/selection';
 import { deleteBlock, duplicate, stepTrack, trackStepOps } from '../timeline/commands';
 import { AudioInspector } from './AudioInspector';
+import { CameraInspector } from './CameraInspector';
 import { ClipInspector } from './ClipInspector';
 import { cardEscape } from './common';
 import { ImageInspector } from './ImageInspector';
@@ -42,11 +43,21 @@ export interface InspectedClip {
   clip: Clip;
 }
 
+/** A recording clip's camera, selected on the video: the Camera card shows it. */
+export interface InspectedCamera {
+  kind: 'camera';
+  clip: Clip;
+}
+
 /**
- * The selected layer the inspector shows, with its track, or the selected main-track clip; null when nothing it has
- * fields for is selected.
+ * The selected layer the inspector shows, with its track, the selected main-track clip, or a recording clip's camera;
+ * null when nothing it has fields for is selected.
  */
-export function useInspected(): { item: Item; track: Track; kind: Inspected } | InspectedClip | null {
+export function useInspected():
+  | { item: Item; track: Track; kind: Inspected }
+  | InspectedClip
+  | InspectedCamera
+  | null {
   const project = useProject((s) => s.snapshot?.project);
   const selectedId = useSelection((s) => s.selectedId);
   return inspectedOf(project, selectedId);
@@ -54,6 +65,11 @@ export function useInspected(): { item: Item; track: Track; kind: Inspected } | 
 
 export function inspectedOf(project: Project | undefined, selectedId: string | null) {
   if (!project || !selectedId) return null;
+  const cameraOf = cameraClipId(selectedId);
+  if (cameraOf !== null) {
+    const clip = findClip(project, cameraOf);
+    return clip?.camera ? { kind: 'camera' as const, clip } : null;
+  }
   const found = findItem(project, selectedId);
   const clip = found ? null : findClip(project, selectedId);
   if (clip) return { kind: 'clip' as const, clip };
@@ -75,7 +91,7 @@ const ICONS: Record<Inspected, IconName> = {
  * selected. Its header has the kind's icon and name, a more menu (Duplicate, Bring forward and Send back for a picture
  * layer, Delete) and a close button; its body the fields of that kind, scrolling with a fade at the bottom. On a
  * locked track it says so and offers Unlock. Changes apply at once and each is one undo step.
- * A main-track clip has a card of its own (`ClipInspector`).
+ * A main-track clip has a card of its own (`ClipInspector`), and so has a recording's camera (`CameraInspector`).
  */
 export function Inspector({ format }: { format: FormatKind }) {
   const { t } = useLingui();
@@ -87,6 +103,10 @@ export function Inspector({ format }: { format: FormatKind }) {
   if (transition) return <TransitionInspector key={transition.clip.id} {...transition} />;
   if (!inspected) return null;
   if (inspected.kind === 'clip') return <ClipInspector key={inspected.clip.id} clip={inspected.clip} format={format} />;
+  if (inspected.kind === 'camera') {
+    const { clip } = inspected;
+    return clip.camera && <CameraInspector key={`camera:${clip.id}`} clip={clip} camera={clip.camera} format={format} />;
+  }
   const { item, track, kind } = inspected;
   // A layer goes a track up or down only when one of its kind is there to take it (not on a locked track).
   const canStep = (direction: 1 | -1) => !!project && trackStepOps(project, item.id, direction).length > 0;
