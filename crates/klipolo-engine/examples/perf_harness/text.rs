@@ -163,10 +163,10 @@ struct CaptionRun {
     build_gpu: Spread,
     atlases: f64,
     atlas_mb: f64,
-    /// The drawer's uploads of its frame buffers per frame (only when they changed), and those made with a
-    /// queue write (its quads' fallback while every kept staging buffer is in flight, and its uniform).
+    /// The drawer's uploads of its frame buffers per frame (only when they changed), and the frames that made
+    /// them through a staging buffer of their own (every kept one in flight).
     uploads: f64,
-    queue_writes: f64,
+    one_off_uploads: f64,
     drawer_cpu: Spread,
     drawer_gpu: Option<Spread>,
 }
@@ -189,7 +189,7 @@ impl CaptionRun {
             atlases: m(|r| r.atlases),
             atlas_mb: m(|r| r.atlas_mb),
             uploads: m(|r| r.uploads),
-            queue_writes: m(|r| r.queue_writes),
+            one_off_uploads: m(|r| r.one_off_uploads),
             drawer_cpu: s(|r| r.drawer_cpu),
             drawer_gpu: median_opt(runs.iter().map(|r| r.drawer_gpu), Spread::median),
         }
@@ -198,7 +198,7 @@ impl CaptionRun {
     fn print(&self, style: &str) {
         println!(
             "  {style:<18} {} pages ({:.1} a second) | frame CPU p50/p95/max {} ms | GPU {} ms | over budget {}/{} | \
-             late caption frames {} | page builds {}: CPU {} ms, GPU {} ms | atlases {} ({:.1} MB) | uploads {:.2} a frame ({:.2} queue writes) | {}",
+             late caption frames {} | page builds {}: CPU {} ms, GPU {} ms | atlases {} ({:.1} MB) | uploads {:.2} a frame ({:.2} one-off) | {}",
             self.pages,
             self.page_rate,
             self.frame_cpu.show(2),
@@ -212,7 +212,7 @@ impl CaptionRun {
             self.atlases,
             self.atlas_mb,
             self.uploads,
-            self.queue_writes,
+            self.one_off_uploads,
             drawer(self.drawer_cpu, self.drawer_gpu),
         );
     }
@@ -287,7 +287,7 @@ async fn captions_case(style: &str, size: (u32, u32), seconds: f64) -> CaptionRu
         atlases: after.atlases as f64,
         atlas_mb: mb(after.atlas_bytes),
         uploads: (after.uploads - before.uploads) as f64 / frames as f64,
-        queue_writes: (after.queue_writes - before.queue_writes) as f64 / frames as f64,
+        one_off_uploads: (after.one_off_uploads - before.one_off_uploads) as f64 / frames as f64,
         drawer_cpu,
         drawer_gpu,
     }
