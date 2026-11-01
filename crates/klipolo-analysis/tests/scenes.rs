@@ -406,7 +406,7 @@ async fn requests(server: &MockServer, verb: &str, path_end: &str) -> Vec<Reques
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn parses_spike_moments_fixture() {
+async fn parses_a_real_moments_answer() {
     let server = MockServer::start().await;
     mount_files(&server, "/v1", "file-moments").await;
     Mock::given(method("POST"))
