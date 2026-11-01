@@ -24,7 +24,7 @@ use klipolo_model::fill_focus::{Keep, KeepRange, MAX_KEEP_RANGES, Who};
 use klipolo_model::ids::Id;
 use klipolo_model::ops::{Op, Origin};
 use klipolo_model::project::FormatKind;
-use klipolo_model::query::clip_starts;
+use klipolo_model::query::{clip_starts, piece_of};
 use klipolo_model::time::{Us, unscaled};
 use klipolo_model::{Project, Transaction};
 
@@ -114,8 +114,9 @@ pub(super) async fn follow_jobs(
     let mut follows = Follows::default();
     if let Some((description, focus)) = asked.first() {
         let phrase = phrase_for(description);
-        // Chat's times are the timeline's the message was sent on: each clip's source time stays put.
-        let keeps = keeps_for(&now.project, focus);
+        // Chat's times are the timeline's the message was sent on: each clip's source time stays put, and a piece a
+        // cut in the same answer makes keeps what its clip keeps.
+        let keeps = on_pieces(&target, &keeps_for(&now.project, focus));
         let estimate = speaker
             .estimate(&target, &clip_ids, &formats, &phrase)
             .await;
@@ -256,6 +257,18 @@ pub fn keeps_for(p: &Project, focus: &[FollowFocus]) -> BTreeMap<Id, Keep> {
         out.insert(clip.id.clone(), keep);
     }
     out
+}
+
+/// `keeps` (by the clips of the project the message was sent on) for the clips of `target`: a piece that a cut or a
+/// split in the same answer made keeps what its clip keeps (`query::piece_of`). Keep ranges are in source time, so
+/// they hold on every piece.
+pub fn on_pieces(target: &Project, keeps: &BTreeMap<Id, Keep>) -> BTreeMap<Id, Keep> {
+    (target.timeline.main.iter())
+        .filter_map(|c| {
+            let from = piece_of(&c.id, |id| keeps.contains_key(id), |_| false)?;
+            Some((c.id.clone(), keeps[from].clone()))
+        })
+        .collect()
 }
 
 /// `ops` into the message's proposal (judged again on `work`, the project its additions leave), else its additions

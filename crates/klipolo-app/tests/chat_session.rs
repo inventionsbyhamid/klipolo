@@ -2689,12 +2689,14 @@ mod follow {
 
     use klipolo_analysis::VideoError;
     use klipolo_analysis::providers::{
-        BoxFuture, ProviderError, SubjectTracker, TrackedBox, TrackedFrame, Tracking,
+        BoxFuture, ProviderError, ProviderErrorKind, ScreenBox, SubjectTracker, TrackedBox,
+        TrackedFrame, Tracking, VoiceAnswer, VoiceMatcher,
     };
+    use klipolo_analysis::subject::voices::VoiceTurn;
     use klipolo_analysis::subject::{SubjectCopy, frames_for};
     use klipolo_app::chat::follow::NO_CROP;
-    use klipolo_app::speaker::{Speaker, Trackers};
-    use klipolo_model::fill_focus::{FillFocus, Keep, KeepRange, Who};
+    use klipolo_app::speaker::{Speaker, Trackers, UNMATCHED, Voices};
+    use klipolo_model::fill_focus::{FillFocus, Keep, KeepRange, Voice, Who};
     use klipolo_model::project::FormatKind;
     use klipolo_model::time::{RangeUs, Us};
 
@@ -2704,6 +2706,8 @@ mod follow {
     pub struct Sam {
         pub calls: AtomicUsize,
         pub phrases: Mutex<Vec<String>>,
+        /// A second person far to the right, too.
+        pub two: bool,
     }
 
     impl SubjectTracker for Sam {
@@ -2736,11 +2740,22 @@ mod follow {
                     bottom: 1.0,
                     confidence: Some(0.9),
                 };
+                let other = TrackedBox {
+                    id: 2,
+                    left: 0.65,
+                    right: 0.85,
+                    ..person
+                };
+                let boxes = if self.two {
+                    vec![person, other]
+                } else {
+                    vec![person]
+                };
                 Ok(Tracking {
                     frames: (0..frames)
                         .map(|frame| TrackedFrame {
                             frame,
-                            boxes: vec![person],
+                            boxes: boxes.clone(),
                         })
                         .collect(),
                     frames_billed: u64::from(frames),
@@ -2751,7 +2766,7 @@ mod follow {
         }
     }
 
-    struct Pays(Arc<Sam>);
+    struct Pays(Arc<Sam>, Option<Arc<NoAnswer>>);
 
     impl Trackers for Pays {
         fn tracker(&self) -> BoxFuture<'_, Result<Arc<dyn SubjectTracker>, String>> {
@@ -2761,6 +2776,54 @@ mod follow {
 
         fn credit_left(&self) -> BoxFuture<'_, Option<f64>> {
             Box::pin(async { None })
+        }
+
+        fn matcher(&self) -> BoxFuture<'_, Option<Arc<dyn VoiceMatcher>>> {
+            let spark = self.1.clone();
+            Box::pin(async move { spark.map(|s| s as Arc<dyn VoiceMatcher>) })
+        }
+    }
+
+    /// A matcher whose every call fails, as one cut off by the network.
+    pub struct NoAnswer;
+
+    impl VoiceMatcher for NoAnswer {
+        fn model(&self) -> &str {
+            "fake-spark"
+        }
+
+        fn estimate_usd(&self, _seconds: f64) -> f64 {
+            0.003
+        }
+
+        fn who_speaks<'a>(
+            &'a self,
+            _video: &'a Path,
+            _people: &'a [ScreenBox],
+        ) -> BoxFuture<'a, Result<VoiceAnswer, ProviderError>> {
+            Box::pin(async {
+                Err(ProviderError::new(
+                    ProviderErrorKind::Unavailable,
+                    "Meta isn't answering.",
+                ))
+            })
+        }
+    }
+
+    /// The talk's two voices: A to 15 s, B after, in part 0.
+    struct TwoVoices;
+
+    impl Voices for TwoVoices {
+        fn turns(&self, _asset_id: &str) -> Vec<VoiceTurn> {
+            let turn = |from: f64, to: f64, label: &str| VoiceTurn {
+                start_us: secs(from),
+                end_us: secs(to),
+                voice: Voice {
+                    part: 0,
+                    label: label.into(),
+                },
+            };
+            vec![turn(0.0, 15.0, "A"), turn(15.0, 30.0, "B")]
         }
     }
 
@@ -2807,7 +2870,7 @@ mod follow {
         let chat = chat_on(project, model.clone(), Found::done(), Paying::key(model));
         let (sam, copies) = (Arc::new(Sam::default()), Arc::new(Copies::default()));
         let speaker = Speaker::new(
-            Arc::new(Pays(sam.clone())),
+            Arc::new(Pays(sam.clone(), None)),
             copies.clone(),
             dir.path().join("analysis"),
             dir.path().join("work"),
@@ -2917,6 +2980,51 @@ mod follow {
         );
         // One step, as any follow.
         assert_eq!(f.chat.project.undo_steps(), 1);
+    }
+
+    #[tokio::test]
+    async fn who_chat_keeps_in_frame_carries_to_the_pieces_a_cut_in_the_same_answer_makes() {
+        let cut = fc(
+            "c",
+            "cutRange",
+            r#"{"startSec": 10.0, "endSec": 12.0}"#,
+        );
+        let guest = fc(
+            "s",
+            "followSubject",
+            r#"{"description": "person", "focus": [{"fromSec": 2, "toSec": 20, "person": "P2"}]}"#,
+        );
+        let f = following(vec![answer("Done.", vec![portrait(), cut, guest])]);
+        let out = f
+            .chat
+            .session
+            .send(request(
+                "cut 10.0 to 12.0 and keep the guest in frame from 2.0 to 20.0",
+            ))
+            .await
+            .unwrap();
+        f.chat.session.apply(&proposal_id(&out)).unwrap();
+        let p = f.chat.project.project();
+        assert_eq!(p.timeline.main.len(), 2, "{:?}", p.timeline.main);
+        // Both pieces keep the guest over their own part of 2 to 20 s of the file.
+        for clip in &p.timeline.main {
+            let Some(FillFocus::Speaker { keep, .. }) = clip.fill_focus.get(&FormatKind::Portrait)
+            else {
+                panic!("{}: {:?}", clip.id, clip.fill_focus)
+            };
+            assert_eq!(
+                *keep,
+                Keep::Ranges {
+                    ranges: vec![KeepRange {
+                        start_us: secs(2.0),
+                        end_us: secs(20.0),
+                        who: Who::Person { person: 2 },
+                    }],
+                },
+                "{}",
+                clip.id
+            );
+        }
     }
 
     #[tokio::test]
