@@ -239,7 +239,7 @@ pub struct Proposal {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Job {
     /// Track what `description` names and follow it; where two or more people are on screen, keep who `focus` names
-    /// over its parts of the timeline (as the compiled project times them).
+    /// over its parts of the timeline (the timeline of the project the message was sent on, before its edits).
     Follow {
         description: String,
         focus: Vec<FollowFocus>,
