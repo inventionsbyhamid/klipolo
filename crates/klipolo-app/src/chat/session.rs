@@ -242,6 +242,7 @@ impl SlotGuard<'_> {
             Vec::new(),
         );
         let id = uuid::Uuid::new_v4().to_string();
+        let words = Words::read(&inputs, &now.project, &proposal.review.removals.ranges);
         let made = card(
             &id,
             now.at.revision,
@@ -250,8 +251,8 @@ impl SlotGuard<'_> {
             &proposal.review,
             tools,
             Some(client),
-        );
-        let words = Words::read(&inputs, &now.project, &proposal.review.removals.ranges);
+        )
+        .with_files(words.files());
         self.slot.open = Some(Stored::new(
             &made,
             now.at.clone(),
@@ -383,6 +384,13 @@ impl Words {
                 })
                 .collect(),
         )
+    }
+
+    /// The files read, by asset id, in order.
+    fn files(&self) -> Vec<String> {
+        let mut files: Vec<String> = self.0.keys().cloned().collect();
+        files.sort();
+        files
     }
 
     /// Whether every file's words are still the ones read.
@@ -851,6 +859,7 @@ impl ChatSession {
                         .map(ToolCall::name)
                         .collect();
                     let id = uuid::Uuid::new_v4().to_string();
+                    let words = Words::read(inputs, &base, &review.removals.ranges);
                     let made = card(
                         &id,
                         at.revision,
@@ -859,8 +868,8 @@ impl ChatSession {
                         &review,
                         &tools,
                         None,
-                    );
-                    let words = Words::read(inputs, &base, &review.removals.ranges);
+                    )
+                    .with_files(words.files());
                     let stored = Stored::new(&made, at.clone(), &p.tx, &review, words, None);
                     landed.proposal = Some((id, made));
                     // A newer proposal replaces the one waiting, so red always means "will be cut".

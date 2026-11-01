@@ -117,6 +117,9 @@ pub struct ChatProposal {
     removed_us: Us,
     /// A short reason over each cut ("um", "pause").
     tags: Vec<ProposalTag>,
+    /// The files whose words its cuts stand on, by asset id: those under its cuts that had words when it was made.
+    /// Their words timed again (`speech-changed`) drop it; another file's leave it standing.
+    files: Vec<String>,
 }
 
 /// A short reason shown on a proposed cut, over the time it covers.
@@ -321,7 +324,14 @@ impl ChatProposal {
                     label: sanitize::reply(label.trim()),
                 })
                 .collect(),
+            files: Vec::new(),
         }
+    }
+
+    /// The proposal standing on the words of `files` (`ChatProposal::files`).
+    pub fn with_files(mut self, files: Vec<String>) -> Self {
+        self.files = files;
+        self
     }
 
     pub fn id(&self) -> &str {

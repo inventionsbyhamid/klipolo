@@ -2427,7 +2427,13 @@ async fn a_proposal_outlives_words_timed_again_in_files_it_doesnt_cut() {
     found.hear("spare");
     let model = Script::new(vec![answer("", vec![fillers()])]);
     let chat = chat_on(p, model.clone(), found.clone(), Paying::key(model));
-    let id = proposal_id(&chat.session.send(request("cut the ums")).await.unwrap());
+    let out = chat.session.send(request("cut the ums")).await.unwrap();
+    // The card names the files whose words its cuts stand on, for the page to drop it as Rust does.
+    assert_eq!(
+        reply(&out)["proposal"]["files"],
+        serde_json::json!(["talk"])
+    );
+    let id = proposal_id(&out);
     // Their words are timed again: nothing the cuts stand on moved.
     found.hear("song");
     found.hear("spare");
@@ -2449,7 +2455,12 @@ async fn a_cut_outlives_another_clips_words_being_timed() {
         found.clone(),
         Paying::key(model),
     );
-    let id = proposal_id(&chat.session.send(asked).await.unwrap());
+    let out = chat.session.send(asked).await.unwrap();
+    assert_eq!(
+        reply(&out)["proposal"]["files"],
+        serde_json::json!(["talk"])
+    );
+    let id = proposal_id(&out);
     // Its words are timed: new words, none of them under the cut.
     found.hear("more");
     chat.session.apply(&id).expect("applied");
@@ -2468,7 +2479,12 @@ async fn a_cut_into_a_clip_with_no_words_yet_outlives_its_words_coming_in() {
         found.clone(),
         Paying::key(model),
     );
-    let id = proposal_id(&chat.session.send(asked).await.unwrap());
+    let out = chat.session.send(asked).await.unwrap();
+    assert_eq!(
+        reply(&out)["proposal"]["files"],
+        serde_json::json!(["talk"])
+    );
+    let id = proposal_id(&out);
     found.hear("more");
     chat.session.apply(&id).expect("applied");
     assert_eq!(chat.project.revision(), 1);
@@ -2487,7 +2503,12 @@ async fn a_cut_is_dropped_when_words_it_cuts_into_are_timed_again() {
         found.clone(),
         Paying::key(model),
     );
-    let id = proposal_id(&chat.session.send(asked).await.unwrap());
+    let out = chat.session.send(asked).await.unwrap();
+    assert_eq!(
+        reply(&out)["proposal"]["files"],
+        serde_json::json!(["more", "talk"])
+    );
+    let id = proposal_id(&out);
     found.hear("more");
     assert_eq!(chat.session.apply(&id).unwrap_err(), CommitError::Moved);
     assert_eq!(chat.project.revision(), 0, "nothing was cut");
