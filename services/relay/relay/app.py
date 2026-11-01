@@ -57,6 +57,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.state.in_flight = proxy.InFlight()
+    app.state.video_frames = proxy.VideoFrames()
     app.state.aligner = align.MmsAligner(settings.align_threads)
     app.state.align_in_flight = proxy.InFlight(
         per_device=align.MAX_REQUESTS_PER_DEVICE,

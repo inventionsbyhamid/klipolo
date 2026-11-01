@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 from relay import db, proxy
 from relay.app import create_app
 from relay.devices import hash_token
+from tests.mp4_bytes import mp4
 
 META = "https://api.meta.ai/v1"
 SPARK_USAGE = {
@@ -80,6 +81,22 @@ def relay_client(settings, **changes):
 
 def with_sam(settings):
     return replace(settings, allowed_models=settings.allowed_models | {"sam-3.1"})
+
+
+def counted(app, device, file_id="file-1", frames=160):
+    """`file_id` as if `device` had uploaded it through the relay: its `frames` counted."""
+    app.state.video_frames.remember(device.device_id, file_id, frames)
+
+
+def upload(client, device, meta, file_id, data):
+    """Uploads `data` as `file_id` through the relay."""
+    meta.post("/files").respond(200, json={"id": file_id, "object": "file"})
+    files = [("purpose", (None, "user_data")), ("file", ("copy.mp4", data, "video/mp4"))]
+    return client.post("/meta/v1/files", files=files, headers=device.headers)
+
+
+def sam_on(file_id):
+    return {"model": "sam-3.1", "stream": True, "input": [{"role": "user", "content": [{"type": "input_text", "text": "person"}, {"type": "input_video", "file_id": file_id}]}]}
 
 
 @pytest.fixture
@@ -266,6 +283,7 @@ SAM_VIDEO = {"model": "sam-3.1", "stream": True, "input": [{"role": "user", "con
 def test_sam_is_forwarded_by_default_and_charged_by_its_frames(client, conn, meta, frames, cost):
     # A 60 s short at 2 frames a second is 120 frames; Meta bills at least 50 a video.
     device = add_device(conn)
+    counted(client.app, device, frames=frames)
     done = {"type": "response.completed", "response": {"status": "completed", "usage": {"video_frames_processed": frames}}}
     route = stream_from_meta(meta, MetaStream([sse(CREATED), sse(done)]))
 
@@ -284,6 +302,7 @@ def test_sam_is_forwarded_by_default_and_charged_by_its_frames(client, conn, met
 def test_sam_keeps_to_the_device_budget(client, conn, meta):
     # A device at its cap is refused before Meta is called.
     full = add_device(conn, spent=2.00)
+    counted(client.app, full)
     route = meta.post("/responses")
 
     response = client.post("/meta/v1/responses", json=SAM_VIDEO, headers=full.headers)
@@ -292,6 +311,60 @@ def test_sam_keeps_to_the_device_budget(client, conn, meta):
     assert response.json() == BUDGET
     assert not route.called
     assert spent(conn, full) == 2.00
+
+
+def test_a_sam_call_reserves_its_uploads_frames_and_is_charged_what_meta_bills(client, conn, meta):
+    # A 60 s short at 2 frames a second: 120 frames, counted from the upload's header as it went up.
+    device = add_device(conn, spent=1.97)
+    assert upload(client, device, meta, "file-short", mp4(120)).status_code == 200
+    done = {"type": "response.completed", "response": {"status": "completed", "usage": {"video_frames_processed": 118}}}
+    route = stream_from_meta(meta, MetaStream([sse(CREATED), sse(done)]))
+
+    response = client.post("/meta/v1/responses", json=sam_on("file-short"), headers=device.headers)
+
+    # $0.024 fits the $0.03 left; the charge is what Meta billed.
+    assert response.status_code == 200
+    assert route.called
+    [_, row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(118 * 0.20 / 1000)
+    assert_ledger_matches_spend(conn, device)
+
+
+@pytest.mark.parametrize(
+    ("frames", "status", "error"),
+    [(15_000, 413, "too_large"), (5_000, 402, "budget")],
+    ids=["15000-frames-over-the-whole-cap", "5000-frames-over-what-is-left"],
+)
+def test_a_long_upload_is_refused_on_a_nearly_spent_device(client, conn, meta, frames, status, error):
+    # 15,000 frames ($3.00) is more than a device's whole $2.00 cap; 5,000 ($1.00) more than the $0.50 left. Either is
+    # refused before Meta is called, with the budget's own answers.
+    device = add_device(conn, spent=1.50)
+    assert upload(client, device, meta, "file-long", mp4(frames)).status_code == 200
+    route = meta.post("/responses")
+
+    response = client.post("/meta/v1/responses", json=sam_on("file-long"), headers=device.headers)
+
+    assert response.status_code == status
+    assert response.json()["error"] == error
+    if status == 402:
+        assert response.json() == NOT_ENOUGH_CREDIT
+    assert not route.called
+    assert spent(conn, device) == 1.50
+
+
+def test_sam_on_a_video_the_relay_did_not_count_is_refused(client, conn, meta):
+    device = add_device(conn)
+    other = add_device(conn, code="othercode")
+    # One whose index comes after its picture can't be counted as it goes up; another device's is not this one's.
+    assert upload(client, device, meta, "file-late", mp4(120, moov_first=False)).status_code == 200
+    assert upload(client, other, meta, "file-theirs", mp4(120)).status_code == 200
+    route = meta.post("/responses")
+
+    for file_id in ["file-never-uploaded", "file-late", "file-theirs"]:
+        response = client.post("/meta/v1/responses", json=sam_on(file_id), headers=device.headers)
+        assert response.status_code == 400, file_id
+        assert response.json()["error"] == "unsupported"
+    assert not route.called
 
 
 def test_wonder_and_contributors_stay_refused_even_if_listed(settings, conn, meta):
@@ -1003,6 +1076,7 @@ def test_usage_missing_a_counter_charges_the_reservation(client, conn, meta, usa
 
 def test_sam_video_usage_without_frames_charges_the_reservation(sam_client, conn, meta):
     device = add_device(conn)
+    counted(sam_client.app, device, frames=160)
     done = {"type": "response.completed", "response": {"status": "completed", "usage": {}}}
     stream_from_meta(meta, MetaStream([sse(CREATED), sse(done)]))
     body = {"model": "sam-3.1", "stream": True, "input": [{"role": "user", "content": [{"type": "input_text", "text": "person"}, {"type": "input_video", "file_id": "file-1"}]}]}
@@ -1012,7 +1086,8 @@ def test_sam_video_usage_without_frames_charges_the_reservation(sam_client, conn
     assert response.status_code == 200
     [row] = ledger(conn, device)
     assert json.loads(row["usage_json"])["reserved"] is True
-    assert row["cost_usd"] == pytest.approx(0.75 + 50 * 0.20 / 1000)
+    # The frames its upload holds: the count bounds the cost, so no media amount on top.
+    assert row["cost_usd"] == pytest.approx(160 * 0.20 / 1000)
 
 
 def test_usage_that_breaks_the_parser_charges_the_reservation(client, conn, meta):
@@ -2135,6 +2210,7 @@ def test_last_event_without_a_closing_blank_line_is_still_read(client, conn, met
 
 def test_streamed_sam_call_is_charged_from_frames(sam_client, conn, meta):
     device = add_device(conn)
+    counted(sam_client.app, device, frames=160)
     done = {"type": "response.completed", "response": {"status": "completed", "usage": {"video_frames_processed": 160}}}
     stream_from_meta(meta, MetaStream([sse(CREATED), b'data: {"type":"response.output_text.delta","delta":"<0f>"}\n\n', sse(done)]))
     body = {"model": "sam-3.1", "stream": True, "input": [{"role": "user", "content": [{"type": "input_text", "text": "person"}, {"type": "input_video", "file_id": "file-1"}]}]}
@@ -2494,6 +2570,7 @@ async def test_drain_that_fails_charges_the_reservation(app, conn, meta):
 async def test_drain_that_fails_for_media_charges_the_media_reservation(sam_app, conn, meta, body):
     app = sam_app
     device = add_device(conn)
+    counted(app, device, frames=160)
     call = AsgiCall(app, "/meta/v1/responses", streamed(body), device.headers)
     upstream = MetaStream(
         [sse(CREATED), sse(DELTA), sse(DELTA)],
@@ -2511,10 +2588,11 @@ async def test_drain_that_fails_for_media_charges_the_media_reservation(sam_app,
     [row] = ledger(conn, device)
     usage = json.loads(row["usage_json"])
     assert usage["reserved"] is True
-    assert usage["media_usd"] == 0.75
     if body["model"] == "sam-3.1":
-        assert row["cost_usd"] == pytest.approx(0.75 + 50 * 0.20 / 1000)
+        # SAM's worst case is its upload's counted frames.
+        assert row["cost_usd"] == pytest.approx(160 * 0.20 / 1000)
     else:
+        assert usage["media_usd"] == 0.75
         assert row["cost_usd"] == pytest.approx(reserved_cost(route.calls.last.request.content, media=True))
     assert_ledger_matches_spend(conn, device)
 

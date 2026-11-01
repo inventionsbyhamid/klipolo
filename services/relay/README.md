@@ -45,7 +45,7 @@ All settings come from the environment.
 | `META_API_KEY` | empty | The server's own Meta key. Never logged. |
 | `DEVICE_CAP_USD` | `2.00` | Most a device can spend, all time. |
 | `GLOBAL_CAP_USD` | `40.00` | Most the whole relay can spend, all time. |
-| `ALLOWED_MODELS` | `muse-spark-1.3,muse-spark-1.2,muse-voice-transcribe-1.0,muse-image-1.0,sam-3.1` | Models the proxy forwards. SAM's video calls must stream and are charged by the frames Meta bills (at least 50 a video). Muse Wonder and the contributor tiers are refused even when listed. |
+| `ALLOWED_MODELS` | `muse-spark-1.3,muse-spark-1.2,muse-voice-transcribe-1.0,muse-image-1.0,sam-3.1` | Models the proxy forwards. SAM's video calls must stream, on a video uploaded through the relay: its frames are counted from its MP4 index as it goes up, reserved (at least 50 a video), and charged as Meta bills them. Muse Wonder and the contributor tiers are refused even when listed. |
 | `ALIGN_MINUTES_PER_DEVICE_PER_DAY` | `120` | Word timing per device per UTC day. |
 | `ALIGN_CONCURRENCY` | `2` | Alignments running at once. More than 2 can run out of memory in 6 GB. |
 | `ALIGN_THREADS` | `3` | Threads per alignment. |

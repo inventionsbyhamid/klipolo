@@ -27,7 +27,10 @@ the most it could cost: for Spark, one input token per request byte plus its
 whole max_output_tokens (set to 8192 when missing, at most 16384) at the
 output price, plus $0.75 unless the call is text only (any image or
 reasoning item, media or files by link or id, stored items by reference, or
-any type the relay doesn't know all count as media); for transcription, the
+any type the relay doesn't know all count as media); for SAM on a video, the
+frames its upload holds (at least 50), counted from the MP4's index as it went
+up through the relay (`mp4`), so SAM is refused on a video the relay didn't
+count; for transcription, the
 audio's data at 32,000 bytes a second, the lowest rate Meta takes; for Muse
 Image, two images ($0.02), the most a call may ask for. The call
 is refused with 402 when the spend alone leaves the device or the relay no
@@ -49,8 +52,9 @@ client that stops reading for 60 s is treated as gone the same way. If a
 charge can't be written, capped calls are refused (503) until a quick retry
 at admission writes it.
 
-Nothing from a proxied request is stored except the ledger row, and request
-or response headers and bodies are never logged.
+Nothing from a proxied request is stored except the ledger row and, in
+memory only, an uploaded video's frame count by device and file id; request or
+response headers and bodies are never logged.
 """
 
 import json
@@ -79,6 +83,7 @@ from relay.config import Settings
 from relay.deps import AppSettings, Conn
 from relay.devices import Device, has_relay_ai
 from relay.errors import RelayError, error_response
+from relay.mp4 import FrameCounter
 from relay.pricing import (
     DEFAULT_MAX_OUTPUT_TOKENS,
     IMAGES_KEY,
@@ -86,6 +91,7 @@ from relay.pricing import (
     MAX_OUTPUT_TOKENS,
     MODELS_BY_ENDPOINT,
     SAM_IMAGES_KEY,
+    SAM_MIN_FRAMES,
     SAM_MODEL,
     SPARK_MODELS,
     UNREADABLE_AUDIO_SECONDS,
@@ -396,6 +402,8 @@ class Meter:
     audio_seconds: float = 0.0
     images: int = 0
     has_video: bool = False
+    # SAM: the frames of its videos, each at least the 50-frame minimum.
+    video_frames: int = 0
     # Anything but a text-only call (any image or reasoning item, media or
     # files by link or id, stored items by reference, a type the relay
     # doesn't know), or SAM.
@@ -418,6 +426,7 @@ class Meter:
             audio_seconds=self.audio_seconds,
             images=self.images,
             has_video=self.has_video,
+            video_frames=self.video_frames,
         )
         return usage, cost_usd(self.endpoint, self.model, usage)
 
@@ -493,6 +502,8 @@ class Call:
     content: bytes | AsyncIterator[bytes] | None = None
     files: dict[str, tuple[str | None, bytes, str]] | None = None
     headers: dict[str, str] = field(default_factory=dict)
+    # Told Meta's whole answer when it succeeds (not for a streamed answer).
+    on_success: Callable[[bytes], None] | None = None
 
 
 # Endpoints.
@@ -516,6 +527,9 @@ async def create_response(request: Request, device: RelayDevice, conn: Conn, set
             # A long SAM video call can outlast the read timeout; streamed, the
             # relay reads it to its final usage.
             raise RelayError(400, "unsupported", "SAM video calls must stream through the relay.")
+        frames = 0
+        if model == SAM_MODEL and has_video:
+            frames = _sam_frames(request.app.state.video_frames, device["device_id"], inputs)
         meter = Meter(
             "responses",
             model,
@@ -523,6 +537,7 @@ async def create_response(request: Request, device: RelayDevice, conn: Conn, set
             max_output_tokens=payload.get("max_output_tokens", 0) if model in SPARK_MODELS else 0,
             images=_count_parts(inputs, "input_image"),
             has_video=has_video,
+            video_frames=frames,
             media=model == SAM_MODEL or _refers_to_media(payload),
         )
         return Call("POST", "responses", meter, content=body, headers={"content-type": "application/json"})
@@ -541,8 +556,19 @@ async def upload_file(request: Request, device: RelayDevice, conn: Conn, setting
         headers = {"content-type": content_type}
         if declared is not None:
             headers["content-length"] = str(declared)
-        # Streamed: an upload is never held whole in memory.
-        return Call("POST", "files", content=_limited_stream(request, limit), headers=headers)
+        counter = FrameCounter()
+        frames: VideoFrames = request.app.state.video_frames
+
+        def remember(body: bytes) -> None:
+            # A video's frames, by the id Meta gave it, for a SAM call on it later.
+            file_id = _uploaded_id(body)
+            if file_id is not None and counter.frames is not None:
+                frames.remember(device["device_id"], file_id, counter.frames)
+
+        # Streamed: an upload is never held whole in memory; its first bytes are read for its frames as they pass.
+        return Call(
+            "POST", "files", content=_counted(_limited_stream(request, limit), counter), headers=headers, on_success=remember
+        )
 
     return await _proxy(request, device, conn, settings, prepare)
 
@@ -703,6 +729,8 @@ async def _forward(
 
     if meter is not None:
         await charge(settings, slot, meter, meter.usage_from_body(body), final=True)
+    if call.on_success is not None and upstream.status_code < 300:
+        call.on_success(body)
     return Response(body, status_code=upstream.status_code, headers=_response_headers(upstream))
 
 
@@ -1106,6 +1134,64 @@ async def _limited_stream(request: Request, limit: int) -> AsyncIterator[bytes]:
         if size > limit:
             raise RelayError(413, "too_large", "The file is larger than 1 GiB.")
         yield chunk
+
+
+async def _counted(chunks: AsyncIterator[bytes], counter: FrameCounter) -> AsyncIterator[bytes]:
+    """`chunks` as they are, each shown to `counter` on the way."""
+    async for chunk in chunks:
+        counter.feed(chunk)
+        yield chunk
+
+
+def _uploaded_id(body: bytes) -> str | None:
+    """The file id in Meta's answer to an upload."""
+    try:
+        value = json.loads(body)
+    except ValueError:
+        return None
+    file_id = value.get("id") if isinstance(value, dict) else None
+    return file_id if isinstance(file_id, str) and file_id else None
+
+
+class VideoFrames:
+    """The frames of each video a device uploaded through the relay, by file
+    id, in memory: the most recent `MAX_VIDEOS`. A relay that restarted has
+    none, and SAM on a video uploaded before is refused (upload it again)."""
+
+    MAX_VIDEOS = 10_000
+
+    def __init__(self) -> None:
+        self._frames: dict[tuple[str, str], int] = {}
+
+    def remember(self, device_id: str, file_id: str, frames: int) -> None:
+        key = (device_id, file_id)
+        self._frames.pop(key, None)
+        self._frames[key] = frames
+        while len(self._frames) > self.MAX_VIDEOS:
+            del self._frames[next(iter(self._frames))]
+
+    def frames(self, device_id: str, file_id: str) -> int | None:
+        return self._frames.get((device_id, file_id))
+
+
+def _sam_frames(known: VideoFrames, device_id: str, inputs: Any) -> int:
+    """What SAM can bill for the videos in `inputs`: each one's frames, at least
+    the 50-frame minimum. A video sent by link, or one this device didn't upload
+    through the relay, is refused: its frames are unknown."""
+    total = 0
+    for item in _objects(inputs):
+        if _type(item) not in ("input_video", "input_file"):
+            continue
+        file_id = item.get("file_id")
+        frames = known.frames(device_id, file_id) if isinstance(file_id, str) else None
+        if frames is None:
+            raise RelayError(
+                400,
+                "unsupported",
+                "SAM works on a video uploaded through Klipolo's relay. Upload it again, then try again.",
+            )
+        total += max(frames, SAM_MIN_FRAMES)
+    return total
 
 
 def _json_object(raw: bytes) -> dict[str, Any]:
