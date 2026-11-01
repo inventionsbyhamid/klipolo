@@ -165,6 +165,9 @@ fn the_shorts_styles_sit_in_the_lower_third_of_9_16() {
             .get(&ContribId::builtin(&format!("caption.{key}")))
             .unwrap();
         let y = style.position.get(FormatKind::Portrait).y;
-        assert!((0.667..=0.72).contains(&y), "{key}: centred at {y} of the height");
+        assert!(
+            (0.667..=0.72).contains(&y),
+            "{key}: centred at {y} of the height"
+        );
     }
 }

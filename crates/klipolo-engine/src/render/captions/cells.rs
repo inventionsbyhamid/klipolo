@@ -4,8 +4,8 @@
 use klipolo_model::captions::style::{BoxOn, CaptionStyleDef};
 
 use super::layout::{PageLayout, WordBox};
-use crate::plan::captions::place::word_growth;
 use super::shaping::Words;
+use crate::plan::captions::place::word_growth;
 
 /// Cells are packed into rows no wider than this.
 const ROW_PX: u32 = 2048;
@@ -37,7 +37,8 @@ pub(super) fn place_words(
     };
     let grow = word_growth(style) as f32;
     // The gap after word i: a space at the growth, and what i and the word after it grow into it.
-    let gap = |i: usize| space * grow + (grow - 1.0) / 2.0 * (words.widths[i] + words.widths[i + 1]);
+    let gap =
+        |i: usize| space * grow + (grow - 1.0) / 2.0 * (words.widths[i] + words.widths[i + 1]);
     let n = words.widths.len();
     for (line, &from) in starts.iter().enumerate() {
         let from = from as usize;
@@ -180,12 +181,18 @@ mod tests {
             place_words(&mut layout, style, &[0], &words, space);
             for pair in layout.words.windows(2) {
                 let (a, b) = (&pair[0], &pair[1]);
-                let gap = (b.centre[0] - b.size[0] * grow / 2.0) - (a.centre[0] + a.size[0] * grow / 2.0);
-                assert!(gap >= space * grow - 0.01, "{key}: {gap} between grown words, not {}", space * grow);
+                let gap =
+                    (b.centre[0] - b.size[0] * grow / 2.0) - (a.centre[0] + a.size[0] * grow / 2.0);
+                assert!(
+                    gap >= space * grow - 0.01,
+                    "{key}: {gap} between grown words, not {}",
+                    space * grow
+                );
             }
             // A style whose words don't grow keeps a plain space.
             if grow == 1.0 {
-                let gap = layout.words[1].centre[0] - layout.words[1].size[0] / 2.0
+                let gap = layout.words[1].centre[0]
+                    - layout.words[1].size[0] / 2.0
                     - (layout.words[0].centre[0] + layout.words[0].size[0] / 2.0);
                 assert!((gap - space).abs() < 0.01, "{key}: {gap}");
             }
