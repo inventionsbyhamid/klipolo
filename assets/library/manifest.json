@@ -134,6 +134,278 @@
       "license": "CC0-1.0"
     },
     {
+      "id": "impact",
+      "name": "Impact",
+      "category": "sound",
+      "file": "sounds/impact.wav",
+      "duration_ms": 1600,
+      "tags": [
+        "impact",
+        "boom",
+        "hit",
+        "cinematic",
+        "transition"
+      ],
+      "sha256": "1c99c590314e2a4e7d45caef745fb8a84a0c82197e64fef81391984657f88e10",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "bass-drop",
+      "name": "Bass drop",
+      "category": "sound",
+      "file": "sounds/bass-drop.wav",
+      "duration_ms": 2283,
+      "tags": [
+        "bass drop",
+        "drop",
+        "bass",
+        "boom",
+        "transition"
+      ],
+      "sha256": "dc91eeec52b738fb8d75490b778f92054c226a6b2f7ae5ba914f5236d031da3b",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "long-riser",
+      "name": "Long riser",
+      "category": "sound",
+      "file": "sounds/long-riser.wav",
+      "duration_ms": 2745,
+      "tags": [
+        "riser",
+        "build up",
+        "tension",
+        "suspense",
+        "intro"
+      ],
+      "sha256": "0997b49cf360d36d39ac7d29c1569940c62e94218752a9843f2017c6ba5e764d",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "swipe-left",
+      "name": "Swipe left",
+      "category": "sound",
+      "file": "sounds/swipe-left.wav",
+      "duration_ms": 309,
+      "tags": [
+        "swipe",
+        "left",
+        "slide",
+        "transition",
+        "quick"
+      ],
+      "sha256": "25698f7edf544bee8552cf3b9cafeb9757ccfc930393ba0a7eb767a09eb3d2b7",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "swipe-right",
+      "name": "Swipe right",
+      "category": "sound",
+      "file": "sounds/swipe-right.wav",
+      "duration_ms": 310,
+      "tags": [
+        "swipe",
+        "right",
+        "slide",
+        "transition",
+        "quick"
+      ],
+      "sha256": "89141c20c7ced394043535402d0ee31d416b6bb949187cc2988a922ed9fb6fe8",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "glitch",
+      "name": "Glitch",
+      "category": "sound",
+      "file": "sounds/glitch.wav",
+      "duration_ms": 393,
+      "tags": [
+        "glitch",
+        "digital",
+        "error",
+        "tech",
+        "transition"
+      ],
+      "sha256": "8fcc48b7edb9d05c69d1cb93c1406d7360ac50be3abe998f2d6b7dbf798b63e0",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "record-scratch",
+      "name": "Record scratch",
+      "category": "sound",
+      "file": "sounds/record-scratch.wav",
+      "duration_ms": 620,
+      "tags": [
+        "record scratch",
+        "scratch",
+        "stop",
+        "rewind",
+        "funny"
+      ],
+      "sha256": "4d75921b49b91032e45de2f1f04ce76cb747c7611894a0602fb68ff1d0243311",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "shutter",
+      "name": "Camera shutter",
+      "category": "sound",
+      "file": "sounds/shutter.wav",
+      "duration_ms": 175,
+      "tags": [
+        "camera",
+        "shutter",
+        "photo",
+        "snap",
+        "picture"
+      ],
+      "sha256": "f2707f84438f949bc05e013c51dc0f79ca9e00f0a476645e9d3cbe3d03416586",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "typing",
+      "name": "Keyboard typing",
+      "category": "sound",
+      "file": "sounds/typing.wav",
+      "duration_ms": 1746,
+      "tags": [
+        "typing",
+        "keyboard",
+        "keys",
+        "text",
+        "computer"
+      ],
+      "sha256": "8b23214c731bdd4903de9172f0acb0a91b18d755ee4b4791d1f000bf6b12166b",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "notification",
+      "name": "Notification",
+      "category": "sound",
+      "file": "sounds/notification.wav",
+      "duration_ms": 1000,
+      "tags": [
+        "notification",
+        "message",
+        "alert",
+        "phone",
+        "ping"
+      ],
+      "sha256": "dd2128bc7219b3539b297241ef8aceb425bdd4171510bb763e1fff73348c9fcc",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "success",
+      "name": "Success",
+      "category": "sound",
+      "file": "sounds/success.wav",
+      "duration_ms": 1300,
+      "tags": [
+        "success",
+        "win",
+        "level up",
+        "correct",
+        "game"
+      ],
+      "sha256": "b8d6536f3af3864434c0ea03ee7714c007fe8737de7c9c4f5bdf0bea09ed0c39",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "error",
+      "name": "Error buzz",
+      "category": "sound",
+      "file": "sounds/error.wav",
+      "duration_ms": 621,
+      "tags": [
+        "error",
+        "wrong",
+        "buzz",
+        "fail",
+        "no"
+      ],
+      "sha256": "c3520b3b35c3e4e8c89ed90c4c1ed8209e56b74e7692446d5f159044254a955e",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "pop-high",
+      "name": "High pop",
+      "category": "sound",
+      "file": "sounds/pop-high.wav",
+      "duration_ms": 100,
+      "tags": [
+        "pop",
+        "high",
+        "appear",
+        "cute",
+        "short"
+      ],
+      "sha256": "34f160f346f409795b7526e2ab3e68eb7decb1e9ef154221d5346384393ec1d5",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "bubbles",
+      "name": "Bubble pops",
+      "category": "sound",
+      "file": "sounds/bubbles.wav",
+      "duration_ms": 410,
+      "tags": [
+        "bubbles",
+        "pop",
+        "popping",
+        "appear",
+        "fun"
+      ],
+      "sha256": "75caf6e1073b0ab706d0d4e1be8eb89eae4fc9cbb7420cf66beba272c6d364b5",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "boing",
+      "name": "Cartoon boing",
+      "category": "sound",
+      "file": "sounds/boing.wav",
+      "duration_ms": 950,
+      "tags": [
+        "boing",
+        "bounce",
+        "spring",
+        "cartoon",
+        "funny"
+      ],
+      "sha256": "66631bc8cf55e24a8ec8f9746a766ff7551cf03ccdaea3443c2a8430155936ae",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "drum-hit",
+      "name": "Drum hit",
+      "category": "sound",
+      "file": "sounds/drum-hit.wav",
+      "duration_ms": 700,
+      "tags": [
+        "drum",
+        "hit",
+        "punch",
+        "snare",
+        "kick"
+      ],
+      "sha256": "fd872b4c7f7439895a2eb7cdb1cc6ee73dcdbf31433b64db11660226cc59dad3",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "tick-tock",
+      "name": "Tick tock",
+      "category": "sound",
+      "file": "sounds/tick-tock.wav",
+      "duration_ms": 1619,
+      "tags": [
+        "clock",
+        "tick tock",
+        "timer",
+        "countdown",
+        "waiting"
+      ],
+      "sha256": "34c073b9c76cfa2ae1f0e0991e403bd8278c08dac77f2749a232c99685acb868",
+      "license": "CC0-1.0"
+    },
+    {
       "id": "soft-ambient",
       "name": "Soft ambient",
       "category": "music",
@@ -143,7 +415,6 @@
         "calm",
         "ambient",
         "soft",
-        "background",
         "chill",
         "loop"
       ],
@@ -161,10 +432,42 @@
         "happy",
         "energetic",
         "pop",
-        "background",
         "loop"
       ],
       "sha256": "9dc2406ca6fa59daad63d2f22354417518fe00551c9b370cf287ad9e3652f57b",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "chill-beat",
+      "name": "Chill beat",
+      "category": "music",
+      "file": "music/chill-beat.wav",
+      "duration_ms": 16000,
+      "tags": [
+        "lofi",
+        "chill",
+        "study",
+        "relaxed",
+        "loop"
+      ],
+      "sha256": "b3e782c02eda7b734ca3719e8c2d42f8788798487d20525b91cf90c548a9d180",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "energetic-loop",
+      "name": "Energetic loop",
+      "category": "music",
+      "file": "music/energetic-loop.wav",
+      "duration_ms": 16000,
+      "tags": [
+        "energetic",
+        "hype",
+        "fast",
+        "sport",
+        "intense",
+        "loop"
+      ],
+      "sha256": "8b6841159837345860e2da4698d52f8e763493aa51d7895d4b3ce9f8cf2f4240",
       "license": "CC0-1.0"
     },
     {
@@ -265,6 +568,508 @@
         "white"
       ],
       "sha256": "c5df4c6ba721c096635451d122f0d7f5e6fbc4915c7ceb4aaa402ed9688594b4",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "arrow-curved",
+      "name": "Curved arrow",
+      "category": "sticker",
+      "file": "stickers/arrow-curved.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "arrow",
+        "curved",
+        "point",
+        "look",
+        "blue"
+      ],
+      "sha256": "387858983459ce6c9228545d1ba472e885a36b163c696162d7408ac04d511727",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "arrow-pointer",
+      "name": "Pointer arrow",
+      "category": "sticker",
+      "file": "stickers/arrow-pointer.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "arrow",
+        "pointer",
+        "point",
+        "look here",
+        "red"
+      ],
+      "sha256": "455d3570059079d7adf40f5c72b3d60fb0a67db4e8130c018302564edf7e29cf",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "circle-drawn",
+      "name": "Drawn circle",
+      "category": "sticker",
+      "file": "stickers/circle-drawn.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "circle",
+        "highlight",
+        "look here",
+        "marker",
+        "red"
+      ],
+      "sha256": "6fcda93d83090771dbb5b0627811764da096ffb7c20e034ebab17fafe77748f0",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "underline",
+      "name": "Underline",
+      "category": "sticker",
+      "file": "stickers/underline.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "underline",
+        "highlight",
+        "marker",
+        "emphasis",
+        "gold"
+      ],
+      "sha256": "d1bf7866ff19ac7709e5645655db0189f295e8e4841e4c1314af8fabd22769e1",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "x-mark",
+      "name": "X mark",
+      "category": "sticker",
+      "file": "stickers/x-mark.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "x",
+        "cross",
+        "wrong",
+        "no",
+        "red"
+      ],
+      "sha256": "85e5c9f09255ace810d61ce36572795b7285e25546c36c779037178e409ca492",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "question",
+      "name": "Question mark",
+      "category": "sticker",
+      "file": "stickers/question.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "question",
+        "question mark",
+        "why",
+        "quiz",
+        "purple"
+      ],
+      "sha256": "440685ddb29b1412c82e4e86d5cc3bb03e0b7669c9917ab0e67a2c7e9d6ae535",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "exclamation",
+      "name": "Exclamation mark",
+      "category": "sticker",
+      "file": "stickers/exclamation.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "exclamation",
+        "exclamation mark",
+        "wow",
+        "alert",
+        "important",
+        "red"
+      ],
+      "sha256": "7eb2ac2433de49f06dfae70215cd4c5adb77ee8e22ba8937eeceba46391ca1ce",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "number-1",
+      "name": "Number 1",
+      "category": "sticker",
+      "file": "stickers/number-1.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "number",
+        "1",
+        "one",
+        "step",
+        "first"
+      ],
+      "sha256": "954017488714cf92fdcc431a6f437212aae3fbdd3ed674be30a323d60fb01e20",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "number-2",
+      "name": "Number 2",
+      "category": "sticker",
+      "file": "stickers/number-2.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "number",
+        "2",
+        "two",
+        "step",
+        "second"
+      ],
+      "sha256": "42773f019a88eb725c1f4643189c2c087fddac4f082b9e5f58b0b0f0760cdfa6",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "number-3",
+      "name": "Number 3",
+      "category": "sticker",
+      "file": "stickers/number-3.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "number",
+        "3",
+        "three",
+        "step",
+        "third"
+      ],
+      "sha256": "bdc624df2d8b5c48e3b080b6a53ef8b5578c162975c7e318195e94a5fd07b8ca",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "number-4",
+      "name": "Number 4",
+      "category": "sticker",
+      "file": "stickers/number-4.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "number",
+        "4",
+        "four",
+        "step",
+        "fourth"
+      ],
+      "sha256": "2c206869ed123b153f94723f93baa91d06cf123646ba6c8e612b1804f976e363",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "number-5",
+      "name": "Number 5",
+      "category": "sticker",
+      "file": "stickers/number-5.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "number",
+        "5",
+        "five",
+        "step",
+        "fifth"
+      ],
+      "sha256": "040addb82b9d6dcd6b3ee8cac48858e5c25f84d39ac0cfda25fb51239575ad8b",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "thought-bubble",
+      "name": "Thought bubble",
+      "category": "sticker",
+      "file": "stickers/thought-bubble.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "thought",
+        "think",
+        "idea",
+        "cloud",
+        "white"
+      ],
+      "sha256": "ab4cecc8c14e935f98c5e6c10042924e98c80ee7801a80434e1f60df794bd403",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "shout-bubble",
+      "name": "Shout bubble",
+      "category": "sticker",
+      "file": "stickers/shout-bubble.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "shout",
+        "burst",
+        "wow",
+        "loud",
+        "comic"
+      ],
+      "sha256": "4fdf8a5c02d7c6e1d2716dd8ae9ef547619cbb21ea4505a82e4c6402a18c7298",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "thumbs-up",
+      "name": "Thumbs up",
+      "category": "sticker",
+      "file": "stickers/thumbs-up.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "thumbs up",
+        "like",
+        "yes",
+        "good",
+        "approve"
+      ],
+      "sha256": "17541a88737ddcab0a5b3879faabdd74dd19b97aacd3a0e17915585d5b50e52f",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "fire",
+      "name": "Fire",
+      "category": "sticker",
+      "file": "stickers/fire.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "fire",
+        "flame",
+        "hot",
+        "trending",
+        "lit"
+      ],
+      "sha256": "391e5a9fe6d89b9b2ae1f39a359db413fe330a9b9b169151bd35b7ee5bd9bbd4",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "sparkles",
+      "name": "Sparkles",
+      "category": "sticker",
+      "file": "stickers/sparkles.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "sparkles",
+        "shine",
+        "magic",
+        "new",
+        "gold"
+      ],
+      "sha256": "be1f0ca8c52844f362de5974dd29fbecd47ca5ad1f1b0c36525717173aed662d",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "lightbulb",
+      "name": "Lightbulb",
+      "category": "sticker",
+      "file": "stickers/lightbulb.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "lightbulb",
+        "idea",
+        "tip",
+        "think",
+        "smart"
+      ],
+      "sha256": "f62b594792f9f62ced545650dd8a2e2b1ac75c0f9c4447da7a1a079877eacc89",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "new-tag",
+      "name": "New tag",
+      "category": "sticker",
+      "file": "stickers/new-tag.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "new",
+        "tag",
+        "label",
+        "launch",
+        "red"
+      ],
+      "sha256": "e8359d2675d4932cb16a47567fffc8c328089a88dcbc94d121a7a6b0d79bcfc7",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "subscribe",
+      "name": "Subscribe button",
+      "category": "sticker",
+      "file": "stickers/subscribe.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "subscribe",
+        "button",
+        "follow",
+        "channel",
+        "call to action"
+      ],
+      "sha256": "1beecd719893e837a3b829624efc89afcf6a3b6a284ab3a4dd97938bcfbf7fa7",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "cursor-hand",
+      "name": "Cursor hand",
+      "category": "sticker",
+      "file": "stickers/cursor-hand.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "cursor",
+        "hand",
+        "click",
+        "pointer",
+        "tap"
+      ],
+      "sha256": "383397df3344fb4bce1390b49635e6584c71f59b655f8b29f35000aa35718142",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "sunset-16x9",
+      "name": "Sunset gradient 16:9",
+      "category": "sticker",
+      "file": "backgrounds/sunset-16x9.png",
+      "width": 1920,
+      "height": 1080,
+      "tags": [
+        "background",
+        "gradient",
+        "sunset",
+        "warm",
+        "16:9",
+        "wide"
+      ],
+      "sha256": "3bcb1447d5a7b38810cc184d2fb7d70fc210f84eeed4895603c9eab44880d316",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "sunset-9x16",
+      "name": "Sunset gradient 9:16",
+      "category": "sticker",
+      "file": "backgrounds/sunset-9x16.png",
+      "width": 1080,
+      "height": 1920,
+      "tags": [
+        "background",
+        "gradient",
+        "sunset",
+        "warm",
+        "9:16",
+        "vertical"
+      ],
+      "sha256": "aca4a5263cc1825596ac80cf606462386b53da5f06725e16af258063d29a731b",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "soft-16x9",
+      "name": "Soft shapes 16:9",
+      "category": "sticker",
+      "file": "backgrounds/soft-16x9.png",
+      "width": 1920,
+      "height": 1080,
+      "tags": [
+        "background",
+        "pastel",
+        "soft",
+        "blur",
+        "16:9",
+        "wide"
+      ],
+      "sha256": "b376227e80fb81300096380ca13bb89e82d5ba4b680a1cc6069e6ff3cf566a82",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "soft-9x16",
+      "name": "Soft shapes 9:16",
+      "category": "sticker",
+      "file": "backgrounds/soft-9x16.png",
+      "width": 1080,
+      "height": 1920,
+      "tags": [
+        "background",
+        "pastel",
+        "soft",
+        "blur",
+        "9:16",
+        "vertical"
+      ],
+      "sha256": "3ce5c37c4cf8787d35b01b16b265d95414629e2a82f7f35b13242242504291d6",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "night-16x9",
+      "name": "Night glow 16:9",
+      "category": "sticker",
+      "file": "backgrounds/night-16x9.png",
+      "width": 1920,
+      "height": 1080,
+      "tags": [
+        "background",
+        "dark",
+        "glow",
+        "night",
+        "16:9",
+        "wide"
+      ],
+      "sha256": "176ec10c1fd4a28e835f9822030974f114bcc0be2963d798a3bc003c413c9803",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "night-9x16",
+      "name": "Night glow 9:16",
+      "category": "sticker",
+      "file": "backgrounds/night-9x16.png",
+      "width": 1080,
+      "height": 1920,
+      "tags": [
+        "background",
+        "dark",
+        "glow",
+        "night",
+        "9:16",
+        "vertical"
+      ],
+      "sha256": "f0e688691fa2e1d7aa9202e8768bc5257c0b58d39d5041edcac87ac58ee6fa2a",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "paper-16x9",
+      "name": "Paper 16:9",
+      "category": "sticker",
+      "file": "backgrounds/paper-16x9.png",
+      "width": 1920,
+      "height": 1080,
+      "tags": [
+        "background",
+        "paper",
+        "texture",
+        "light",
+        "16:9",
+        "wide"
+      ],
+      "sha256": "19f56f74f87e0ccdd5f3b651f7336adc348b23c7a83332aadc69f9853b740bde",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "paper-9x16",
+      "name": "Paper 9:16",
+      "category": "sticker",
+      "file": "backgrounds/paper-9x16.png",
+      "width": 1080,
+      "height": 1920,
+      "tags": [
+        "background",
+        "paper",
+        "texture",
+        "light",
+        "9:16",
+        "vertical"
+      ],
+      "sha256": "ad7e2b09b016792c98c8dbcdddd3489f47507e8d6e4aac25b9b75ae3915846f0",
       "license": "CC0-1.0"
     }
   ]
