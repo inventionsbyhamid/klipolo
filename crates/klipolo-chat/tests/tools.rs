@@ -668,6 +668,14 @@ fn caption_styles_say_which_light_up_each_word() {
     for key in ["clean", "boxed"] {
         assert!(!of(key).contains("lights up"), "{}", of(key));
     }
+    // The shorts' two say so.
+    for key in ["word-pop", "bold-box"] {
+        assert!(
+            of(key).starts_with(&format!("{key}: for shorts")),
+            "{}",
+            of(key)
+        );
+    }
 }
 
 #[test]
@@ -675,14 +683,29 @@ fn style_enum_matches_caption_style_ids() {
     let style = &parameters_of("setCaptions")["properties"]["style"];
     assert_eq!(
         style["enum"],
-        json!(["clean", "bold", "karaoke", "highlight", "boxed", null])
+        json!([
+            "clean",
+            "bold",
+            "karaoke",
+            "highlight",
+            "boxed",
+            "word-pop",
+            "bold-box",
+            null
+        ])
     );
-    assert_eq!(
-        CHAT_CAPTION_STYLES.map(|(s, _)| s.key()),
-        ["clean", "bold", "karaoke", "highlight", "boxed"]
-    );
+    let words = [
+        "clean",
+        "bold",
+        "karaoke",
+        "highlight",
+        "boxed",
+        "word-pop",
+        "bold-box",
+    ];
+    assert_eq!(CHAT_CAPTION_STYLES.map(|(s, _)| s.key()), words);
     let installed = CaptionStyles::builtin();
-    for word in ["clean", "bold", "karaoke", "highlight", "boxed"] {
+    for word in words {
         let args = json!({"on": true, "style": word}).to_string();
         let parsed = ToolCall::parse(&call("setCaptions", &args)).unwrap();
         let ToolCall::SetCaptions {
@@ -709,7 +732,8 @@ fn style_enum_matches_caption_style_ids() {
         assert_eq!(
             err.to_string(),
             format!(
-                "setCaptions: style must be one of clean, bold, karaoke, highlight, boxed or null, not \"{word}\"."
+                "setCaptions: style must be one of clean, bold, karaoke, highlight, boxed, word-pop, bold-box or \
+                 null, not \"{word}\"."
             )
         );
     }

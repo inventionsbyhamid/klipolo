@@ -346,9 +346,9 @@ impl ToolCall {
 
 /// The caption styles `setCaptions` offers, in the schema's order, each with how the model is told it looks. Whether a
 /// word lights up as it is said is what tells them apart when a person asks for captions "that light up" or "word by
-/// word": karaoke and highlight light up each word, bold only pops words in. The other built-ins (Loud, Arcade) stay
-/// out of chat.
-pub const CHAT_CAPTION_STYLES: [(BuiltinCaptionStyle, &str); 5] = [
+/// word": karaoke, highlight and word pop light up each word, bold only pops words in. Word pop and bold box are the
+/// shorts' styles. The other built-ins (Loud, Arcade) stay out of chat.
+pub const CHAT_CAPTION_STYLES: [(BuiltinCaptionStyle, &str); 7] = [
     (
         BuiltinCaptionStyle::Clean,
         "calm subtitles, a sentence at a time",
@@ -366,6 +366,14 @@ pub const CHAT_CAPTION_STYLES: [(BuiltinCaptionStyle, &str); 5] = [
         "up to four big uppercase words where a coloured box lights up each word as it is said, word by word",
     ),
     (BuiltinCaptionStyle::Boxed, "sentences on rounded boxes"),
+    (
+        BuiltinCaptionStyle::WordPop,
+        "for shorts: big words pop in as said, the said one coloured",
+    ),
+    (
+        BuiltinCaptionStyle::BoldBox,
+        "for shorts: heavy words on a rounded box",
+    ),
 ];
 
 /// The formats `setFormat` offers, `setClip`'s framing names, and the recording tools' `format`.
@@ -707,7 +715,7 @@ pub fn tools() -> Value {
     )
 }
 
-fn chat_styles() -> [BuiltinCaptionStyle; 5] {
+fn chat_styles() -> [BuiltinCaptionStyle; 7] {
     CHAT_CAPTION_STYLES.map(|(s, _)| s)
 }
 
