@@ -38,6 +38,7 @@ import { followRecorder, reopenWhereLeft, useRecorder } from './state/recorder';
 import { followSaves } from './state/saving';
 import { toast } from './state/toasts';
 import { keepPlayheadInVideo, keepPlayheadOnReload, restorePlayhead } from './state/transport';
+import { followVolume } from './state/volume';
 
 let started = false;
 
@@ -118,6 +119,8 @@ export function App() {
     keepPlayheadOnReload();
     // Loop: a forward run goes back to the selected range's start at its end.
     keepLooping();
+    // The player bar's volume reaches the preview as it changes.
+    followVolume();
     clearRangeOnProjectSwitch();
     clearProposalOnProjectSwitch();
     // Other apps' calls read the person's view (the selection, the playhead) as Klipolo last heard it.

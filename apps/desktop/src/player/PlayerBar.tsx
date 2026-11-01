@@ -11,6 +11,7 @@ import { usePlayback } from '../state/playback';
 import { skip, useDurationUs } from '../state/transport';
 import { useUi } from '../state/ui';
 import { formatTime } from './time';
+import { VolumeControl } from './VolumeControl';
 
 /** The zoom as the slider shows it: 0 (the whole video) to 1 (the closest), on a log scale. */
 function zoomShare(pps: number, range: [number, number] | null): number {
@@ -111,9 +112,9 @@ function BarButton({
 }
 
 /**
- * The player bar: Split and Delete on the left, the transport (with Loop) centred on the window, the timeline's zoom and
- * Fit on the right. Split, Delete, Loop, the zoom and Fit run the same commands as their keys; every
- * control says what it does and its key in a tooltip, and none looks live and does nothing.
+ * The player bar: Split and Delete on the left, the transport (with Loop) centred on the window, the timeline's zoom,
+ * Fit and the preview's volume on the right. Split, Delete, Loop, the zoom and Fit run the same commands
+ * as their keys; every control says what it does and its key in a tooltip, and none looks live and does nothing.
  */
 export function PlayerBar() {
   const duration = useDurationUs();
@@ -229,6 +230,7 @@ export function PlayerBar() {
             Fit
           </button>
         </Tooltip>
+        <VolumeControl />
       </div>
     </footer>
   );
