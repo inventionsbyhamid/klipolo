@@ -5,8 +5,10 @@
 //! - `klipolo://proposal` (`getProposal`): JSON, what became of this app's proposal (`ProposalOutcome`).
 //!
 //! All built from the host's snapshot when read; nothing is kept but what the session read (`Seen`). Reading the
-//! context or the transcript, which show the timeline, records the project and its `timeline_key`, which a call naming
-//! times or clip refs needs to match. The summary doesn't: an app reads the timeline before it names times.
+//! context or the transcript records the project and its `timeline_key`, which a call naming times or clip refs needs
+//! to match. The summary doesn't, though it lists the clips with their times: it holds no transcript or scenes, so an
+//! app that read only it hasn't seen what is said or shown at the times it would name. Nor does checking it for the
+//! revision bring a read the person's edit made stale up to date.
 
 use klipolo_chat::{build_context, full_transcript, timeline_key};
 use klipolo_model::time::{MAX_TIME_US, Us, secs_to_us};

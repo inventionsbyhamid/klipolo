@@ -5,7 +5,8 @@
 //! - `transcript_clip_a.json`: klipolo-analysis's `align_clip_a.json` words as its `transcript::assemble` writes them
 //!   (words scoring under 0.05 dropped, each ending by the next one's start, a pause word in every gap of 0.7 s or
 //!   more); `turns_clip_a.json`: the speaker turns of its `asr_clip_a.json`.
-//! - `scenes_clip_a.json`: a real Muse Spark 1.3 moments answer for the clip (the planner spike's), as `SceneEntry`s.
+//! - `scenes_clip_a.json`: a real Muse Spark 1.3 moments answer for the clip (from a first trial of the planner), as
+//!   `SceneEntry`s.
 //! - `project_two_clips.json`: the clip as `astronauts.mp4`, played as two pieces around the cut.
 //!
 //! `tests/fixtures/make_fixtures.py` makes all four again (its notes say from what).
@@ -1301,6 +1302,7 @@ fn library_item(name: &str, kind: MediaKind, pack: bool) -> LibraryItem {
         kind,
         asset,
         pack,
+        tags: Vec::new(),
     }
 }
 

@@ -15,7 +15,7 @@ export interface BurstChange {
    * The ops, or a builder for them: called when the burst commits (and once a frame for its dry run), so ops that
    * carry a whole value (a layer's content, a point) build on the project as it is then, a change made by another
    * control in the meantime included. (A change from elsewhere, such as chat's, merged since the press makes Rust
-   * refuse it: L7.)
+   * refuse it.)
    */
   ops: Op[] | (() => Op[]);
   /** Nothing changes after all (nudged back to where it began): drop the dry run instead of committing. */

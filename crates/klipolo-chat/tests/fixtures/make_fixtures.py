@@ -2,8 +2,8 @@
 
 usage: python3 -I make_fixtures.py <spark moments answer.json>
 The Spark answer is a whole Responses API answer whose message text is the moments JSON (start_sec, end_sec, kind,
-who, description), as the planner spike kept it (t3_muse-spark-1_3_moments_fpsdefault_default.json, not in this
-repository). Writes transcript_clip_a.json, turns_clip_a.json, scenes_clip_a.json and project_two_clips.json.
+who, description), as a first trial of the planner kept it (not in this repository). Writes transcript_clip_a.json,
+turns_clip_a.json, scenes_clip_a.json and project_two_clips.json.
 The transcript follows klipolo-analysis's `transcript::assemble`: aligned words scoring under 0.05 dropped, fillers
 tagged, each word ending by the next one's start, and a pause word in every gap of 700 ms or more.
 """

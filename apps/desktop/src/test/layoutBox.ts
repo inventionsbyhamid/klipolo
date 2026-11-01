@@ -1,7 +1,8 @@
 /**
  * jsdom has no layout: every element measures 0 × 0 at 0, 0. `stubSize` gives the elements matching a selector a size,
  * and optionally a place, for code that measures with `getBoundingClientRect`, `offsetWidth/Height`,
- * `offsetLeft/Top` or `clientWidth/Height`. Shared by the UI tests; a fix to it reaches them all.
+ * `offsetLeft/Top` or `clientWidth/Height`. Shared by the page's tests, so a change to it must keep every one of them
+ * green.
  *
  * The stub sits on `Element.prototype` (and `offset*` on `HTMLElement.prototype`). A test's own
  * `HTMLElement.prototype.clientWidth/clientHeight` therefore takes precedence over it on HTML elements (the preview,

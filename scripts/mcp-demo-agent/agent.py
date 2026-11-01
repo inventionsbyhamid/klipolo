@@ -386,13 +386,13 @@ def _plain(text: str) -> str:
 
 
 def plain_reply(text: str) -> str:
-    """Muse Spark's reply as it is printed, with no em or en dash: one between digits with no space (a range) becomes a
-    hyphen, one opening a line goes, and any other becomes a comma (an aside's pair, two; one with spaces after a
-    number too, as in "9:16, 30 s")."""
+    """Muse Spark's reply as it is printed, with no em or en dash: an en dash between digits with no space (a range)
+    becomes a hyphen, one opening a line goes, and any other becomes a comma (an aside's pair, two; one with spaces
+    after a number too, and an em dash between digits, as in "9:16, 30 s")."""
     lines = []
     for line in text.splitlines():
         line = re.sub("^\\s*[\u2013\u2014]+\\s*", "", line)
-        line = re.sub("(?<=\\d)[\u2013\u2014](?=\\d)", "-", line)
+        line = re.sub("(?<=\\d)\u2013(?=\\d)", "-", line)
         line = re.sub("\\s*[\u2013\u2014]+\\s*", ", ", line)
         # A comma the dash left before other punctuation goes.
         line = re.sub(",\\s*(?=[,.;:!?])", "", line)
