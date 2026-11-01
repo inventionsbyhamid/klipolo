@@ -16,9 +16,9 @@ use klipolo_model::timeline::{Clip, ClipSource};
 use klipolo_platform::durable::{Durability, Os};
 
 use super::*;
-use klipolo_app::analysis::holds::{Holds, SETTLE};
 use crate::project::recent::{RECENT_LIMIT, poster_wants, recent_in};
 use crate::project::save;
+use klipolo_app::analysis::holds::{Holds, SETTLE};
 
 #[path = "../../../klipolo-engine/tests/support/fixture_set.rs"]
 mod fixture_set;
@@ -109,7 +109,10 @@ fn posters_for_never_opened_projects_appear_without_opening_them() {
     let call = saved(&library, "Call", &phone, Some(cut));
 
     let rows = recent_in(&library, &stamps, Some(&root), RECENT_LIMIT).unwrap();
-    assert!(rows.iter().all(|row| row.thumb.is_none()), "nothing made yet");
+    assert!(
+        rows.iter().all(|row| row.thumb.is_none()),
+        "nothing made yet"
+    );
     let wants = poster_wants(&rows, &root);
     let files: BTreeSet<&str> = wants.iter().map(|w| w.file.as_str()).collect();
     assert_eq!(files.len(), 2, "one want per file: {wants:?}");
@@ -140,7 +143,10 @@ fn posters_for_never_opened_projects_appear_without_opening_them() {
         (&call, Some(cut), (202, 360)),
     ] {
         let thumb = told(project);
-        assert_eq!((thumb.tile_w, thumb.tile_h, thumb.cols), (size.0, size.1, 1));
+        assert_eq!(
+            (thumb.tile_w, thumb.tile_h, thumb.cols),
+            (size.0, size.1, 1)
+        );
         assert_eq!(thumb.crop, crop, "{project:?}");
         assert!(Path::new(&thumb.sprite).is_file());
     }
@@ -151,7 +157,11 @@ fn posters_for_never_opened_projects_appear_without_opening_them() {
         assert_eq!(thumb.cols, 1, "{}", row.name);
         assert_eq!(thumb.sprite, told(Path::new(&row.path)).sprite);
     }
-    assert_eq!(poster_wants(&rows, &root), Vec::new(), "nothing more to make");
+    assert_eq!(
+        poster_wants(&rows, &root),
+        Vec::new(),
+        "nothing more to make"
+    );
     assert!(!stamps.exists(), "no project was opened");
 }
 
@@ -180,7 +190,8 @@ impl Stand {
             let key = stem(file, &CacheKind::Thumbs).ok_or("gone")?;
             let (luma, chroma) = (vec![100; 4 * 2], vec![128; 2]);
             let planes = [luma.as_slice(), chroma.as_slice(), chroma.as_slice()];
-            thumbs::write_poster(&Os, root, &key, (4, 2), planes, [4, 2, 2]).map_err(|e| e.to_string())?;
+            thumbs::write_poster(&Os, root, &key, (4, 2), planes, [4, 2, 2])
+                .map_err(|e| e.to_string())?;
             stand.made.lock().unwrap().push(file.to_owned());
             stand.busy.fetch_sub(1, Ordering::SeqCst);
             Ok(thumbs::poster(root, file))
@@ -271,14 +282,16 @@ fn a_file_whose_poster_cant_be_made_is_not_tried_again() {
     let dir = tempfile::tempdir().unwrap();
     let tries = Arc::new(Mutex::new(Vec::new()));
     let tried = tries.clone();
-    let make: Arc<Make> = Arc::new(move |_: &Path, file: &str| -> Result<Option<Poster>, String> {
-        tried.lock().unwrap().push(file.to_owned());
-        if file.ends_with("sound.m4a") {
-            Ok(None)
-        } else {
-            Err("The file can't be read.".into())
-        }
-    });
+    let make: Arc<Make> = Arc::new(
+        move |_: &Path, file: &str| -> Result<Option<Poster>, String> {
+            tried.lock().unwrap().push(file.to_owned());
+            if file.ends_with("sound.m4a") {
+                Ok(None)
+            } else {
+                Err("The file can't be read.".into())
+            }
+        },
+    );
     let (posters, heard) = posters(&dir.path().join("thumbs"), Arc::new(Holds::default()), make);
     for _ in 0..2 {
         posters.want(wants_for(dir.path(), &["sound.m4a", "damaged.mp4"]));

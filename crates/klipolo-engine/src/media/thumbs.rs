@@ -290,16 +290,20 @@ mod tests {
             .windows(2)
             .position(|w| w == [0xFF, 0xDB])
             .expect("a DQT");
-        jpeg[at + 5..at + 5 + 64].iter().map(|&q| q.into()).collect()
+        jpeg[at + 5..at + 5 + 64]
+            .iter()
+            .map(|&q| q.into())
+            .collect()
     }
 
     /// The libjpeg quality a luminance table was made at (its scale of the standard table, 50 and up), from its AC
     /// steps (FFmpeg's encoder sets the DC step by its own precision).
     fn jpeg_quality(table: &[u16]) -> f64 {
         const STANDARD: [u16; 64] = [
-            16, 11, 12, 14, 12, 10, 16, 14, 13, 14, 18, 17, 16, 19, 24, 40, 26, 24, 22, 22, 24, 49, 35, 37, 29,
-            40, 58, 51, 61, 60, 57, 51, 56, 55, 64, 72, 92, 78, 64, 68, 87, 69, 55, 56, 80, 109, 81, 87, 95, 98,
-            103, 104, 103, 62, 77, 113, 121, 112, 100, 120, 92, 101, 103, 99,
+            16, 11, 12, 14, 12, 10, 16, 14, 13, 14, 18, 17, 16, 19, 24, 40, 26, 24, 22, 22, 24, 49,
+            35, 37, 29, 40, 58, 51, 61, 60, 57, 51, 56, 55, 64, 72, 92, 78, 64, 68, 87, 69, 55, 56,
+            80, 109, 81, 87, 95, 98, 103, 104, 103, 62, 77, 113, 121, 112, 100, 120, 92, 101, 103,
+            99,
         ];
         let scale: f64 = table
             .iter()

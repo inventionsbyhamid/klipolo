@@ -183,7 +183,8 @@ mod tests {
         let half = estimate(&one, ExportQuality::High, 30, length, false, 0.5).bytes as f64;
         assert!(screen < half && half < camera as f64);
         // Master's ProRes is sized by its own rate, whatever the footage.
-        let master = |screen| estimate(&one, ExportQuality::Master, 30, length, false, screen).bytes;
+        let master =
+            |screen| estimate(&one, ExportQuality::Master, 30, length, false, screen).bytes;
         assert_eq!(master(1.0), master(0.0));
     }
 
@@ -212,7 +213,13 @@ mod tests {
         let of = |id: &str| ClipSource::Recording { id: id.into() };
         project.timeline.main = vec![
             Clip::new(of("screen"), 0, 30_000_000),
-            Clip::new(ClipSource::Asset { id: "camera".into() }, 0, 10_000_000),
+            Clip::new(
+                ClipSource::Asset {
+                    id: "camera".into(),
+                },
+                0,
+                10_000_000,
+            ),
             Clip::new(of("game"), 0, 10_000_000),
         ];
         assert!((screen_share(&project) - 0.6).abs() < 1e-9);

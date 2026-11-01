@@ -792,13 +792,24 @@ fn an_older_project_opens_with_the_name_it_is_listed_by() {
         file_name: "Untitled project 3".into(),
     });
     assert_eq!(opened.listed_as, listed);
-    assert_eq!(snapshot_now(&state).unwrap().listed_as, listed, "a reload says so too");
+    assert_eq!(
+        snapshot_now(&state).unwrap().listed_as,
+        listed,
+        "a reload says so too"
+    );
     assert_eq!(fs::read(&third).unwrap(), bytes, "its file isn't rewritten");
     let rows = recent_in(&library, &stamps, None, RECENT_LIMIT).unwrap();
-    let row = rows.iter().find(|row| Path::new(&row.path) == third).unwrap();
+    let row = rows
+        .iter()
+        .find(|row| Path::new(&row.path) == third)
+        .unwrap();
     assert_eq!(row.name, "Untitled project 3", "the name the list shows");
 
-    assert_eq!(open_in(&state, &first).unwrap().listed_as, None, "its file's name is its own");
+    assert_eq!(
+        open_in(&state, &first).unwrap().listed_as,
+        None,
+        "its file's name is its own"
+    );
     assert_eq!(open_in(&state, &demo).unwrap().listed_as, None);
     let mut renamed = untitled.clone();
     renamed.name = "Kiln vlog".into();

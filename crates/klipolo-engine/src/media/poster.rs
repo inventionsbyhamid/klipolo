@@ -52,7 +52,10 @@ pub fn make_poster(root: &Path, steps: &dyn Steps, path: &str) -> Result<Option<
     let Some(mut source) = Source::open(path)? else {
         return Ok(None);
     };
-    let mut fit = Fit::new(poster_size(source.upright.0, source.upright.1), source.rotation);
+    let mut fit = Fit::new(
+        poster_size(source.upright.0, source.upright.1),
+        source.rotation,
+    );
     let Some(first_us) = source.next()? else {
         return Ok(None);
     };

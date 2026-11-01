@@ -177,7 +177,10 @@ fn a_picture_becomes_the_background_with_its_file() {
     p.background.padding = 0.1;
     let logo = p.asset("logo").unwrap().clone();
     let ops = background_picture_ops(&p, &logo).unwrap();
-    assert!(matches!(ops.as_slice(), [Op::SetBackground { .. }]), "{ops:?}");
+    assert!(
+        matches!(ops.as_slice(), [Op::SetBackground { .. }]),
+        "{ops:?}"
+    );
     let shown = apply_ops(&p, &ops).unwrap();
     assert_eq!(shown.background.kind, BackgroundKind::Image);
     assert_eq!(shown.background.asset_id.as_deref(), Some("logo"));
@@ -191,9 +194,18 @@ fn a_picture_becomes_the_background_with_its_file() {
         ..logo
     };
     let ops = background_picture_ops(&p, &wall).unwrap();
-    assert!(matches!(ops.as_slice(), [Op::AddAssets { .. }, Op::SetBackground { .. }]), "{ops:?}");
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [Op::AddAssets { .. }, Op::SetBackground { .. }]
+        ),
+        "{ops:?}"
+    );
     let shown = apply_ops(&p, &ops).unwrap();
-    assert_eq!(shown.asset("wall").map(|a| a.path.as_str()), Some("/Users/me/Pictures/wall.jpg"));
+    assert_eq!(
+        shown.asset("wall").map(|a| a.path.as_str()),
+        Some("/Users/me/Pictures/wall.jpg")
+    );
     assert_eq!(shown.background.asset_id.as_deref(), Some("wall"));
     assert!(validate(&shown).is_ok());
     assert!(background_picture_ops(&p, &whoosh()).is_err());

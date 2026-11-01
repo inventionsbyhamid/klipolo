@@ -117,7 +117,10 @@ fn picture(w: usize, h: usize, luma: impl Fn(usize, usize) -> u8, u: u8, v: u8) 
 }
 
 fn dull(planes: &[Vec<u8>; 3], w: usize) -> bool {
-    is_dull([&planes[0], &planes[1], &planes[2]], (w, planes[0].len() / w))
+    is_dull(
+        [&planes[0], &planes[1], &planes[2]],
+        (w, planes[0].len() / w),
+    )
 }
 
 /// Black, white, one colour, noise on black and a black frame with a small title say nothing; bars, a page of text and
@@ -131,13 +134,28 @@ fn a_picture_that_is_nearly_all_one_colour_is_dull() {
     let noise = |x: usize, y: usize| 16 + ((x * 7 + y * 13) % 5) as u8;
     assert!(dull(&picture(w, h, noise, 128, 128), w), "noise on black");
     // A title 20 × 6 (under 1 % of the picture).
-    let title = |x: usize, y: usize| if (70..90).contains(&x) && (42..48).contains(&y) { 235 } else { 16 };
-    assert!(dull(&picture(w, h, title, 128, 128), w), "a small title on black");
+    let title = |x: usize, y: usize| {
+        if (70..90).contains(&x) && (42..48).contains(&y) {
+            235
+        } else {
+            16
+        }
+    };
+    assert!(
+        dull(&picture(w, h, title, 128, 128), w),
+        "a small title on black"
+    );
 
     let bars = |x: usize, _| [235, 210, 170, 145, 106, 81, 41, 16][x * 8 / w];
     assert!(!dull(&picture(w, h, bars, 128, 128), w), "bars");
     // Black lines of text over a fifth of a white page.
-    let page = |x: usize, y: usize| if y % 10 < 2 && (10..150).contains(&x) { 16 } else { 235 };
+    let page = |x: usize, y: usize| {
+        if y % 10 < 2 && (10..150).contains(&x) {
+            16
+        } else {
+            235
+        }
+    };
     assert!(!dull(&picture(w, h, page, 128, 128), w), "a page of text");
     let halves = |_, y: usize| if y < h / 2 { 81 } else { 41 };
     assert!(!dull(&picture(w, h, halves, 128, 128), w), "two colours");

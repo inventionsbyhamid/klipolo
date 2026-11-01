@@ -279,7 +279,10 @@ pub(crate) fn mark_open(rows: &mut [ProjectRow], open: Option<&Path>) {
 /// `project`, read from `file`, as a row.
 fn row(file: &Path, opened_ms: u64, project: &Project, thumbs: Option<&Path>) -> ProjectRow {
     let main = &project.timeline.main;
-    let crop = main.first().and_then(|clip| clip.crop).filter(|c| !c.is_none());
+    let crop = main
+        .first()
+        .and_then(|clip| clip.crop)
+        .filter(|c| !c.is_none());
     let first = first_file(project).map(|path| (path.to_owned(), crop));
     let thumb = thumbs
         .zip(first.as_ref())
