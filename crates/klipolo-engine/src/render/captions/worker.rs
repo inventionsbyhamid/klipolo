@@ -11,6 +11,7 @@
 //! draws from the atlas, comes after it on the shared queue.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 
 use klipolo_model::captions::Pages;
@@ -66,6 +67,8 @@ pub(super) enum Job {
     Free(Vec<Entry>),
     /// A page built that the drawer didn't keep (asked before a font change, or kept already): freed here.
     Unkept(Box<Built>),
+    /// The dropped drawer's end of the replies, with the pages built and not picked up: freed here.
+    Close(Receiver<Reply>),
 }
 
 /// A page built.
@@ -91,6 +94,8 @@ pub(super) struct Gone;
 pub(super) struct Worker {
     jobs: Sender<Job>,
     replies: Receiver<Reply>,
+    /// Set when the drawer is dropped: the builds still asked are skipped.
+    closed: Arc<AtomicBool>,
 }
 
 impl Worker {
@@ -100,14 +105,20 @@ impl Worker {
         let (jobs, asked) = mpsc::channel();
         let (answer, replies) = mpsc::channel();
         let dev = dev.clone();
+        let closed = Arc::new(AtomicBool::new(false));
+        let skip = closed.clone();
         let spawned = std::thread::Builder::new()
             .name("klipolo-captions".into())
-            .spawn(move || run(&dev, redraw, wait, &asked, &answer));
+            .spawn(move || run(&dev, redraw, wait, &asked, &answer, &skip));
         if let Err(error) = spawned {
             // Both channel ends the thread held are gone: the drawer says so (`Gone`).
             tracing::warn!(%error, "caption build thread");
         }
-        Self { jobs, replies }
+        Self {
+            jobs,
+            replies,
+            closed,
+        }
     }
 
     pub(super) fn send(&self, request: Request) -> Result<(), Gone> {
@@ -142,12 +153,24 @@ impl Worker {
     }
 }
 
+impl Drop for Worker {
+    /// The replies channel goes to the thread too, with any page built and not picked up: freed there after the build
+    /// it is on (the builds still asked are skipped), and the thread ends after it.
+    fn drop(&mut self) {
+        self.closed.store(true, Ordering::Release);
+        let (_, none) = mpsc::channel();
+        let replies = std::mem::replace(&mut self.replies, none);
+        let _ = self.jobs.send(Job::Close(replies));
+    }
+}
+
 fn run(
     dev: &RenderDevice,
     redraw: Option<Arc<Notify>>,
     wait: bool,
     asked: &Receiver<Job>,
     answer: &Sender<Reply>,
+    closed: &AtomicBool,
 ) {
     // Its builds are work someone is waiting to see (the export caps it under its own ceiling).
     crate::qos::set_current(crate::qos::Qos::UserInitiated);
@@ -166,6 +189,8 @@ fn run(
     notify();
     while let Ok(job) = asked.recv() {
         let r = match job {
+            // The drawer is gone: nothing to build for.
+            Job::Build(_) if closed.load(Ordering::Acquire) => continue,
             Job::Build(r) => r,
             // Freed here, never on the render thread.
             Job::Free(entries) => {
@@ -174,6 +199,10 @@ fn run(
             }
             Job::Unkept(built) => {
                 drop(built);
+                continue;
+            }
+            Job::Close(replies) => {
+                drop(replies);
                 continue;
             }
         };
