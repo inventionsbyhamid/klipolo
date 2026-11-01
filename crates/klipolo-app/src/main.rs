@@ -52,6 +52,8 @@ fn main() {
         std::process::exit(klipolo_capture::worker::main(&args));
     }
     log::install();
+    // This build, as its export jobs record it, read now: a program replaced while Klipolo runs is never taken for it.
+    let _ = klipolo_engine::export::job::this_build();
     // The engine's fonts, once: the bundled folder in the app's resources (or the repository's in a dev build).
     if let Err(e) = fonts::configure(FontDirs {
         bundled: klipolo_fonts::bundled::bundled_dir(),
@@ -142,7 +144,10 @@ fn main() {
             app.manage(view);
             app.manage(analysis);
             app.manage(chat);
-            app.manage(commands::export::state_at_launch());
+            // Exports: the folders they were written in are remembered in the app's data folder, so a kept job there
+            // is listed after a relaunch.
+            let data = app.path().app_data_dir().ok();
+            app.manage(commands::export::state_at_launch(data.as_deref()));
             // Editing copies of the open project's slow files, beside the thumbnails in the media cache. The preview
             // reads them once made; they wait while an export holds the slot.
             let proxies = app
@@ -269,6 +274,10 @@ fn main() {
             commands::export::export_plan,
             commands::export::export_start,
             commands::export::export_cancel,
+            commands::export::export_jobs,
+            commands::export::export_pause,
+            commands::export::export_resume,
+            commands::export::export_discard,
             commands::export::export_reveal,
             commands::export::export_open,
             commands::export::export_share,
@@ -315,8 +324,9 @@ fn main() {
                 if let Some(mcp) = app.try_state::<McpState>() {
                     mcp.stop();
                 }
-                // Every edit is on the disk, then a running export stops, before the app goes. An editing copy being
-                // made keeps its finished segments: its worker sees the app go and is made on at the next launch.
+                // Every edit is on the disk, then a running export pauses to resume next time, before the app goes. An
+                // editing copy being made keeps its finished segments: its worker sees the app go and is made on at the
+                // next launch.
                 commands::export::on_exit(app);
             }
             // The system's appearance changed: the window's colour follows it while the theme is System.
