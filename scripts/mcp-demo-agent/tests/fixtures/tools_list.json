@@ -157,6 +157,117 @@
       "annotations": {
         "readOnlyHint": false
       },
+      "description": "Set a clip's speed, volume, mute, or Fit or Fill; a song's volume or mute; a video layer's speed, volume or mute. Null keeps a value.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "clip": {
+            "description": "A ref: c2 for a clip, m1 for a song, v1 for a video layer, or all for every clip.",
+            "type": "string"
+          },
+          "framing": {
+            "description": "fit shows the whole picture; fill fills the frame, cropping.",
+            "enum": [
+              "fit",
+              "fill",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "framingFormat": {
+            "description": "With framing: the format it is for. Null for every format.",
+            "enum": [
+              "landscape",
+              "portrait",
+              "square",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "muted": {
+            "description": "True mutes it, false unmutes it.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "speed": {
+            "description": "0.5, 0.75, 1, 1.25, 1.5 or 2 (2 is twice as fast).",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "volume": {
+            "description": "0 to 2 in steps of 0.01; 1 is as recorded.",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "clip",
+          "speed",
+          "volume",
+          "muted",
+          "framing",
+          "framingFormat"
+        ],
+        "type": "object"
+      },
+      "name": "setClip"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Add, change or remove the transition at a cut.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "description": "The clip before the cut, such as c2 for the cut from c2 to c3, or all.",
+            "type": "string"
+          },
+          "durationSec": {
+            "description": "0.1 to 5 s. Null: 0.5 s (or the longest that fits), or the length it has.",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "kind": {
+            "description": "dissolve is a crossfade, dip goes through black, push and wipe slide across, none removes it.",
+            "enum": [
+              "dissolve",
+              "dip",
+              "push",
+              "wipe",
+              "none"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "after",
+          "kind",
+          "durationSec"
+        ],
+        "type": "object"
+      },
+      "name": "setTransition"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
       "description": "Set the video's shape. It becomes the main format.",
       "inputSchema": {
         "additionalProperties": false,

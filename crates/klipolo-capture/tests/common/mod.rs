@@ -1,5 +1,5 @@
 //! Helpers the capture tests share. Modules that use `synthetic` items (`take`, `harness` and `fake`) are declared
-//! 13 and 14) are declared `#[cfg(feature = "synthetic")]`, so CI's featureless `cargo check --all-targets` still
+//! `#[cfg(feature = "synthetic")]`, so CI's featureless `cargo check --all-targets` still
 //! compiles every test.
 #![allow(dead_code)]
 
