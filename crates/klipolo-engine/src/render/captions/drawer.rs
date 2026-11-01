@@ -14,6 +14,10 @@
 //!   draws the page's last one, never another page's words. An export (`wait`) waits for the reply on the
 //!   same path, so preview == export holds. The asking
 //!   and keeping is `builds`.
+//! - **Nor freed on the render thread:** an atlas evicted, every one after a font change and the drawer's own when it
+//!   is dropped go back to the build thread, which frees them in order with its builds. Freeing a texture's view can
+//!   wait for the GPU's queue (lavapipe takes the queue's lock for it, and holds that lock while it runs a submission,
+//!   a page build's included), so a frame never frees one.
 //! - **Per frame:** the face is resolved only when the font, weight, style or fonts' generation change; the words' hash
 //!   is kept per page; the instances go into kept buffers (`draw`), uploaded only when they changed.
 //!   Nothing is allocated once warm.
@@ -145,10 +149,11 @@ impl CaptionDrawer {
         self.buffers.forget_uploads();
     }
 
-    /// The shared fonts changed (`SharedFonts::refresh` returned true): every atlas and the face go, and a build asked
-    /// before is dropped when it lands (the build thread refreshes its own fonts before each build).
+    /// The shared fonts changed (`SharedFonts::refresh` returned true): every atlas (freed on the build thread) and the
+    /// face go, and a build asked before is dropped when it lands (the build thread refreshes its own fonts before each
+    /// build).
     pub fn fonts_changed(&mut self) {
-        self.cache.0.clear();
+        self.worker.free(std::mem::take(&mut self.cache.0));
         self.face = None;
         self.epoch += 1;
     }
@@ -207,8 +212,13 @@ impl CaptionDrawer {
             }
             None => return None,
         };
-        self.cache
-            .evict(layer.format, [Some(shown), next_key.map(|(_, k)| k)]);
+        let mut evicted = Vec::new();
+        self.cache.evict(
+            layer.format,
+            [Some(shown), next_key.map(|(_, k)| k)],
+            &mut evicted,
+        );
+        self.worker.free(evicted);
         let index = self.cache.find(&shown)?;
         let entry = &mut self.cache.0[index];
         entry.used = self.tick;
@@ -254,5 +264,12 @@ impl CaptionDrawer {
         pass.set_bind_group(0, &entry.bind, &[]);
         pass.set_vertex_buffer(0, buffer.slice(..));
         pass.draw(0..4, 0..n);
+    }
+}
+
+impl Drop for CaptionDrawer {
+    /// The atlases kept go to the build thread to free, as every other one does; the thread ends once it has them.
+    fn drop(&mut self) {
+        self.worker.free(std::mem::take(&mut self.cache.0));
     }
 }
