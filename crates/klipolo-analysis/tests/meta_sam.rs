@@ -23,19 +23,38 @@ fn video() -> (tempfile::TempDir, PathBuf) {
     (dir, file)
 }
 
-/// SAM's answer as the stream of events it sends: the text in two deltas, then the final answer with its usage.
+/// SAM's answer as the stream it sends, in the shape of a recorded real one: the response created and in progress, its
+/// message and text part added, one text delta per frame line, the text and the message done, then the completed
+/// response carrying the whole text again and the frames billed.
 fn answer(text: &str, frames: u64) -> ResponseTemplate {
-    let (first, rest) = text.split_at(text.len() / 2);
-    let events = [
-        json!({"type": "response.created", "response": {"status": "in_progress"}}),
-        json!({"type": "response.output_text.delta", "delta": first}),
-        json!({"type": "response.output_text.delta", "delta": rest}),
+    let message = |status: &str, text: &str| {
+        json!({"type": "message", "id": "msg_1", "role": "assistant", "status": status,
+               "content": [{"type": "output_text", "text": text, "annotations": [], "logprobs": []}]})
+    };
+    let part = json!({"type": "output_text", "text": "", "annotations": [], "logprobs": []});
+    let mut events = vec![
+        json!({"type": "response.created", "sequence_number": 0,
+               "response": {"id": "resp_1", "model": "sam-3.1", "status": "in_progress", "output": []}}),
+        json!({"type": "response.in_progress", "sequence_number": 1,
+               "response": {"id": "resp_1", "model": "sam-3.1", "status": "in_progress", "output": []}}),
+        json!({"type": "response.output_item.added", "output_index": 0, "item": message("in_progress", "")}),
+        json!({"type": "response.content_part.added", "item_id": "msg_1", "part": part}),
+    ];
+    for line in text.split_inclusive('\n') {
+        events.push(json!({"type": "response.output_text.delta", "item_id": "msg_1", "delta": line}));
+    }
+    events.extend([
+        json!({"type": "response.output_text.done", "item_id": "msg_1", "text": text}),
+        json!({"type": "response.output_item.done", "output_index": 0, "item": message("completed", text)}),
         json!({"type": "response.completed", "response": {
-            "id": "resp_1", "object": "response", "model": "sam-3.1", "status": "completed", "output": [],
+            "id": "resp_1", "object": "response", "model": "sam-3.1", "status": "completed",
+            "output": [message("completed", text)],
             "usage": {"input_tokens": 0, "output_tokens": 0, "video_frames_processed": frames}
         }}),
-    ];
-    let body: String = events.iter().map(|e| format!("data: {e}\n\n")).collect();
+    ]);
+    let body: String = (events.iter())
+        .map(|e| format!("event: {}\ndata: {e}\n\n", e["type"].as_str().unwrap()))
+        .collect();
     ResponseTemplate::new(200).set_body_raw(body, "text/event-stream")
 }
 
