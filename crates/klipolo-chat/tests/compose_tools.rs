@@ -906,7 +906,9 @@ fn fades_and_ducking_go_on_clips_and_music() {
             set("c1", json!([{"key": "opacity", "value": 0.5}])),
         )],
     );
-    assert!(refused_to_model(&out, 0).contains("takes only crop, separate, after, fadeIn and fadeOut"));
+    assert!(
+        refused_to_model(&out, 0).contains("takes only crop, separate, after, fadeIn and fadeOut")
+    );
     let out = run(
         &p,
         &[(
