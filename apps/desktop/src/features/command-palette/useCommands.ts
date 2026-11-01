@@ -17,6 +17,7 @@ import { importFiles } from '../media/useImportMedia';
 import { deleteBlock, deleteRange, removeTransition, useTimelineCommands } from '../timeline/commands';
 import { useSourceCommands } from '../timeline/useSourceCommands';
 import { searchWords, type Command } from './command';
+import { usePanelCommands } from './usePanelCommands';
 import { useTransportCommands } from './useTransportCommands';
 
 /** The formats 1, 2 and 3 switch to, in the preview's order. */
@@ -26,7 +27,7 @@ const FORMAT_KEYS: readonly FormatKind[] = ['landscape', 'portrait', 'square'];
  * Every editor action with its current label and availability. The keyboard shortcuts, the player bar and the
  * timeline's block menus run them, so all agree; each id is stable. Values that change every frame (the playhead) are
  * read when a command runs. The timeline's are in `useTimelineCommands`, a recording clip's sounds' in
- * `useSourceCommands`, the transport's in `useTransportCommands`.
+ * `useSourceCommands`, the transport's in `useTransportCommands`, the panels' in `usePanelCommands`.
  *
  * Each hook builds its entries once per language and per what they read: a play, a selection or a view change rebuilds
  * only the entries that show it.
@@ -41,6 +42,7 @@ export function useCommands(): Command[] {
   const timeline = useTimelineCommands();
   const sounds = useSourceCommands();
   const transport = useTransportCommands();
+  const panels = usePanelCommands();
 
   const own = useMemo(() => {
     if (!snapshot) return null;
@@ -169,7 +171,18 @@ export function useCommands(): Command[] {
 
   return useMemo(
     () =>
-      own ? [...own.head, own.remove, ...transport, ...own.view, ...own.projectCommands, ...timeline, ...sounds] : [],
-    [own, transport, timeline, sounds],
+      own
+        ? [
+            ...own.head,
+            own.remove,
+            ...transport,
+            ...own.view,
+            ...panels,
+            ...own.projectCommands,
+            ...timeline,
+            ...sounds,
+          ]
+        : [],
+    [own, transport, panels, timeline, sounds],
   );
 }

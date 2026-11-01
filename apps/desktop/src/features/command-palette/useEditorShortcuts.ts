@@ -3,7 +3,17 @@ import { flushBursts } from '../../state/bursts';
 import { useRange } from '../../state/range';
 import { useSelection } from '../../state/selection';
 import type { RunOptions } from './command';
-import { inPopup, keyOf, otherAlone, OWNS_KEYS, PAGE_LIST, primaryHeld, typing, within } from './shortcutKeys';
+import {
+  controlCommand,
+  inPopup,
+  keyOf,
+  otherAlone,
+  OWNS_KEYS,
+  PAGE_LIST,
+  primaryHeld,
+  typing,
+  within,
+} from './shortcutKeys';
 import { markRange } from '../timeline/commands';
 import { useCommands } from './useCommands';
 
@@ -17,9 +27,17 @@ const PRESSES =
 const OPTIONAL = new Set(['copy', 'cut', 'paste', 'duplicate', 'paste-effects']);
 
 /**
+ * ⌃⌘ shortcuts: macOS's own for showing and hiding panels (⌃⌘S the sidebar, ⌃⌘I the inspector), here ⌃⌘I chat and ⌃⌘S
+ * the library. Checked first: Control with ⌘ never runs a ⌘ shortcut, and other ⌃⌘ keys (⌃⌘F full screen) go to the
+ * system. They work while typing, as ⌘K does, and wait while a menu, popup list or dialog has the keyboard
+ * (`controlCommand`). A held key folds or opens once.
+ */
+export const CONTROL_COMMAND: Readonly<Record<string, string>> = { i: 'toggle-chat', s: 'toggle-side-panel' };
+
+/**
  * Editor keyboard shortcuts, with ⌘ on a Mac and Ctrl on Windows and Linux; ⌃ alone on a Mac (the field's
  * own keys, such as ⌃K) and the Windows or Super key alone run none (`otherAlone`). ⌘K puts the cursor in the chat;
- * ⌘↩ applies the proposal chat has open;
+ * ⌃⌘I folds or opens chat; ⌃⌘S folds or opens the library; ⌘↩ applies the proposal chat has open;
  * ⌘Z undo; ⇧⌘Z redo; ⌘O add files; ⌘E export; ⌘T add a transition (after the selected clip, at a focused cut, else
  * at the cut nearest the playhead); S split; Space play/pause; J / L play backward / forward (pressed again while
  * playing that way: double speed); K pause; with K held, J / L one frame; Delete or Backspace delete (the selected
@@ -29,8 +47,8 @@ const OPTIONAL = new Set(['copy', 'cut', 'paste', 'duplicate', 'paste-effects'])
  * clip or layer selected: Q / W trim its start or end to the playhead; , and . move it a frame (⇧ ten) or a clip a
  * place; ⌘C ⌘X ⌘V ⌘D copy, cut, paste, duplicate; ⌥⌘V paste effects; ⌥↑ / ⌥↓ the track above or below.
  * (On a focused timeline block the arrows, Home, End, Enter and Space move between blocks: `useRovingFocus`.)
- * Everything but ⌘K and ⌘↩ is ignored while typing in a field; everything while a menu, list or dialog is open, and when a
- * focused control already handled the key.
+ * Everything but ⌘K, ⌘↩ and the ⌃⌘ keys (`CONTROL_COMMAND`) is ignored while typing in a field; everything while a
+ * menu, list or dialog is open, and when a focused control already handled the key.
  */
 export function useEditorShortcuts() {
   const commands = useCommands();
@@ -47,7 +65,14 @@ export function useEditorShortcuts() {
       command.run(options);
       return true;
     };
-    if (e.ctrlKey && e.metaKey) return;
+    if (e.ctrlKey && e.metaKey) {
+      const id = controlCommand(e, CONTROL_COMMAND);
+      if (id) {
+        e.preventDefault();
+        run(id);
+      }
+      return;
+    }
     // On a Mac, ⌃ alone used to run the ⌘ shortcuts: ⌃K took kill-line from a field, and ⌃Z, ⌃I, ⌃E and ⌃D undid,
     // imported, exported and duplicated.
     if (otherAlone(e)) return;
