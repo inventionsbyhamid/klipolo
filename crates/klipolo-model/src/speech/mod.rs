@@ -66,7 +66,7 @@ pub struct Word {
 #[ts(export)]
 pub struct Transcript {
     pub key: SpeechKey,
-    /// Whisper's language code ("en", "de", "ja").
+    /// The language's ISO 639-1 style code ("en", "de", "ja").
     pub language: String,
     /// The speech model's pin id.
     pub model: String,

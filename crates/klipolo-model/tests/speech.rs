@@ -56,7 +56,7 @@ fn transcript(words: Vec<Word>) -> Arc<Transcript> {
     Arc::new(Transcript {
         key: "k".into(),
         language: "en".into(),
-        model: "speech-whisper-small-q5_1".into(),
+        model: "muse-voice-transcribe-1.0".into(),
         covered_us: secs(300.0),
         complete: true,
         words,
