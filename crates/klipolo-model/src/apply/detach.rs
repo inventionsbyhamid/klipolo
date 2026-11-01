@@ -42,6 +42,9 @@ pub(super) fn detach_source(
         .clip(&p.timeline.main, clip_id)
         .ok_or_else(|| not_found("clip", clip_id))?;
     let clip = &p.timeline.main[i];
+    if clip.is_freeze() {
+        return Err(invalid(code!("model.freeze.separate")));
+    }
     let recording = match &clip.source {
         ClipSource::Recording { id } => p.recording(id),
         ClipSource::Asset { .. } => None,
@@ -135,6 +138,9 @@ pub(super) fn detach_sound(p: &mut Project, clip_id: &str, places: &mut Places) 
         .clip(&p.timeline.main, clip_id)
         .ok_or_else(|| not_found("clip", clip_id))?;
     let clip = &p.timeline.main[i];
+    if clip.is_freeze() {
+        return Err(invalid(code!("model.freeze.separate")));
+    }
     let ClipSource::Asset { id: file } = &clip.source else {
         return Err(invalid(code!("model.sound.recording")));
     };

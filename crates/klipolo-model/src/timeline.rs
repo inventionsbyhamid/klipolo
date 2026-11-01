@@ -235,6 +235,12 @@ pub struct Framing {
     pub follow: Option<Follow>,
 }
 
+/// The project feature (`Project::requires`) a main track with a freeze frame needs: a build without freeze frames
+/// would play one as moving footage and drop it on save, so it opens such a project read-only.
+pub const FREEZE_FEATURE: &str = "freeze@1";
+/// The longest freeze frame `FreezeFrame` makes: 10 minutes (trims may make it longer).
+pub const MAX_FREEZE_US: Us = 600_000_000;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -269,6 +275,13 @@ pub struct Clip {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub cursor: Option<CursorStyle>,
+    /// A freeze frame (`FreezeFrame`): the clip holds its source's frame at this source time for its whole length (a
+    /// recording's every picture and its cursor as they were then) and plays no sound. Its source range only gives its
+    /// length and the room its trims have, so it may run past the file, and it holds no footage: its sound, words and
+    /// cursor path are nobody's. Left out of the JSON while None.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub freeze_at_us: Option<Us>,
 }
 
 impl Clip {
@@ -290,7 +303,13 @@ impl Clip {
             transition_out: None,
             source_mix: BTreeMap::new(),
             cursor: None,
+            freeze_at_us: None,
         }
+    }
+
+    /// Whether the clip is a freeze frame (`freeze_at_us`): it shows one frame and holds no footage.
+    pub fn is_freeze(&self) -> bool {
+        self.freeze_at_us.is_some()
     }
 
     /// The mix `source` plays at in this clip: the clip's own override, else the source's default.

@@ -146,6 +146,11 @@ pub const MESSAGES: Messages = &[
     ("model.sound.recording", "Separate a recording's sounds one by one from its menu."),
     ("model.sound.none", "This clip's file has no sound."),
     ("model.sound.alreadySeparate", "This clip's sound is already in its own layer."),
+    // `FreezeFrame`, and what a freeze frame can't do.
+    ("model.freeze.noClip", "There's no clip at that time to freeze."),
+    ("model.freeze.length", "A freeze frame must be between 10 ms and 10 minutes long."),
+    ("model.freeze.separate", "A freeze frame has nothing to separate."),
+    ("model.freeze.outside", "A freeze frame holds a frame outside its file."),
     ("model.settings.fps", "fps must be 24, 25, 30, 50 or 60."),
     ("model.settings.formatCount", "Pick between one and three formats."),
     ("model.settings.duplicateFormat", "Each format can only be added once."),

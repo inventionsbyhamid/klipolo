@@ -17,7 +17,9 @@ use crate::query::{anchor_at, clip_at, main_track_duration, MainIndex};
 use crate::time::{
     drifted, kept_parts, merge_ranges, scaled, unscaled, RangeUs, Ripple, Us, MIN_DURATION_US,
 };
-use crate::timeline::{Attach, Clip, ClipSource, Item, ItemContent, Transition};
+use crate::timeline::{
+    Attach, Clip, ClipSource, Item, ItemContent, Transition, FREEZE_FEATURE, MAX_FREEZE_US,
+};
 use crate::transitions::{max_transition_us, MIN_TRANSITION_US};
 
 use super::generator_pieces;
@@ -120,6 +122,84 @@ pub(super) fn split(p: &mut Project, at_us: Us) -> Result<()> {
     p.timeline.main[i] = first;
     p.timeline.main.insert(i.saturating_add(1), second);
     Ok(())
+}
+
+/// `FreezeFrame` (see the op): the frame the clip at `at_us` shows there (a freeze's own frame for a freeze), held for
+/// `duration_us` by a copy of that clip whose source range is `[frame, frame + duration_us)` at 1×, between the pieces
+/// of a split, or before or after the clip within 10 ms of its edges. The copy keeps the clip's look, framing,
+/// effects, camera, cursor and mix, and drops its fades and transition; its id is the clip's with `-freeze`.
+pub(super) fn freeze_frame(p: &mut Project, at_us: Us, duration_us: Us) -> Result<()> {
+    check_time(at_us)?;
+    if !(MIN_DURATION_US..=MAX_FREEZE_US).contains(&duration_us) {
+        return Err(invalid(code!("model.freeze.length")));
+    }
+    let main = &p.timeline.main;
+    let total = main_track_duration(main);
+    let no_clip = || invalid(code!("model.freeze.noClip"));
+    if at_us > total {
+        return Err(no_clip());
+    }
+    // The clip shown at `at_us`; at the main track's end, the last one.
+    let (i, start) = clip_at(main, at_us)
+        .or_else(|| {
+            let last = main.len().checked_sub(1)?;
+            Some((last, total.saturating_sub(main[last].duration_us())))
+        })
+        .ok_or_else(no_clip)?;
+    let clip = &main[i];
+    let end = start.saturating_add(clip.duration_us());
+    let frame = clip.freeze_at_us.unwrap_or_else(|| {
+        clip.source_in_us
+            .saturating_add(unscaled(at_us.saturating_sub(start), clip.speed))
+            .clamp(clip.source_in_us, clip.source_out_us.saturating_sub(1))
+    });
+    let mut held = clip.clone();
+    let index = if at_us.saturating_sub(start) < MIN_DURATION_US {
+        i
+    } else if end.saturating_sub(at_us) < MIN_DURATION_US {
+        i.saturating_add(1)
+    } else {
+        split(p, at_us)?;
+        i.saturating_add(1)
+    };
+    held.id = freeze_id(p, &held.id);
+    held.freeze_at_us = Some(frame);
+    held.source_in_us = frame;
+    held.source_out_us = frame.saturating_add(duration_us);
+    held.speed = 1.0;
+    held.muted = true;
+    held.fade_in_us = 0;
+    held.fade_out_us = 0;
+    held.transition_out = None;
+    p.timeline.main.insert(index, held);
+    Ok(())
+}
+
+/// A freeze frame's id: `{clip}-freeze`, then `{clip}-freeze2`, `-freeze3`. Never `<base>-<n>`, the id of a piece cut
+/// or split from a clip (`query::piece_of`): a freeze holds none of its clip's footage, so review must not count it as
+/// a piece keeping some.
+fn freeze_id(p: &Project, clip_id: &str) -> Id {
+    let taken = super::all_ids(p);
+    let base = format!("{clip_id}-freeze");
+    (1u64..)
+        .map(|n| match n {
+            1 => base.clone(),
+            n => format!("{base}{n}"),
+        })
+        .find(|id| !taken.contains(id))
+        .unwrap_or(base)
+}
+
+/// After every applied batch: `requires` holds [`FREEZE_FEATURE`] exactly while the main track has a freeze frame, so
+/// a build without them opens the project read-only rather than save its freezes as moving footage. O(clips);
+/// allocates only when it adds the requirement.
+pub fn sync_freeze_requirement(p: &mut Project) {
+    let frozen = p.timeline.main.iter().any(Clip::is_freeze);
+    if !frozen {
+        p.requires.remove(FREEZE_FEATURE);
+    } else if !p.requires.contains(FREEZE_FEATURE) {
+        p.requires.insert(FREEZE_FEATURE.to_owned());
+    }
 }
 
 /// Separated source layers (`DetachSource`: the camera's video, a mic's or game sound's audio) that start on the left

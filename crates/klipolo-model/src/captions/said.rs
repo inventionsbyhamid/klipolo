@@ -182,10 +182,13 @@ fn shot_ends(p: &Project) -> HashMap<&str, Us> {
     let mut ends = HashMap::with_capacity(main.len());
     let mut shot_end: Us = 0;
     for (k, clip) in main.iter().enumerate().rev() {
+        // A freeze frame plays none of its file: one ends a shot and is a shot of its own.
         let goes_on = main.get(k + 1).is_some_and(|next| {
             clip.transition_out.is_none()
                 && next.source == clip.source
                 && next.source_in_us == clip.source_out_us
+                && !clip.is_freeze()
+                && !next.is_freeze()
         });
         if !goes_on {
             shot_end = starts[k] + clip.duration_us();

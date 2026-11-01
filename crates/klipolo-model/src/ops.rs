@@ -110,6 +110,14 @@ pub enum Op {
     Split {
         at_us: Us,
     },
+    /// Hold the frame shown at `at_us` there for `duration_us` (10 ms to 10 minutes): the clip playing there is split
+    /// and a freeze frame of it (`Clip::freeze_at_us`) goes between its pieces, with its look, framing, effects, camera
+    /// and cursor, silent. Within 10 ms of a clip's edge it goes at that edge (the end of the main track included),
+    /// holding the frame shown there. What comes after moves later by `duration_us`, layers attached to it with it.
+    FreezeFrame {
+        at_us: Us,
+        duration_us: Us,
+    },
     /// Remove timeline ranges from the main track; gaps close and attached layers follow.
     DeleteRanges {
         ranges: Vec<RangeUs>,
@@ -474,6 +482,7 @@ impl Op {
             Op::MoveClip { .. } => "moveClip",
             Op::TrimClip { .. } => "trimClip",
             Op::Split { .. } => "split",
+            Op::FreezeFrame { .. } => "freezeFrame",
             Op::DeleteRanges { .. } => "deleteRanges",
             Op::RemoveClip { .. } => "removeClip",
             Op::UpdateClip { .. } => "updateClip",

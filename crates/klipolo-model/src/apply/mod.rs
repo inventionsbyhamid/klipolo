@@ -154,6 +154,7 @@ fn indexes_after(op: &Op, touched: &Touched, places: &mut Places) {
         Op::InsertClip { .. }
             | Op::MoveClip { .. }
             | Op::Split { .. }
+            | Op::FreezeFrame { .. }
             | Op::DeleteRanges { .. }
             | Op::RemoveClip { .. }
     ) {
@@ -174,6 +175,7 @@ fn indexes_after(op: &Op, touched: &Touched, places: &mut Places) {
 pub fn finish_parts(next: &mut Project) -> Result<()> {
     crate::transitions::normalize(next);
     generator_pieces::sync_scene_requirement(next);
+    main_ops::sync_freeze_requirement(next);
     validate(next)
 }
 
@@ -241,6 +243,9 @@ fn apply_one(p: &mut Project, op: &Op, places: &mut Places) -> Result<Touched> {
             source_us,
         } => main(main_ops::trim_clip(p, id, *edge, *source_us, places)),
         Op::Split { at_us } => main(main_ops::split(p, *at_us)),
+        Op::FreezeFrame { at_us, duration_us } => {
+            main(main_ops::freeze_frame(p, *at_us, *duration_us))
+        }
         Op::DeleteRanges { ranges } => main(main_ops::delete_ranges(p, ranges)),
         Op::RemoveClip { id } => main(main_ops::remove_clip(p, id, places)),
         // Speed changes a clip's length; volume, fades, look, camera, framing and effects change no timing.
@@ -712,7 +717,7 @@ pub(crate) fn fits_in_order(track: &Track, start: Us, end: Us, ignore: Option<&s
 
 /// Every id in the project, copied into a set for an edit that names many things ([`IdPool`]). Generated ids avoid
 /// all of them, so validation never sees a duplicate.
-fn all_ids(p: &Project) -> HashSet<Id> {
+pub(super) fn all_ids(p: &Project) -> HashSet<Id> {
     std::iter::once(&p.id)
         .chain(p.assets.iter().map(|a| &a.id))
         .chain(p.recordings.iter().map(|r| &r.id))

@@ -495,10 +495,20 @@ fn validate_clip(p: &Project, c: &Clip) -> Result<()> {
     check(
         valid_time(c.source_in_us)
             && valid_time(c.source_out_us)
-            && c.source_in_us < c.source_out_us
-            && c.source_out_us <= source_len.saturating_add(SOURCE_SLACK_US),
+            && c.source_in_us < c.source_out_us,
         code!("model.clip.outsideSource"),
     )?;
+    match c.freeze_at_us {
+        // A freeze frame's range is only its length: the frame it holds is what must be in the file.
+        Some(frame) => check(
+            valid_time(frame) && frame < source_len.max(1),
+            code!("model.freeze.outside"),
+        )?,
+        None => check(
+            c.source_out_us <= source_len.saturating_add(SOURCE_SLACK_US),
+            code!("model.clip.outsideSource"),
+        )?,
+    }
     check(in_range(c.speed, 0.25, 4.0), code!("model.clip.speed"))?;
     check(in_range(c.volume, 0.0, 2.0), code!("model.clip.volume"))?;
     let duration = c.duration_us();

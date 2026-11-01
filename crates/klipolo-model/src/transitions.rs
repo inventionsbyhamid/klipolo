@@ -30,6 +30,13 @@ pub struct Handles {
 
 pub fn handles(p: &Project, i: usize) -> Handles {
     let c = &p.timeline.main[i];
+    // A freeze frame holds its frame however long it runs: a transition has all the room it needs.
+    if c.is_freeze() {
+        return Handles {
+            before: MAX_TRANSITION_US,
+            after: MAX_TRANSITION_US,
+        };
+    }
     let length = source_duration_us(p, &c.source).unwrap_or(c.source_out_us);
     Handles {
         before: scaled(c.source_in_us.max(0), c.speed),
