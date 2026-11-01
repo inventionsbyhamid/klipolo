@@ -87,6 +87,8 @@ pub(crate) struct Transient {
 pub(crate) enum Cmd {
     View(ViewSpec),
     Visible(bool),
+    /// The listening volume, 0 to 1 (`Engine::set_volume`).
+    Volume(f32),
     Attached,
     Play {
         from_us: Us,
@@ -191,6 +193,14 @@ impl Engine {
 
     pub fn set_visible(&self, visible: bool) {
         let _ = self.cmds.send(Cmd::Visible(visible));
+    }
+
+    /// How loud the preview plays for the person (the player bar's volume), 0 (silent) to 1 (as the mix is), on top of
+    /// the loudness target's gain. Held to 0 to 1; a value that isn't a number changes nothing. Export never hears it.
+    pub fn set_volume(&self, volume: f32) {
+        if volume.is_finite() {
+            let _ = self.cmds.send(Cmd::Volume(volume.clamp(0.0, 1.0)));
+        }
     }
 
     pub fn seek(&self, at_us: Us, seq: u32) {
