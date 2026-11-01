@@ -22,13 +22,13 @@ use crate::platform::common::sck::fit_size;
 pub const SMALL_BOX: (u32, u32) = (640, 640);
 /// A big view's most: 1080p, in the view's shape.
 pub const BIG_MOST: (u32, u32) = (1920, 1080);
-/// A big view's most frames a second.
+/// Apple silicon's big view's most frames a second (an Intel Mac's is `INTEL_MAC_FPS`).
 pub const BIG_MAX_FPS: u32 = 30;
-/// A big view's fewest frames a second: below it, its picture gets smaller instead.
+/// Apple silicon's big view's fewest frames a second: below it, its picture gets smaller instead.
 pub const BIG_MIN_FPS: u32 = 15;
 /// A big view's most pixels a second: 1080p at 15 frames a second (about 31 Mpx/s; the small view sends about 2.6).
 pub const BIG_PIXEL_RATE: u64 = 1920 * 1080 * 15;
-/// An Intel Mac's: 720p at 15 frames a second (about 14 Mpx/s).
+/// An Intel Mac's: 720p at 15 frames a second (about 14 Mpx/s), so at its 10 a picture of at most about 1.38 Mpx.
 pub const INTEL_MAC_PIXEL_RATE: u64 = 1280 * 720 * 15;
 /// An Intel Mac's frames a second, fewest and most: its JPEGs are made on its CPU, which the window server shares, so
 /// its big view keeps the view's size and sends fewer frames rather than a smaller picture.

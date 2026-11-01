@@ -7,7 +7,8 @@
 //!   Granted, the view refuses with `capture.permission.screen` and calls nothing else; the backend's own pipe reads
 //!   the preflight again before it lists anything (`platform::macos::live_view`).
 //! - **Its frames:** in the small view, about 10 a second, at most 640 px on the long side; in a big view (the Record
-//!   dialog's preview box), the view's own pixel size within 1080p, at up to 30 a second (`live_view_size`).
+//!   dialog's preview box), the view's own pixel size within 1080p, at up to 30 a second (10 on an Intel Mac;
+//!   `live_view_size`).
 //!   The view it starts for is the worker's last argument; the app's `ViewSize` changes it as the view changes size.
 //!   Scaled by the system's capture itself and paced before each JPEG is made, each a `Preview` event (`preview_loop`).
 //! - **Its end:** a stream that ends by itself says so (`capture.liveView.unavailable`), so the UI never keeps its last
