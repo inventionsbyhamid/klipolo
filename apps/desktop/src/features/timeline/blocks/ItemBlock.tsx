@@ -28,7 +28,10 @@ import { DuckTag, VolumeLine } from './VolumeLine';
 /** The icon before an overlay's name (T for text, the picture for an image). */
 const ICON: Partial<Record<LayerKind, LucideIcon>> = { text: Type, image: Image, video: Film, audio: Music };
 
-/** How a layer draws: on the Overlays lane, the Sounds lane (a teal block named to its right) or the Music lane. */
+/**
+ * How a layer draws: on the Overlays lane, the Sounds lane (a teal block named to its right; a take's own sound
+ * separated from its clip in the clip's blue, with its waveform) or the Music lane.
+ */
 export type ItemLook = 'overlay' | 'sound' | 'music';
 
 /** What screen readers call each kind of layer. */
@@ -121,6 +124,9 @@ export const ItemBlock = memo(function ItemBlock({
   const ref = useCallback((el: HTMLButtonElement | null) => registerBlock(id, el), [id]);
   // Muted by its own switch: an icon before its name (which gives way first as the block narrows), its sound faded.
   const soundMuted = content.type === 'audio' && !!content.muted;
+  // A recording's own sound on a layer of its own (Separate): part of the footage, not an effect, so it draws as the
+  // clip did, its waveform in the clip's blue, to be cut and moved by what it says.
+  const recorded = look === 'sound' && content.type === 'audio' && content.tie !== undefined;
   const layer = t(soundMuted ? MUTED_SOUND : KIND_NAME[kind]);
   const duration = formatTime(durationUs);
   const start = formatTime(startUs);
@@ -191,14 +197,16 @@ export const ItemBlock = memo(function ItemBlock({
         className={cn(
           'tl-item',
           `is-${look}`,
+          recorded && 'is-recorded',
           selected && 'is-selected',
           inRun && 'is-in-run',
           dimmed && 'is-dimmed',
           tiny && 'isolate',
         )}
       >
-        {/* Music's waveform, or a video layer's filmstrip, first: its marks and label draw over it. */}
-        {!tiny && files && look !== 'sound' && (content.type === 'video' || content.type === 'audio') && (
+        {/* Music's or a separated sound's waveform, or a video layer's filmstrip, first: its marks and label draw over
+            it. */}
+        {!tiny && files && (look !== 'sound' || recorded) && (content.type === 'video' || content.type === 'audio') && (
           <BlockMedia
             kind={content.type}
             thumbPath={files.thumbPath}
@@ -217,7 +225,7 @@ export const ItemBlock = memo(function ItemBlock({
             faded={soundMuted}
             pps={pps}
             height={height}
-            waveToken={look === 'music' ? '--color-lane-music' : undefined}
+            waveToken={look === 'music' ? '--color-lane-music' : recorded ? '--color-clip-2' : undefined}
           />
         )}
         {/* Music's volume line and its dips under speech (their tag is beside the block: `DuckTag`). */}

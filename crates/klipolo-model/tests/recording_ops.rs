@@ -264,6 +264,26 @@ fn mic_layers(p: &Project) -> Vec<(Us, Us, Us)> {
     out
 }
 
+/// Separate from a clip's menu, then undo: the layer is gone and the clip plays its own mic again, exactly as before.
+#[test]
+fn separating_a_sound_then_undo_puts_the_clip_back() {
+    let mut doc = Document::new(fixture()).unwrap();
+    let before = doc.project().clone();
+    let separate = Transaction {
+        label: "undo.source.separate".into(),
+        ops: vec![detach_mic()],
+        origin: None,
+        ..Default::default()
+    };
+    doc.apply(&separate).unwrap();
+    assert_eq!(mic_layers(doc.project()), [(0, secs(20.0), 0)]);
+    assert!(doc.project().timeline.main[0].source_mix["mic"].muted);
+    doc.undo();
+    assert_eq!(*doc.project(), before);
+    assert!(mic_layers(doc.project()).is_empty());
+    assert!(doc.project().timeline.main[0].source_mix.is_empty());
+}
+
 /// A separated sound takes its clip's fades as its own (sync must hold): the clip's fade-in and fade-out where it
 /// reaches the clip's edges, or, across a transition, the part of the window inside the clip.
 #[test]
