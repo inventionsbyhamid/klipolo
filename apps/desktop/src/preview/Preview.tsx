@@ -8,13 +8,13 @@ import { Inspector, useInspected } from '../features/inspector/Inspector';
 import { useInspectedTransition } from '../features/inspector/TransitionInspector';
 import { useImportMedia } from '../features/media/useImportMedia';
 import { AddTitleMenu } from '../features/preview/AddTitleMenu';
+import { SafeAreaMenu } from '../features/preview/SafeAreaMenu';
 import { Stage } from '../features/preview/Stage';
 import { Icon } from '../layout/Icon';
 import { useDockHold } from '../state/dockHold';
 import { useEngine } from '../state/engine';
 import { useProject } from '../state/project';
 import { useSelection } from '../state/selection';
-import { useUi } from '../state/ui';
 
 /** The format the preview shows (it lives with the format switch). */
 export { useShownFormat };
@@ -74,9 +74,6 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
   const message = useEngine((s) => s.message);
   const hasVideo = useProject((s) => (s.snapshot?.project.timeline.main.length ?? 0) > 0);
   const format = useShownFormat();
-  const portrait = format === 'portrait';
-  const safeArea = useUi((s) => s.safeArea);
-  const setSafeArea = useUi((s) => s.setSafeArea);
   const inspected = useInspected();
   const transition = useInspectedTransition();
   const native = useEngine((s) => s.presenter === 'native' && !!s.info);
@@ -90,21 +87,7 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
         {status !== 'unavailable' && message && <span className="stage-status">{message}</span>}
         <RoughCaptionsNote />
         <AddTitleMenu disabled={!hasVideo} />
-        {/* The guide is drawn in 9:16 only: elsewhere the switch is off (focusable, so its tooltip says why). */}
-        <button
-          className="icon-btn"
-          aria-label={t({ id: 'preview.safeArea', message: 'Show safe area' })}
-          title={
-            portrait
-              ? t({ id: 'preview.safeArea.tip', message: 'Safe area: where the apps leave a 9:16 video clear' })
-              : t({ id: 'preview.safeArea.off', message: 'Shows in 9:16' })
-          }
-          aria-pressed={portrait && safeArea !== 'off'}
-          aria-disabled={!portrait || undefined}
-          onClick={() => portrait && setSafeArea(safeArea === 'off' ? 'all' : 'off')}
-        >
-          <Icon name="safe" />
-        </button>
+        <SafeAreaMenu />
       </div>
       <div className={docked ? 'stage-body has-inspector' : 'stage-body'}>
         {hasVideo && <AnalysisBanner />}

@@ -276,8 +276,9 @@
   color: var(--color-ink-disabled);
 }
 
-/* A toggle that is on: a 4 px paper dot under its icon. */
-.icon-btn[aria-pressed="true"]::after {
+/* A toggle that is on, or a menu whose choice is on: a 4 px paper dot under its icon. */
+.icon-btn[aria-pressed="true"]::after,
+.icon-btn[data-on]::after {
   content: "";
   position: absolute;
   bottom: 2px;

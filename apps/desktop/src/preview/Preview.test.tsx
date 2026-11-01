@@ -6,7 +6,8 @@ import { renderWithProviders } from '../test/render';
 
 /*
  * The preview's header: every control in it does something where it shows. The safe area guide is drawn
- * only in 9:16, so elsewhere its switch is off and says where it shows; full screen isn't there until it works.
+ * only in 9:16: there its menu picks Off, every platform's area or one app's; elsewhere the button is off and says
+ * where it shows. Full screen isn't there until it works.
  */
 
 vi.mock('../bridge/commands', () => ({ bridge: {}, mediaUrl: (p: string) => p }));
@@ -25,30 +26,49 @@ beforeEach(() => {
 });
 
 describe('the preview’s header', () => {
-  it('Show safe area is off outside 9:16, saying where it shows; in 9:16 it shows the guide', async () => {
+  it('the safe area is off outside 9:16, saying where it shows; in 9:16 its menu picks the platform', async () => {
     renderWithProviders(<Preview />);
-    const safe = screen.getByRole('button', { name: 'Show safe area' });
-    expect(safe).toHaveAttribute('aria-disabled', 'true');
-    expect(safe).toHaveAttribute('title', 'Shows in 9:16');
-    await userEvent.click(safe);
+    const off = screen.getByRole('button', { name: 'Safe area' });
+    expect(off).toHaveAttribute('aria-disabled', 'true');
+    expect(off).toHaveAttribute('title', 'Shows in 9:16');
+    await userEvent.click(off);
+    expect(screen.queryByRole('menu')).toBeNull();
     expect(useUi.getState().safeArea).toBe('off');
     act(() => useUi.setState({ previewFormat: 'portrait' }));
-    expect(safe).not.toHaveAttribute('aria-disabled');
-    await userEvent.click(safe);
-    expect(useUi.getState().safeArea).toBe('all');
-    expect(safe).toHaveAttribute('aria-pressed', 'true');
+    const menu = screen.getByRole('button', { name: 'Safe area: Off' });
+    expect(menu).toHaveAttribute('title', "Safe area: Off. Show where each app's buttons cover the video.");
+    await userEvent.click(menu);
+    expect((await screen.findAllByRole('menuitemradio')).map((item) => item.textContent)).toEqual([
+      'Off',
+      'All platforms',
+      'TikTok',
+      'Instagram Reels',
+      'YouTube Shorts',
+    ]);
+    expect(screen.getByRole('menuitemradio', { name: 'Off' })).toHaveAttribute('aria-checked', 'true');
+    await userEvent.click(screen.getByRole('menuitemradio', { name: 'TikTok' }));
+    expect(useUi.getState().safeArea).toBe('tiktok');
+    expect(screen.getByRole('button', { name: 'Safe area: TikTok' })).toHaveAttribute('data-on');
   });
 
-  it('Show safe area reads off outside 9:16, with the guide on for 9:16', () => {
-    useUi.setState({ previewFormat: 'portrait', safeArea: 'all' });
+  it('the chosen area reads off outside 9:16 and is on again back in 9:16', () => {
+    useUi.setState({ previewFormat: 'portrait', safeArea: 'reels' });
     renderWithProviders(<Preview />);
-    const safe = screen.getByRole('button', { name: 'Show safe area' });
-    expect(safe).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Safe area: Instagram Reels' })).toHaveAttribute('data-on');
     act(() => useUi.setState({ previewFormat: 'landscape' }));
-    expect(safe).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Safe area' })).not.toHaveAttribute('data-on');
     // Back in 9:16, the guide is on again.
     act(() => useUi.setState({ previewFormat: 'portrait' }));
-    expect(safe).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Safe area: Instagram Reels' })).toHaveAttribute('data-on');
+  });
+
+  it('Off from the menu hides the guide, and the next drag shows the area chosen last', async () => {
+    useUi.setState({ previewFormat: 'portrait', safeArea: 'shorts', lastSafeArea: 'shorts' });
+    renderWithProviders(<Preview />);
+    await userEvent.click(screen.getByRole('button', { name: 'Safe area: YouTube Shorts' }));
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Off' }));
+    expect(useUi.getState()).toMatchObject({ safeArea: 'off', lastSafeArea: 'shorts' });
+    expect(screen.getByRole('button', { name: 'Safe area: Off' })).not.toHaveAttribute('data-on');
   });
 
   it('has no full screen button until full screen works', () => {

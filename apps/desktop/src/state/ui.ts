@@ -27,7 +27,7 @@ interface UiStore {
   /** Bumped by Command K: the chat panel opens and puts the cursor in its composer. */
   chatFocus: number;
   focusChat: () => void;
-  /** The 9:16 safe area the preview shows ("Show safe area"), or off. */
+  /** The 9:16 safe area the preview shows (the safe area menu), or off. */
   safeArea: SafeAreaId;
   /** The area shown last (what a drag in 9:16 shows and snaps to while it's off). */
   lastSafeArea: SafeAreaId;
