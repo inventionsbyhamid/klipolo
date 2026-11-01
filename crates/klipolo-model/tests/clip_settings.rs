@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use common::*;
 use klipolo_model::clip_settings::{
-    SPEEDS, VOLUME_MAX, VOLUME_MIN, VOLUME_STEP, is_speed, is_volume,
+    is_speed, is_volume, SPEEDS, VOLUME_MAX, VOLUME_MIN, VOLUME_STEP,
 };
 use klipolo_model::query::clip_has_sound;
 use klipolo_model::timeline::{Clip, ClipSource};

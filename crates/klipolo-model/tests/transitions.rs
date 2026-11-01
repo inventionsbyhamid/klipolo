@@ -608,7 +608,10 @@ fn a_length_lands_on_a_whole_frame_within_the_cuts_room() {
     assert_eq!(transition_length_us(1_234_567, secs(4.0), 30), 1_233_333);
     // Never under the first frame count of at least 0.1 s (3 frames at 30 fps, 125 ms at 24), never past the room.
     assert_eq!(transition_length_us(90_000, secs(4.0), 30), 100_000);
-    assert_eq!(transition_length_us(MIN_TRANSITION_US, secs(4.0), 24), 125_000);
+    assert_eq!(
+        transition_length_us(MIN_TRANSITION_US, secs(4.0), 24),
+        125_000
+    );
     assert_eq!(transition_length_us(5_000_000, 400_001, 30), 400_000);
     // No room for one frame of 0.1 s: nothing fits.
     assert_eq!(transition_length_us(500_000, 110_000, 24), 0);
