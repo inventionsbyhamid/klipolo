@@ -4,7 +4,7 @@
 # manifest lists each file's SHA-256; every item has a file, a name and 3 to 6 tags, and every file an item; every sound
 # is 48 kHz 16-bit mono and under 3 s; every music bed is 16 to 30 s and loops at a zero crossing without a click (two
 # copies back to back are as smooth at the join as anywhere else); every sticker is a 1024 x 1024 RGBA PNG with
-# transparent corners; every background an RGB PNG that fills a 16:9 or 9:16 frame, each in both; the pack holds the
+# transparent corners; every background an RGB PNG sized for a 16:9 or 9:16 frame, each in both; the pack holds the
 # items listed below, CC0-1.0, and is under 10.5 MB. Then scripts/check-library-sounds.py measures each sound and fails
 # on any out of bounds.
 #   scripts/gen-library.test.sh
@@ -199,7 +199,7 @@ def _():
         assert 0.05 < solid < 0.8, f"{i['id']}: {solid:.0%} of it is solid"
 
 
-@check("backgrounds_fill_a_16x9_or_9x16_frame")
+@check("backgrounds_are_sized_for_16x9_and_9x16")
 def _():
     shapes = {}
     for i in [i for i in of("sticker") if i["file"].startswith("backgrounds/")]:
@@ -207,7 +207,7 @@ def _():
         w, h, depth, colour, _, _, interlace = header
         assert (w, h) in [(1920, 1080), (1080, 1920)] and (w, h) == (i["width"], i["height"]), f"{i['id']}: {w} x {h}"
         assert (depth, colour, interlace) == (8, 2, 0), f"{i['id']}: 8-bit RGB with no alpha: {header}"
-        assert len(zlib.decompress(idat)) == h * (1 + 3 * w), f"{i['id']}: its pixels don't fill {w} x {h}"
+        assert len(zlib.decompress(idat)) == h * (1 + 3 * w), f"{i['id']}: its pixel data isn't {w} x {h}"
         ratio = "16:9" if w > h else "9:16"
         name, said = i["name"].rsplit(" ", 1)
         assert said == ratio and i["id"].endswith(ratio.replace(":", "x")) and ratio in i["tags"], i["id"]

@@ -8,7 +8,7 @@ same bytes. It writes, into assets/library or --out DIR:
   sounds/<id>.wav     48 kHz 16-bit mono, each under 3 s, starting and ending at silence
   music/<id>.wav      24 kHz 16-bit mono beds of 16 s, drawn exactly periodic so they loop without a click
   stickers/<id>.png   1024 x 1024 RGBA, the shape with a border on a transparent canvas
-  backgrounds/<id>.png  1920 x 1080 or 1080 x 1920 RGB, to fill a 16:9 or 9:16 frame (listed as stickers: pictures)
+  backgrounds/<id>.png  1920 x 1080 or 1080 x 1920 RGB, sized for a 16:9 or 9:16 frame (listed as stickers: pictures)
   manifest.json       each item's id, name, category, file, length or size, tags, sha256 and licence
   LICENSE.txt         the CC0 dedication
 Usage: python3 scripts/gen-library.py [--out DIR] [--workers N]
@@ -1496,9 +1496,9 @@ def cursor_hand():
 
 # ------------------------------------------------------------------------------------------------- backgrounds
 #
-# Pictures that fill a 16:9 frame (1920 x 1080) or a 9:16 one (1080 x 1920), as opaque RGB PNGs. Each is worked out on
-# a grid of points 8 px apart (two more past every edge), drawn up to full size by a cubic B-spline (smooth, and never
-# past the points' own colours), and dithered so its slow gradients don't band.
+# Pictures sized for a 16:9 frame (1920 x 1080) or a 9:16 one (1080 x 1920), as opaque RGB PNGs. Each is worked out
+# on a grid of points 8 px apart (two more past every edge), drawn up to full size by a cubic B-spline (smooth, and
+# never past the points' own colours), and dithered so its slow gradients don't band.
 
 STEP = 8
 BAYER = [[0, 32, 8, 40, 2, 34, 10, 42], [48, 16, 56, 24, 50, 18, 58, 26], [12, 44, 4, 36, 14, 46, 6, 38],
