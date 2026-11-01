@@ -1,0 +1,332 @@
+{
+ "version": 7,
+ "id": "two-takes",
+ "name": "Space station takes",
+ "settings": {
+  "fps": 30,
+  "formats": [
+   "landscape",
+   "portrait"
+  ],
+  "primaryFormat": "landscape"
+ },
+ "assets": [
+  {
+   "id": "rec1-screen",
+   "kind": "video",
+   "path": "/media/rec1-screen.mov",
+   "name": "rec1-screen.mov",
+   "durationUs": 155040000,
+   "width": 1920,
+   "height": 1080,
+   "fps": 30.0,
+   "hasAudio": false
+  },
+  {
+   "id": "rec1-camera",
+   "kind": "video",
+   "path": "/media/rec1-camera.mov",
+   "name": "rec1-camera.mov",
+   "durationUs": 155040000,
+   "width": 1280,
+   "height": 720,
+   "fps": 30.0,
+   "hasAudio": false
+  },
+  {
+   "id": "rec1-mic",
+   "kind": "audio",
+   "path": "/media/rec1-mic.m4a",
+   "name": "rec1-mic.m4a",
+   "durationUs": 155040000,
+   "width": 0,
+   "height": 0,
+   "fps": 0.0,
+   "hasAudio": true
+  },
+  {
+   "id": "rec1-system",
+   "kind": "audio",
+   "path": "/media/rec1-system.m4a",
+   "name": "rec1-system.m4a",
+   "durationUs": 155040000,
+   "width": 0,
+   "height": 0,
+   "fps": 0.0,
+   "hasAudio": true
+  },
+  {
+   "id": "rec2-screen",
+   "kind": "video",
+   "path": "/media/rec2-screen.mov",
+   "name": "rec2-screen.mov",
+   "durationUs": 45000000,
+   "width": 1920,
+   "height": 1080,
+   "fps": 30.0,
+   "hasAudio": false
+  },
+  {
+   "id": "rec2-camera",
+   "kind": "video",
+   "path": "/media/rec2-camera.mov",
+   "name": "rec2-camera.mov",
+   "durationUs": 45000000,
+   "width": 1280,
+   "height": 720,
+   "fps": 30.0,
+   "hasAudio": false
+  },
+  {
+   "id": "rec2-mic",
+   "kind": "audio",
+   "path": "/media/rec2-mic.m4a",
+   "name": "rec2-mic.m4a",
+   "durationUs": 45000000,
+   "width": 0,
+   "height": 0,
+   "fps": 0.0,
+   "hasAudio": true
+  }
+ ],
+ "recordings": [
+  {
+   "id": "rec-1",
+   "kind": "screen",
+   "primary": "screen",
+   "markers": [],
+   "sources": [
+    {
+     "id": "screen",
+     "role": "screen",
+     "label": "capture.source.screen",
+     "runs": [
+      {
+       "assetId": "rec1-screen",
+       "offsetUs": 0,
+       "durationUs": 155040000,
+       "driftPpm": 0.0
+      }
+     ],
+     "nudgeUs": 0,
+     "mix": {
+      "volume": 1.0,
+      "muted": false,
+      "effects": []
+     }
+    },
+    {
+     "id": "camera",
+     "role": "camera",
+     "label": "capture.source.camera",
+     "runs": [
+      {
+       "assetId": "rec1-camera",
+       "offsetUs": 0,
+       "durationUs": 155040000,
+       "driftPpm": 0.0
+      }
+     ],
+     "nudgeUs": 0,
+     "mix": {
+      "volume": 1.0,
+      "muted": false,
+      "effects": []
+     }
+    },
+    {
+     "id": "mic",
+     "role": "mic",
+     "label": "capture.source.mic",
+     "runs": [
+      {
+       "assetId": "rec1-mic",
+       "offsetUs": 0,
+       "durationUs": 155040000,
+       "driftPpm": 0.0
+      }
+     ],
+     "nudgeUs": 0,
+     "mix": {
+      "volume": 1.0,
+      "muted": false,
+      "effects": []
+     }
+    },
+    {
+     "id": "system",
+     "role": "systemAudio",
+     "label": "capture.source.computerSound",
+     "runs": [
+      {
+       "assetId": "rec1-system",
+       "offsetUs": 0,
+       "durationUs": 155040000,
+       "driftPpm": 0.0
+      }
+     ],
+     "nudgeUs": 0,
+     "mix": {
+      "volume": 1.0,
+      "muted": false,
+      "effects": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "rec-2",
+   "kind": "screen",
+   "primary": "screen",
+   "markers": [],
+   "sources": [
+    {
+     "id": "screen",
+     "role": "screen",
+     "label": "capture.source.screen",
+     "runs": [
+      {
+       "assetId": "rec2-screen",
+       "offsetUs": 0,
+       "durationUs": 45000000,
+       "driftPpm": 0.0
+      }
+     ],
+     "nudgeUs": 0,
+     "mix": {
+      "volume": 1.0,
+      "muted": false,
+      "effects": []
+     }
+    },
+    {
+     "id": "camera",
+     "role": "camera",
+     "label": "capture.source.camera",
+     "runs": [
+      {
+       "assetId": "rec2-camera",
+       "offsetUs": 0,
+       "durationUs": 45000000,
+       "driftPpm": 0.0
+      }
+     ],
+     "nudgeUs": 0,
+     "mix": {
+      "volume": 1.0,
+      "muted": false,
+      "effects": []
+     }
+    },
+    {
+     "id": "mic",
+     "role": "mic",
+     "label": "capture.source.mic",
+     "runs": [
+      {
+       "assetId": "rec2-mic",
+       "offsetUs": 0,
+       "durationUs": 45000000,
+       "driftPpm": 0.0
+      }
+     ],
+     "nudgeUs": 0,
+     "mix": {
+      "volume": 1.0,
+      "muted": false,
+      "effects": []
+     }
+    }
+   ]
+  }
+ ],
+ "timeline": {
+  "main": [
+   {
+    "id": "take-1",
+    "source": {
+     "type": "recording",
+     "id": "rec-1"
+    },
+    "sourceInUs": 0,
+    "sourceOutUs": 60000000,
+    "speed": 1.0,
+    "volume": 1.0,
+    "muted": false,
+    "fadeInUs": 0,
+    "fadeOutUs": 0,
+    "look": {
+     "preset": null,
+     "strength": 1.0,
+     "lutId": null,
+     "lutStrength": 1.0
+    },
+    "camera": {
+     "mode": "bubble",
+     "modeOverrides": {},
+     "shape": "circle",
+     "border": true,
+     "mirror": true,
+     "bubble": {
+      "anchor": "bottomRight",
+      "rect": {
+       "x": 0.76,
+       "y": 0.6044,
+       "w": 0.2,
+       "h": 0.3556
+      },
+      "rotation": 0.0,
+      "opacity": 1.0,
+      "radius": 0.0,
+      "overrides": {}
+     }
+    }
+   },
+   {
+    "id": "take-2",
+    "source": {
+     "type": "recording",
+     "id": "rec-2"
+    },
+    "sourceInUs": 0,
+    "sourceOutUs": 45000000,
+    "speed": 1.0,
+    "volume": 1.0,
+    "muted": false,
+    "fadeInUs": 0,
+    "fadeOutUs": 0,
+    "look": {
+     "preset": null,
+     "strength": 1.0,
+     "lutId": null,
+     "lutStrength": 1.0
+    },
+    "camera": {
+     "mode": "bubble",
+     "modeOverrides": {},
+     "shape": "circle",
+     "border": true,
+     "mirror": true,
+     "bubble": {
+      "anchor": "bottomRight",
+      "rect": {
+       "x": 0.76,
+       "y": 0.6044,
+       "w": 0.2,
+       "h": 0.3556
+      },
+      "rotation": 0.0,
+      "opacity": 1.0,
+      "radius": 0.0,
+      "overrides": {}
+     }
+    }
+   }
+  ],
+  "tracks": []
+ },
+ "captions": {
+  "enabled": false,
+  "style": null
+ }
+}
