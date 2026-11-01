@@ -638,7 +638,7 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     expect(
       screen.getByText('Analyze the clips first to cut pauses, find moments and add captions. Format and music work now.'),
     ).toBeInTheDocument();
-    act(() => useAnalysis.setState({ states: { screen: { state: 'running', step: 'words', pct: 40 } } }));
+    act(() => useAnalysis.setState({ states: { mic: { state: 'running', step: 'words', pct: 40 } } }));
     expect(
       screen.getByText('Klipolo is still listening to these clips. Cuts and moments work when analysis is done.'),
     ).toBeInTheDocument();

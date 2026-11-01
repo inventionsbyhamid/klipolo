@@ -31,3 +31,14 @@ pub fn analysed_assets(p: &Project) -> Vec<&Asset> {
         .filter(|a| matches!(a.kind, AssetKind::Video | AssetKind::Audio) && played.contains(&a.id))
         .collect()
 }
+
+/// Whether analysis hears `asset_id` for its words only, never watching it for a scene log: a file of one of `p`'s
+/// recordings (in any run of its sources), or the same file (by its path) imported again. A take's picture is the
+/// person's screen or face; what it says is its voice's words. The page's `recordingOf` mirrors it (pinned by
+/// `voices-parity.json`, `tests/analysed.rs`).
+pub fn words_only(p: &Project, asset_id: &str) -> bool {
+    let path = p.asset(asset_id).map(|a| a.path.as_str());
+    p.recordings.iter().flat_map(|r| r.asset_ids()).any(|id| {
+        id == asset_id || (path.is_some() && p.asset(id).map(|a| a.path.as_str()) == path)
+    })
+}

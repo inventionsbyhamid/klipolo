@@ -541,6 +541,34 @@ fn new_projects_get_their_own_file_in_the_library() {
     assert_eq!(untitled.settings.primary_format, FormatKind::Portrait);
 }
 
+/// A new project whose name's file is taken is named as its file is ("Untitled project 4"), in the editor and in the
+/// file, so the editor's title and the start screen's card say the same.
+#[test]
+fn a_new_project_with_a_taken_name_is_named_as_its_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = ProjectSessionState::default();
+    for _ in 0..3 {
+        create_in(&state, dir.path(), new_project("Untitled project", vec![])).unwrap();
+    }
+    let fourth = create_in(&state, dir.path(), new_project("Untitled project", vec![])).unwrap();
+    assert_eq!(fourth.project.name, "Untitled project 4");
+    let names: Vec<String> = ["", " 2", " 3", " 4"]
+        .iter()
+        .map(|n| read(&dir.path().join(format!("Untitled project{n}.klipolo"))))
+        .map(|project| project.unwrap().name)
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "Untitled project",
+            "Untitled project 2",
+            "Untitled project 3",
+            "Untitled project 4"
+        ],
+        "each file's own name, a free name as given"
+    );
+}
+
 /// Klipolo opens on the start screen: launch opens no project, not even the one open when the app last quit, and the
 /// engine is given none. That project stays named in the memo, and a project opened from the start screen is named
 /// and stamped for the list as before.

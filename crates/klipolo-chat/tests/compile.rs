@@ -792,6 +792,65 @@ fn no_analysis_gives_a_friendly_refusal() {
     assert!(done.proposal.is_some());
 }
 
+/// A take's screen file placed on its own, with no sound, is never analysed: a take's files are heard for their words
+/// only, never watched, and it has none. Finding moments doesn't wait for a scene log it never gets; an imported video
+/// on its own still does.
+#[test]
+fn finding_moments_never_waits_for_a_scene_log_of_a_takes_file() {
+    use klipolo_model::project::{
+        Recording, RecordingKind, RecordingSource, SourceMix, SourceRole, SourceRun,
+    };
+    let find = [call(
+        "findMoments",
+        r#"{"query": "the module", "ranges": []}"#,
+    )];
+    let mut p = project(
+        vec![file("screen", 10.0, false)],
+        vec![clip("s", "screen", 0.0, 10.0)],
+    );
+    p.recordings = vec![Recording {
+        id: "rec".into(),
+        kind: RecordingKind::Screen,
+        sources: vec![RecordingSource {
+            id: "screen".into(),
+            role: SourceRole::Screen,
+            label: "capture.source.screen".into(),
+            runs: vec![SourceRun {
+                asset_id: "screen".into(),
+                offset_us: 0,
+                duration_us: secs(10.0),
+                drift_ppm: 0.0,
+                file_in_us: 0,
+            }],
+            nudge_us: 0,
+            mix: SourceMix::default(),
+            synced: None,
+        }],
+        primary: "screen".into(),
+        cursor: None,
+        markers: Vec::new(),
+        game: None,
+    }];
+    let mut i = inputs(&p, Speech::default(), "find the module");
+    i.analysis.clear();
+    let out = compile(&p, &i, &find);
+    assert!(
+        out.refusals.iter().all(|r| r.reason != ANALYZE_FIRST),
+        "{:?}",
+        out.refusals
+    );
+
+    p.recordings.clear();
+    let out = compile(&p, &i, &find);
+    assert_eq!(
+        (
+            out.refusals[0].reason.as_str(),
+            out.refusals[0].clip.as_deref()
+        ),
+        (ANALYZE_FIRST, Some("c1"))
+    );
+}
+
 #[test]
 fn fix_caption_words_targets_sound_time() {
     // The interview's sound starts 0.5 s into its file, and its clip plays the file from 2.0 s, after a 4.0 s intro.

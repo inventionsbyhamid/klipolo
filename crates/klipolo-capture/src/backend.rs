@@ -70,6 +70,13 @@ pub trait Backend: Send + Sync {
     fn display_awake(&self) -> bool {
         true
     }
+    /// Whether a system alert is on the screen now: one of the OS's own questions, which a take must not record (on
+    /// macOS, a permission prompt, or the question a take's first stream can raise about the private window picker).
+    /// A take reads it from the start until the gate, and its countdown waits while one is up
+    /// (`SessionCore::system_alert`). Read without capture or a prompt. Default: none.
+    fn system_alert(&self) -> bool {
+        false
+    }
     /// Whether this keyframe decodes (the 10 s read-back); None where there's no decoder to ask.
     /// macOS: VTDecompressionSession; Windows and Linux: FFmpeg.
     fn decodes(&self, _info: &StreamInfo, _keyframe: &[u8]) -> Option<bool> {
