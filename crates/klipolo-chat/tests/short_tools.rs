@@ -710,3 +710,50 @@ fn a_short_planned_in_one_answer_applies_its_look_and_proposes_its_cut() {
     assert_eq!(sounds.len(), 1);
     assert_eq!(sounds[0].start_us, sticker.start_us);
 }
+
+#[test]
+fn kinetic_words_are_the_kinetic_title_template() {
+    let p = project();
+    let out = run(
+        &p,
+        "a title Day one at the start",
+        &[(
+            "addText",
+            json!({"text": "Day one", "preset": "title", "atSec": 0.5, "durationSec": null, "animation": "kinetic"}),
+        )],
+    );
+    let after = applied(&p, &out);
+    let layer = &layers(&after, TrackKind::Overlay)[0];
+    let ItemContent::Generator { source, params, .. } = &layer.content else {
+        panic!("a template: {layer:?}");
+    };
+    assert_eq!(source.as_str(), "klipolo.builtin/scene.kinetic-title");
+    assert_eq!(
+        params.get("title"),
+        Some(&ParamValue::Text("Day one".into()))
+    );
+    assert_eq!((layer.start_us, layer.duration_us), (secs(0.5), secs(3.0)));
+    // It fills the frame, as every template does, and the context names it as a title.
+    assert_eq!(layer.layout.rect, klipolo_model::layout::BoxN::FULL);
+    let ctx = build_context(
+        &after,
+        &Speech::default(),
+        &HashMap::new(),
+        &HashMap::new(),
+        &View::default(),
+        &Library::default(),
+    );
+    assert!(
+        ctx.text.contains("t1 0.5-3.5 \"Day one\" (title)"),
+        "{}",
+        ctx.text
+    );
+    // A layer already there can't become one.
+    let p = with_words_and_picture();
+    let out = run(
+        &p,
+        "make the title kinetic",
+        &[("animate", animate("t1", json!({"enter": "kinetic"})))],
+    );
+    assert!(refused_to_model(&out, 0).starts_with("animate: kinetic is a title of its own"));
+}

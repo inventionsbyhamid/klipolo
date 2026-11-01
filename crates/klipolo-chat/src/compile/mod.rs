@@ -923,7 +923,10 @@ impl Compiler<'_> {
         sound: Option<&str>,
         so_far: &HashMap<usize, Animated>,
     ) -> Result<Animated, Refused> {
-        if change.enter == Some(crate::tools::Entrance::Typewriter) {
+        if matches!(
+            change.enter,
+            Some(crate::tools::Entrance::Typewriter | crate::tools::Entrance::Kinetic)
+        ) {
             return Err(to_model(
                 "animate: typewriter is for words. Use another enter for the sticker.".to_owned(),
             ));

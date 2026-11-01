@@ -535,6 +535,7 @@
               "bounce",
               "blur",
               "typewriter",
+              "kinetic",
               "fromLeft",
               "fromRight",
               "fromTop",
@@ -769,7 +770,7 @@
             ]
           },
           "enter": {
-            "description": "typewriter: words only.",
+            "description": "typewriter: words only. kinetic: addText only.",
             "enum": [
               "pop",
               "fade",
@@ -777,6 +778,7 @@
               "bounce",
               "blur",
               "typewriter",
+              "kinetic",
               "fromLeft",
               "fromRight",
               "fromTop",

@@ -20,6 +20,8 @@ pub enum Entrance {
     Blur,
     /// Letter by letter: words only.
     Typewriter,
+    /// Letters rising in one by one (the kinetic title template): `addText`'s words only.
+    Kinetic,
     FromLeft,
     FromRight,
     FromTop,
@@ -67,6 +69,7 @@ impl Entrance {
             Entrance::Bounce => "bounce",
             Entrance::Blur => "blur",
             Entrance::Typewriter => "typewriter",
+            Entrance::Kinetic => "kinetic",
             Entrance::FromLeft => "fromLeft",
             Entrance::FromRight => "fromRight",
             Entrance::FromTop => "fromTop",
@@ -123,13 +126,14 @@ impl Word for Emphasis {
 }
 
 /// The entrances, in the schema's order.
-pub const ENTRANCES: [Entrance; 11] = [
+pub const ENTRANCES: [Entrance; 12] = [
     Entrance::Pop,
     Entrance::Fade,
     Entrance::Zoom,
     Entrance::Bounce,
     Entrance::Blur,
     Entrance::Typewriter,
+    Entrance::Kinetic,
     Entrance::FromLeft,
     Entrance::FromRight,
     Entrance::FromTop,
@@ -180,7 +184,7 @@ pub(super) const ANIMATE: Tool = Tool {
             ),
             (
                 "enter",
-                nullable_words(&ENTRANCES, "typewriter: words only."),
+                nullable_words(&ENTRANCES, "typewriter: words only. kinetic: addText only."),
             ),
             ("exit", nullable_words(&EXITS, "How it goes out.")),
             ("emphasis", nullable_words(&EMPHASES, "While shown.")),

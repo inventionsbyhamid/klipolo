@@ -253,20 +253,19 @@ fn apps_words((tool, field): (&str, &str), text: &str) -> Result<String, Refused
     Ok(words)
 }
 
-/// The ops that add the title card template reading `text` (its other words left empty) from `start` for `duration`
-/// (None: `TEMPLATE_US`), as the canvas adds a title template (`media::text::add_template_ops`: filling the frame in
-/// every format, attached to the clip under it); and the new layer's id. Refused when the template holds fewer
-/// characters, said for `tool`'s `field`.
+/// The ops that add title template `template` (the title card, or the kinetic title) reading `text` (its other words
+/// left empty) from `start` for `duration` (None: `TEMPLATE_US`), as the canvas adds a title template
+/// (`media::text::add_template_ops`: filling the frame in every format, attached to the clip under it); and the new
+/// layer's id. Refused when the template holds fewer characters, said for `tool`'s `field`.
 fn title_ops(
     work: &Project,
+    template: TitleTemplate,
     (tool, field): (&str, &str),
     text: &str,
-    start: Us,
-    duration: Option<Us>,
+    (start, duration): (Us, Option<Us>),
 ) -> Result<(Vec<Op>, Id), Refused> {
-    let template = TitleTemplate::TitleCard;
     let def = (Catalog::builtin().get(&template.source()))
-        .ok_or_else(|| to_model(format!("{tool}: this build has no title card template.")))?;
+        .ok_or_else(|| to_model(format!("{tool}: this build has no such title template.")))?;
     let mut params = BTreeMap::new();
     for spec in &def.params {
         let ParamKind::Text { max_len, .. } = &spec.kind else {
@@ -421,6 +420,26 @@ pub(super) fn add_text(
         })?
     };
     let start = start(c, work, "addText", "atSec", at)?;
+    // Kinetic words are the kinetic title template, near the top whatever the preset.
+    if animation == Some(Entrance::Kinetic) {
+        let (ops, _) = title_ops(
+            work,
+            TitleTemplate::KineticTitle,
+            ("addText", "text"),
+            &words,
+            (start, duration.or(Some(TEXT_US))),
+        )?;
+        return Ok(Edit {
+            ops,
+            label: label(
+                "addText",
+                vec![
+                    ("text", ErrorParam::from(words.as_str())),
+                    ("preset", ErrorParam::from("kinetic")),
+                ],
+            ),
+        });
+    }
     let mut ops = add_text_ops(work, preset.preset(), &words, start)
         .map_err(|e| to_model(format!("addText: {e}")))?;
     if let Some(animation) = animation {
@@ -565,7 +584,13 @@ pub(super) fn make_title_card(
         })?
     };
     let start = start(c, work, "makeTitleCard", "atSec", at)?;
-    let (ops, title_id) = title_ops(work, ("makeTitleCard", "title"), &words, start, duration)?;
+    let (ops, title_id) = title_ops(
+        work,
+        TitleTemplate::TitleCard,
+        ("makeTitleCard", "title"),
+        &words,
+        (start, duration),
+    )?;
     let edit = Edit {
         ops,
         label: label(

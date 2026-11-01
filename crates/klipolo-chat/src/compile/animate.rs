@@ -89,6 +89,8 @@ pub(crate) fn enter_use(e: Entrance, text: Option<&str>) -> Option<MotionUse> {
                 (letters * TYPE_US).clamp(TYPE_MIN_US, TYPE_MAX_US),
             )
         }
+        // A template of its own, not a preset: `addText` makes it.
+        Entrance::Kinetic => return None,
         Entrance::FromLeft => preset("slide", Some("left"), ENTER_US),
         Entrance::FromRight => preset("slide", Some("right"), ENTER_US),
         Entrance::FromTop => preset("slide", Some("top"), ENTER_US),
@@ -203,6 +205,11 @@ pub(super) fn animate(
         return Err(to_model(format!(
             "animate: {said} draws nothing to animate."
         )));
+    }
+    if change.enter == Some(Entrance::Kinetic) {
+        return Err(to_model(
+            "animate: kinetic is a title of its own: add the words with addText and animation kinetic.".to_owned(),
+        ));
     }
     if change.enter == Some(Entrance::Typewriter) && words_of(item).is_none() {
         return Err(to_model(format!(
