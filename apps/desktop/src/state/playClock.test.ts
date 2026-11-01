@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clockAnchor, clockUs, holdClock, reportFrame, setClock } from './playClock';
+import { clockAnchor, clockUs, holdClock, onClock, reportFrame, setClock } from './playClock';
 
 describe('playback clock', () => {
   it('starts with the first frame and re-anchors only when it drifts by more than a frame', () => {
@@ -21,5 +21,20 @@ describe('playback clock', () => {
   it('runs at the anchor rate, backwards too', () => {
     setClock({ us: 10_000_000, atMs: 1_000, running: true, rate: -2 });
     expect(clockUs(1_500)).toBe(9_000_000);
+  });
+
+  it('a listener that moves the clock again leaves every listener with the newer place, never the older', () => {
+    const heard: number[] = [];
+    const stops = [
+      onClock((a) => {
+        // The loop going back as the clock passes its end.
+        if (a.us === 8_000_000) holdClock(5_000_000);
+      }),
+      onClock((a) => heard.push(a.us)),
+    ];
+    reportFrame(8_000_000, 1_000);
+    for (const stop of stops) stop();
+    expect(heard).toEqual([5_000_000]);
+    expect(clockAnchor().us).toBe(5_000_000);
   });
 });
