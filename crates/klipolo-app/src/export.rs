@@ -6,9 +6,10 @@
 //!   person picked another), `<name> 16x9 2.mp4` when that name is taken (`naming`).
 //! - **What it draws is what the preview draws**: the open project as saved, the captions frozen from the finished
 //!   transcripts the preview has (`captions`), and the fonts checked first (`fonts`).
-//! - **Nothing half made is left behind**: Cancel deletes the job and its parts, and so does a run that fails, as
-//!   Klipolo doesn't resume one, and so does quitting; a crash's leftovers go at the next start or launch (`cleanup`).
-//!   Quit while one runs asks first (the app's `commands::export`).
+//! - **An export that stops resumes**: a run that fails or pauses (a full disk, a disk gone, a busy encoder), Quit, a
+//!   crash and the Mac shutting down all keep its job and every finished part (`cleanup`), and the dialog lists it to
+//!   resume or discard (`jobs`). Only Cancel and Discard delete one. Quit while one runs asks first, and pauses it (the
+//!   app's `commands::export`).
 //!
 //! No Tauri types here: the commands in `commands/export.rs` are thin layers over it, and `tests/export_mac.rs` drives
 //! it with the real worker.
@@ -17,6 +18,7 @@ mod captions;
 mod cleanup;
 mod estimate;
 mod fonts;
+pub mod jobs;
 mod naming;
 mod run;
 mod start;
@@ -41,13 +43,13 @@ use serde::Serialize;
 use ts_rs::TS;
 
 pub use captions::export_speech;
-pub use cleanup::{clear_on_quit, sweep_folder, tidy_jobs};
+pub use cleanup::{pause_on_quit, sweep_folder, tidy_jobs};
 pub use estimate::{Estimate, apple_silicon, estimate};
 pub use fonts::{missing_fonts, refuse_missing};
 pub use naming::{format_word, plan_files};
-pub use run::{run, said};
-pub use start::{StartSteps, Started, create_job, start_on_slot};
-pub use state::{ExportState, Releases, Stopped};
+pub use run::{coded, resume, run, said};
+pub use start::{StartSteps, Started, create_job, resume_on_slot, start_on_slot};
+pub use state::{ExportState, Releases};
 
 /// What an export will write, and what it costs (an honest estimate before it starts).
 #[derive(Clone, Debug, PartialEq, Serialize, TS)]
