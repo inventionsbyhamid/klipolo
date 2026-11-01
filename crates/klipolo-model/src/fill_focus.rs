@@ -243,15 +243,22 @@ impl FocusPath {
 pub const TRIM_MARGIN_US: Us = 5_000_000;
 
 /// `clip`'s speaker paths kept to the footage it plays and `TRIM_MARGIN_US` either side (`FocusPath::trimmed`): a
-/// piece of a split or a cut carries its own part, not the whole talk's.
+/// piece of a split or a cut carries its own part, not the whole talk's. Its keep ranges are kept to the same footage,
+/// and a piece none comes near keeps whoever speaks.
 pub fn trim_to_clip(clip: &mut crate::timeline::Clip) {
     let (from, to) = (
         clip.source_in_us.saturating_sub(TRIM_MARGIN_US),
         clip.source_out_us.saturating_add(TRIM_MARGIN_US),
     );
     for focus in clip.fill_focus.values_mut() {
-        if let FillFocus::Speaker { path, .. } = focus {
+        if let FillFocus::Speaker { path, keep, .. } = focus {
             *path = path.trimmed(from, to);
+            if let Keep::Ranges { ranges } = keep {
+                ranges.retain(|r| r.start_us < to && from < r.end_us);
+                if ranges.is_empty() {
+                    *keep = Keep::Speaker;
+                }
+            }
         }
     }
 }

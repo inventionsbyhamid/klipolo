@@ -346,3 +346,53 @@ fn a_bad_keep_or_too_many_people_is_refused() {
     );
     assert!(code(fine).is_ok());
 }
+
+#[test]
+fn split_pieces_keep_only_the_keep_ranges_near_their_own_footage() {
+    let mut p = followed_talk();
+    // Chat kept P2 from 30 to 40 s and P1 from 200 to 210 s of the file.
+    let ranges = vec![
+        range(30.0, 40.0, Who::Person { person: 2 }),
+        range(200.0, 210.0, Who::Person { person: 1 }),
+    ];
+    let b = &mut p.timeline.main[1];
+    let FillFocus::Speaker { keep, .. } = b.fill_focus.get_mut(&FormatKind::Portrait).unwrap()
+    else {
+        panic!()
+    };
+    *keep = Keep::Ranges {
+        ranges: ranges.clone(),
+    };
+    // Clip b plays the file from 0 at 20 s on the timeline: split it at 120 s of the file.
+    let cut = apply_ops(&p, &[Op::Split { at_us: secs(140.0) }]).unwrap();
+    let keep_of = |i: usize| match &cut.timeline.main[i].fill_focus[&FormatKind::Portrait] {
+        FillFocus::Speaker { keep, .. } => keep.clone(),
+        FillFocus::Center => panic!(),
+    };
+    assert_eq!(
+        keep_of(1),
+        Keep::Ranges {
+            ranges: vec![ranges[0]]
+        }
+    );
+    assert_eq!(
+        keep_of(2),
+        Keep::Ranges {
+            ranges: vec![ranges[1]]
+        }
+    );
+    // A piece no range comes near keeps whoever speaks, rather than chat's choice elsewhere.
+    let cut = apply_ops(
+        &p,
+        &[
+            Op::Split { at_us: secs(70.0) },
+            Op::Split { at_us: secs(160.0) },
+        ],
+    )
+    .unwrap();
+    let FillFocus::Speaker { keep, .. } = &cut.timeline.main[2].fill_focus[&FormatKind::Portrait]
+    else {
+        panic!()
+    };
+    assert_eq!(*keep, Keep::Speaker);
+}
