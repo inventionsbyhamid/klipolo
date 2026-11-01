@@ -17,7 +17,7 @@ use klipolo_model::ids::{Id, new_id};
 use klipolo_model::ops::{ClipPatch, Op, TrackPatch};
 use klipolo_model::project::FormatKind;
 use klipolo_model::time::{MIN_DURATION_US, Us};
-use klipolo_model::timeline::{CameraMode, ClipSource, ItemContent};
+use klipolo_model::timeline::{CameraMode, Clip, ClipSource, ItemContent};
 
 use super::recorded::{Noted, clip_recording, has_format, named, noted};
 use super::{Compiler, Edit, Refused, label, to_model, to_person};
@@ -170,12 +170,11 @@ pub(super) fn no_bubble(work: &Project, clip: &str) -> String {
     )
 }
 
-/// The working copy's clip with id `id`.
-pub(super) fn clip_of<'p>(
-    work: &'p Project,
-    id: &str,
-) -> Option<&'p klipolo_model::timeline::Clip> {
-    work.timeline.main.iter().find(|clip| clip.id == id)
+/// The working copy's clips by id: built once a call, so a tool for every clip stays linear.
+pub(super) fn clips_by_id(work: &Project) -> HashMap<&str, &Clip> {
+    (work.timeline.main.iter())
+        .map(|clip| (clip.id.as_str(), clip))
+        .collect()
 }
 
 /// The track that layer `id` is on, by index.
@@ -229,8 +228,9 @@ pub(super) fn set_mode(
             notes.push(SEPARATE_LEFT.to_owned());
         }
     }
+    let by_id = clips_by_id(work);
     for id in &cams.on_clips {
-        let Some(cam) = clip_of(work, id).and_then(|clip| clip.camera.as_ref()) else {
+        let Some(cam) = by_id.get(id.as_str()).and_then(|clip| clip.camera.as_ref()) else {
             continue;
         };
         let mut now = cam.clone();
@@ -328,8 +328,9 @@ pub(super) fn detach(
     let formats = &work.settings.formats;
     let (mut hidden, mut nothing) = (false, false);
     let mut ops = Vec::with_capacity(cams.on_clips.len());
+    let by_id = clips_by_id(work);
     for clip_id in &cams.on_clips {
-        let Some(clip) = clip_of(work, clip_id) else {
+        let Some(clip) = by_id.get(clip_id.as_str()) else {
             continue;
         };
         // The recording's camera source: `DetachSource` separates it.

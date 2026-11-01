@@ -19,7 +19,7 @@ use klipolo_model::ops::{ClipPatch, ItemPatch, Op};
 use klipolo_model::project::FormatKind;
 use klipolo_model::timeline::{CameraShape, ItemContent, ROUNDED_CAMERA_RADIUS};
 
-use super::cameras::{bubbles, clip_of, find, no_bubble};
+use super::cameras::{bubbles, clips_by_id, find, no_bubble};
 use super::recorded::{Noted, has_format, named, noted};
 use super::{Compiler, Edit, Refused, label, to_model};
 use crate::tools::{BubbleChange, BubbleSize, SizeStep};
@@ -56,11 +56,10 @@ pub(super) fn adjust(
         bubbles(work, cams)?
     };
     let mut ops = Vec::new();
+    let by_id = clips_by_id(work);
+    let camera_of = |id: &str| by_id.get(id).and_then(|clip| clip.camera.as_ref());
     for id in &cams.footage {
-        let (Some(cam), Some(mirror)) = (
-            clip_of(work, id).and_then(|clip| clip.camera.as_ref()),
-            a.mirror,
-        ) else {
+        let (Some(cam), Some(mirror)) = (camera_of(id), a.mirror) else {
             continue;
         };
         if cam.mirror != mirror {
@@ -70,7 +69,7 @@ pub(super) fn adjust(
         }
     }
     for id in &cams.on_clips {
-        let Some(cam) = clip_of(work, id).and_then(|clip| clip.camera.as_ref()) else {
+        let Some(cam) = camera_of(id) else {
             continue;
         };
         let mut now = cam.clone();
