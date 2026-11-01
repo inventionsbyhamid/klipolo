@@ -7,6 +7,10 @@ interface SegmentedOption<T extends string> {
   label: string;
   /** Says more than the label, e.g. what "Fill" does. */
   tooltip?: string;
+  /** Can't be chosen now (a fade longer than the clip); `describedBy` names the note that says why. */
+  disabled?: boolean;
+  /** Id of a note that explains the option, e.g. why it is off. */
+  describedBy?: string;
 }
 
 interface SegmentedProps<T extends string> {
@@ -41,10 +45,10 @@ export function Segmented<T extends string>({
       onValueChange={(next) => next && onChange(next as T)}
       className={cn('seg seg-sm', fill && 'seg-fill')}
     >
-      {options.map(({ value: option, label: name, tooltip }) => {
+      {options.map(({ value: option, label: name, tooltip, disabled: off, describedBy }) => {
         // Styled from aria-checked, not data-state: a tooltip trigger sets its own data-state on the same element.
         const item = (
-          <ToggleGroup.Item key={option} value={option}>
+          <ToggleGroup.Item key={option} value={option} disabled={off} aria-describedby={describedBy}>
             {name}
           </ToggleGroup.Item>
         );

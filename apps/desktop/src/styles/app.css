@@ -350,6 +350,12 @@
   color: var(--color-navy);
 }
 
+/* An option that can't be chosen now (a note beside it says why): disabled ink, no hover. */
+.seg button:disabled:not([aria-checked="true"]) {
+  color: var(--color-ink-disabled);
+  cursor: default;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
