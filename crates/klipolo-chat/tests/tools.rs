@@ -5,18 +5,21 @@
 //! before `startSec`), `{}` for a tool without arguments, two calls in one answer. That trial's 12 requests come first,
 //! in this tool set's names and words (its `removeFillerWords` is `removeFillers`, `setCaptionStyle` with
 //! `karaoke_highlight` is `setCaptions` with `karaoke`, `setFormat` `9:16` is `portrait`); the rest cover the tools the
-//! trial did not have, the media tools last, with times from the clip A context fixture.
+//! trial did not have, then the media tools with times from the clip A context fixture, then a recording's camera and
+//! sounds last.
 
 use std::collections::BTreeSet;
 
 use klipolo_chat::tools::{
-    CHAT_CAPTION_STYLES, ClipRef, FunctionCall, Moment, PictureSize, Position, Problem, TextPreset,
-    ToolCall, TransitionKind, tools,
+    BubbleChange, CHAT_CAPTION_STYLES, ClipRef, FunctionCall, Moment, PictureSize, Position,
+    Problem, SizeStep, Sound, TextPreset, ToolCall, TransitionKind, tools,
 };
 use klipolo_model::captions::styles::{BuiltinCaptionStyle, CaptionStyles};
+use klipolo_model::layout::Anchor;
 use klipolo_model::ops::Edge;
 use klipolo_model::project::FormatKind;
 use klipolo_model::time::{RangeUs, secs_to_us};
+use klipolo_model::timeline::{CameraMode, CameraShape};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
@@ -203,6 +206,12 @@ fn every_tool_schema_is_strict() {
             "addImage",
             "makeSticker",
             "makeTitleCard",
+            "setCameraMode",
+            "adjustCamera",
+            "detachCamera",
+            "muteSource",
+            "setSourceVolume",
+            "separateSound",
             "undo",
             "askUser",
             "cannotDo",
@@ -250,6 +259,23 @@ fn every_tool_schema_is_strict() {
             "makeSticker.position",
             "makeTitleCard.atSec",
             "makeTitleCard.durationSec",
+            "setCameraMode.clips",
+            "setCameraMode.format",
+            "adjustCamera.border",
+            "adjustCamera.clips",
+            "adjustCamera.format",
+            "adjustCamera.mirror",
+            "adjustCamera.position",
+            "adjustCamera.shape",
+            "adjustCamera.size",
+            "adjustCamera.sizeStep",
+            "detachCamera.clips",
+            "muteSource.clips",
+            "muteSource.which",
+            "setSourceVolume.clips",
+            "setSourceVolume.which",
+            "separateSound.clips",
+            "separateSound.which",
         ]
     );
 }
@@ -497,6 +523,64 @@ fn parses_each_tool_from_spike_shaped_calls() {
                 prompt: "Lisbon trams".into(),
                 at_us: None,
                 duration_us: None,
+            }],
+        ),
+        (
+            "hide my camera",
+            vec![SetCameraMode {
+                clips: None,
+                mode: CameraMode::Hidden,
+                format: None,
+            }],
+        ),
+        (
+            "make the camera a split screen in vertical",
+            vec![SetCameraMode {
+                clips: None,
+                mode: CameraMode::SplitBottom,
+                format: Some(FormatKind::Portrait),
+            }],
+        ),
+        (
+            "move my bubble to the top left, bigger and square",
+            vec![AdjustCamera {
+                clips: None,
+                change: BubbleChange {
+                    position: Some(Anchor::TopLeft),
+                    size_step: Some(SizeStep::Bigger),
+                    shape: Some(CameraShape::Square),
+                    ..BubbleChange::default()
+                },
+            }],
+        ),
+        (
+            "separate the camera so I can cut it",
+            vec![DetachCamera { clips: None }],
+        ),
+        (
+            "mute the mic in the second recording",
+            vec![MuteSource {
+                source: Sound::Mic,
+                muted: true,
+                which: None,
+                clips: Some(vec!["c3".into()]),
+            }],
+        ),
+        (
+            "turn the system sound down",
+            vec![SetSourceVolume {
+                source: Sound::ComputerSound,
+                volume: 0.5,
+                which: None,
+                clips: None,
+            }],
+        ),
+        (
+            "separate the sound",
+            vec![SeparateSound {
+                source: Sound::Mic,
+                which: None,
+                clips: None,
             }],
         ),
     ];
@@ -1262,7 +1346,9 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let prompt_tokens = klipolo_chat::estimate_tokens(prompt);
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
-    assert!(prompt_tokens <= 900, "prompt {prompt_tokens} tokens");
-    // 3,088 measured with the clip tools (setClip, setTransition: about 410 of them, every value nullable and described).
-    assert!(tools_tokens <= 3_100, "tools {tools_tokens} tokens");
+    // 914 measured with the clip tools' line and the recordings' line.
+    assert!(prompt_tokens <= 920, "prompt {prompt_tokens} tokens");
+    // 4,099 measured with the clip tools (setClip, setTransition) and the recording tools (the camera's three and the
+    // recorded sounds' three, about 1,010 of them).
+    assert!(tools_tokens <= 4_150, "tools {tools_tokens} tokens");
 }

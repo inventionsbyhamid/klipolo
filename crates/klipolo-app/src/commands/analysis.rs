@@ -56,7 +56,8 @@ pub(crate) fn load(
 }
 
 /// What analysing these clips costs, which are cached, and, with an access code, the credit left and why Analyze is
-/// refused. Only the files a main-track clip plays are analysed (`analysed_assets`); others asked for are left out.
+/// refused. Only the files a main-track clip plays are analysed (`analysed_assets`); others asked for are left out. A
+/// recording's files are priced for their words only. Nothing with no project open.
 #[tauri::command]
 pub(crate) async fn analysis_estimate(
     analysis: State<'_, AnalysisHandle>,
@@ -65,14 +66,16 @@ pub(crate) async fn analysis_estimate(
 ) -> Result<Estimate, String> {
     // The opening first: a switch while the assets are read is seen.
     let opening = analysis.opening();
-    let assets = projects.analysed_assets(&asset_ids);
-    Ok(analysis.estimate_at(opening, &assets).await)
+    let Some((project, assets)) = projects.analysed_assets(&asset_ids) else {
+        return Ok(Estimate::default());
+    };
+    Ok(analysis.estimate_at(opening, &project, &assets).await)
 }
 
-/// Analyses these clips (the files a main-track clip plays among them, `analysed_assets`): cached ones load at once; the
-/// others start, or the error says why they can't (no key or code, the device not registered, more than the credit
-/// left). `by_page`: the page asked on its own (loading cached clips), not the person, so rough words are timed again
-/// at most once per clip per app run.
+/// Analyses these clips (the files a main-track clip plays among them, `analysed_assets`; a recording's for their words
+/// only): cached ones load at once; the others start, or the error says why they can't (no key or code, the device not
+/// registered, more than the credit left). `by_page`: the page asked on its own (loading cached clips), not the
+/// person, so rough words are timed again at most once per clip per app run. Nothing with no project open.
 #[tauri::command]
 pub(crate) async fn analysis_start(
     analysis: State<'_, AnalysisHandle>,
@@ -82,13 +85,19 @@ pub(crate) async fn analysis_start(
 ) -> Result<(), String> {
     // The opening first: a switch while the assets are read is seen.
     let opening = analysis.opening();
-    let assets = projects.analysed_assets(&asset_ids);
+    let Some((project, assets)) = projects.analysed_assets(&asset_ids) else {
+        return Ok(());
+    };
     let asked = if by_page == Some(true) {
         Asked::Page
     } else {
         Asked::Person
     };
-    match analysis.start_at(opening, &assets, asked).await.refused {
+    match analysis
+        .start_at(opening, &project, &assets, asked)
+        .await
+        .refused
+    {
         Some(reason) => Err(reason),
         None => Ok(()),
     }

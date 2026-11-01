@@ -102,6 +102,8 @@ pub const ENGLISH: Messages = &[
     ("capture.startOver.undoFailed", "The last take couldn't be put back. If it isn't on Home, look for it in the Trash."),
     // The start gate, pauses and notes after a take.
     ("capture.gate.waiting", "{source} isn't sending anything yet."),
+    // A system alert on the screen holds the countdown (`SessionCore::system_alert`), so it is never recorded.
+    ("capture.gate.systemAlert", "macOS is asking you something. Answer it, and the countdown starts again."),
     ("capture.paused.sleep", "Recording paused while your computer slept."),
     ("capture.paused.lock", "Recording paused while your screen was locked."),
     ("capture.paused.focus", "Paused while {app} isn't in front."),

@@ -44,6 +44,11 @@ export interface RecorderState {
   countdown: number | null;
   /** The sources the start gate is still waiting for ("{source} isn't sending anything yet."). */
   gate: string[] | null;
+  /**
+   * macOS is asking the person something on the screen (a permission prompt, or its question about the private window
+   * picker): the countdown waits, and starts again from the top once it is answered, so the question is never recorded.
+   */
+  systemAlert: boolean;
   /** The mic's peak level during the countdown, in dBFS. */
   meterDbfs: number | null;
   /** Why the take didn't start, or why it stopped, or why a press was refused, as a sentence. */
