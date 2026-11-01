@@ -12,29 +12,45 @@ import { findClip, findItem } from '../../lib/timeline';
 import { useProject } from '../../state/project';
 import { cameraClipId, useSelection } from '../../state/selection';
 import { deleteBlock, duplicate, stepTrack, trackStepOps } from '../timeline/commands';
+import { AdjustmentInspector } from './AdjustmentInspector';
 import { AudioInspector } from './AudioInspector';
 import { CameraInspector } from './CameraInspector';
 import { ClipInspector } from './ClipInspector';
 import { cardEscape } from './common';
+import { GeneratorInspector } from './GeneratorInspector';
 import { ImageInspector } from './ImageInspector';
 import { commitLatest } from '../../state/latest';
 import { TemplateInspector } from './TemplateInspector';
 import { TextInspector } from './TextInspector';
 import { TransitionInspector, useInspectedTransition } from './TransitionInspector';
 import { VideoInspector } from './VideoInspector';
+import { ZoomInspector } from './ZoomInspector';
 
-/** What the inspector shows: a text, a picture, a title template, music, a sound effect or a video layer. */
-export type Inspected = 'text' | 'image' | 'template' | 'music' | 'sound' | 'video';
+/**
+ * What the inspector shows: a text, a picture, a title template, music, a sound effect, a video layer, or a zoom,
+ * adjustment or generator layer (made by a recording or by chat).
+ */
+export type Inspected =
+  | 'text'
+  | 'image'
+  | 'template'
+  | 'music'
+  | 'sound'
+  | 'video'
+  | 'zoom'
+  | 'adjustment'
+  | 'generator';
 
-/** The kind of `item` the inspector has fields for, or null (a clip, a zoom). */
-export function inspectedKind(item: Item): Inspected | null {
+/** The kind of `item` the inspector has fields for: every layer has a card. */
+export function inspectedKind(item: Item): Inspected {
   const c = item.content;
   if (c.type === 'text') return 'text';
   if (c.type === 'image') return 'image';
   if (c.type === 'video') return 'video';
-  if (c.type === 'generator' && c.source.includes('/scene.')) return 'template';
+  if (c.type === 'generator') return c.source.includes('/scene.') ? 'template' : 'generator';
   if (c.type === 'audio') return typeof c.duck === 'number' ? 'music' : 'sound';
-  return null;
+  if (c.type === 'zoom') return 'zoom';
+  return 'adjustment';
 }
 
 /** A selected main-track clip: the clip card shows it (it has no layer or track). */
@@ -84,12 +100,15 @@ const ICONS: Record<Inspected, IconName> = {
   music: 'music',
   sound: 'pulse',
   video: 'film',
+  zoom: 'zoom-in',
+  adjustment: 'layers',
+  generator: 'image',
 };
 
 /**
- * The inspector: a raised card docked to the right inside the preview while an overlay or a sound is
- * selected. Its header has the kind's icon and name, a more menu (Duplicate, Bring forward and Send back for a picture
- * layer, Delete) and a close button; its body the fields of that kind, scrolling with a fade at the bottom. On a
+ * The inspector: a raised card docked to the right inside the preview while a layer is selected. Its
+ * header has the kind's icon and name, a more menu (Duplicate, Bring forward and Send back for a layer drawn over the
+ * video, Delete) and a close button; its body the fields of that kind, scrolling with a fade at the bottom. On a
  * locked track it says so and offers Unlock. Changes apply at once and each is one undo step.
  * A main-track clip has a card of its own (`ClipInspector`), and so has a recording's camera (`CameraInspector`).
  */
@@ -126,9 +145,15 @@ export function Inspector({ format }: { format: FormatKind }) {
             ? t({ id: 'inspector.sound', message: 'Sound' })
             : kind === 'video'
               ? t({ id: 'inspector.video', message: 'Video layer' })
-              : content.type === 'generator'
-                ? contribLabel(content.source, 'scene')
-                : '';
+              : kind === 'zoom'
+                ? t({ id: 'inspector.zoom', message: 'Zoom', comment: 'A zoom layer' })
+                : kind === 'adjustment'
+                  ? t({ id: 'inspector.adjustment', message: 'Adjustment layer' })
+                  : content.type === 'generator'
+                    ? contribLabel(content.source, kind === 'template' ? 'scene' : 'generator')
+                    : '';
+  // A layer drawn over the video goes over or under the others; a zoom has a track of its own.
+  const ordered = kind !== 'zoom' && track.kind === 'overlay';
   const close = () => useSelection.getState().select(null);
   return (
     <aside
@@ -151,7 +176,7 @@ export function Inspector({ format }: { format: FormatKind }) {
             <MenuItem onSelect={() => duplicate(item.id)} disabled={track.locked}>
               {t({ id: 'inspector.duplicate', message: 'Duplicate' })}
             </MenuItem>
-            {(kind === 'text' || kind === 'image' || kind === 'template' || kind === 'video') && (
+            {ordered && (
               <>
                 <MenuItem onSelect={() => stepTrack(item.id, 1)} disabled={!canStep(1)}>
                   {t({ id: 'inspector.forward', message: 'Bring forward' })}
@@ -190,13 +215,18 @@ export function Inspector({ format }: { format: FormatKind }) {
               />
             )}
             {content.type === 'image' && <ImageInspector key={item.id} item={item} format={format} primary={primary} />}
-            {content.type === 'generator' && (
-              <TemplateInspector key={item.id} item={item} content={content} locked={track.locked} />
-            )}
+            {content.type === 'generator' &&
+              (kind === 'template' ? (
+                <TemplateInspector key={item.id} item={item} content={content} locked={track.locked} />
+              ) : (
+                <GeneratorInspector key={item.id} item={item} content={content} />
+              ))}
             {content.type === 'audio' && <AudioInspector key={item.id} item={item} content={content} />}
             {content.type === 'video' && (
               <VideoInspector key={item.id} item={item} content={content} format={format} primary={primary} />
             )}
+            {content.type === 'zoom' && <ZoomInspector key={item.id} item={item} content={content} />}
+            {content.type === 'adjustment' && <AdjustmentInspector key={item.id} item={item} />}
           </>
         )}
       </div>
