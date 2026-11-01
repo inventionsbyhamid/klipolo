@@ -160,6 +160,35 @@
   grid-area: 1 / 1 / 2 / 2;
 }
 
+.library-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.library-body[hidden] {
+  display: none;
+}
+
+/* Folded (Control Command S), the library is its rail: Open library and Add files. Wins over the Captions view's
+   wider panel. */
+.workspace:has(.library.panel[data-collapsed="true"]) {
+  --library-w: var(--library-rail);
+}
+
+.library-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-5) 0;
+}
+
+.library-rail .ico.is-mirrored {
+  transform: scaleX(-1);
+}
+
 .timeline {
   grid-area: 2 / 1 / 3 / 3;
 }
