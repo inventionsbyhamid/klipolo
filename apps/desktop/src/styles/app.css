@@ -161,6 +161,45 @@
   grid-area: 1 / 1 / 2 / 2;
 }
 
+.library-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.library-body[hidden] {
+  display: none;
+}
+
+/* Folded (Control Command S), the library is its rail: Open library and Add files. Wins over the Captions view's
+   wider panel. */
+.workspace:has(.library.panel[data-collapsed="true"]) {
+  --library-w: var(--library-rail);
+}
+
+.library-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-5) 0;
+}
+
+.library .ico.is-mirrored {
+  transform: scaleX(-1);
+}
+
+/* The library's right edge: a double click folds it or opens it again. */
+.library-edge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 6px;
+}
+
 .timeline {
   grid-area: 2 / 1 / 3 / 3;
 }
@@ -1095,6 +1134,56 @@
   pointer-events: none;
 }
 
+/* A recording's markers along the top of the Video lane: a paper flag (you put it there) with a line down through the
+   clips that takes no presses; red while a proposal removes it. Over the clips, under the playhead and the marks. */
+.tl-markers {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.tl-marker {
+  position: absolute;
+  top: 0;
+  width: 10px;
+  height: 12px;
+  padding: 0;
+  border-radius: var(--radius-xs);
+  pointer-events: auto;
+}
+
+/* Under the design's 28 px: a pad that takes presses reaches out from the flag, down into the clips' top. */
+.tl-marker::before {
+  content: "";
+  position: absolute;
+  inset: -2px -5px -8px;
+}
+
+.tl-marker-flag {
+  position: absolute;
+  inset: 0;
+  background: var(--color-paper);
+  clip-path: polygon(0 0, 100% 25%, 0 55%);
+}
+
+.tl-marker-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 400px;
+  background: var(--color-paper);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.tl-marker[data-ghost] .tl-marker-flag,
+.tl-marker[data-ghost] .tl-marker-line {
+  background: var(--color-cut);
+}
+
 /* Clips: clip-deep with a clip-2 edge, filmstrip over 62 %, the clip's own waveform under it, back to back with a
    1 px seam where two meet. */
 .tl-clip {
@@ -1374,16 +1463,114 @@
 }
 
 /* Its header in the 40 px gutter: the kind's icon, which opens its volume, and Mute. */
-.tl-source-head {
+.tl-source-head,
+.tl-lane-head {
   display: flex;
   align-items: center;
   gap: 1px;
 }
 
-.icon-btn.tl-source-btn {
+.icon-btn.tl-source-btn,
+.icon-btn.tl-lane-btn {
   width: 19px;
   height: 19px;
   border-radius: var(--radius-xs);
+}
+
+/* While every track shows: each track's header fills the wider gutter (its name, its toggles while pointed at or
+   focused, its options), the new-track zone a dragged layer can go to, and the buttons that add a track. */
+.tl-track-head {
+  justify-self: stretch;
+  width: 100%;
+  min-width: 0;
+}
+
+.icon-btn.tl-track-toggle,
+.tl-track-head [data-track-menu] {
+  border-radius: var(--radius-xs);
+}
+
+.icon-btn.tl-track-toggle.is-on {
+  background: var(--color-paper-wash);
+  box-shadow: inset 0 0 0 1px var(--color-paper);
+  color: var(--color-ink);
+}
+
+.tl-track-name-field {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-paper);
+  border-radius: var(--radius-xs);
+  background: var(--color-night);
+  color: var(--color-ink);
+  font-size: var(--text-xs);
+  outline: none;
+}
+
+.tl-new-track {
+  display: flex;
+  flex: none;
+}
+
+.tl-new-track-name {
+  place-items: center start;
+  padding-left: var(--space-5);
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+}
+
+.tl-new-track-zone {
+  flex: 1;
+  margin: 2px;
+  border: 1px dashed var(--color-line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-paper-wash);
+}
+
+.tl-add-track {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 32px;
+}
+
+.tl-add-track-buttons {
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+}
+
+/* The gutter's small buttons sit side by side: their pads reach up and down only, toward the design's 28 px. */
+.icon-btn.tl-lane-btn::before,
+.icon-btn.tl-track-toggle::before {
+  content: "";
+  position: absolute;
+  inset: -4px 0;
+}
+
+/* A lane's icon opens its options; a soloed or locked lane shows it on a small badge at the icon's corner. */
+.tl-lane-btn .ico {
+  width: 14px;
+  height: 14px;
+}
+
+.tl-lane-badge {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  display: flex;
+  gap: 1px;
+  padding: 1px;
+  border-radius: var(--radius-xs);
+  background: var(--color-paper);
+  color: var(--color-on-paper);
+  pointer-events: none;
 }
 
 .source-volume {
@@ -2012,6 +2199,34 @@
 .play:disabled {
   background: var(--color-off-canvas);
   color: var(--color-ink-disabled);
+}
+
+/* The play button, with the shuttle's speed on its top right corner while J or L plays backward or faster. */
+.play-wrap {
+  position: relative;
+  display: grid;
+}
+
+.rate-badge {
+  position: absolute;
+  top: -6px;
+  right: -10px;
+  pointer-events: none;
+}
+
+.rate-badge-tag {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 16px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--color-paper);
+  color: var(--color-on-paper);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-strong);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-height: 819px) {

@@ -19,7 +19,7 @@ const laneHas = (project: Project, id: string, expanded: boolean) =>
 
 /**
  * The timeline's commands that move around rather than edit (`useTimelineCommands` merges them): the selection from
- * block to block, the playhead between edits and to either end, zoom and snapping. Stable ids.
+ * block to block, the playhead between edits and to either end, zoom, snapping and the track view. Stable ids.
  */
 export function useTimelineNavCommands(): Command[] {
   const { t } = useLingui();
@@ -189,6 +189,16 @@ export function useTimelineNavCommands(): Command[] {
         ),
         enabled: true,
         run: () => useUi.getState().setSnapping(!snapping),
+      },
+      {
+        id: 'toggle-tracks',
+        action: 'timelineView',
+        group: 'view',
+        label: expanded
+          ? t({ id: 'timeline.tracks.fewer', message: 'Show fewer tracks' })
+          : t({ id: 'timeline.tracks.all', message: 'Show all tracks' }),
+        enabled: true,
+        run: () => useUi.getState().setTimelineExpanded(!expanded),
       },
     ];
   }, [t, project, selectedId, snapping, expanded, durationUs, atStart, atEnd]);

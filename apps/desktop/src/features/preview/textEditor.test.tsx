@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Item } from '../../bindings/Item';
@@ -297,7 +297,7 @@ describe('on-canvas text', () => {
     );
     await userEvent.dblClick(layer());
     await userEvent.type(editor(), ' now');
-    await userEvent.click(screen.getByRole('radio', { name: 'Yellow' }));
+    await userEvent.click(within(screen.getByRole('radiogroup', { name: 'Text color' })).getByRole('radio', { name: 'Yellow' }));
     await waitFor(() => expect(heard.applied).toHaveLength(2));
     expect(heard.applied.map((tx) => tx.label)).toEqual(['text.edit.undo', 'text.color.undo']);
     expect(heard.applied[1].ops[0]).toMatchObject({

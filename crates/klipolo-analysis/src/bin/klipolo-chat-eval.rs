@@ -373,6 +373,7 @@ fn run(args: &Args) -> Result<bool, String> {
             analysis: HashMap::from([(fx.asset.clone(), AnalysisState::Done)]),
             time_again: HashSet::new(),
             library: library.clone(),
+            fonts: Default::default(),
         };
         let planned = runtime.block_on(plan(
             &model,
@@ -694,11 +695,13 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
             preset,
             at_us,
             duration_us,
+            font,
         } => json!({
             "text": text,
             "preset": preset.key(),
             "atSec": at_us.map(s),
             "durationSec": duration_us.map(s),
+            "font": font,
         }),
         ToolCall::AddImage {
             file,
@@ -933,7 +936,7 @@ mod tests {
             ("addSound", json!({"name": "whoosh", "atSec": [12.8, 23.0]})),
             (
                 "addText",
-                json!({"text": "Day 1", "preset": "title", "atSec": 0.0, "durationSec": 3.0}),
+                json!({"text": "Day 1", "preset": "title", "atSec": 0.0, "durationSec": 3.0, "font": "Poppins"}),
             ),
             (
                 "addImage",

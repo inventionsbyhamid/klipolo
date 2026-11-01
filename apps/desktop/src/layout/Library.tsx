@@ -1,22 +1,29 @@
 import { useLingui } from '@lingui/react/macro';
-import { useState, type KeyboardEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { SearchField } from '../design/SearchField';
+import { SpriteIcon } from '../design/SpriteIcon';
 import { CaptionsPanel } from '../features/captions/CaptionsPanel';
 import { LooksPanel } from '../features/looks/LooksPanel';
 import { MediaList } from '../features/media/MediaList';
 import { useImportMedia } from '../features/media/useImportMedia';
 import { useCaptionsView, type LeftView } from '../state/captionsView';
+import { useLibraryPanel } from '../state/libraryPanel';
 import { useUi, type LibraryTab } from '../state/ui';
 import { Icon } from './Icon';
 
 const TABS: LibraryTab[] = ['clips', 'music', 'sounds', 'images'];
+
+/** The library's body, which its rail's Open library opens. */
+export const LIBRARY_BODY_ID = 'library-body';
 
 /**
  * The library panel: the Library, Captions and Looks view tabs, Add files, Record your screen (the
  * shown, and the filter pills Clips, Music, Sounds and Images over the files of each (yours first, then Klipolo's
  * pack). The search keeps its words from tab to tab. The pills scroll sideways in a narrow panel, with a fade at the
  * right edge. The arrow keys move between them. Its Captions tab shows the Captions view in its place,
- * and its Looks tab the looks (`LooksPanel`).
+ * and its Looks tab the looks (`LooksPanel`). Its head's Collapse library, Command B (or Control Command S), or a
+ * double click on its edge folds it to its rail (`useLibraryPanel`), whose Open library (or the edge) opens it again;
+ * folded, it stays mounted (`hidden` and `inert`), and a fold with the keyboard inside puts it on the rail.
  */
 export function Library() {
   const { t } = useLingui();
@@ -26,6 +33,20 @@ export function Library() {
   const view = useCaptionsView((s) => s.view);
   const setView = useCaptionsView((s) => s.setView);
   const [query, setQuery] = useState('');
+  const collapsed = useLibraryPanel((s) => s.collapsed);
+  const rail = useRef<HTMLButtonElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+  /** The keyboard was in the library as it folded: it goes to the rail. */
+  const inside = useRef(false);
+  /** Opened from the rail: the keyboard goes to the view's tab once the body shows. */
+  const wantFocus = useRef(false);
+  useLayoutEffect(() => {
+    if (collapsed && inside.current) rail.current?.focus();
+    if (!collapsed && wantFocus.current) {
+      wantFocus.current = false;
+      body.current?.querySelector<HTMLElement>('.view-tab[aria-selected="true"]')?.focus();
+    }
+  }, [collapsed]);
   const names: Record<LibraryTab, string> = {
     clips: t({ id: 'library.tab.clips', message: 'Clips' }),
     music: t({ id: 'library.tab.music', message: 'Music' }),
@@ -61,56 +82,120 @@ export function Library() {
       aria-label={viewLabels[view]}
       data-view={view}
       data-tab={tab}
+      data-collapsed={collapsed}
     >
-      <div className="panel-head">
-        <div className="view-tabs" role="tablist">
-          {viewTab('library', t({ id: 'library.view', message: 'Library' }))}
-          {viewTab('captions', captionsLabel)}
-          {viewTab('looks', looksLabel)}
-        </div>
-        <button
-          className="icon-btn"
-          aria-label={t({ id: 'library.addFiles', message: 'Add files' })}
-          title={t({ id: 'library.addFiles.tip', message: 'Add files (Command O)' })}
-          onClick={() => void importMedia()}
-        >
-          <Icon name="plus" />
-        </button>
-      </div>
-      {view === 'captions' ? (
-        <CaptionsPanel />
-      ) : view === 'looks' ? (
-        <LooksPanel />
-      ) : (
-        <>
-          <SearchField className="lib-search" value={query} onChange={setQuery} label={searchLabels[tab]} />
-          <div
-            className="pills lib-pills"
-            role="tablist"
-            aria-label={t({ id: 'library.show', message: 'Show' })}
-            onKeyDown={onKeyDown}
+      {/* Its edge: a double click folds it, or opens it again from the rail. */}
+      <div
+        aria-hidden
+        data-library-edge
+        className="library-edge"
+        onDoubleClick={() => useLibraryPanel.getState().toggle()}
+      />
+      {collapsed && (
+        <div className="library-rail">
+          <button
+            ref={rail}
+            type="button"
+            className="icon-btn"
+            aria-label={t({ id: 'library.open', message: 'Open library' })}
+            title={t({ id: 'library.open.tip', message: 'Open library (Command B)' })}
+            aria-expanded={false}
+            aria-controls={LIBRARY_BODY_ID}
+            onClick={() => {
+              wantFocus.current = true;
+              useLibraryPanel.getState().setCollapsed(false);
+            }}
           >
-            {TABS.map((name) => (
-              <button
-                key={name}
-                className="pill"
-                role="tab"
-                data-tab={name}
-                id={`library-tab-${name}`}
-                aria-selected={tab === name}
-                aria-controls="library-list"
-                tabIndex={tab === name ? 0 : -1}
-                onClick={() => setTab(name)}
-              >
-                {names[name]}
-              </button>
-            ))}
-          </div>
-          <div className="lib-scroll" role="tabpanel" id="library-list" aria-labelledby={`library-tab-${tab}`}>
-            <MediaList tab={tab} query={query} />
-          </div>
-        </>
+            <SpriteIcon name="expand-panel" className="is-mirrored" />
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label={t({ id: 'library.addFiles', message: 'Add files' })}
+            title={t({ id: 'library.addFiles.tip', message: 'Add files (Command O)' })}
+            onClick={() => void importMedia()}
+          >
+            <Icon name="plus" />
+          </button>
+        </div>
       )}
+      <div
+        id={LIBRARY_BODY_ID}
+        ref={body}
+        className="library-body"
+        hidden={collapsed}
+        inert={collapsed}
+        onFocus={() => (inside.current = true)}
+        onBlur={(e) => {
+          const left = e.target;
+          if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
+          // Checked once the event is over: a control still focused only lost the window's focus (Command Tab).
+          queueMicrotask(() => {
+            if (left.isConnected && document.activeElement !== left) inside.current = false;
+          });
+        }}
+      >
+        <div className="panel-head">
+          <div className="view-tabs" role="tablist">
+            {viewTab('library', t({ id: 'library.view', message: 'Library' }))}
+            {viewTab('captions', captionsLabel)}
+            {viewTab('looks', looksLabel)}
+          </div>
+          <button
+            className="icon-btn"
+            aria-label={t({ id: 'library.addFiles', message: 'Add files' })}
+            title={t({ id: 'library.addFiles.tip', message: 'Add files (Command O)' })}
+            onClick={() => void importMedia()}
+          >
+            <Icon name="plus" />
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label={t({ id: 'library.collapse', message: 'Collapse library' })}
+            title={t({ id: 'library.collapse.tip', message: 'Collapse library (Command B)' })}
+            aria-expanded
+            aria-controls={LIBRARY_BODY_ID}
+            onClick={() => useLibraryPanel.getState().setCollapsed(true)}
+          >
+            <Icon name="collapse" className="is-mirrored" />
+          </button>
+        </div>
+        {view === 'captions' ? (
+          <CaptionsPanel />
+        ) : view === 'looks' ? (
+          <LooksPanel />
+        ) : (
+          <>
+            <SearchField className="lib-search" value={query} onChange={setQuery} label={searchLabels[tab]} />
+            <div
+              className="pills lib-pills"
+              role="tablist"
+              aria-label={t({ id: 'library.show', message: 'Show' })}
+              onKeyDown={onKeyDown}
+            >
+              {TABS.map((name) => (
+                <button
+                  key={name}
+                  className="pill"
+                  role="tab"
+                  data-tab={name}
+                  id={`library-tab-${name}`}
+                  aria-selected={tab === name}
+                  aria-controls="library-list"
+                  tabIndex={tab === name ? 0 : -1}
+                  onClick={() => setTab(name)}
+                >
+                  {names[name]}
+                </button>
+              ))}
+            </div>
+            <div className="lib-scroll" role="tabpanel" id="library-list" aria-labelledby={`library-tab-${tab}`}>
+              <MediaList tab={tab} query={query} />
+            </div>
+          </>
+        )}
+      </div>
     </aside>
   );
 }

@@ -1,5 +1,5 @@
 import { Slider as S } from 'radix-ui';
-import { useRef } from 'react';
+import { useRef, type CSSProperties } from 'react';
 import { cn } from './cn';
 
 interface SliderProps {
@@ -16,6 +16,10 @@ interface SliderProps {
   onBlur?: () => void;
   /** The value shown beside the slider (and spoken). */
   format?: (value: number) => string;
+  /** What is spoken for the value, when it says more than the shown text (a hue's colour name). */
+  valueText?: (value: number) => string;
+  /** The track drawn as a picture of what it sets (a hue's spectrum, a colour fading out): no range fill then. */
+  trackStyle?: CSSProperties;
   /** Inert, with its value still shown (why is said beside it). */
   disabled?: boolean;
   className?: string;
@@ -35,6 +39,8 @@ export function Slider({
   onCommit,
   onBlur,
   format,
+  valueText,
+  trackStyle,
   disabled,
   className,
 }: SliderProps) {
@@ -59,13 +65,13 @@ export function Slider({
           keyed.current = false;
         }}
       >
-        <S.Track className="slider-track">
-          <S.Range className="slider-range" />
+        <S.Track className={cn('slider-track', trackStyle && 'slider-track-drawn')} style={trackStyle}>
+          {!trackStyle && <S.Range className="slider-range" />}
         </S.Track>
         <S.Thumb
           className="slider-thumb"
           aria-label={label}
-          aria-valuetext={text}
+          aria-valuetext={valueText ? valueText(value) : text}
           aria-disabled={disabled || undefined}
         />
       </S.Root>

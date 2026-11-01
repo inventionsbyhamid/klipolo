@@ -268,6 +268,15 @@ impl Args {
         Ok(text)
     }
 
+    /// Text as `text` reads it, or None when it is null or left out.
+    pub(super) fn optional_text(&mut self, key: &str) -> Result<Option<String>, ToolError> {
+        if self.map.get(key).is_none_or(Value::is_null) {
+            self.map.remove(key);
+            return Ok(None);
+        }
+        self.text(key).map(Some)
+    }
+
     /// One short noun phrase: no list, at most `MAX_PHRASE_WORDS` words.
     pub(super) fn phrase(&mut self, key: &str) -> Result<String, ToolError> {
         let text = self.text(key)?;
