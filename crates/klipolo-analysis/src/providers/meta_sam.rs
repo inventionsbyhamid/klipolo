@@ -16,6 +16,9 @@ use super::{
 
 /// The most frames SAM takes in one video.
 pub const SAM_MAX_FRAMES: u64 = 15_000;
+/// Through Klipolo's relay, which makes at most ten minutes of video for SAM: 1,180 frames at 2 a second, under its
+/// ten-minute check with a frame to spare. Longer footage goes in parts, and their tracks join.
+pub const RELAY_MAX_FRAMES: u64 = 1_180;
 
 impl SubjectTracker for Meta {
     fn model(&self) -> &str {
@@ -23,7 +26,11 @@ impl SubjectTracker for Meta {
     }
 
     fn max_frames(&self) -> u64 {
-        SAM_MAX_FRAMES
+        if self.client().is_relay() {
+            RELAY_MAX_FRAMES
+        } else {
+            SAM_MAX_FRAMES
+        }
     }
 
     /// SAM's list price: $0.20 a thousand frames, at least 50 billed a video.

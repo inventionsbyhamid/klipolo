@@ -240,3 +240,12 @@ async fn an_answer_meta_stopped_part_way_is_kept_and_said_to_be_cut_off() {
     assert!((tracking.cost_usd - 0.032).abs() < 1e-12);
     server.verify().await;
 }
+
+#[test]
+fn through_the_relay_a_request_is_at_most_just_under_ten_minutes() {
+    // The relay makes at most ten minutes of video for SAM: 1,180 frames at 2 a second, with a frame to spare.
+    let relay = Meta::new(MetaClient::relay(SecretString::from(TOKEN)).with_ledger(None));
+    let key = Meta::new(MetaClient::direct(SecretString::from(KEY)).with_ledger(None));
+    assert_eq!(relay.max_frames(), 1_180);
+    assert_eq!(key.max_frames(), 15_000);
+}
