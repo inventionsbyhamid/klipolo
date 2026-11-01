@@ -19,6 +19,11 @@ export function formatPrecise(us: number): string {
   return `${formatTime(us)}.${tenths}`;
 }
 
+/** A Library row's length: under 10 s to the tenth ("0:00.4", never under "0:00.1"), anything longer to the second. */
+export function formatRowLength(us: number): string {
+  return us < 10_000_000 ? formatPrecise(Math.max(100_000, us)) : formatTime(us);
+}
+
 export function frameUs(fps: number): number {
   return Math.round(US_PER_SEC / fps);
 }

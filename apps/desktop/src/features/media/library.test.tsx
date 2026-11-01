@@ -122,41 +122,55 @@ describe('the Library', () => {
     expect(useUi.getState().libraryTab).toBe('clips');
   });
 
-  it('a_recording_s_files_are_named_by_their_recording', () => {
-    // The fixture's recording: its screen is the main footage, with a camera and a mic beside it. Each row adds that
-    // file alone, so each is named by its source: the screen's row isn't the recording itself.
+  it('a recording’s row adds the whole take: its "+" after the last clip, with the camera its clip plays', async () => {
+    vi.mocked(bridge.apply).mockResolvedValueOnce(revisionPatch(4));
     renderWithProviders(<Library />);
     const clips = within(screen.getByRole('list', { name: 'Your clips' }));
-    expect(clips.getByText('Screen of Recording 1')).toBeInTheDocument();
-    expect(clips.getByText('Camera of Recording 1')).toBeInTheDocument();
-    expect(clips.queryByText('Recording 1')).toBeNull();
-    expect(clips.queryByText('screen.mp4')).toBeNull();
-    expect(clips.queryByText('camera.mp4')).toBeNull();
-    expect(clips.getByRole('button', { name: 'Add Screen of Recording 1 to the end' })).toBeInTheDocument();
-    // Its mic, a minute long, is with the songs.
-    act(() => useUi.setState({ libraryTab: 'music' }));
-    expect(within(screen.getByRole('tabpanel')).getByText('Mic of Recording 1')).toBeInTheDocument();
+    // A recording drags as a whole, onto the Video lane only.
+    fireEvent.pointerDown(clips.getByText('Recording 1').closest('li')!, { button: 0, pointerId: 1 });
+    expect(vi.mocked(beginMediaDrag).mock.calls.at(-1)![1]).toMatchObject({ name: 'Recording 1', durationUs: 60_000_000 });
+    expect(vi.mocked(beginMediaDrag).mock.calls.at(-1)![3]).toBe('main');
+    await userEvent.click(clips.getByRole('button', { name: 'Add Recording 1 to the end' }));
+    await waitFor(() => expect(bridge.apply).toHaveBeenCalledTimes(1));
+    const tx = vi.mocked(bridge.apply).mock.calls[0][0];
+    const { camera } = useProject.getState().snapshot!.project.timeline.main[0];
+    expect(tx.ops).toMatchObject([
+      {
+        type: 'insertClip',
+        index: 2,
+        clip: { source: { type: 'recording', id: 'rec' }, sourceInUs: 0, sourceOutUs: 60_000_000, speed: 1, camera },
+      },
+    ]);
+    await waitFor(() => expect(library.markUsed).toHaveBeenCalledWith('file:/media/screen'));
+    expect(useSelection.getState().selectedId).toBe(tx.ops[0].type === 'insertClip' ? tx.ops[0].clip.id : null);
   });
 
-  it('the search finds a recording’s files by the names the Library shows them by', async () => {
+  it('a recording let go on the Video lane goes in at that cut; one the video doesn’t play yet gets the bubble', async () => {
+    vi.mocked(bridge.apply).mockResolvedValueOnce(revisionPatch(4));
+    const snapshot = useProject.getState().snapshot!;
+    // Its clip is gone from the video: a new one starts as a take lands.
+    snapshot.project.timeline.main = snapshot.project.timeline.main.slice(1);
+    snapshot.project.settings.primaryFormat = 'portrait';
     renderWithProviders(<Library />);
-    const search = screen.getByRole('searchbox', { name: 'Search clips' });
-    await userEvent.type(search, 'camera');
-    expect(listed(screen.getByRole('list', { name: 'Your clips' }))).toEqual(['Camera of Recording 1']);
-    await userEvent.clear(search);
-    await userEvent.type(search, 'recording 1');
-    expect(listed(screen.getByRole('list', { name: 'Your clips' })).sort()).toEqual([
-      'Camera of Recording 1',
-      'Screen of Recording 1',
+    fireEvent.pointerDown(screen.getByText('Recording 1').closest('li')!, { button: 0, pointerId: 1 });
+    act(() => vi.mocked(beginMediaDrag).mock.calls.at(-1)![2]({ lane: 'main', index: 0 }));
+    await waitFor(() => expect(bridge.apply).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(bridge.apply).mock.calls[0][0].ops).toMatchObject([
+      {
+        type: 'insertClip',
+        index: 0,
+        clip: {
+          source: { type: 'recording', id: 'rec' },
+          camera: {
+            mode: 'bubble',
+            modeOverrides: { portrait: 'splitBottom' },
+            shape: 'circle',
+            mirror: true,
+            bubble: { anchor: 'bottomRight', rect: { x: 0.6044, y: 0.76, w: 0.3556, h: 0.2 } },
+          },
+        },
+      },
     ]);
-    // The mic, with the songs: its source's name finds it too.
-    act(() => useUi.setState({ libraryTab: 'music' }));
-    const music = screen.getByRole('searchbox', { name: 'Search music' });
-    await userEvent.clear(music);
-    await userEvent.type(music, 'mic');
-    expect(within(screen.getByRole('tabpanel')).getByText('Mic of Recording 1')).toBeInTheDocument();
-    expect(within(screen.getByRole('tabpanel')).queryByText('music.mp3')).toBeNull();
-    expect(within(screen.getByRole('tabpanel')).queryByText('lofi.wav')).toBeNull();
   });
 
   it('with no clips, the Clips tab says what shows there and where the best moments come from', () => {
@@ -398,6 +412,7 @@ describe('the Library', () => {
     await userEvent.type(screen.getByRole('searchbox', { name: 'Search clips' }), 'zzz');
     expect(screen.getByRole('tabpanel')).toHaveTextContent('No clips match “zzz”.');
     snapshot.project.assets = snapshot.project.assets.filter((a) => a.kind !== 'video');
+    snapshot.project.recordings = [];
     act(() => useProject.setState({ snapshot: structuredClone(snapshot) }));
     expect(screen.getByRole('tabpanel')).toHaveTextContent('No clips yet');
   });

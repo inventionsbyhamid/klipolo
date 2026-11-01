@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { create } from 'zustand';
 import type { Mark } from '../../bindings/Mark';
 import { library, type LibraryMarks } from '../../bridge/library';
@@ -89,4 +90,26 @@ export function marked<T>(items: T[], keyOf: (item: T) => string, marks: Library
     .map((item, index) => ({ item, index, rank: rank(item) }))
     .sort((a, b) => a.rank[0] - b.rank[0] || a.rank[1] - b.rank[1] || a.index - b.index)
     .map((row) => row.item);
+}
+
+/**
+ * The marks a list is in order by: as they were when `context` (a tab and its search) or the marks read from Rust last
+ * changed, or when the pointer or the focus last left the list (`settle`). A star or an add shows on its own item at
+ * once but moves no item while the person is on the list, so the next click lands on the item they aimed at, focus
+ * stays on the star they pressed, and a drag that began meanwhile goes on.
+ */
+export function useSettledMarks(context: string) {
+  const reads = useMarks((s) => s.reads);
+  const key = `${context}\n${reads}`;
+  const [settled, setSettled] = useState(() => ({ key, marks: useMarks.getState().marks }));
+  let marks = settled.marks;
+  if (settled.key !== key) {
+    marks = useMarks.getState().marks;
+    setSettled({ key, marks });
+  }
+  const settle = () => {
+    const now = useMarks.getState().marks;
+    setSettled((s) => (s.marks === now ? s : { key: s.key, marks: now }));
+  };
+  return { marks, settle };
 }
