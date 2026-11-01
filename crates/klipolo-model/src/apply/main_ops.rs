@@ -12,6 +12,7 @@
 use std::collections::HashSet;
 
 use crate::error::{invalid, invalid_with, not_found, Result};
+use crate::fill_focus::trim_to_clip;
 use crate::ids::Id;
 use crate::media::music::is_music;
 use crate::messages::{code, msg};
@@ -110,6 +111,8 @@ pub(super) fn split(p: &mut Project, at_us: Us) -> Result<()> {
     second.fade_in_us = 0;
     clamp_fades(&mut first);
     clamp_fades(&mut second);
+    trim_to_clip(&mut first);
+    trim_to_clip(&mut second);
     // Content from the cut on (including the old end) now plays from the second piece.
     for item in p
         .timeline
@@ -620,6 +623,9 @@ pub(super) fn update_clip_at(
     if let Some(v) = &patch.framing {
         clip.framing = v.clone();
     }
+    if let Some(v) = &patch.fill_focus {
+        clip.fill_focus = v.clone();
+    }
     if let Some(v) = patch.crop {
         clip.crop = (!v.is_none()).then_some(v);
     }
@@ -805,6 +811,7 @@ fn cut_main(main: &mut Vec<Clip>, removed: &Ripple, ids: &mut IdPool) -> Origins
                 None
             };
             clamp_fades(&mut piece);
+            trim_to_clip(&mut piece);
             out.push(piece);
             origins.push((from, *part));
         }

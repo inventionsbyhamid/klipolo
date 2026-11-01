@@ -36,12 +36,14 @@ const FRAMING: Record<string, ClipFraming> = {
   a: {
     framing: { landscape: { mode: 'fit', focusX: 0.5, focusY: 0.5 }, portrait: follows, square: follows },
     follows: true,
+    speaker: false,
     fillCrop: WIDE,
   },
-  b: { framing: { landscape: fill, portrait: fill, square: fill }, follows: false, fillCrop: WIDE },
+  b: { framing: { landscape: fill, portrait: fill, square: fill }, follows: false, speaker: false, fillCrop: WIDE },
   tall: {
     framing: { landscape: fill, portrait: fill, square: fill },
     follows: false,
+    speaker: false,
     fillCrop: { ...WIDE, landscape: { x: 0, y: 0.125, w: 1, h: 0.75 } },
   },
 };

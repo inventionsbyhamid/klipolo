@@ -6,7 +6,7 @@
  */
 export type SessionSpend = { 
 /**
- * Transcripts, word times and scene logs.
+ * Transcripts, word times, scene logs and the footage tracked to follow the speaker.
  */
 analysisUsd: number, 
 /**

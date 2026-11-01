@@ -154,7 +154,7 @@ pub struct AiStatus {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct SessionSpend {
-    /// Transcripts, word times and scene logs.
+    /// Transcripts, word times, scene logs and the footage tracked to follow the speaker.
     pub analysis_usd: f64,
     /// Chat's messages.
     pub chat_usd: f64,

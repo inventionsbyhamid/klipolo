@@ -3,8 +3,8 @@
 //! pages the Captions panel reads; how loud a recorded sound is on each side (`channels`); chat with the open project;
 //! the pictures made for a project; export's slot, start and run; the app's own settings file (`prefs`), the window's
 //! colour for the theme it keeps (`appearance`), what Settings copies for another app to start Klipolo's MCP bridge
-//! (`mcp_config`), and the library's favorites and recently used items (`library_marks`). The Tauri commands
-//! (`main.rs` and its modules) call into it.
+//! (`mcp_config`), the library's favorites and recently used items (`library_marks`), and following the speaker in a
+//! vertical or square version (`speaker`). The Tauri commands (`main.rs` and its modules) call into it.
 
 pub mod analysis;
 pub mod appearance;
@@ -17,6 +17,7 @@ pub mod fonts;
 pub mod library_marks;
 pub mod mcp_config;
 pub mod prefs;
+pub mod speaker;
 
 /// Files made for a project: stickers (cut out of their white background) and title card backgrounds drawn by an
 /// `ImageMaker`, and clips' footage written backward (`reverse`), saved in the project's media folder. Importing files is

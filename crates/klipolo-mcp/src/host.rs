@@ -8,6 +8,16 @@ use klipolo_chat::{Inputs, Job, Moment, Proposal, SpeakerTurn, ToolCall};
 use klipolo_model::{Project, Transaction};
 use serde::{Deserialize, Serialize};
 
+/// What a paid job came to once started.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Started {
+    /// It runs on: what it makes shows in Klipolo's chat panel later, for the person to place.
+    Later,
+    /// It is done already, in the edit as one undo step: what to tell the app (with what it cost), and the revision it
+    /// left.
+    Done { said: String, revision: u64 },
+}
+
 /// The open project as a call compiles against it, all of one revision.
 #[derive(Clone, Debug)]
 pub struct Snapshot {
@@ -148,8 +158,9 @@ pub trait Host: Send + Sync + 'static {
     fn estimate_usd(&self, job: &Job) -> f64;
 
     /// Starts a job that costs money, after the app's own checks (a Meta key or an access code, relay credit for its
-    /// estimate): `NoCredit` with no key or code, `LowCredit` when the credit is below the estimate.
-    fn start_paid(&self, client: &str, job: &Job) -> Result<(), HostError>;
+    /// estimate): `NoCredit` with no key or code, `LowCredit` when the credit is below the estimate. A picture runs on
+    /// (`Started::Later`); following a subject is done before this returns (`Started::Done`).
+    fn start_paid(&self, client: &str, job: &Job) -> Result<Started, HostError>;
 
     /// The apps connected now, by name, sorted: told whenever the list changes.
     fn connected(&self, clients: &[String]);

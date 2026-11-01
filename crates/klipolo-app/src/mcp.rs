@@ -13,7 +13,8 @@
 //!   app. Moments an app points at never touch the slot.
 //! - **Jobs that cost money** start only through `start_paid`, which answers at once: no key or code is `NoCredit`, an
 //!   access code's credit below the estimate (or turned off) `LowCredit`. A picture is asked for as chat asks for one,
-//!   its prompt cleaned and capped, and drawn when the page asks; following and blurring answer as chat does.
+//!   its prompt cleaned and capped, and drawn when the page asks. Following a subject runs as chat's does
+//!   (`follow_subject`): tracked, then landed as one undo step the app made; blurring answers as chat does.
 //! - **Events:** `mcp-reply` (`ExternalReply`) for each change, proposal, moments or picture, told once every lock is
 //!   let go; `mcp-apps` with the apps connected.
 
@@ -24,6 +25,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use klipolo_app::analysis::AnalysisState;
+use klipolo_app::chat::follow::{NO_CROP, NO_ONE_THERE, cost_said, kept_in_frame, phrase_for};
 use klipolo_app::chat::{
     At, ChatReply, ChatSession, Decided, ExternalReply, Findings, Gone, PictureAsk, Projects,
     Waiting, inputs_for, picture_for,
@@ -31,12 +33,15 @@ use klipolo_app::chat::{
 use klipolo_app::credentials::{AiStatus, Credentials};
 use klipolo_app::mcp_config::{config_json, needs_move};
 use klipolo_app::prefs;
+use klipolo_app::speaker::SpeakerEstimate;
 use klipolo_chat::{Job, Moment, Proposal, ToolCall};
 use klipolo_mcp::connection::{self, McpServer};
-use klipolo_mcp::host::{Applied, Host, HostError, OpenProposal, ProposalOutcome, Snapshot};
+use klipolo_mcp::host::{
+    Applied, Host, HostError, OpenProposal, ProposalOutcome, Snapshot, Started,
+};
 use klipolo_mcp::{Mcp, words};
 use klipolo_model::Transaction;
-use klipolo_model::coded::CodedError;
+use klipolo_model::coded::{CodedError, ErrorParam};
 use klipolo_model::text_safety;
 use klipolo_model::time::Us;
 use serde::Serialize;
@@ -179,6 +184,79 @@ impl<S: SessionOf> AppHost<S> {
     /// Where the open project stands now, for a reply's moments and pictures.
     fn at_now(&self) -> Option<At> {
         Projects::now(&*self.projects.session()).map(|now| now.at)
+    }
+
+    /// What following `description` costs on the open project as it is: None without a speaker following or a project.
+    fn follow_estimate(&self, description: &str) -> Option<SpeakerEstimate> {
+        let speaker = self.chat.speaker()?;
+        let now = Projects::now(&*self.projects.session())?;
+        let p = &now.project;
+        let ids: Vec<String> = p.timeline.main.iter().map(|c| c.id.clone()).collect();
+        let phrase = phrase_for(description);
+        Some(
+            self.rt
+                .block_on(speaker.estimate(p, &ids, &p.settings.formats, &phrase)),
+        )
+    }
+
+    /// Follows `description` in every clip that can, in every format whose Fill crops it, as chat's `followSubject`
+    /// does, and lands it as one undo step `client` made (told to the page). Waits for the tracking: SAM answers a
+    /// short in under a minute. Refused with the sentence chat would say.
+    fn follow_subject(&self, client: &str, description: &str) -> Result<Started, HostError> {
+        let speaker = self.chat.speaker().ok_or(HostError::NoCredit)?;
+        // Someone else's proposal waiting would refuse the change: say so before anything is paid for.
+        if someone_else(self.chat.slot().waiting().as_ref(), client) {
+            return Err(HostError::Moved);
+        }
+        let estimate = self.follow_estimate(description).ok_or(HostError::Moved)?;
+        if estimate.clips.is_empty() {
+            return Err(HostError::Refused(NO_CROP.to_owned()));
+        }
+        if let Some(refusal) = estimate.refusal {
+            return Err(HostError::Refused(refusal));
+        }
+        let now = Projects::now(&*self.projects.session()).ok_or(HostError::Moved)?;
+        let p = now.project.clone();
+        let ids: Vec<String> = p.timeline.main.iter().map(|c| c.id.clone()).collect();
+        let phrase = phrase_for(description);
+        let followed = (self.rt)
+            .block_on(speaker.follow(&p, &ids, &p.settings.formats, &phrase))
+            .map_err(HostError::Refused)?;
+        let tx = {
+            let session = self.projects.session();
+            let ops = Projects::now(&*session).map_or_else(Vec::new, |n| followed.ops(&n.project));
+            if ops.is_empty() {
+                return Err(HostError::Refused(NO_ONE_THERE.to_owned()));
+            }
+            Transaction {
+                label: "chat.followSubject".into(),
+                params: Some(
+                    [("description".to_owned(), ErrorParam::from(phrase.as_str()))].into(),
+                ),
+                ops,
+                origin: None,
+            }
+        };
+        let done = {
+            let mut slot = self.chat.slot();
+            if someone_else(slot.waiting().as_ref(), client) {
+                return Err(HostError::Moved);
+            }
+            let session = self.projects.session();
+            let done = commit_by_app(&session, client, &tx, |_| true).map_err(host_error)?;
+            let _ = slot.settle();
+            done
+        };
+        let applied = reply()
+            .applied(done.patch, undo_label(&tx))
+            .on_revision(done.at.revision);
+        self.told(client, done.at.opening, applied);
+        let kept = kept_in_frame(&p, &p.settings.formats, &phrase);
+        let cost = cost_said(followed.paid_usd);
+        Ok(Started::Done {
+            said: format!("{kept}. {cost} The person can undo it in Klipolo."),
+            revision: self.revisions.of(&done.at),
+        })
     }
 
     /// Whether an access code's credit, as the relay says now, is below `usd` (or the code is turned off). Waits at
@@ -418,12 +496,18 @@ impl<S: SessionOf> Host for AppHost<S> {
             Job::MakeSticker(_) | Job::MakeTitleBackground { .. } => {
                 klipolo_meta::pricing::image_usd(1)
             }
+            Job::Follow { description } => self.follow_estimate(description).map_or(0.0, |e| e.usd),
             // Not in Klipolo yet: nothing runs, nothing is spent.
-            Job::Follow { .. } | Job::Blur { .. } => 0.0,
+            Job::Blur { .. } => 0.0,
         }
     }
 
-    fn start_paid(&self, client: &str, job: &Job) -> Result<(), HostError> {
+    fn start_paid(&self, client: &str, job: &Job) -> Result<Started, HostError> {
+        if let Job::Follow { description } = job
+            && self.chat.speaker().is_some()
+        {
+            return self.follow_subject(client, description);
+        }
         let ask = picture_for(job).map_err(|coming| HostError::Refused(coming.to_owned()))?;
         let ask = capped(ask).ok_or_else(|| HostError::Refused(words::NO_PROMPT.to_owned()))?;
         // No key, and no access code this Mac registered: nothing can pay.
@@ -437,7 +521,7 @@ impl<S: SessionOf> Host for AppHost<S> {
         let at = self.at_now();
         let asked = (reply().picture(picture)).on_revision(at.as_ref().map_or(0, |at| at.revision));
         self.told(client, at.map_or(0, |at| at.opening), asked);
-        Ok(())
+        Ok(Started::Later)
     }
 
     fn connected(&self, clients: &[String]) {

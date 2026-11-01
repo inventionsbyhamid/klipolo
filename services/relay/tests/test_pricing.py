@@ -123,11 +123,14 @@ def test_spark_reservation_adds_75_cents_for_media():
     assert cost_usd("responses", "muse-spark-1.3", usage) == pytest.approx(400 * 1.25e-6 + 100 * 4.25e-6 + 0.75)
 
 
-def test_sam_reservation_is_media_plus_the_minimum_frames_and_each_image():
-    with_video = reservation_usage("responses", "sam-3.1", request_bytes=300, has_video=True, images=2)
+def test_sam_reservation_is_the_videos_counted_frames_and_each_image():
+    # A video's frames are counted from its upload, so they bound the cost: no media amount on top.
+    with_video = reservation_usage("responses", "sam-3.1", request_bytes=300, has_video=True, video_frames=15_000, images=2)
+    short = reservation_usage("responses", "sam-3.1", request_bytes=300, has_video=True, video_frames=20)
     images_only = reservation_usage("responses", "sam-3.1", request_bytes=300, images=2)
 
-    assert cost_usd("responses", "sam-3.1", with_video) == pytest.approx(0.75 + 50 * 0.20 / 1000 + 2 * 2.50 / 1000)
+    assert cost_usd("responses", "sam-3.1", with_video) == pytest.approx(15_000 * 0.20 / 1000 + 2 * 2.50 / 1000)
+    assert cost_usd("responses", "sam-3.1", short) == pytest.approx(50 * 0.20 / 1000)
     assert cost_usd("responses", "sam-3.1", images_only) == pytest.approx(0.75 + 2 * 2.50 / 1000)
 
 

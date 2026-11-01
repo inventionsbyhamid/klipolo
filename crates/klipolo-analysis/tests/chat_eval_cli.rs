@@ -85,11 +85,11 @@ async fn every_case_is_judged_and_the_cost_added_up_without_the_key() {
     assert!(stdout.contains("FAIL vertical"), "{stdout}");
     assert!(stdout.contains("     reply: Undone."), "{stdout}");
     assert!(
-        stdout.contains("1/37 passed (target 35); 37 model calls; total $0.06"),
+        stdout.contains("1/38 passed (target 36); 38 model calls; total $0.06"),
         "{stdout}"
     );
     assert!(!stdout.contains(KEY) && !stderr.contains(KEY));
-    assert_eq!(server.received_requests().await.unwrap().len(), 37);
+    assert_eq!(server.received_requests().await.unwrap().len(), 38);
 
     // One case on its own must pass.
     let out = run(&env, &["--only", "undo"]).await;
@@ -174,6 +174,12 @@ fn ideal(message: &str) -> Vec<(&'static str, Value)> {
             portrait,
             ("followSubject", json!({"description": "woman astronaut"})),
         ],
+        "Make a vertical short of this and keep whoever is talking in frame" => {
+            vec![
+                portrait,
+                ("followSubject", json!({"description": "person"})),
+            ]
+        }
         "Blur the kids' faces, we don't have consent from the school" => {
             vec![("blurObjects", json!({"description": "kids' faces"}))]
         }
@@ -278,7 +284,7 @@ async fn ideal_answers_pass_every_case() {
     ];
     let out = run(&env, &[]).await;
     let (stdout, stderr) = text(&out);
-    assert!(stdout.contains("37/37 passed"), "{stdout}{stderr}");
+    assert!(stdout.contains("38/38 passed"), "{stdout}{stderr}");
     // A case that allows more than one answer says which passed: the first for each (a question is the second).
     let sticker = &stdout[stdout.find("PASS plane-sticker").expect("the sticker case")..];
     assert!(
@@ -289,7 +295,7 @@ async fn ideal_answers_pass_every_case() {
     assert_eq!(stdout.matches("     passed on alternative #0").count(), 4);
     assert_eq!(out.status.code(), Some(0));
     // One call each: clip A's missing filler words are told to the person, with no refusal round.
-    assert!(stdout.contains("37 model calls"), "{stdout}");
+    assert!(stdout.contains("38 model calls"), "{stdout}");
     assert!(
         stdout.contains("     reply: There are no filler words to remove."),
         "{stdout}"

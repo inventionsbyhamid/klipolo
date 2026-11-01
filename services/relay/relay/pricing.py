@@ -108,21 +108,24 @@ def reservation_usage(
     audio_seconds: float = 0.0,
     images: int = 0,
     has_video: bool = False,
+    video_frames: int = 0,
 ) -> dict[str, Any]:
     """The most a call could cost, as usage that `cost_usd` prices.
 
     Spark: one input token per request byte (adversarial text can tokenize
     close to that), plus the whole output limit, plus MEDIA_RESERVE_USD
     unless the call is text only.
-    Transcription: the audio's length. SAM (always media): the 50-frame video
-    minimum and each image, plus MEDIA_RESERVE_USD. Muse Image: the most images
-    a call may ask for.
+    Transcription: the audio's length. SAM: its videos' `video_frames` (each
+    at least the 50-frame minimum, counted from the uploads, so they bound the
+    cost) and each image; with no video, each image plus MEDIA_RESERVE_USD.
+    Muse Image: the most images a call may ask for.
     """
     if model in SPARK_MODELS:
         usage: dict[str, Any] = {"input_tokens": request_bytes, "output_tokens": max_output_tokens}
     elif model == SAM_MODEL:
-        usage = {"video_frames_processed": SAM_MIN_FRAMES if has_video else 0, SAM_IMAGES_KEY: images}
-        media = True
+        frames = max(video_frames, SAM_MIN_FRAMES) if has_video else 0
+        usage = {"video_frames_processed": frames, SAM_IMAGES_KEY: images}
+        media = not has_video
     elif model == TRANSCRIBE_MODEL:
         usage = {"audioDurationMs": math.ceil(audio_seconds * 1000)}
         media = False

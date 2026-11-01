@@ -37,11 +37,17 @@ pub fn asr_usd(duration_ms: u64) -> f64 {
 
 /// The cost of a SAM video call: its frames, at least [`SAM_MIN_FRAMES`].
 pub fn sam_usd(usage: Usage) -> f64 {
-    let frames = match usage.video_frames_processed {
+    sam_frames_usd(usage.video_frames_processed)
+}
+
+/// What a SAM video of `frames` frames costs: at least [`SAM_MIN_FRAMES`] are billed, nothing for none. For estimates
+/// before a call.
+pub fn sam_frames_usd(frames: u64) -> f64 {
+    let billed = match frames {
         0 => 0,
         n => n.max(SAM_MIN_FRAMES),
     };
-    frames as f64 * SAM_FRAME_USD
+    billed as f64 * SAM_FRAME_USD
 }
 
 /// The cost of a Muse Image answer with `images` pictures.

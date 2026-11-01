@@ -742,6 +742,11 @@
     "params": []
   },
   {
+    "code": "model.clip.fillFocus",
+    "message": "A clip's speaker path must keep its points in time order and inside the picture, at most 20,000 of them.",
+    "params": []
+  },
+  {
     "code": "model.clip.crop",
     "message": "A crop must leave at least a tenth of the picture each way.",
     "params": []
