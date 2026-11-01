@@ -106,6 +106,9 @@ fn main() {
                 credentials.clone(),
                 sounds,
             );
+            // Following the speaker, its tracked footage kept beside the analysis's in the same cache.
+            let speaker =
+                commands::speaker::load(app.handle(), credentials.clone(), analysis.cache_root());
             // Chat over the open project, what analysis found and the same credentials.
             let chat = commands::chat::load(app.handle(), credentials.clone(), analysis.clone());
             // The person's view as the page last told it, which other apps' calls read as the person's.
@@ -131,6 +134,7 @@ fn main() {
             app.manage(mcp);
             app.manage(view);
             app.manage(analysis);
+            app.manage(speaker);
             app.manage(chat);
             app.manage(commands::export::state_at_launch());
             // Editing copies of the open project's slow files, beside the thumbnails in the media cache. The preview
@@ -183,6 +187,8 @@ fn main() {
             project::project_redo,
             project::project_snapshot,
             commands::framing::clip_framing,
+            commands::speaker::speaker_estimate,
+            commands::speaker::speaker_follow,
             project::project_reveal,
             project::projects_recent,
             media::media_import,
