@@ -2249,9 +2249,12 @@
   grid-area: 1 / 1;
 }
 
+/* Over the video, dark in both themes: the layers' outlines and handles, the snap guides and the safe area keep the
+   dark theme's colours. */
 .frame-handles {
   position: relative;
   pointer-events: none;
+  color-scheme: dark;
 }
 
 .frame-handles[data-settling] {
