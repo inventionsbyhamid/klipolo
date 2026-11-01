@@ -379,9 +379,10 @@ describe('a recording', () => {
       primary: sources[0][0],
       markers: [],
     };
+    const whole = { sourceInUs: 0, sourceOutUs: 65_000_000 };
     const main = [
-      { id: 'clip-take', source: { type: 'recording', id: 'take' } },
-      ...alone.map((id) => ({ id: `clip-${id}`, source: { type: 'asset', id } })),
+      { id: 'clip-take', source: { type: 'recording', id: 'take' }, ...whole },
+      ...alone.map((id) => ({ id: `clip-${id}`, source: { type: 'asset', id }, ...whole })),
     ];
     const assets = sources.map(([, asset]) => asset);
     const snapshot = {
