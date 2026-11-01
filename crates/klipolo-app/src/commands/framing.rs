@@ -1,11 +1,13 @@
 //! How a main-track clip is framed in each format, as the engine draws it: its own framing, else the model's default
 //! (`klipolo_model::framing::effective_framing`, the rule the engine and chat's tools read), and whether it can follow
 //! the cursor at all (`framing::can_follow`), with which part of the footage Fill shows from the centre in each format
-//! (`klipolo_engine::plan::fill_crop`). The clip card's Fit, Fill and Fill focus show this answer, never a copy of
-//! these rules. Read-only: it changes nothing.
+//! (`klipolo_engine::plan::fill_crop`), and whether it can follow the speaker (`subject::clips::footage`: an imported
+//! video or a camera take). The clip card's Fit, Fill and Fill focus show this answer, never a copy of these rules.
+//! Read-only: it changes nothing.
 
 use std::collections::BTreeMap;
 
+use klipolo_analysis::subject::clips::footage;
 use klipolo_engine::plan::fill_crop;
 use klipolo_model::coded::Said;
 use klipolo_model::framing::{can_follow, effective_framing};
@@ -27,6 +29,8 @@ pub struct ClipFraming {
     pub framing: BTreeMap<FormatKind, Framing>,
     /// It can follow the cursor in a vertical or square version: a screen take with a cursor track.
     pub follows: bool,
+    /// It can follow the speaker where Fill crops it: an imported video, or a camera take.
+    pub speaker: bool,
     /// Every format's Fill crop from the centre (source-normalised): narrower than the footage where Fill crops
     /// across, shorter where it crops down, all of it where nothing is cropped; empty for a clip with no video.
     pub fill_crop: BTreeMap<FormatKind, BoxN>,
@@ -60,6 +64,7 @@ pub(crate) fn framing_of(state: &ProjectSessionState, clip_id: &str) -> Result<C
                 .map(|f| (f, effective_framing(p, clip, f)))
                 .collect(),
             follows: can_follow(p, clip),
+            speaker: footage(p, clip).is_some(),
             fill_crop: formats
                 .into_iter()
                 .filter_map(|f| Some((f, fill_crop(p, clip, f)?)))
@@ -163,6 +168,9 @@ mod tests {
         // can't.
         assert!(framing_of(&state, "c2").unwrap().follows);
         assert!(!framing_of(&state, "c1").unwrap().follows);
+        // An imported video can follow its speaker; a screen take follows its cursor instead.
+        assert!(framing_of(&state, "c1").unwrap().speaker);
+        assert!(!framing_of(&state, "c2").unwrap().speaker);
         let c2 = framing_of(&state, "c2").unwrap().framing;
         assert_eq!(
             c2.keys().copied().collect::<Vec<_>>(),

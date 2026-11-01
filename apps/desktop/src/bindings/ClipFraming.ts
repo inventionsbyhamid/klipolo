@@ -16,6 +16,10 @@ framing: { [key in FormatKind]?: Framing },
  */
 follows: boolean, 
 /**
+ * It can follow the speaker where Fill crops it: an imported video, or a camera take.
+ */
+speaker: boolean, 
+/**
  * Every format's Fill crop from the centre (source-normalised): narrower than the footage where Fill crops
  * across, shorter where it crops down, all of it where nothing is cropped; empty for a clip with no video.
  */
