@@ -93,8 +93,8 @@ pub fn discarded_name(job_id: &str) -> String {
 }
 
 /// Removes the staging folders of job creations a crash or a force quit cut off (app start), and the folders of
-/// discards one cut off (`discarded_name`): their process is gone, or, with no id in the name, they haven't changed for
-/// 10 minutes. A live creation or discard is never touched.
+/// discards one cut off (`discarded_name`): only Klipolo's own, `<job id>.<pid>.new` or `.gone`, and only once that
+/// process is gone. A live creation or discard is never touched, nor a folder of any other name.
 pub fn tidy_staging(jobs_root: &Path) {
     let Ok(entries) = std::fs::read_dir(jobs_root) else {
         return;
@@ -107,9 +107,16 @@ pub fn tidy_staging(jobs_root: &Path) {
         else {
             continue;
         };
-        let pid = stem.rsplit_once('.').and_then(|(_, pid)| pid.parse().ok());
-        let modified = entry.metadata().ok().and_then(|m| m.modified().ok());
-        if entry.path().is_dir() && klipolo_platform::process::is_leftover(pid, modified) {
+        let Some((job, pid)) = stem
+            .rsplit_once('.')
+            .and_then(|(job, pid)| Some((job, pid.parse::<u32>().ok()?)))
+        else {
+            continue;
+        };
+        if valid_job_id(job)
+            && entry.path().is_dir()
+            && klipolo_platform::process::is_leftover(Some(pid), None)
+        {
             let _ = std::fs::remove_dir_all(entry.path());
         }
     }
