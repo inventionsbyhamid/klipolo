@@ -318,7 +318,7 @@ describe('Fix the words: a fix’s edges are spaced as the captions draw them', 
     const pick = <T>(xs: T[]) => xs[Math.floor(rnd() * xs.length)];
     const latin = 'the cat sat on a so um go big red now cats Hello, OK! 😀'.split(' ');
     const cjk = '今日 は いい 天気 です。 カメラ を で の 我们 今天， 那个 去 的 相机'.split(' ');
-    // Brand names between scripts, and marks as whisper writes them: on the word before.
+    // Brand names between scripts, and marks as speech-to-text writes them: on the word before.
     const mixed = [...cjk, ...'iPhone iPhone、 iphone， Mac。 Mac AI 「カメラ」 今日、 the 😀'.split(' ')];
     const chars = [...'ab 今日は天的😀の、。，!'];
     const failures: string[] = [];

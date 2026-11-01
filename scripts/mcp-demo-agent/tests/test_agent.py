@@ -291,12 +291,14 @@ def test_the_prompt_asks_for_format_and_captions_before_the_cut():
 
 
 def test_the_reply_prints_with_no_em_or_en_dash(tmp_path):
-    # The reply is what the video shows: a dash between words reads as a comma, one in a range as a hyphen. Only a
-    # dash with no space between two digits is a range: one with spaces after a number is an aside.
+    # The reply is what the video shows: a dash between words reads as a comma, one in a range as a hyphen. Only an
+    # en dash with no space between two digits is a range: an em dash there, or one with spaces after a number, is an
+    # aside.
     said = (
         "Done \u2014 it's vertical with karaoke captions \u2014 and the cut waits for your Apply.\n"
         "I kept 61.2\u201391.0 s\u2014the best moment \u2013 as the teaser, \u2014 nothing else.\n"
         "It's 9:16 \u2014 30 s of the best moment.\n"
+        "It's 9:16\u201430 s of the best moment.\n"
         "I kept 61.2\u201391.0 \u2014 29.8 s in total.\n"
         "\u2014 Captions are karaoke."
     )
@@ -307,6 +309,7 @@ def test_the_reply_prints_with_no_em_or_en_dash(tmp_path):
     assert out == (
         "Done, it's vertical with karaoke captions, and the cut waits for your Apply.\n"
         "I kept 61.2-91.0 s, the best moment, as the teaser, nothing else.\n"
+        "It's 9:16, 30 s of the best moment.\n"
         "It's 9:16, 30 s of the best moment.\n"
         "I kept 61.2-91.0, 29.8 s in total.\n"
         "Captions are karaoke.\n"

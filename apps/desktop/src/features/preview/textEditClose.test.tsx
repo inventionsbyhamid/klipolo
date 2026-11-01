@@ -124,7 +124,7 @@ it('a one-shot press (Background: Box) made while a commit is on its way goes in
   expect(titleIn(rust.project).content).toMatchObject({ style: { background: BOX_COLOR, shadow: false } });
 });
 
-it('a canvas edit with nothing to commit settles as the project closes behind a commit on its way: the title shows again (Minor C)', async () => {
+it('a canvas edit with nothing to commit settles as the project closes behind a commit on its way: the title shows again', async () => {
   rustForText();
   renderOpen(<Stage />);
   await userEvent.dblClick(titleBox());
@@ -133,7 +133,7 @@ it('a canvas edit with nothing to commit settles as the project closes behind a 
   expect(heard.calls).toEqual(['hide title', 'show']);
 });
 
-it('a canvas edit whose title went meanwhile puts its words on the clipboard as the project closes behind a commit (Minor C)', async () => {
+it('a canvas edit whose title went meanwhile puts its words on the clipboard as the project closes behind a commit', async () => {
   const write = vi.fn(() => Promise.resolve());
   Object.defineProperty(navigator, 'clipboard', { value: { writeText: write }, configurable: true });
   rustForText();

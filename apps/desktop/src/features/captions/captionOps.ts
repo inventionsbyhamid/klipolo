@@ -12,7 +12,7 @@ import { commitLatest, commitToggle } from '../../state/commit';
 
 /**
  * The caption edits the panel, the canvas block and the lane make: the same ops chat's tools compile to, each one
- * to, each one undo step through the commit queue, built when it goes in so it builds on the edit before.
+ * undo step through the commit queue, built when it goes in so it builds on the edit before.
  */
 
 const NO_CAPTIONS: CaptionSettings = { enabled: false, place: {}, adSafe: false };
@@ -24,8 +24,8 @@ export function captionSettings(): CaptionSettings {
 
 /**
  * `setCaptions` with `patch` over the settings as they are now: every other field kept, the style included (never
- * sent as null: a never-enabled project's stays unset, and the model writes the formats' default on the first enable,
- * N3). A field set to undefined is cleared (the style's own look, colour or font).
+ * sent as null: a never-enabled project's stays unset, and the model writes the formats' default on the first
+ * enable). A field set to undefined is cleared (the style's own look, colour or font).
  */
 export function setCaptionsOp(patch: Partial<CaptionSettings>): Op {
   return { type: 'setCaptions', captions: { ...captionSettings(), ...patch } };
@@ -113,8 +113,8 @@ export function withChange(look: CaptionLook, change: LookChange): CaptionLook {
 }
 
 /**
- * The ops that give `words` (each once) `change` over their own looks: a word the change leaves alike
- * sends nothing, and the words that come out with one look are one `setWordLook` over their ranges in their file's own
+ * The ops that give `words` (each once) `change` over their own looks: a word the change leaves alike sends nothing,
+ * and the words that come out with one look are one `setWordLook` over their ranges in their file's own time, applied
  * in one pass. One undo step whatever the number of words.
  */
 export function lookOps(words: WordView[], change: LookChange): Op[] {

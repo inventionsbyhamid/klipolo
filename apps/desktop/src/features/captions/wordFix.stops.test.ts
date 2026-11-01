@@ -4,9 +4,8 @@ import type { WordView } from '../../bindings/WordView';
 import { fixOps, joinWords, visibleWords } from './wordFix';
 
 /**
- * "Fix the words" never covers a hidden word, two files' words, or file time played elsewhere
- * A fix stops there, and words taken out where no fix can take them in are
- * hidden instead.
+ * "Fix the words" never covers a hidden word, two files' words, or file time played elsewhere: a fix stops there, and
+ * words taken out where no fix can take them in are hidden instead.
  */
 
 const S = 1_000_000;

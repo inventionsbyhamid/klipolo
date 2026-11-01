@@ -1,4 +1,4 @@
-//! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's context was
+//! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's
 //! context was built from, out as edits.
 //! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, a trim that makes a clip longer, and the
 //!   media: `addMusic`, `addSound`, `addText`, `addImage` and `makeTitleCard`'s title) are one `Transaction` the app

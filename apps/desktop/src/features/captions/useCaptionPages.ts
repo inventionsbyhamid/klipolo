@@ -114,8 +114,8 @@ export function useCaptionPages(
 
 /**
  * `useCaptionPages`, and whether the answer shown is the one for what is asked now (`current`): false while a new
- * revision's or window's answer is on its way and the last one still shows. `fresh`: it
- * was asked at the project's revision now, whatever window. `of`: the revision (with the
+ * revision's or window's answer is on its way and the last one still shows. `fresh`: it was asked at the project's
+ * revision now, whatever window (so a selection can wait out an edit's round trip). `of`: the revision (with the
  * project, its opening and what was said) it was asked at, and `base` the one now: the words a selection holds are
  * behind only when theirs is older.
  */
