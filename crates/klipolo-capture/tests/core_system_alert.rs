@@ -7,6 +7,7 @@ mod common;
 
 use common::harness::{Harness, Src, cfg};
 use klipolo_capture::english::english;
+use klipolo_capture::pipe::PipeEvent;
 use klipolo_capture::protocol::{Command, Event};
 use klipolo_capture::run::core::Effect;
 use klipolo_capture::shell::{ShellOutput, WorkerState};
@@ -171,4 +172,49 @@ fn an_alert_read_as_the_countdown_runs_out_holds_it_before_the_gate() {
     assert_eq!(h.state(), WorkerState::Recording);
     let t0 = h.gate_s();
     assert!((11.0..11.1).contains(&t0), "{t0}");
+}
+
+#[test]
+fn an_alert_s_end_says_the_gate_s_question_as_it_now_stands() {
+    let gate = |missing: &[&str]| Event::Gate {
+        missing: missing.iter().map(|s| s.to_string()).collect(),
+    };
+    // The screen sends nothing real (a blank screen), so the gate asks; an alert comes over the question.
+    let asked = || {
+        let mut h = Harness::new(cfg(&[Src::Screen, Src::Mic], 3));
+        h.command(Command::Start);
+        h.pipe_event("screen", PipeEvent::Blank(true));
+        h.feed(0.0, 4.0);
+        assert!(h.events().contains(&gate(&["screen"])));
+        h.system_alert(true);
+        h
+    };
+    // Answered meanwhile: the question goes as the alert does.
+    let mut h = asked();
+    h.pipe_event("screen", PipeEvent::Blank(false));
+    h.feed(4.0, 6.0);
+    let before = h.events().len();
+    h.system_alert(false);
+    assert_eq!(
+        h.events()[before..],
+        [
+            Event::Countdown { left_s: 3 },
+            gate(&[]),
+            Event::SystemAlert { up: false }
+        ]
+    );
+    h.feed(6.0, 9.5);
+    assert_eq!(h.state(), WorkerState::Recording);
+    // Still unanswered: the question again, and the countdown waits for it.
+    let mut h = asked();
+    h.feed(4.0, 6.0);
+    let before = h.events().len();
+    h.system_alert(false);
+    assert!(
+        h.events()[before..].contains(&gate(&["screen"])),
+        "{:?}",
+        &h.events()[before..]
+    );
+    h.feed(6.0, 12.0);
+    assert_eq!(h.state(), WorkerState::Countdown);
 }

@@ -77,6 +77,7 @@ impl SessionCore {
                         missing: missing.clone(),
                     }));
                     c.asked = Some(missing);
+                    c.asked_aloud = true;
                 }
             }
             GateState::Waiting { .. } => {}
@@ -182,8 +183,8 @@ impl SessionCore {
     /// (macOS's own question, such as the one a take's first stream can raise about the private window picker). While
     /// one is up the countdown waits, even one that ran out since the last input; once it goes the countdown starts
     /// again from the top, so the person has the whole count after answering it and the question is never in the
-    /// recording. Each change is said once (`Event::SystemAlert`), and the HUD says why it waits. Any other
-    /// time it changes nothing.
+    /// recording. Each change is said once (`Event::SystemAlert`), with the gate's question as it now stands when one
+    /// was said, and the HUD says why it waits. Any other time it changes nothing.
     pub fn system_alert(&mut self, up: bool, now_ns: u64) -> Vec<Effect> {
         let mut fx = Vec::new();
         if !self.watches_system_alerts() || self.countdown.alert == up {
@@ -198,8 +199,16 @@ impl SessionCore {
             (c.done_ns, c.running_since) = (0, None);
         }
         // A countdown held or let go says so first (its number and the status; one still starting, once it begins), so
-        // the page has the count from the top by the time it hears the alert went.
+        // the page has the count from the top by the time it hears the alert went, and the question as it now stands
+        // (answered meanwhile, it goes).
         self.advance(now_ns, &mut fx);
+        let c = &self.countdown;
+        if !up && c.asked_aloud {
+            let missing = (c.held_by.clone().map(|id| vec![id]))
+                .or_else(|| c.asked.clone())
+                .unwrap_or_default();
+            fx.push(Effect::Emit(Event::Gate { missing }));
+        }
         fx.push(Effect::Emit(Event::SystemAlert { up }));
         fx
     }
