@@ -4,9 +4,9 @@
 #
 # Writes the set this version of the script makes: target/engine-fixtures/<version>/, the version being the script's
 # POSIX `cksum` (its CRC and length), which the tests compute the same way to find it
-# (crates/klipolo-engine/tests/support/fixture_set.rs). On the build server every lane and gate shares target/engine-fixtures (one
-# folder mounted into each run), and branches carry different versions of this script, so:
-#   - each version has its own set, and a lane never regenerates another branch's;
+# (crates/klipolo-engine/tests/support/fixture_set.rs). On a shared build server every checkout and gate may share
+# target/engine-fixtures (one folder mounted into each run), and branches carry different versions of this script, so:
+#   - each version has its own set, and a checkout never regenerates another branch's;
 #   - one generator runs at a time (a lock on target/engine-fixtures/.lock), and a set is used once it is complete
 #     (`.complete`, `.complete-bench`); run again, it does nothing;
 #   - each file is written under a temporary name beside it and renamed into place, so a test reading it never sees
