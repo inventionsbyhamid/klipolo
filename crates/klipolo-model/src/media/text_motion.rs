@@ -301,25 +301,30 @@ pub fn scene(text: &str, style: &TextStyle, motion: &TextMotion) -> Scene {
         each: Some(motion.stagger_secs()),
         amount: None,
         from: Some(motion.order.unwrap_or(Order::Start).stagger_from()),
-        seed: None,
+        seed: (motion.order == Some(Order::Random)).then_some(0),
     };
     let values: BTreeMap<String, Val> = (motion.from.values().into_iter())
         .map(|(k, v)| (k.to_owned(), v))
         .collect();
     let unit = motion.unit_secs();
     let ease = motion.ease.unwrap_or(Ease::Power2Out);
-    let mut timeline = vec![Tween {
-        from: Some(crate::scene::Selectors::One("#words".to_owned())),
-        at: Some(Val::Num(0.0)),
-        dur: Some(unit),
-        ease: Some(ease.name()),
-        stagger: Some(stagger.clone()),
-        vars: values.clone(),
-        ..Tween::default()
-    }];
+    // Words at rest everywhere have nothing to tween: they show still.
+    let moves = !values.is_empty();
+    let mut timeline = Vec::new();
+    if moves {
+        timeline.push(Tween {
+            from: Some(crate::scene::Selectors::One("#words".to_owned())),
+            at: Some(Val::Num(0.0)),
+            dur: Some(unit),
+            ease: Some(ease.name()),
+            stagger: Some(stagger.clone()),
+            vars: values.clone(),
+            ..Tween::default()
+        });
+    }
     let enter = motion.entrance_secs(text);
     let out = if motion.exit { enter } else { 0.0 };
-    if motion.exit {
+    if motion.exit && moves {
         timeline.push(Tween {
             to: Some(crate::scene::Selectors::One("#words".to_owned())),
             at: Some(Val::Str("out".to_owned())),
@@ -460,10 +465,12 @@ pub fn read(params: &BTreeMap<String, ParamValue>) -> (String, TextStyle, TextMo
         italic: flag("italic").unwrap_or(false),
         color: color("color").unwrap_or(base.color.clone()),
         background: color("highlight"),
-        outline: color("outline").map(|c| TextOutline {
-            color: c,
-            width: within(number("outlineWidth"), (0.0, 100.0)).unwrap_or(0.0),
-        }),
+        // A width set on the card with no colour stored draws the definition's black.
+        outline: {
+            let width = within(number("outlineWidth"), (0.0, 100.0)).unwrap_or(0.0);
+            (color("outline").or_else(|| (width > 0.0).then(|| "#000000".to_owned())))
+                .map(|color| TextOutline { color, width })
+        },
         shadow: flag("shadow").unwrap_or(base.shadow),
         align: match text_of("align") {
             Some("left") => TextAlign::Left,
@@ -480,17 +487,45 @@ fn is_color(c: &str) -> bool {
     matches!(hex.len(), 6 | 8) && hex.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
-/// The scene a layer of [`SOURCE`] with these settings draws: [`read`], then [`scene`] (a text past what [`problem`]
-/// lets through comes in by word).
+/// The scene a layer of [`SOURCE`] with these settings draws: [`read`], then [`scene`], always one that checks, so animated
+/// words never vanish whatever the card stores. A text past what [`problem`] lets through comes in by word; a scene the
+/// check refuses (too many units blurring at once) comes in without its blur (a fade when nothing else moves), then by
+/// word, then by line, and as a last resort still.
 pub fn scene_of(params: &BTreeMap<String, ParamValue>) -> Scene {
     let (text, style, mut motion) = read(params);
     if problem(&text, &motion).is_some() {
-        motion.unit = Unit::Word;
-        motion.stagger_secs = motion
-            .stagger_secs
-            .map(|s| s.min(MAX_ENTRANCE_SECS / Unit::Word.count(&text) as f64 / 2.0));
+        by(&mut motion, Unit::Word, &text);
     }
+    let checks = |m: &TextMotion| {
+        let s = scene(&text, &style, m);
+        crate::scene::check_scene(&s, crate::contrib::Catalog::builtin())
+            .is_ok()
+            .then_some(s)
+    };
+    if let Some(s) = checks(&motion) {
+        return s;
+    }
+    if motion.from.blur.take().is_some() && motion.from.is_rest() {
+        motion.from.opacity = Some(0.0);
+    }
+    for unit in [motion.unit, Unit::Word, Unit::Line] {
+        let mut m = motion.clone();
+        if unit != m.unit {
+            by(&mut m, unit, &text);
+        }
+        if let Some(s) = checks(&m) {
+            return s;
+        }
+    }
+    motion.from = From::default();
     scene(&text, &style, &motion)
+}
+
+/// `m` coming in by `unit`, its stagger short enough that the entrance stays within [`MAX_ENTRANCE_SECS`].
+fn by(m: &mut TextMotion, unit: Unit, text: &str) {
+    m.unit = unit;
+    let most = MAX_ENTRANCE_SECS / unit.count(text) as f64 / 2.0;
+    m.stagger_secs = Some(m.stagger_secs().min(most));
 }
 
 fn spec(key: &str, label: &str, kind: ParamKind) -> ParamSpec {

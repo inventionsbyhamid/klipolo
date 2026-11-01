@@ -63,3 +63,29 @@ fn other_sources_are_the_registrys_own_scenes() {
             .is_none()
     );
 }
+
+/// A 20-letter blur-in title typed into the card still draws: the registry never answers None for animated words.
+#[test]
+fn animated_words_edited_on_the_card_still_draw() {
+    let reg = Registry::builtin();
+    let motion = TextMotion {
+        unit: Unit::Letter,
+        from: From {
+            blur: Some(12.0),
+            opacity: Some(0.0),
+            ..From::default()
+        },
+        unit_secs: None,
+        ease: None,
+        stagger_secs: None,
+        order: None,
+        exit: false,
+    };
+    let mut params = text_motion::params("Day one", &TextStyle::default(), &motion);
+    params.insert(
+        "title".into(),
+        ParamValue::Text("A twenty letter titl".into()),
+    );
+    let scene = reg.scene_for(&text_motion::source(), &params);
+    assert!(scene.is_some_and(|s| s.facts.animates));
+}

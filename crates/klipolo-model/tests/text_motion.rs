@@ -254,3 +254,74 @@ fn words_that_become_animated_words_are_no_removal() {
     let after = apply_ops(&before, &animated).unwrap();
     assert!(klipolo_model::risk::removals(&before, &after).is_empty());
 }
+
+/// Settings the card can store make a scene that always checks, so animated words never vanish: a 20-letter blur-in
+/// title typed into the card, and the longest words at the card's extremes (letter by letter, the most blur, no fade,
+/// no stagger, leaving the same way), each in turn by letter, word and line.
+#[test]
+fn any_settings_the_card_stores_draw_a_scene_that_checks() {
+    use klipolo_model::params::ParamValue;
+    let blur_in = TextMotion {
+        from: From {
+            blur: Some(12.0),
+            opacity: Some(0.0),
+            ..From::default()
+        },
+        unit_secs: None,
+        stagger_secs: None,
+        ..pop_in(Unit::Letter)
+    };
+    let mut params = text_motion::params("Day one", &TextStyle::default(), &blur_in);
+    check_scene(&scene_of(&params), Catalog::builtin()).expect("as chat made it");
+    params.insert("title".into(), ParamValue::Text("A twenty letter titl".into()));
+    check_scene(&scene_of(&params), Catalog::builtin()).expect("as the card left it");
+    let extreme = TextMotion {
+        from: From {
+            blur: Some(40.0),
+            opacity: Some(1.0),
+            ..From::default()
+        },
+        unit_secs: Some(5.0),
+        stagger_secs: Some(0.0),
+        exit: true,
+        ..pop_in(Unit::Letter)
+    };
+    let longest = "word ".repeat(40);
+    for by in ["letter", "word", "line"] {
+        let mut params = text_motion::params(longest.trim(), &TextStyle::default(), &extreme);
+        params.insert("by".into(), ParamValue::Text(by.into()));
+        let s = scene_of(&params);
+        check_scene(&s, Catalog::builtin()).unwrap_or_else(|p| panic!("by {by}: {p:#?}"));
+        assert!(!s.timeline.is_empty(), "by {by}: still moves");
+    }
+}
+
+/// With `order` random and an exit, the words leave in the order they came in.
+#[test]
+fn a_random_order_leaves_as_it_came() {
+    let shuffled = TextMotion {
+        order: Some(Order::Random),
+        exit: true,
+        ..pop_in(Unit::Word)
+    };
+    let s = scene("One two three four", &TextStyle::default(), &shuffled);
+    let seeds: Vec<_> = (s.timeline.iter())
+        .map(|t| match &t.stagger {
+            Some(klipolo_model::scene::StaggerArg::Spec { seed, .. }) => *seed,
+            _ => None,
+        })
+        .collect();
+    assert_eq!(seeds.len(), 2);
+    assert!(seeds[0].is_some() && seeds[0] == seeds[1], "{seeds:?}");
+}
+
+/// An outline width set on the card with no colour stored draws the definition's black outline.
+#[test]
+fn an_outline_width_alone_draws_the_default_colour() {
+    use klipolo_model::params::ParamValue;
+    let mut params = text_motion::params("Hi", &TextStyle::default(), &pop_in(Unit::Word));
+    params.insert("outlineWidth".into(), ParamValue::Number(6.0));
+    let (_, style, _) = text_motion::read(&params);
+    let outline = style.outline.expect("an outline");
+    assert_eq!((outline.color.as_str(), outline.width), ("#000000", 6.0));
+}
