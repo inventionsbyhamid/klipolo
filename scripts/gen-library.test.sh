@@ -83,12 +83,15 @@ def _():
 @check("manifest_lists_the_pack")
 def _():
     want = {
-        "sound": ["whoosh", "swoosh", "pop", "click", "ding", "chime", "rise", "sparkle"],
+        "sound": ["whoosh", "swoosh", "pop", "click", "ding", "chime", "rise", "sparkle",
+                  "impact", "bass-drop", "long-riser", "swipe-left", "swipe-right", "glitch", "record-scratch",
+                  "shutter", "typing", "notification", "success", "error", "pop-high", "bubbles", "boing", "drum-hit",
+                  "tick-tock"],
         "music": ["soft-ambient", "upbeat-loop"],
         "sticker": ["heart", "star", "arrow", "circle", "check", "bubble"],
     }
     assert {k: [i["id"] for i in of(k)] for k in want} == want, [i["id"] for i in items]
-    assert len(items) == 16 and manifest["license"] == "CC0-1.0" and manifest["creator"] == "Klipolo"
+    assert len(items) == 33 and manifest["license"] == "CC0-1.0" and manifest["creator"] == "Klipolo"
     for i in items:
         assert i["license"] == "CC0-1.0", i["id"]
         assert i["name"] and not any(d in i["name"] for d in "–—"), i["id"]
