@@ -3,7 +3,7 @@
 //! them by its change (`slip_separated`); Sync's re-time moves each to where the new runs play the recording moment it
 //! played (`follow_runs`), keeping its cuts, fades, extensions and volume.
 //!
-//! **Tied**: the layer's own record, `ItemContent::tie`, set when `DetachSource` separates it or Sync
+//! **Tied:** the layer's own record, `ItemContent::tie`, set when `DetachSource` separates it or Sync
 //! lines it up, kept by splits and edge trims, dropped by a hand slip of its file time. Never time proximity: a J-cut
 //! lead over the previous clip and the pieces Sync keeps over B-roll follow; a reused stretch or a voice-over of the
 //! file, which nothing tied, is left alone.
@@ -163,9 +163,9 @@ pub(super) fn slip_separated(
 }
 
 /// Sync's re-time: each tied layer plays, from its start, the recording moment it played before: its file time mapped
-/// time mapped onto the recording through `old` (the source's runs and nudge before the change), then back into the file
-/// through `runs` (nudge 0), a sound layer at its new run's drift; everything else about it kept. Returns the layers cut
-/// at their start.
+/// onto the recording through `old` (the source's runs and nudge before the change), then back into the file through
+/// `runs` (nudge 0), a sound layer at its new run's drift; everything else about it kept. Returns the layers cut at
+/// their start.
 pub(super) fn follow_runs(
     p: &mut Project,
     old: &RecordingSource,

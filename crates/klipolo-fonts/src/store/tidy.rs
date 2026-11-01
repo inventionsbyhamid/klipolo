@@ -1,8 +1,8 @@
-//! What a quit or crash left in the store, removed at start: `.part` and temporary
-//! files, and in a folder whose download didn't finish, any face that isn't recorded or no longer hashes to what was
-//! written. Finished faces stay for the next download to resume from, unless Google's catalogue no longer offers that
-//! version: such a download can never resume, so its folder goes whole. One folder's disk error never stops the
-//! others being tidied; the first is said once all are done.
+//! What a quit or crash left in the store, removed at start: `.part` and temporary files, and in a folder whose
+//! download didn't finish, any face that isn't recorded or no longer hashes to what was written. Finished faces stay
+//! for the next download to resume from, unless Google's catalogue no longer offers that version: such a download can
+//! never resume, so its folder goes whole. One folder's disk error never stops the others being tidied; the first is
+//! said once all are done.
 
 use std::collections::HashSet;
 use std::fs;

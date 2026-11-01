@@ -15,8 +15,7 @@ const EPS: f64 = 1e-9;
 ///   a first shot arriving late from the span's start is settled, and holds the box, from its arrival;
 /// - each action in the span that no kept shot frames (or that it keeps in view, `plan_keeping`), found from the input
 ///   itself, lies inside the view: a click or a pause at its start, a typing span while it lasts; outside the person's
-///   zooms, the moves into and out of them, and the link between two of
-///   them;
+///   zooms, the moves into and out of them, and the link between two of them;
 /// - the path holds each Auto shot's view from its first event to its hold's end, and the person's zoom as they made
 ///   it (a glide moves only the centre, inside the rules above);
 /// - each move between Auto shots or the span's ends lasts `move_min_us..=move_max_us`;
@@ -168,8 +167,7 @@ pub fn plan_capped(input: &Input, max_rounds: u32) -> (Plan, u32) {
 /// Each action in the span the plan was given that no kept shot frames shows in the view, at the times above that
 /// fall before `span`.
 fn dropped_in_view(p: &Plan, span: Us) -> Result<(), String> {
-    // Kept events carry their `until` cut to the span's end (`shots::prepare`): the input is matched the same way (the
-    // same cut).
+    // Kept events carry their `until` cut to the span's end (`shots::prepare`): the input is matched the same way.
     let end = p.span.1;
     let key = |at: Us, until: Us, r: Rect01| {
         let until = until.max(at).min(end.max(at));
@@ -220,7 +218,7 @@ fn dropped_in_view(p: &Plan, span: Us) -> Result<(), String> {
 
 /// When each of the person's zooms holds the view, read from the keys: from the start of the move into it to the end of
 /// the move out. The move in arrives at its start, or early only on the link from another of their zooms, which is
-/// theirs too (spec line 5).
+/// theirs too.
 fn person_spans(p: &Plan) -> Vec<(Us, Us)> {
     let (k, mine) = (&p.keys, |s: &&super::Shot| s.weight == Weight::Person);
     let ended = |v: View, at: Us| {

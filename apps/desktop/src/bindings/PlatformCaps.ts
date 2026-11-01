@@ -30,7 +30,7 @@ memoryBytes: number,
  */
 physicalCores: number, 
 /**
- * The render worker can sandbox itself here (`process::sandbox_self`: macOS's Seatbelt). Windows and Linux get
- * theirs at W and L; until then agent-made code is never checked there, so the Make tools are off.
+ * The render worker can sandbox itself here (`process::sandbox_self`: macOS's Seatbelt). Windows and Linux have no
+ * worker sandbox yet, so agent-made code is never checked there and the Make tools are off.
  */
 workerSandbox: boolean, };

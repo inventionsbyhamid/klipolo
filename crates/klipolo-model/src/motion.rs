@@ -1,8 +1,7 @@
-//! Layer motion: keyframed position, scale, rotation and
-//! opacity with eases on every visual layer and on the camera bubble, plus enter, exit and loop presets. One key and
-//! ease type and one evaluator, pure and allocation-free, shared later by `scene@1`. Presets are contributions
-//! (`ContribKind::Motion`) that the engine evaluates per format; this module owns the keys, the eases and
-//! what edits do to them.
+//! Layer motion: keyframed position, scale, rotation and opacity with eases on every visual layer and on the camera
+//! bubble, plus enter, exit and loop presets. One key and ease type and one evaluator, pure and allocation-free, shared
+//! by `scene@1`. Presets are contributions (`ContribKind::Motion`) that the engine evaluates per format; this module
+//! owns the keys, the eases and what edits do to them.
 
 use std::collections::BTreeMap;
 

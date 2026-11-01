@@ -149,7 +149,7 @@ pub(crate) fn volume_name(path: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     /// It moves a temp folder into this Mac's own Trash (and deletes it there at once), so the ordinary suite never
-    /// runs it: the user's Trash is left alone. Run it by hand on a Mac:
+    /// runs it: the person's own Trash is left alone. Run it by hand on a Mac:
     /// `cargo test -p klipolo-platform --lib -- --ignored a_folder_goes_to_the_trash`.
     #[test]
     #[ignore = "touches this Mac's real Trash: run by hand with --ignored"]

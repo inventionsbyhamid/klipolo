@@ -1,5 +1,5 @@
-//! Every take's facts on the timeline: one mapping through the screen's sync nudge,
-//! clip speed and cuts. Its types are the planner context's (`klipolo-actions` re-exports them), so the engine's camera
+//! Every take's facts on the timeline: one mapping through the screen's sync nudge, clip speed and cuts. Its types are
+//! the planner context's (`klipolo-actions` re-exports them), so the engine's camera and chat plan from the same focus,
 //! and nothing converts on each call.
 //!
 //! A fact at recording time `t` shows with the screen's frame there, which the screen's nudge moved to `t + nudge`;

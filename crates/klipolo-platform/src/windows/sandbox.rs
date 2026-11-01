@@ -1,5 +1,5 @@
-//! The render worker's sandbox on Windows: `Unsupported` until W (a restricted job object: no network, a low-integrity
-//! token, writes only to the session's `tmp/` and `out/`), so the app sends this worker no agent code.
+//! The render worker's sandbox on Windows: `Unsupported` for now (later, a restricted job object: no network, a
+//! low-integrity token, writes only to the session's `tmp/` and `out/`), so the app sends this worker no agent code.
 
 use crate::process::sandbox::{Applied, SandboxProfile};
 
@@ -8,7 +8,7 @@ pub(crate) fn sandbox_self(_profile: &SandboxProfile) -> Result<Applied, String>
     Ok(Applied::Unsupported)
 }
 
-/// Nothing yet (W: the job object's own limits).
+/// Nothing yet (later: the job object's own limits).
 pub(crate) fn limit_file_size(_bytes: u64) -> std::io::Result<()> {
     Ok(())
 }
@@ -18,17 +18,17 @@ pub(crate) fn raise_open_files(_target: u64) -> std::io::Result<u64> {
     Ok(0)
 }
 
-/// Not known yet (W: the job object ends the worker with the app).
+/// Not known yet (later: the job object ends the worker with the app).
 pub(crate) fn parent_id() -> Option<u32> {
     None
 }
 
-/// Not set yet (W).
+/// Not set yet.
 pub(crate) fn file_size_limit() -> Option<u64> {
     None
 }
 
-/// Not read-only (W: the job object's own rules).
+/// Not read-only (later: the job object's own rules).
 pub(crate) fn unlock(path: &std::path::Path) {
     if let Ok(meta) = path.symlink_metadata() {
         let mut permissions = meta.permissions();
@@ -45,5 +45,5 @@ pub(crate) fn metal_cache() -> Option<std::path::PathBuf> {
     None
 }
 
-/// Nothing: the launcher passes the worker no handles but its pipes (W: the job object's own rules).
+/// Nothing: the launcher passes the worker no handles but its pipes (later: the job object's own rules).
 pub(crate) fn close_inherited() {}

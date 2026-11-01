@@ -1,6 +1,6 @@
-//! One caption style as data: the fixed vocabulary every style file speaks, read from
-//! `captions/styles/<key>.json` (built-ins) or a pack. The engine draws any style generically; nothing here names
-//! a style. `check` (in `style_check.rs`) refuses a file that breaks a rule, naming the field.
+//! One caption style as data: the fixed vocabulary every style file speaks, read from `captions/styles/<key>.json`
+//! (built-ins) or, later, a pack. The engine draws any style generically; nothing here names a style. `check` (in
+//! `style_check.rs`) refuses a file that breaks a rule, naming the field.
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -136,7 +136,7 @@ impl<T: Clone> PerFormat<T> {
 }
 
 impl PerFormat<f64> {
-    /// A size for `f`: the square's own, else the portrait's × 0.9 (research: square and 4:5 use 0.9 of portrait).
+    /// A size for `f`: the square's own, else the portrait's × 0.9 (square and 4:5 read best at 0.9 of portrait).
     pub fn size(&self, f: FormatKind) -> f64 {
         match (f, self.square) {
             (FormatKind::Square, None) => self.portrait * 0.9,

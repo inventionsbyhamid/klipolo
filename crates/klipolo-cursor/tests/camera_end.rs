@@ -1,8 +1,7 @@
 //! The span's ends are the person's, as their own zooms are. The end cuts the last shot's hold: an Auto zoom a person
-//! an Auto zoom a person ends shortly after the action, while the cursor still rests or the typing goes on, still
-//! zooms, holding until the move out that reaches the whole frame by the end, never before its last event. The start
-//! lets the first shot arrive late: a zoom whose click comes
-//! right at its start arrives as soon as it legally can.
+//! ends shortly after the action, while the cursor still rests or the typing goes on, still zooms, holding until the
+//! move out that reaches the whole frame by the end, never before its last event. The start lets the first shot arrive
+//! late: a zoom whose click comes right at its start arrives as soon as it legally can.
 
 mod common;
 

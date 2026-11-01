@@ -1,5 +1,5 @@
-//! The eases scenes and layer motion share: the published equations, springs that
-//! settle into their key and never leave the ease bounds, and GSAP's and CSS's names read and written.
+//! The eases scenes and layer motion share: the published equations, springs that settle into their key and never leave
+//! the ease bounds, and GSAP's and CSS's names read and written.
 
 use klipolo_model::ease_names;
 use klipolo_model::motion::{spring_peak, Ease, EASE_Y};

@@ -12,7 +12,7 @@ export type Snapshot = { project: Project, history: HistoryState,
  */
 readOnly?: string, 
 /**
- * Which opening of the project this is, when the host says (revisions restart at 0 on each): a change the host tells
- * of later, with no reply of its own, is matched to it by project, opening and revision.
+ * Which opening of the project this is, when the host says (revisions restart at 0 on each): a change the host
+ * tells of later, with no reply of its own, is matched to it by project, opening and revision.
  */
 opening?: number, };

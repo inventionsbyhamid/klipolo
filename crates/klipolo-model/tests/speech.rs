@@ -56,7 +56,7 @@ fn transcript(words: Vec<Word>) -> Arc<Transcript> {
     Arc::new(Transcript {
         key: "k".into(),
         language: "en".into(),
-        model: "speech-whisper-small-q5_1".into(),
+        model: "muse-voice-transcribe-1.0".into(),
         covered_us: secs(300.0),
         complete: true,
         words,
@@ -483,9 +483,9 @@ fn a_fix_split_into_pieces_reads_once() {
     }
 }
 
-/// Within one use of a fix's words, the first piece still on the timeline reads it,
-/// whichever of its words it holds; a copy is another use and reads it again. So the person's correction shows once
-/// per time its words play: never twice for one use, and never not at all while a word of it plays.
+/// Within one use of a fix's words, the first piece still on the timeline reads it, whichever of its words it holds; a
+/// copy is another use and reads it again. So the person's correction shows once per time its words play: never twice
+/// for one use, and never not at all while a word of it plays.
 #[test]
 fn a_fix_reads_once_on_its_first_piece_still_on_the_timeline() {
     let (p, speech) = imported(vec![
@@ -615,8 +615,8 @@ fn a_fix_needs_media_a_range_and_one_short_line() {
     );
 }
 
-/// Tag characters draw nothing: a correction is stored without them, so it can't carry text the person never sees
-///; a correction of tags only is one nobody could see.
+/// Tag characters draw nothing: a correction is stored without them, so it can't carry text the person never sees;
+/// a correction of tags only is one nobody could see.
 #[test]
 fn a_fix_is_stored_without_tag_characters() {
     let (p, _) = recorded();

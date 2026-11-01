@@ -95,9 +95,8 @@ pub fn title_start(p: &Project, on: &str) -> Us {
 }
 
 /// Sync's part of the frozen shapes: a synced recording whose camera file has sound starting 40 ms after its picture
-/// picture (`audioLeadUs`) and fills the gaps in the recorded sound (`fillsGaps`), and whose mic starts
-/// inside its file, added to `p`, and Sync's ops (`useRecording`,
-/// `addRecordingSource`, re-timed runs) for the ops golden.
+/// (`audioLeadUs`) and fills the gaps in the recorded sound (`fillsGaps`), and whose mic starts inside its file, added
+/// to `p`, and Sync's ops (`useRecording`, `addRecordingSource`, re-timed runs) for the ops golden.
 pub fn sync_shapes(p: &mut Project) -> Vec<klipolo_model::ops::Op> {
     use klipolo_model::ops::{Op, SourcePatch};
     p.assets.push(Asset {

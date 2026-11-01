@@ -100,9 +100,9 @@ fn nothing_goes_out_once_cancelled() {
     assert_eq!(server.total_requests(), 0);
 }
 
-/// A finished face is kept by what was written (its SHA-256 and
-/// a parse), not by the catalogue's size, and across a quit too: start-up `tidy` keeps it, and the next download fetches
-/// only the rest. A face changed since is fetched again.
+/// A finished face is kept by what was written (its SHA-256 and a parse), not by the catalogue's size, and across a
+/// quit too: start-up `tidy` keeps it, and the next download fetches only the rest. A face changed since is fetched
+/// again.
 #[test]
 fn a_finished_face_survives_a_quit_and_a_catalogue_size_that_differs() {
     let server = Server::start();

@@ -1,5 +1,4 @@
 //! How the crop's centre moves toward its target, one step at a time in O(1):
-//! in O(1):
 //! - **the wanted centre** is where the crop is while the target lies inside its central dead zone. Once the target
 //!   leaves it, the crop heads for the least shift that brings it back inside. A target box larger than the dead zone
 //!   is kept `safe` from the crop's edges instead, and one larger than that room is centred. It is always inside the

@@ -1,7 +1,7 @@
-//! How the follow-crop moves:
-//! it holds while the cursor is inside its central dead zone and brings it back inside once it
-//! leaves. It moves up to twice as fast only while the cursor is in its margin, ramped across the margin's depth, along
-//! a side it can move, and never for a click still to come, slowing to its limit before one rather than in one step.
+//! How the follow-crop moves: it holds while the cursor is inside its central dead zone and brings it back inside once
+//! it leaves. It moves up to twice as fast only while the cursor is in its margin, ramped across the margin's depth,
+//! along a side it can move, and never for a click still to come, slowing to its limit before one rather than in one
+//! step.
 
 mod common;
 

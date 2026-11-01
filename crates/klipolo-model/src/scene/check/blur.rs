@@ -5,7 +5,7 @@
 //! - while it moves, the units its stagger lets overlap (an `amount` spread over every member the tween selects),
 //!   twice as many when units start in pairs (`from: center` or `edges`), and that many again for each repeat; a
 //!   tween repeating forever counts every unit. Repeats are per unit, as the tween's span assumes, and the
-//!   18 runs them so. Yoyo with an odd repeat ends on the start values, which finished units then hold;
+//!   evaluator runs them so. Yoyo with an odd repeat ends on the start values, which finished units then hold;
 //! - several sources on one node add up, at most every unit; a tween's moving units count once across all its
 //!   targets, as its stagger group draws them, in nested layers that ramp up and down
 //!   (`moving`), while held units count on each node;
@@ -13,10 +13,10 @@
 //!   through a tween's span, the tween adds only the rest, none when they count all. So
 //!   "SUBSCRIBE" blurring in with `to` from a blurred, invisible rest counts 9, not 18.
 //!
-//! A unit held at opacity exactly 0 isn't counted, but only while
+//! The rule for opacity 0: a unit held at opacity exactly 0 isn't counted, but only while
 //! nothing else writes the node's opacity: no opacity keys (unless the blur comes from those keys), no other tween
-//! setting its opacity, and no opacity modifier on it or on a group above it. **A binding condition:
-//! the renderer culls units on their evaluated opacity (after keys, tweens and modifiers) before it blurs them.** So
+//! setting its opacity, and no opacity modifier on it or on a group above it. **The renderer must cull units on
+//! their evaluated opacity (after keys, tweens and modifiers) before it blurs them.** So
 //! "letters blur in" from opacity 0 fits however many letters there are.
 
 use std::borrow::Cow;
@@ -215,7 +215,7 @@ impl Writers {
     }
 }
 
-/// Exactly 0: not drawn (as above).
+/// Exactly 0: not drawn (the rule above).
 fn zero(v: Option<&Val>) -> bool {
     matches!(v, Some(Val::Num(n)) if *n == 0.0)
 }

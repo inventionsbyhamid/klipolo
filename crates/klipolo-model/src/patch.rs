@@ -210,8 +210,8 @@ pub fn diff(a: &Project, b: &Project) -> ProjectPatch {
 }
 
 /// The patch that does `first`, then `then`, for two patches made one after the other on one project:
-/// `apply(a, &compose(f, t)) == apply(&apply(a, f)?, t)`. A part `then` sets wins; clips and items are merged by id, the
-/// later one kept. The history uses it to fold a step into the one before it. O(patch).
+/// `apply(a, &compose(f, t)) == apply(&apply(a, f)?, t)`. A part `then` sets wins; clips and items are merged by id,
+/// the later one kept. The history uses it to fold a step into the one before it. O(patch).
 pub fn compose(first: &ProjectPatch, then: &ProjectPatch) -> ProjectPatch {
     fn either<T: Clone>(first: &Option<T>, then: &Option<T>) -> Option<T> {
         then.as_ref().or(first.as_ref()).cloned()

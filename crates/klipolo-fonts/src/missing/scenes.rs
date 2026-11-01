@@ -1,9 +1,9 @@
-//! Motion graphics in the missing-font rules: each text of a scene layer, as the app lists it
-//! from the layer's instance (`make::fonts::scene_fonts`), runs the same per-font check: the one resolver's stand-in
-//! rule (a Google family whose version isn't downloaded, an installed family this computer lacks; a family present at
-//! another weight isn't missing: its nearest face draws), and CJK text without its Noto face. A use from a `Font`
-//! setting is listed under `scene_params` (what Replace writes), never under `layers`; one written inside a saved scene
-//! version is listed with neither, so only "Export with Inter instead" covers it.
+//! Motion graphics in the missing-font rules: each text of a scene layer, as the app lists it from the layer's instance
+//! (`make::fonts::scene_fonts`), runs the same per-font check as a text layer: the one resolver's stand-in rule (a
+//! Google family whose version isn't downloaded, an installed family this computer lacks; a family present at another
+//! weight isn't missing: its nearest face draws), and CJK text without its Noto face. A use from a `Font` setting is
+//! listed under `scene_params` (what Replace writes), never under `layers`; one written inside a saved scene version is
+//! listed with neither, so only "Export with Inter instead" covers it.
 
 use std::collections::HashMap;
 

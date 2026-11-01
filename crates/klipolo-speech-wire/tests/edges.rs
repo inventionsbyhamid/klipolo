@@ -158,7 +158,7 @@ fn a_joined_edge_in_connected_speech_leads_the_recognizers_time_not_the_rise() {
 }
 
 /// The envelope is one pass over the samples and each edge looks at 33 hops: a minute of sound with 170 words is
-/// refined in well under a millisecond a second of sound even in a debug build (the report states the release cost).
+/// refined in well under a millisecond a second of sound even in a debug build (a release build is faster still).
 #[test]
 fn a_minute_with_170_words_is_refined_in_one_pass() {
     let x = noise(60.0, -30.0);

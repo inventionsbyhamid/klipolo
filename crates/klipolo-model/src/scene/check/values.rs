@@ -237,6 +237,7 @@ pub(super) fn seconds(s: &Scope, out: &mut Problems, v: Option<f64>, path: &str)
 }
 
 /// The most characters a bound number shows, as a counter's are counted (the evaluator formats bound numbers within
+/// it).
 pub(super) const NUMBER_CHARS: usize = 24;
 
 /// How many characters a text value can show: its own as `case` writes them, or a bound setting's longest (three

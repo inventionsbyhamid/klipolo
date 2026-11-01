@@ -5,20 +5,21 @@
 //! - macOS: a descriptor on the folder, opened with `O_EVTONLY` (it never stops its volume from being ejected), answers
 //!   `F_GETPATH`; the answer counts only while the folder at that path is the held one (same device and file number),
 //!   since a deleted folder may still name its last place;
-//! - W: a handle opened with `FILE_FLAG_BACKUP_SEMANTICS` and every share mode (so it never blocks a rename or a
-//!   delete), answering `GetFinalPathNameByHandleW`;
-//! - L: an `O_PATH` descriptor, read back through `/proc/self/fd`, checked like macOS's.
+//! - Windows (later): a handle opened with `FILE_FLAG_BACKUP_SEMANTICS` and every share mode (so it never blocks a
+//!   rename or a delete), answering `GetFinalPathNameByHandleW`;
+//! - Linux (later): an `O_PATH` descriptor, read back through `/proc/self/fd`, checked like macOS's.
 //!
-//! Until W and L (and wherever a folder can't be held), it is followed by its path: found where it was, else gone. A
-//! folder renamed there reads as gone, which loses nothing: the caller keeps what it would have saved.
+//! Until then on Windows and Linux (and wherever a folder can't be held), it is followed by its path: found where it
+//! was, else gone. A folder renamed there reads as gone, which loses nothing: the caller keeps what it would have
+//! saved.
 
 use std::path::{Component, Path, PathBuf};
 
 /// Where deleted files wait until the Trash is emptied. A followed folder found there counts as gone.
 /// - macOS: any folder named `.Trash` (the home Trash, iCloud Drive's) or `.Trashes` (other volumes'): Finder keeps
 ///   those names for itself;
-/// - W: `$Recycle.Bin`;
-/// - L: `$XDG_DATA_HOME/Trash`, and `.Trash` or `.Trash-<uid>` at a volume's top (the XDG Trash spec).
+/// - Windows: `$Recycle.Bin`;
+/// - Linux: `$XDG_DATA_HOME/Trash`, and `.Trash` or `.Trash-<uid>` at a volume's top (the XDG Trash spec).
 ///
 /// No file is read to tell: only the path's names are compared.
 #[derive(Clone, Debug)]
@@ -76,7 +77,7 @@ pub fn move_to_trash_at(path: &Path) -> std::io::Result<Option<PathBuf>> {
 
 /// Puts an item `move_to_trash_at` moved to `trashed` back at `to`, as Put Back does: Start over's Undo.
 /// Nothing is copied or overwritten: AlreadyExists when something is at `to`, NotFound when the Trash was emptied.
-/// Linux also removes the item's `.trashinfo`; Windows says Unsupported until W.
+/// Linux also removes the item's `.trashinfo`; Windows says Unsupported for now.
 pub fn put_back(trashed: &Path, to: &Path) -> std::io::Result<()> {
     crate::imp::put_back(trashed, to)
 }

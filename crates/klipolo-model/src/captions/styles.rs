@@ -99,7 +99,7 @@ struct SchemaProbe {
 }
 
 impl CaptionStyleDef {
-    /// A style file as this build reads it (built-ins now, P1's packs later): its schema first, so a newer one says it
+    /// A style file as this build reads it (built-ins now, packs later): its schema first, so a newer one says it
     /// needs a newer Klipolo whatever fields it adds; then the strict parse and `check`, whose reason names the
     /// field.
     pub fn from_json(json: &str) -> Result<CaptionStyleDef, CodedError> {

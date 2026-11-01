@@ -1,10 +1,10 @@
-//! What a frame can read: an upper bound on the tracks the evaluator reads, at most
-//! `MAX_TRACKS`. Each property a tween or a node's own keys animate is one track per number it writes (`x` and `y`
-//! two, a colour and `origin` four), on every instance of every target, and on every unit of a split text for the
-//! properties units have. One property's run of `g` tracks, `c` of them chained (they start or end from the value
-//! before), reads at most `run_reads(g, c)`: the run, then a shorter run for each chained read, at most 8 deep. The
-//! evaluator decides each instance against the same bound, and draws one past it as its settled still. Clips are
-//! counted too, each tween's and key's once: at most 65,535.
+//! What a frame can read: an upper bound on the tracks the evaluator reads, at most `MAX_TRACKS`. Each property a tween
+//! or a node's own keys animate is one track per number it writes (`x` and `y` two, a colour and `origin` four), on
+//! every instance of every target, and on every unit of a split text for the properties units have. One property's run
+//! of `g` tracks, `c` of them chained (they start or end from the value before), reads at most `run_reads(g, c)`: the
+//! run, then a shorter run for each chained read, at most 8 deep. The evaluator decides each instance against the same
+//! bound, and draws one past it as its settled still. Clips are counted too, each tween's and key's once: at most
+//! 65,535.
 
 use std::collections::BTreeMap;
 

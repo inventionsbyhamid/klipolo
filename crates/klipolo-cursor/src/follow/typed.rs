@@ -1,7 +1,6 @@
-//! The part typed lately. A typing span's box is the union of all
-//! that was typed while it lasted, so a long line or a coding session frames most of an editor. Where that box is
-//! larger than the crop or a quarter of the picture, the crop follows the part typed lately instead, read from the
-//! screen's activity ticks:
+//! The part typed lately. A typing span's box is the union of all that was typed while it lasted, so a long line or a
+//! coding session frames most of an editor. Where that box is larger than the crop or a quarter of the picture, the
+//! crop follows the part typed lately instead, read from the screen's activity ticks:
 //! - a tick's regions count as typed by the rule `activity::typing` counts typing with (`typed_region`: typing-sized,
 //!   clear of playing media, not a caret blinking), so an animation playing inside the box is never followed;
 //! - a typed region inside the span's box joins the part while the part still fits the crop's safe room (the crop less

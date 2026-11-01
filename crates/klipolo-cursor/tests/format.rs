@@ -98,6 +98,6 @@ fn a_torn_foreign_overlong_or_non_finite_line_is_none() {
 #[test]
 fn a_version_one_line_is_not_a_format_two_line() {
     // Format 1 has no `k`: never a `Line`. The track still reads it as positions and presses
-    // `track::a_version_one_file_keeps_its_positions_and_presses`).
+    // (`track::a_version_one_file_keeps_its_positions_and_presses`).
     assert_eq!(parse_line(br#"{"t":16667,"x":0.5,"y":0.25,"b":1}"#), None);
 }

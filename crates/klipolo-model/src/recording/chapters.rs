@@ -1,8 +1,7 @@
 //! A camera's chapters: Sync ends a chapter's run where the next one starts on the clock,
 //! so runs never overlap, but a camera's chapter files can overlap a little (a frame or two; the generated ones by
 //! 67 ms). A clip showing such a chapter to its file's end still lies on the recording: its last moments play from the
-//! next chapter, the same moment on the clock, and review counts them as the earlier file's footage
-//! (`tail`).
+//! next chapter, the same moment on the clock, and review counts them as the earlier file's footage (`tail`).
 
 use super::SourceRun;
 use crate::time::Us;

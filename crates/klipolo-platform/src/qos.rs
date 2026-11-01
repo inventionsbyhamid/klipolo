@@ -1,6 +1,6 @@
 //! Thread quality-of-service classes, which steer core placement, timer latency and I/O priority. On macOS Apple asks
-//! for `pthread_set_qos_class_self_np` rather than raw priorities (those lock a thread out of QoS). Windows (W:
-//! EcoQoS/HighQoS through `SetThreadInformation`, MMCSS) and Linux (L: nice, ioprio, rtkit) don't set anything yet.
+//! for `pthread_set_qos_class_self_np` rather than raw priorities (those lock a thread out of QoS). Windows (later:
+//! EcoQoS/HighQoS through `SetThreadInformation`, MMCSS) and Linux (later: nice, ioprio, rtkit) don't set anything yet.
 //!
 //! Klipolo's map: the audio callback stays real-time (CoreAudio owns it); the mixer, the native presenter and the
 //! preview decoders are user-interactive (the user is watching or listening); the export worker's threads are
@@ -47,7 +47,8 @@ pub struct Lent(#[allow(dead_code)] crate::imp::Lent);
 /// Lends `qos` (capped by the ceiling) to `thread` while the returned `Lent` lives: a caller about to wait on work
 /// that thread does raises it, so that work isn't held back at a lower class, by the CPU or by the disk's throttling
 /// of background I/O (a close's flush waiting on the utility save thread during an export). The thread keeps its own
-/// class if that is higher. macOS: a QoS override (`pthread_override_qos_class_start_np`); W and L: nothing yet.
+/// class if that is higher. macOS: a QoS override (`pthread_override_qos_class_start_np`); Windows and Linux: nothing
+/// yet.
 pub fn lend<T>(thread: &std::thread::JoinHandle<T>, qos: Qos) -> Lent {
     Lent(crate::imp::lend(thread, capped(qos)))
 }

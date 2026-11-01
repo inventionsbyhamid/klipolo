@@ -1,5 +1,5 @@
-//! Google's families among the others: which family a name resolves to, and a typed
-//! query's cap, which never lets one source crowd another out.
+//! Google's families among the others: which family a name resolves to, and a typed query's cap, which never lets one
+//! source crowd another out.
 
 use klipolo_fonts::google::Catalogue;
 use klipolo_fonts::index::{Downloaded, FontIndex, InstalledFamily};
@@ -23,8 +23,8 @@ fn google(family: &str, version: &str) -> FontRef {
     }
 }
 
-/// A name never resolves to a Google family not downloaded while
-/// one of that name is here. Bundled, then a downloaded Google family, then this computer's, then Google's catalogue.
+/// A name never resolves to a Google family not downloaded while one of that name is here. Bundled, then a downloaded
+/// Google family, then this computer's, then Google's catalogue.
 #[test]
 fn a_name_resolves_bundled_then_downloaded_then_installed_then_the_catalogue() {
     let here = |name: &str| InstalledFamily {
@@ -99,9 +99,9 @@ fn a_typed_query_caps_each_source_so_this_macs_families_stay() {
     assert_eq!(google, 200, "Google's own cap");
 }
 
-/// A rank tie breaks as a name resolves: bundled, then a downloaded Google family, then this
-/// computer's, then a Google family not downloaded. So "roboto" typed in the menu leads with this Mac's Roboto, as chat's
-/// `styleText "Roboto"` stores it, and a downloaded Lato leads this Mac's; a better rank still comes first.
+/// A rank tie breaks as a name resolves: bundled, then a downloaded Google family, then this computer's, then a Google
+/// family not downloaded. So "roboto" typed in the menu leads with this Mac's Roboto, as chat's `styleText "Roboto"`
+/// stores it, and a downloaded Lato leads this Mac's; a better rank still comes first.
 #[test]
 fn a_rank_tie_breaks_bundled_downloaded_installed_then_google() {
     let here = |name: &str| InstalledFamily {
@@ -149,9 +149,9 @@ fn downloaded(family: &str, version: &str) -> Downloaded {
     }
 }
 
-/// The older-download row: a family downloaded only at a version older than
-/// the catalogue's is listed as that download, which a pick stores and which draws, never as "Download" of the newer
-/// one; at equal rank it ties as a downloaded family.
+/// The older-download row: a family downloaded only at a version older than the catalogue's is listed as that download,
+/// which a pick stores and which draws, never as "Download" of the newer one; at equal rank it ties as a downloaded
+/// family.
 #[test]
 fn a_family_downloaded_only_at_an_older_version_is_listed_as_that_download() {
     let ix = index().with_downloaded(vec![downloaded("Lato", "v20"), downloaded("Lato", "v23")]);

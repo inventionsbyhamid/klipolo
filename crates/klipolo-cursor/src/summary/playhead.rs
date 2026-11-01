@@ -1,9 +1,9 @@
-//! The cursor at the exact playhead, for segment C. Segment B's line lists the facts nearest the
-//! middle of the playhead's minute, so that it stays the same all minute (the pre-fill's rule); in a busy take it can
-//! then list none at the playhead itself, which "zoom on what I clicked here" is about. This note says those, in a few
-//! words, when B's line leaves any out.
+//! The cursor at the exact playhead, for the planner's note on what is there now. The cursor line (`summary_line`)
+//! lists the facts nearest the middle of the playhead's minute, so that it stays the same all minute (the pre-fill's
+//! rule); in a busy take it can then list none at the playhead itself, which "zoom on what I clicked here" is about.
+//! This note says those, in a few words, when the cursor line leaves any out.
 //!
-//! **Cost:** a binary search per kind for the facts near the playhead, `summary_line` once more to know what B lists,
+//! **Cost:** a binary search per kind for the facts near the playhead, `summary_line` once more to know what it lists,
 //! then the nearest facts one at a time (a handful fit): O(kinds × log n + k²) for k listed.
 
 use klipolo_model::time::clock;

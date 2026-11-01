@@ -1,5 +1,5 @@
-//! Google Fonts downloads: only when the person
-//! picked a family and confirmed in place, straight from Google, into the store (`store`).
+//! Google Fonts downloads: only when the person picked a family and confirmed in place, straight from Google, into the
+//! store (`store`).
 //!
 //! - **One host: Google's** (`net`). Every file comes from `https://fonts.gstatic.com/s/`; the licence ships in the
 //!   app (`licence`), so nothing else is ever asked. A cancel (the person's, or Google Fonts

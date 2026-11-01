@@ -88,7 +88,7 @@ fn the_check_catches_a_broken_plan() {
     assert!(broken(&pan).contains("not held"));
 }
 
-/// The squeezed move: two of the person's zooms 0.3 s apart at very different views pass (the move
+/// A squeezed move: two of the person's zooms 0.3 s apart at very different views pass (the move
 /// between them is as they placed it), but an Auto move beside them made faster than its limits still fails.
 #[test]
 fn only_a_move_filling_the_gap_between_their_zooms_is_exempt() {

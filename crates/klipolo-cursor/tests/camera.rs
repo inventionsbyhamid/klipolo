@@ -1,5 +1,5 @@
-//! The smart camera: planned ahead, settled before every kept
-//! event with it inside the safe zone, every move within its limits, conflicts dropped or merged and never rushed.
+//! The smart camera: planned ahead, settled before every kept event with it inside the safe zone, every move within its
+//! limits, conflicts dropped or merged and never rushed.
 
 mod common;
 
@@ -104,7 +104,7 @@ fn a_dense_tutorial_widens_or_merges_rather_than_rushing() {
     let p = plan(&input(125_000_000, &focus, &[], Rules::default()));
     check(&p, Rules::default(), 125_000_000, "dense");
     let l = p.ladder();
-    eprintln!("dense tutorial: {} shots, {l:?}", p.shots().len()); // reported in the task report
+    eprintln!("dense tutorial: {} shots, {l:?}", p.shots().len()); // printed for a person reading the run
     assert_eq!(p.events().len() as u32 + l.dropped, 40);
 }
 

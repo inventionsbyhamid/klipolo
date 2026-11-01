@@ -14,10 +14,10 @@ pub struct Running {
 
 /// Processes other than this one whose executable lies inside `bundle`: workers, the recorder, chat servers, the MCP
 /// bridge, another Klipolo. macOS `proc_listallpids` + `exe_path` + `KERN_PROCARGS2`; Linux `/proc/*/{exe,cmdline}`;
-/// W: Toolhelp (stub: empty until W, which is why Windows' `install::place` is Unknown).
+/// Windows later: Toolhelp (the stub answers an error for now, which is why Windows' `install::place` is Unknown).
 ///
 /// A process whose arguments can't be read is listed with no mode, so it counts as running (the safe side). `Err` when
-/// the process list itself can't be read (W's stub, a failed `proc_listallpids`, an unreadable `/proc`): an unknown
+/// the process list itself can't be read (the Windows stub, a failed `proc_listallpids`, an unreadable `/proc`): an
 /// unknown answer is never "nothing runs", so a caller treats it as something running.
 pub fn running_from(bundle: &Path) -> io::Result<Vec<Running>> {
     // The OS reports each executable by its resolved path (macOS: /private/var, not /var).

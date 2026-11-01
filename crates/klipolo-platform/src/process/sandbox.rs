@@ -1,11 +1,10 @@
-//! The render worker's sandbox: `klipolo --render-worker` checks, compiles and
-//! measures agent-written WGSL and scenes, so it closes the descriptors it inherited and then sandboxes itself before
-//! it reads a request.
+//! The render worker's sandbox: `klipolo --render-worker` checks, compiles and measures agent-written WGSL and scenes,
+//! so it closes the descriptors it inherited and then sandboxes itself before it reads a request.
 //! - macOS: a fixed Seatbelt profile (`PROFILE`) whose only variables are its parameters, passed through
 //!   `sandbox_init_with_parameters` (the symbol Chromium also uses), or, where that symbol is missing, `sandbox_init`
 //!   with the values written into the text as escaped string literals (`escaped_profile`);
-//! - Linux: `Unsupported` until L (Landlock);
-//! - Windows: `Unsupported` until W (a restricted job object).
+//! - Linux: `Unsupported` for now (later: Landlock);
+//! - Windows: `Unsupported` for now (later: a restricted job object).
 //!
 //! The profile names only the worker's own session folder and fixed app or system paths, never a path a project
 //! controls: every input is copied or passed as bytes into the session's `in/`.
@@ -27,8 +26,8 @@ pub struct SandboxProfile {
     pub font_dirs: Vec<PathBuf>,
 }
 
-/// Whether `sandbox_self` sandboxed the process. `Unsupported`: this OS has no worker sandbox yet (Linux until L,
-/// Windows until W), so the app sends that worker no agent code.
+/// Whether `sandbox_self` sandboxed the process. `Unsupported`: this OS has no worker sandbox yet (Linux and Windows),
+/// so the app sends that worker no agent code.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Applied {
     Sandboxed,
@@ -39,18 +38,17 @@ pub enum Applied {
 /// since an unset `(param …)` breaks its `subpath`.
 pub const FONT_SLOTS: usize = 3;
 
-/// The macOS profile, the smallest with which the worker draws with Metal (the spike's report has
-/// the evidence). Its only variables are `(param "SESSION")`, `(param "BUNDLE")`, `(param "FONTS_0")` to
-/// `(param "FONTS_2")` and `(param "METAL_CACHE")`.
+/// The macOS profile, the smallest with which the worker draws with Metal. Its only variables are `(param "SESSION")`,
+/// `(param "BUNDLE")`, `(param "FONTS_0")` to `(param "FONTS_2")` and `(param "METAL_CACHE")`.
 /// - `system.sb` brings dyld and the shared cache, reads of `/System`, `/usr/lib` and `/usr/share`, and the basic
 ///   system services (logging, preferences, notifications);
 /// - reads: the bundle, the system-wide and the three font folders, and the session;
-/// - Metal's shader cache, read only (Step 0): `METAL_CACHE` is this user's cache folder
-///   (`$DARWIN_USER_CACHE_DIR`), of which the worker may stat the folder itself and read `com.apple.metal` and
-///   `com.apple.metalfe` (compiled shaders, nothing personal). A warm cache cuts the worker's device from about 1.2 s
-///   to 0.13 s and a new pipeline from 0.5 s to 0.03 s. Never written: the app (whose executable the worker is) loads
-///   the same cache, so a compromised worker could otherwise poison the app's shaders;
-/// - writes: only the session's `tmp/` and `out/`, and no mode, BSD flag or ACL changes there
+/// - Metal's shader cache, read only: `METAL_CACHE` is this user's cache folder (`$DARWIN_USER_CACHE_DIR`), of which
+///   the worker may stat the folder itself and read `com.apple.metal` and `com.apple.metalfe` (compiled shaders,
+///   nothing personal). A warm cache cuts the worker's device from about 1.2 s to 0.13 s and a new pipeline from 0.5 s
+///   to 0.03 s. Never written: the app (whose executable the worker is) loads the same cache, so a compromised worker
+///   could otherwise poison the app's shaders;
+/// - writes: only the session's `tmp/` and `out/`, and no mode, BSD flag or ACL changes there (`chmod`,
 ///   `chflags uchg` or a deny-delete ACL would let it lock the parent out of what it wrote; Seatbelt
 ///   has `file-write-mode`, `file-write-flags` and `file-write-acl`, each probed on 15.7.5). A mode given at creation
 ///   (`mkdir(path, 0)`) is still possible: the parent's walk fails closed and its removal undoes it
@@ -94,8 +92,8 @@ pub const PARAMETERS: [&str; 3 + FONT_SLOTS] = [
     "METAL_CACHE",
 ];
 
-/// Sandboxes this process for good, as `profile` allows (macOS), or answers `Unsupported` (Linux until L, Windows
-/// until W). Call `close_inherited` first. An invalid profile is an error on every OS; on macOS so is a profile the
+/// Sandboxes this process for good, as `profile` allows (macOS), or answers `Unsupported` (Linux and Windows, for
+/// now). Call `close_inherited` first. An invalid profile is an error on every OS; on macOS so is a profile the
 /// kernel refused, and then the worker must exit before it reads a request.
 pub fn sandbox_self(profile: &SandboxProfile) -> Result<Applied, String> {
     crate::imp::sandbox::sandbox_self(profile)
@@ -110,15 +108,16 @@ pub fn sandbox_self_escaped(profile: &SandboxProfile) -> Result<Applied, String>
 }
 
 /// Caps the size of any file this process writes at `bytes` (`RLIMIT_FSIZE`, soft and hard, never above the hard limit
-/// it has): the render worker sets it before its sandbox, so one file can't pass the parent's disk cap
-/// between two of its polls. A write past it ends the process (`SIGXFSZ`). Windows: nothing (W: the job object).
+/// it has): the render worker sets it before its sandbox, so one file can't pass the parent's disk cap between two of
+/// its polls. A write past it ends the process (`SIGXFSZ`). Windows: nothing (later: the job object).
 pub fn limit_file_size(bytes: u64) -> std::io::Result<()> {
     crate::imp::sandbox::limit_file_size(bytes)
 }
 
 /// The id of this process's parent (`getppid`), for the render worker's watchdog: it changes when
 /// the parent exits and the worker is adopted (by launchd, init or a subreaper), so a worker that outlives the app
-/// notices and exits. None where the OS doesn't say (Windows until W, whose job object ends the worker with the app).
+/// notices and exits. None where the OS doesn't say (Windows, for now; its later job object ends the worker with the
+/// app).
 pub fn parent_id() -> Option<u32> {
     crate::imp::sandbox::parent_id()
 }
@@ -137,7 +136,7 @@ pub fn unlock_for_removal(path: &Path) {
 }
 
 /// Closes every descriptor above 2 this process inherited: `close_range` where the OS has it (Linux 5.9+), else
-/// each one `/dev/fd` lists (macOS). Windows (W: the launcher passes no handles; a job object at W): nothing. Call it
+/// each one `/dev/fd` lists (macOS). Windows (the launcher passes no handles; later, a job object): nothing. Call it
 /// first in the worker's `main`, while only one thread runs, before `sandbox_self`.
 pub fn close_inherited() {
     crate::imp::sandbox::close_inherited();

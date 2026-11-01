@@ -1,9 +1,9 @@
-//! Timeline facts read from JSON (a planner context). `on_timeline` gives each kind
-//! sorted, sane and at most `MAX_FACTS` long, but serde would take any number in any order, so each kind is held to the
-//! same when it is read: a fact outside the reader's time window (never negative, at most `TIME_LIMIT_US`), a span
-//! ending before it starts, or a place that isn't finite (JSON refuses one; another format might not) goes; the first
-//! `MAX_FACTS` are kept, then sorted by time.
-//! The summary and the tools then never see an unbounded or unsorted list, nor times whose sums overflow.
+//! Timeline facts read from JSON (a planner context). `on_timeline` gives each kind sorted, sane and at most
+//! `MAX_FACTS` long, but serde would take any number in any order, so each kind is held to the same when it is read: a
+//! fact outside the reader's time window (never negative, at most `TIME_LIMIT_US`), a span ending before it starts, or
+//! a place that isn't finite (JSON refuses one; another format might not) goes; the first `MAX_FACTS` are kept, then
+//! sorted by time. The summary and the tools then never see an unbounded or unsorted list, nor times whose sums
+//! overflow.
 
 use serde::{Deserialize, Deserializer};
 

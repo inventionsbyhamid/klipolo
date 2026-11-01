@@ -1,9 +1,9 @@
-//! No action happens off screen. An action whose
-//! shot was dropped still lies inside the view: its point (a box's centre), anywhere in the view. A click or a pause
-//! must show at its start; a typing span while it lasts, at its start, every `EVERY_US` and its end (a pause only at
-//! its start: a parked cursor shown for its whole rest would block every zoom). A zoom that would hide one is widened
-//! to show it, or dropped too, so the camera stays wide. The person's own zoom, a move into or out of it, and the link
-//! between two of their zooms win where they cover that time (`influence`).
+//! No action happens off screen. An action whose shot was dropped still lies inside the view: its point (a box's
+//! centre), anywhere in the view. A click or a pause must show at its start; a typing span while it lasts, at its
+//! start, every `EVERY_US` and its end (a pause only at its start: a parked cursor shown for its whole rest would block
+//! every zoom). A zoom that would hide one is widened to show it, or dropped too, so the camera stays wide. The
+//! person's own zoom, a move into or out of it, and the link between two of their zooms win where they cover that time
+//! (`influence`).
 //!
 //! After the ladder, each dropped action is checked against the planned path, and what hides it is fixed:
 //! - **in a shot's own hold** (its settle time to its hold's end), that shot must show it from then on
@@ -140,7 +140,7 @@ fn hidden(
             if t >= until {
                 break;
             }
-            // The next 100 ms step. Past a person's zoom at once (nothing is checked there, n2); past a hold at once,
+            // The next 100 ms step. Past a person's zoom at once (nothing is checked there); past a hold at once,
             // its view doesn't change, and a hold to the last key never changes again. Saturating, so a span ending
             // near `Us::MAX` (an open end) still stops.
             let i = keys.partition_point(|k| k.at <= t);
@@ -195,8 +195,8 @@ fn hidden(
 ///
 /// The person's zoom takes only the moves touching its own start or end (the move in arriving at its start, or any
 /// from another of their zooms; the move out leaving at its end, or before it where the next of theirs starts first),
-/// so a zoom of theirs at exactly the whole frame is never taken for an out-and-in's whole-frame leg.
-/// With no move out, its cover ends at its own end, unless the next is theirs too: the gap between
+/// so a zoom of theirs at exactly the whole frame is never taken for an out-and-in's whole-frame leg. With no move
+/// out, its cover ends at its own end, unless the next is theirs too: the gap between
 /// two of their zooms is theirs.
 fn influence(kept: &Kept, r: &Rules) -> Vec<(Us, Us)> {
     // Each window is the shot before, a shot with the link into it, and the next with the link out.

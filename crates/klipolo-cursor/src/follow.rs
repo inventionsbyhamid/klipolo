@@ -1,7 +1,7 @@
-//! The vertical follow-crop: where a Fill crop's centre sits over a take, so a
-//! portrait or square version follows the action. It is built once per take and crop size, at 30 Hz, from the **raw**
-//! cursor track with its own filter, never the style's smoothing. Its cache key (the caller's) is the crop size,
-//! these rules and the activity track's `complete_through`.
+//! The vertical follow-crop: where a Fill crop's centre sits over a take, so a portrait or square version follows the
+//! action. It is built once per take and crop size, at 30 Hz, from the **raw** cursor track with its own filter, never
+//! the style's smoothing. Its cache key (the caller's) is the crop size, these rules and the activity track's
+//! `complete_through`.
 //!
 //! **Each step** the crop looks at a target (`target`): a click due within the pre-roll, else what is being typed,
 //! else a dwell, else the raw cursor. With none (the cursor hidden by an app, outside the picture, before its first

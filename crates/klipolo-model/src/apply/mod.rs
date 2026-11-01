@@ -114,7 +114,7 @@ pub fn apply_part(next: &mut Project, ops: &[Op]) -> Result<()> {
             reference::normalize_before_pa1(&mut before);
             [
                 (now, "the whole-project normalise"),
-                (before, "the old normalise"),
+                (before, "the normalise before batches settled incrementally"),
             ]
         };
         if k == 0 {

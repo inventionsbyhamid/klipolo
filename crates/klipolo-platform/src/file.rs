@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize};
 /// a file or a symbolic link already at `path` is `AlreadyExists`, and nothing is written through it (`O_CREAT |
 /// O_EXCL | O_NOFOLLOW`).
 /// - macOS and Linux: mode 0600;
-/// - Windows: the file is created inside the per-user app-data folder, whose ACL already excludes other users (W adds
-///   an explicit DACL).
+/// - Windows: the file is created inside the per-user app-data folder, whose ACL already excludes other users (an
+///   explicit DACL is still to come).
 pub fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create_new(true);
@@ -71,7 +71,7 @@ pub fn read_private(path: &Path, most: u64) -> io::Result<Vec<u8>> {
 /// Tells the OS that `bytes`, part of a memory-mapped file, will be read soon, so it pages them in ahead of the reader
 /// (the PCM cache after a seek). Only a hint: nothing changes if it can't.
 /// - macOS and Linux: `madvise(MADV_WILLNEED)`;
-/// - Windows (W: `PrefetchVirtualMemory`): nothing yet.
+/// - Windows (later: `PrefetchVirtualMemory`): nothing yet.
 pub fn will_need(bytes: &[u8]) {
     crate::imp::will_need(bytes);
 }
@@ -87,7 +87,7 @@ pub fn will_need(bytes: &[u8]) {
 ///     reboot or a remount;
 ///   - FAT, exFAT, SMB and some FUSE file systems make file numbers up per mount;
 ///   - on Windows, FAT's file index changes when the file moves, and ReFS's 128-bit ids don't fit the 64-bit index
-///     (W: `GetFileInformationByHandleEx(FileIdInfo)`).
+///     (later: `GetFileInformationByHandleEx(FileIdInfo)`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FileIdentity {
     /// macOS and Linux: `st_dev`; Windows: the volume serial number.
@@ -111,7 +111,7 @@ pub fn identity(file: &File) -> Option<FileIdentity> {
 /// may change at a remount: callers must treat a mismatch as "maybe not the same", never the other way.
 /// - macOS: `getattrlist`'s `ATTR_VOL_UUID` on the volume's mount point (`statfs`'s `f_mntonname`);
 /// - Linux: `statvfs`'s `f_fsid`, which ext4, XFS and btrfs derive from the file system's UUID;
-/// - W: none yet (the volume serial and file index need a handle opened with backup semantics).
+/// - Windows: none yet (the volume serial and file index need a handle opened with backup semantics).
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PlacedIdentity {
     /// `uuid:<32 hex digits>` (macOS), `fsid:<hex>` (Linux), or `dev:<n>` where neither reads.

@@ -30,7 +30,7 @@ fn english_words_a_size_as_the_ui_does() {
     assert_eq!(size(10.0), "a 1 MB model");
 }
 
-/// A language a code names (a Whisper code) reads as its English name in Rust's English (MCP replies, logs), as the
+/// A language a code names (an ISO 639-1 style code) reads as its English name in Rust's English (MCP replies, logs),
 /// as the UI names it in the person's language; a value that isn't a code it knows stays as it is.
 #[test]
 fn english_names_a_language_by_its_name() {

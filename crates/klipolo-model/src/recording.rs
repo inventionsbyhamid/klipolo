@@ -70,7 +70,7 @@ pub struct SourceMix {
     /// Audio effects, in order.
     pub effects: Vec<EffectInstance>,
     /// Play only this channel of the source's files (0 is the first), on both sides at the level a one-channel file
-    /// plays at; None plays them as recorded. A mic on one input of a two-input interface records [voice, silence]
+    /// plays at; None plays them as recorded. A mic on one input of a two-input interface records [voice, silence]:
     /// import sets this when the other channel stayed silent for the whole take. The files keep
     /// every channel, and a one-channel file plays centred either way. Under `validate::PLAYED_CHANNELS`; left out of
     /// the JSON while None.
@@ -83,7 +83,7 @@ pub struct SourceMix {
     /// the JSON while false.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub fills_gaps: bool,
-    /// The person muted it (`set_muted`: chat, a lane, a clip), not Sync (its camera sound, muted, filling the gaps): the
+    /// The person muted it (`set_muted`: chat, a lane, a clip), not Sync (its camera sound, muted, filling the gaps):
     /// the person's mute wins, so `fillGaps` never fills it. Unmuting clears it; left out while false.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub muted_by_person: bool,
@@ -149,8 +149,8 @@ impl SourceRun {
 }
 
 /// One source of a recording: its own file(s) and lane. A clean take has one run; a reattached device, a rebuilt
-/// a rebuilt encoder or a resumed recorder starts another. Runs lie on the recording clock (the recorder's session clock:
-/// host time since the start gate, pauses left out), in order and never overlapping.
+/// encoder or a resumed recorder starts another. Runs lie on the recording clock (the recorder's session clock: host
+/// time since the start gate, pauses left out), in order and never overlapping.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -158,7 +158,7 @@ pub struct RecordingSource {
     /// Unique within its recording.
     pub id: Id,
     pub role: SourceRole,
-    /// A `capture.source.<role>` code for a name Klipolo made ("capture.source.mic"), or the person's own text once they
+    /// A `capture.source.<role>` code for a name Klipolo made ("capture.source.mic"), or the person's own text once
     /// they rename it. The UI words a code with `wordCode`; chat's summary words it in English.
     pub label: String,
     pub runs: Vec<SourceRun>,

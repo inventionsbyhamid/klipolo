@@ -486,7 +486,7 @@ fn overlapping_staggers_resolve_in_timeline_order() {
     assert_eq!(fa.units_of("t")[3].y_px, -40.0);
 }
 
-/// In m4's scene the last letter, hidden by the exit before its entrance began, stays hidden.
+/// In the staggered scene above the last letter, hidden by the exit before its entrance began, stays hidden.
 #[test]
 fn an_exit_placed_later_keeps_the_last_letter_hidden() {
     let s = scene(

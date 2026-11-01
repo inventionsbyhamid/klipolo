@@ -1,10 +1,9 @@
 //! A tween's moving units: the split units it blurs while they move, counted once across all its targets as its
-//! stagger group draws them, named at the tween, whose stagger and dur are what to change
-//!.
+//! stagger group draws them, named at the tween, whose stagger and dur are what to change.
 //!
 //! Units start `each` apart over the tween's span and move for its dur, so as many as overlap move at once, but only
-//! in the middle: the count ramps up from the span's start and down to its end. Nested layers count that exactly
-//!: level ℓ covers [start + (ℓ − 1)·each, end − (ℓ − 1)·each], which is where at least ℓ units can
+//! in the middle: the count ramps up from the span's start and down to its end. Nested layers count that exactly:
+//! level ℓ covers [start + (ℓ − 1)·each, end − (ℓ − 1)·each], which is where at least ℓ units can
 //! move, and the levels stop at the units that overlap. So tweens that follow each other closely add up only what
 //! actually moves together. This holds for a stagger from the start, the end or at random (every unit's start is
 //! one of start + k·each); repeats and centre-out pairs keep one flat count over the whole span.

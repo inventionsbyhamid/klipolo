@@ -1,10 +1,10 @@
 //! The network path, so update downloads and telemetry uploads wait while the connection costs the person money or
 //! data:
 //! - macOS: `NWPathMonitor` (Low Data Mode is `isConstrained`; cellular and a personal hotspot are `isExpensive`);
-//! - Windows (W): `GetNetworkConnectivityHint`'s cost (a fixed or variable cost is constrained, roaming or over the data
-//!   limit expensive) and `NotifyNetworkConnectivityHintChange`. Stub: the default;
-//! - Linux (L): NetworkManager's `Metered` (yes or guess-yes is constrained) and its `PropertiesChanged` signal. Stub:
-//!   the default.
+//! - Windows (later): `GetNetworkConnectivityHint`'s cost (a fixed or variable cost is constrained, roaming or over the
+//!   data limit expensive) and `NotifyNetworkConnectivityHintChange`. Stub: the default;
+//! - Linux (later): NetworkManager's `Metered` (yes or guess-yes is constrained) and its `PropertiesChanged` signal.
+//!   Stub: the default.
 //!
 //! Nothing polls: the OS's monitor reports each change, and `path` reads the latest report.
 

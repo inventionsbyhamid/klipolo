@@ -1,6 +1,5 @@
-//! What a text node can show in place of its text, counted as upper bounds: text
-//! keys and tween `text` values show instead of the text (the longest counts), and split words count the words of
-//! every text the node can show.
+//! What a text node can show in place of its text, counted as upper bounds: text keys and tween `text` values show
+//! instead of the text (the longest counts), and split words count the words of every text the node can show.
 
 use super::super::problems::{at, join, Problems};
 use super::super::{Node, NodeType, Props, SceneLimits, Split, TextCase, Val};

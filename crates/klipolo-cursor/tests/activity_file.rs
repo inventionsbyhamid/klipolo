@@ -69,8 +69,8 @@ fn a_damaged_chunk_reads_as_unknown_and_is_missing_again() {
         assert_eq!((a.append_at(), missing(&a)), (0, vec![0, 1, 2]));
         assert!(!a.is_complete() && a.complete_through() == 0);
     }
-    // The screen file's own duration, as its header stores it (reading a finished file uses it); None when the
-    // header can't be read.
+    // The screen file's own duration, as its header stores it (the engine's pass reads a finished file with it); None
+    // when the header can't be read.
     assert_eq!(stored_duration(&bytes), Some(150 * S));
     assert_eq!(stored_duration(&head_damaged), None);
     assert_eq!(stored_duration(&bytes[..10]), None);

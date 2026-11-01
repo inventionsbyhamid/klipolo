@@ -1,5 +1,5 @@
-//! The edges of the move: what a full disk, a failed Trash, the same version, a
-//! Klipolo put at the target during the copy and an administrator's copy each leave.
+//! The move's edge cases: what a full disk, a failed Trash, the same version, a Klipolo put at the target during the
+//! copy and an administrator's copy each leave.
 
 use std::cmp::Ordering;
 

@@ -128,8 +128,8 @@ fn sorted(v: serde_json::Value) -> serde_json::Value {
 /// truth; the file is written here with `UPDATE_GOLDEN=1` and checked otherwise (the parity fixtures' pattern). Byte
 /// ranges are UTF-8 offsets: the TS mirror converts them to string indices in its test.
 ///
-/// The rows: CJK punctuation standing alone gets no segment, and a text whose own face covers CJK
-/// a picked Hiragino covers Han and kana) leaves only what it lacks to the fallbacks. Each row also carries its `marks`
+/// The rows: CJK punctuation standing alone gets no segment, and a text whose own face covers CJK (a picked Hiragino
+/// covers Han and kana) leaves only what it lacks to the fallbacks. Each row also has its `marks`
 /// (`lone_marks`): punctuation standing alone, which both draw in the text language's Noto Sans, else NotDef's box.
 #[test]
 fn export_the_parity_fixture_for_the_webview() {

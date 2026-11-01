@@ -1,5 +1,5 @@
 //! An installed family's widths and duplicate faces, as the menu and the resolver see them. The faces
-//! are this Mac's (the review read their OS/2 tables): Futura and Helvetica Neue hold condensed faces among their
+//! are a Mac's (as their OS/2 tables read): Futura and Helvetica Neue hold condensed faces among their
 //! normal ones; Impact is condensed only; Avenir has two 400s (Book and Roman).
 
 use klipolo_fonts::index::{FontIndex, InstalledFace, InstalledFamily};

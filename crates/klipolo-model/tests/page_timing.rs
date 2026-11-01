@@ -1,5 +1,5 @@
-//! When caption pages show: held into silence, read at the style's speed, found by
-//! binary search, and never more words than the renderer lays out.
+//! When caption pages show: held into silence, read at the style's speed, found by binary search, and never more words
+//! than the renderer lays out.
 
 use klipolo_model::captions::pages::{captions, page_at, Pages, MAX_PAGE_WORDS};
 use klipolo_model::project::FormatKind;

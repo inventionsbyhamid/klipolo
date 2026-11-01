@@ -1,7 +1,7 @@
-//! A scene's costs are upper bounds: a fractional setting counts rounded up;
-//! a split text's own blur, repeats and centre-out staggers count every unit they can blur; the opacity-0
-//! exemption holds only while nothing else writes the opacity; wrapped lines count as many as the layout can make;
-//! keys and tweens share the static ranges; and a bound number shows up to 24 characters.
+//! A scene's costs are upper bounds: a fractional setting counts rounded up; a split text's own blur, repeats and
+//! centre-out staggers count every unit they can blur; the opacity-0 exemption holds only while nothing else writes the
+//! opacity; wrapped lines count as many as the layout can make; keys and tweens share the static ranges; and a bound
+//! number shows up to 24 characters.
 
 use klipolo_model::contrib::Catalog;
 use klipolo_model::scene::{check_scene, Scene, SceneFacts, SceneProblem};
@@ -36,7 +36,7 @@ fn a_float_setting_counts_at_its_maximum_rounded_up() {
     };
     assert_eq!(checked(&repeat("0.9")).unwrap().max_instances, 1);
     assert_eq!(checked(&repeat("1.99")).unwrap().max_instances, 2);
-    // The repro: a maximum under 1 read as no instances, so 1,000 emitters of 500 passed.
+    // A maximum under 1 must not read as no instances, or 1,000 emitters of 500 would pass.
     let nested = format!(
         r#"{{"scene":1,"duration":2,"params":[{}],"nodes":[{{"type":"repeat","times":"$k","children":[
         {{"type":"repeat","times":1000,"children":[{{"type":"emitter","burst":500,"child":{{"type":"rect"}}}}]}}]}}]}}"#,

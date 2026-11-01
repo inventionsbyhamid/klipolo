@@ -1,6 +1,6 @@
 //! Projects saved before the cursor record named a recording's cursor file `cursorPath`. One field read, not a
 //! migration: it becomes the recording's `cursor`, read as a take of that time (burned in, sampled clicks), and the
-//! writes that shape.
+//! next save writes that shape.
 
 use serde_json::Value;
 

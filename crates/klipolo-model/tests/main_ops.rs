@@ -161,9 +161,9 @@ fn delete_range_splits_attached_video() {
 #[test]
 fn messy_ranges_are_merged_and_clamped() {
     let p = fixture();
-    // Range bounds must lie in [0, MAX_TIME_US], so `range(-3.0, 1.0)` is
-    // now refused (see `out_of_range_times_are_refused_without_panicking`); it starts at 0 here.
-    // Ends past the timeline are still clamped.
+    // Range bounds must lie in [0, MAX_TIME_US], so `range(-3.0, 1.0)` is refused (see
+    // `out_of_range_times_are_refused_without_panicking`); it starts at 0 here. Ends past the timeline are still
+    // clamped.
     let p = apply_ops(
         &p,
         &[Op::DeleteRanges {
@@ -868,7 +868,7 @@ fn split_leaves_anchors_past_the_clip_end_alone() {
 }
 
 /// Sound layers have no speed, so a clip whose sound plays from separated layers keeps its speed rather than drift from
-/// them: one change, and one inside a run of speed changes (`speed_run`), are refused with a code. The
+/// them (sync must hold): one change, and one inside a run of speed changes (`speed_run`), are refused with a code. The
 /// same speed, and another clip, still change.
 #[test]
 fn a_clip_whose_sound_was_separated_keeps_its_speed() {

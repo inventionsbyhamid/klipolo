@@ -99,7 +99,7 @@
       "coveredUs": 300000000,
       "key": "k",
       "language": "en",
-      "model": "speech-whisper-small-q5_1",
+      "model": "muse-voice-transcribe-1.0",
       "words": [
         {
           "confidence": 0.8999999761581421,

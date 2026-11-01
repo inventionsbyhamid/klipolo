@@ -1,6 +1,6 @@
-//! A scene's costs can't be emptied: a repeat counts from a literal or a number
-//! setting only; counts take no unbounded binding; modifiers and held blur count; selectors resolve once each;
-//! strings and counters are ranged; and a cap names the node that took it over.
+//! A scene's costs can't be emptied: a repeat counts from a literal or a number setting only; counts take no unbounded
+//! binding; modifiers and held blur count; selectors resolve once each; strings and counters are ranged; and a cap
+//! names the node that took it over.
 
 use klipolo_model::contrib::Catalog;
 use klipolo_model::scene::{check_scene, Scene, SceneFacts, SceneProblem};
@@ -31,7 +31,7 @@ const TABLE: &str =
 
 #[test]
 fn a_repeat_counts_only_a_literal_whole_number_or_a_number_setting() {
-    // The review's repro: a percentage read as no instances, so a million emitters passed.
+    // A percentage must not read as no instances, or a million emitters would pass.
     let million = r#"{"type":"repeat","times":"100000%","children":[{"type":"repeat","times":"100000%",
         "children":[{"type":"emitter","burst":500,"child":{"type":"rect"}}]}]}"#;
     has(

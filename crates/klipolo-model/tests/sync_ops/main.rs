@@ -1,6 +1,6 @@
 //! Format 4 for Sync: a synced recording made from an imported video and a recorder's file. `clips` moves the video's
-//! video's clips onto it (`useRecording`) and checks nothing seen, placed or heard is lost; `sources` checks what a
-//! synced source may hold (two mics, a run inside its file, re-timed runs, a source added to a take); `paused` a recorder
+//! clips onto it (`useRecording`) and checks nothing seen, placed or heard is lost; `sources` checks what a synced
+//! source may hold (two mics, a run inside its file, re-timed runs, a source added to a take); `paused` a recorder
 //! paused inside one file, as two runs of it.
 
 #[path = "../common/mod.rs"]

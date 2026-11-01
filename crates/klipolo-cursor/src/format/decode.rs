@@ -8,7 +8,7 @@ use crate::shapes::{file_ok, hotspot_ok, parse_key, size_ok};
 use crate::track::area_ok;
 use crate::{ClickSource, Us};
 
-/// A format-1 line (the first versions): the cursor at one frame, `b` the buttons held as bits (1 the primary).
+/// A format-1 line (the first recorder builds): the cursor at one frame, `b` the buttons held as bits (1 the primary).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct V1 {
     pub t: Us,

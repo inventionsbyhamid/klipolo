@@ -51,7 +51,7 @@ pub(crate) fn move_to_trash(path: &Path) -> io::Result<Option<std::path::PathBuf
     result.map(|()| None).map_err(io::Error::other)
 }
 
-/// Not yet: the Recycle Bin's own restore (W, with Start over's Undo there).
+/// Not yet: the Recycle Bin's own restore (later, with Start over's Undo there).
 pub(crate) fn put_back(_trashed: &Path, _to: &Path) -> io::Result<()> {
     Err(io::ErrorKind::Unsupported.into())
 }

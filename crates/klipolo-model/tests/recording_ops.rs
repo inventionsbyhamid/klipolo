@@ -264,7 +264,7 @@ fn mic_layers(p: &Project) -> Vec<(Us, Us, Us)> {
     out
 }
 
-/// A separated sound takes its clip's fades as its own: the clip's fade-in and fade-out where it
+/// A separated sound takes its clip's fades as its own (sync must hold): the clip's fade-in and fade-out where it
 /// reaches the clip's edges, or, across a transition, the part of the window inside the clip.
 #[test]
 fn a_separated_sound_takes_its_clip_s_fades() {
@@ -309,8 +309,8 @@ fn a_separated_sound_takes_its_clip_s_fades() {
     );
 }
 
-/// A later sync change moves what a separated sound plays with its source (sync must hold). The layer
-/// keeps its place and plays the file as the clip's own sound would there; where the file doesn't reach, it is cut back.
+/// A later sync change moves what a separated sound plays with its source (sync must hold). The layer keeps its place
+/// and plays the file as the clip's own sound would there; where the file doesn't reach, it is cut back.
 #[test]
 fn a_sync_change_slips_the_separated_sound_with_its_source() {
     let separated = apply(&fixture(), vec![detach_mic()]);
@@ -564,9 +564,9 @@ fn replacing_a_marker_is_a_removal() {
     assert!(removals(&p, &apply(&p, vec![add(5.0)])).is_empty());
 }
 
-/// A one-sided source plays centred from one channel, by default or in one clip's
-/// own mix (as its volume), and a separated layer keeps it. Only a channel a file plays is accepted, and the setting
-/// survives undo, redo, saving and loading.
+/// A one-sided source plays centred from one channel, by default or in one clip's own mix (as its volume), and a
+/// separated layer keeps it. Only a channel a file plays is accepted, and the setting survives undo, redo, saving and
+/// loading.
 #[test]
 fn a_one_sided_source_plays_centred_and_keeps_it() {
     let centred = |k: u8| SourceMix {

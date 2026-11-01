@@ -47,8 +47,8 @@ pub fn videos_dir() -> Option<PathBuf> {
 
 /// Where recordings are made: `<videos>/Klipolo/Recordings` on every OS, one `<id>.klipolorec` folder per take. Never a
 /// cache or temporary folder, which the OS may empty. `KLIPOLO_RECORDINGS_ROOT` replaces it when it is an absolute path
-/// (a small disk image, for the disk-full check); a relative one is ignored, with a
-/// warning in the log, since the app and its recorder would read it from different folders. None: no videos folder.
+/// (to record onto a small disk image for the disk-full check); a relative one is ignored, with a warning in the log,
+/// since the app and its recorder would read it from different folders. None: no videos folder.
 pub fn recordings_root() -> Option<PathBuf> {
     recordings_root_in(std::env::var_os("KLIPOLO_RECORDINGS_ROOT"), videos_dir())
 }

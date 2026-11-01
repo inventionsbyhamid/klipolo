@@ -1,6 +1,6 @@
-//! The Windows backend (until W): the clock, durable files and process plumbing are simple and real; QoS, power,
+//! The Windows backend, for now: the clock, durable files and process plumbing are simple and real; QoS, power,
 //! memory pressure, the audio route and the seams updates ask about (`updates`) are stubs that change nothing (each
-//! names its W counterpart).
+//! names its later counterpart).
 
 use std::fs::File;
 use std::io;
@@ -53,17 +53,17 @@ pub(crate) fn host_ns() -> u64 {
     (u128::from(count.max(0) as u64) * 1_000_000_000 / u128::from(frequency)) as u64
 }
 
-/// W: EcoQoS for utility work and HighQoS for the export worker (`SetThreadInformation`), MMCSS for audio.
+/// Later: EcoQoS for utility work and HighQoS for the export worker (`SetThreadInformation`), MMCSS for audio.
 pub(crate) fn set_qos(_qos: Qos) {}
 
-/// W: raising the waited-on thread (`SetThreadPriority` boost, or EcoQoS off) while the caller waits.
+/// Later: raising the waited-on thread (`SetThreadPriority` boost, or EcoQoS off) while the caller waits.
 pub(crate) struct Lent;
 
 pub(crate) fn lend<T>(_thread: &std::thread::JoinHandle<T>, _qos: Qos) -> Lent {
     Lent
 }
 
-/// W: `PowerCreateRequest` + `PowerSetRequest(SystemRequired | ExecutionRequired)`.
+/// Later: `PowerCreateRequest` + `PowerSetRequest(SystemRequired | ExecutionRequired)`.
 pub struct Activity;
 
 pub(crate) fn begin_activity(_reason: &str) -> Activity {
@@ -75,15 +75,15 @@ pub(crate) fn begin_capture(reason: &str) -> Activity {
     begin_activity(reason)
 }
 
-/// W: the effective power mode (`PowerRegisterForEffectivePowerModeNotifications`), battery saver as `Fair`.
+/// Later: the effective power mode (`PowerRegisterForEffectivePowerModeNotifications`), battery saver as `Fair`.
 pub(crate) fn thermal() -> crate::power::Thermal {
     crate::power::Thermal::Nominal
 }
 
-/// W: `CreateMemoryResourceNotification` and the DXGI budget. The level stays Normal.
+/// Later: `CreateMemoryResourceNotification` and the DXGI budget. The level stays Normal.
 pub(crate) fn watch_pressure() {}
 
-/// W: `IMMNotificationClient::OnDefaultDeviceChanged`. Reports no changes.
+/// Later: `IMMNotificationClient::OnDefaultDeviceChanged`. Reports no changes.
 #[derive(Default)]
 pub struct RouteWatch;
 
@@ -95,12 +95,13 @@ impl RouteWatch {
     pub fn follow(&mut self) {}
 }
 
-/// W: `IAudioClient::GetStreamLatency` and `IAudioClock`.
+/// Later: `IAudioClient::GetStreamLatency` and `IAudioClock`.
 pub(crate) fn hardware_latency() -> Duration {
     Duration::ZERO
 }
 
-/// W: the webview's `EyeDropper` (WebView2 has one) rather than this seam. None until then: the UI shows no eyedropper.
+/// Later: the webview's `EyeDropper` (WebView2 has one) rather than this seam. None until then: the UI shows no
+/// eyedropper.
 pub(crate) fn screen_color_supported() -> bool {
     false
 }
@@ -109,7 +110,7 @@ pub(crate) fn sample_screen_color(done: Box<dyn FnOnce(Option<String>) + Send>) 
     done(None)
 }
 
-/// `FlushFileBuffers` either way (W: `MoveFileExW(WRITE_THROUGH)` and retries on antivirus locks).
+/// `FlushFileBuffers` either way (later: `MoveFileExW(WRITE_THROUGH)` and retries on antivirus locks).
 pub(crate) fn sync(file: &File, durability: Durability) -> io::Result<()> {
     match durability {
         Durability::Ordered => file.sync_data(),
@@ -127,12 +128,12 @@ pub(crate) fn order(_file: &File) -> io::Result<()> {
     Ok(())
 }
 
-/// W: `GetVolumeInformationByHandleW`'s volume serial number. Unknown until then.
+/// Later: `GetVolumeInformationByHandleW`'s volume serial number. Unknown until then.
 pub(crate) fn volume_id(_path: &Path) -> Option<u64> {
     None
 }
 
-/// W: the volume serial and file index of a handle opened with backup semantics. Unknown until then.
+/// Later: the volume serial and file index of a handle opened with backup semantics. Unknown until then.
 pub(crate) fn placed_identity(_path: &Path) -> Option<crate::file::PlacedIdentity> {
     None
 }
@@ -153,8 +154,8 @@ pub(crate) fn is_trash_name(name: &std::ffi::OsStr) -> bool {
         .is_some_and(|name| name.eq_ignore_ascii_case("$Recycle.Bin"))
 }
 
-/// W: a handle opened with `FILE_FLAG_BACKUP_SEMANTICS` and every share mode, answering `GetFinalPathNameByHandleW`
-/// (`folder::HeldFolder`). None yet: folders are followed by their path.
+/// Later: a handle opened with `FILE_FLAG_BACKUP_SEMANTICS` and every share mode, answering
+/// `GetFinalPathNameByHandleW` (`folder::HeldFolder`). None yet: folders are followed by their path.
 pub(crate) enum Held {}
 
 pub(crate) fn hold_folder(_path: &Path) -> io::Result<Option<Held>> {
@@ -243,7 +244,7 @@ pub(crate) fn read_exact_at(file: &File, mut buf: &mut [u8], mut offset: u64) ->
     Ok(())
 }
 
-/// W: `PrefetchVirtualMemory` over the range. Nothing yet: the pages come in as they are read.
+/// Later: `PrefetchVirtualMemory` over the range. Nothing yet: the pages come in as they are read.
 pub(crate) fn will_need(_bytes: &[u8]) {}
 
 /// `GetFileInformationByHandle`: the volume serial number and the 64-bit file index.
@@ -320,7 +321,7 @@ pub(crate) fn os_version() -> String {
     }
 }
 
-/// The Dock menu's counterpart (the taskbar's thumbnail toolbar, W: `dock`'s module doc) isn't built yet.
+/// The Dock menu's counterpart (the taskbar's thumbnail toolbar: `dock`'s module doc) isn't built yet.
 pub(crate) fn install_dock_menu(_items: crate::dock::DockItems, _click: crate::dock::DockClick) {
     tracing::debug!("dock: no app icon menu on this OS yet");
 }
