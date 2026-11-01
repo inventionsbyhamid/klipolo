@@ -1469,8 +1469,8 @@ def lightbulb():
     glass = Smooth(Circle(0.0, -60.0, 230.0), Taper(0.0, 20.0, 180.0, 0.0, 250.0, 120.0), 40.0)
     base = Box(0.0, 320.0, 125.0, 80.0, 30.0)
     threads = Strokes([[(-110.0, y), (110.0, y)] for y in (295.0, 345.0)], 14.0)
-    return (bordered(rays, GOLD) + [(Union(glass, base), BORDER, WHITE)] + outlined(base, GREY)[1:]
-            + outlined(glass, GOLD)[1:] + [(threads, 0.0, NAVY)])
+    return (bordered(rays, GOLD) + [(Union(glass, base), BORDER, WHITE)] + outlined(glass, GOLD)[1:]
+            + outlined(base, GREY)[1:] + [(threads, 0.0, NAVY)])
 
 
 def new_tag():
