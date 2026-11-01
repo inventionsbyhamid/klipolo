@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { ExportEvent } from '../bindings/ExportEvent';
-import { applyEvent, exportPercent, idleRun, unsavedFormats, type ExportRun } from './exportRun';
+import type { ExportJobInfo } from '../bindings/ExportJobInfo';
+import {
+  applyEvent,
+  canStartOver,
+  exportPercent,
+  idleRun,
+  resuming,
+  shownJob,
+  unfinishedJobs,
+  unsavedFormats,
+  type ExportRun,
+} from './exportRun';
 
 const file = {
   format: 'landscape' as const,
@@ -52,12 +63,58 @@ describe('export run', () => {
     expect([s.retries, s.retrying, s.etaS]).toEqual([2, false, 90]);
   });
 
-  it('a run that stops keeping its parts has failed here, and says why', () => {
-    // Klipolo doesn't resume an export: Rust says a stop as a failure, but a pause that reaches the page is one too.
-    const message = 'Your disk is full. Free up space, then resume.';
-    const s = run([started, progress(80, 12), { type: 'paused', message, compatibility: null }]);
-    expect([s.phase, s.jobId, s.message, s.etaS]).toEqual(['failed', 'job', message, null]);
-    expect(s.announcement).toBe(`16:9 was not saved. ${message}`);
+  it('a run that stops keeping its parts is paused, calmly, saying why, and its job is kept', () => {
+    const diskFull = { code: 'exports.diskFull', params: {} };
+    const s = run([started, progress(80, 12), { type: 'paused', message: diskFull, compatibility: null }]);
+    const why = 'The disk is full. Free up space, then resume.';
+    expect([s.phase, s.jobId, s.message, s.etaS]).toEqual(['paused', 'job', why, null]);
+    expect(s.announcement).toBe(`Export paused. ${why}`);
+    expect(exportPercent(s)).toBe(40);
+    // The person's pause (Pause, Quit) says no reason.
+    const own = run([started, { type: 'paused', message: null, compatibility: null }]);
+    expect([own.phase, own.message, own.announcement]).toEqual(['paused', null, 'Export paused.']);
+  });
+
+  it('a resume shows the job as it was at once, from the list or from the screen', () => {
+    const listed: ExportJobInfo = {
+      jobId: 'kept',
+      projectId: 'p',
+      projectName: 'Demo',
+      quality: 'high',
+      files: [file],
+      state: 'interrupted',
+      message: null,
+      frame: 120,
+      totalFrames: 200,
+      segmentsDone: 2,
+      segmentsTotal: 4,
+      stale: false,
+      createdMs: 0,
+      compatibility: null,
+    };
+    const fromList = { ...idleRun, ...resuming(idleRun, 'kept', listed) };
+    expect([fromList.phase, fromList.jobId, exportPercent(fromList), fromList.segmentsDone]).toEqual([
+      'running',
+      'kept',
+      60,
+      2,
+    ]);
+    expect(fromList.announcement).toBe('Export resumed.');
+    // Paused on screen with a file in place: it stays listed as the job goes on.
+    const paused = run([
+      { ...started, files: [file, portrait] } as ExportEvent,
+      progress(100, 3),
+      { type: 'fileReady', index: 0, path: file.path },
+      { type: 'paused', message: null, compatibility: null },
+    ]);
+    const again = { ...paused, ...resuming(paused, 'job') };
+    expect([again.phase, again.ready, exportPercent(again)]).toEqual(['running', [0], 50]);
+    // The job on screen isn't among the unfinished rows; a job none of whose formats is left can't start over.
+    const view = { jobId: 'kept', jobs: [listed, { ...listed, jobId: 'other' }] };
+    expect(shownJob(view)).toBe(listed);
+    expect(unfinishedJobs(view).map((j) => j.jobId)).toEqual(['other']);
+    expect(canStartOver(listed, ['landscape'])).toBe(true);
+    expect(canStartOver(listed, ['portrait'])).toBe(false);
   });
 
   it('rows show the file name as written', () => {
@@ -79,10 +136,10 @@ describe('export run', () => {
       { type: 'failed', message: { code: 'exports.diskFull', params: {} } },
     ]);
     expect(s.phase).toBe('failed');
-    expect(s.message).toBe('The disk is full. Free up space, then try again.');
+    expect(s.message).toBe('The disk is full. Free up space, then resume.');
     expect(unsavedFormats(s)).toEqual(['portrait']);
     // What was lost first, then why and what to do.
-    expect(s.announcement).toBe('9:16 was not saved. The disk is full. Free up space, then try again.');
+    expect(s.announcement).toBe('9:16 was not saved. The disk is full. Free up space, then resume.');
     expect(s.ready).toEqual([0]);
   });
 

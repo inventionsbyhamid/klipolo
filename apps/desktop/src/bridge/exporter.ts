@@ -2,9 +2,11 @@ import { Channel } from '@tauri-apps/api/core';
 import type { CaptionFile } from '../bindings/CaptionFile';
 import type { ExportedFile } from '../bindings/ExportedFile';
 import type { ExportEvent } from '../bindings/ExportEvent';
+import type { ExportJobInfo } from '../bindings/ExportJobInfo';
 import type { ExportPlan } from '../bindings/ExportPlan';
 import type { ExportQuality } from '../bindings/ExportQuality';
 import type { FormatKind } from '../bindings/FormatKind';
+import type { ResumeMode } from '../bindings/ResumeMode';
 import { call } from './call';
 
 /** A box in the page, in CSS px from its top left (an element's `getBoundingClientRect`). */
@@ -28,18 +30,37 @@ export const exporter = {
     call<ExportPlan>('export_plan', { req: { formats, quality } }),
   /**
    * Resolves once the export has started; its progress arrives on `onEvent`. `options.captionFile`: also save the
-   * captions as that kind of file beside the 16:9 video.
+   * captions as that kind of file beside the 16:9 video. `options.replaces`: Start over, the unfinished job this export
+   * replaces, which Rust discards only once the new export holds the slot and is ready to run (a refused start keeps
+   * it).
    */
   start: (
     formats: FormatKind[],
     quality: ExportQuality,
     onEvent: (event: ExportEvent) => void,
-    options?: { captionFile?: CaptionFile },
+    options?: { captionFile?: CaptionFile; replaces?: string },
   ) =>
     call<void>('export_start', {
-      req: { formats, quality, ...(options?.captionFile ? { captionFile: options.captionFile } : {}) },
+      req: {
+        formats,
+        quality,
+        ...(options?.captionFile ? { captionFile: options.captionFile } : {}),
+        ...(options?.replaces ? { replaces: options.replaces } : {}),
+      },
       events: channel(onEvent),
     }),
+  /** Unfinished exports on disk, newest first: running, paused, stopped by a quit or a crash, or failed. */
+  jobs: () => call<ExportJobInfo[]>('export_jobs'),
+  /** Pauses a running export at its next part, keeping every finished part. */
+  pause: (job: string) => call<void>('export_pause', { job }),
+  /**
+   * Continues an unfinished export from its finished parts (`compatible`: in compatibility mode); its progress arrives
+   * on `onEvent`, as for `start`.
+   */
+  resume: (job: string, onEvent: (event: ExportEvent) => void, mode?: ResumeMode) =>
+    call<void>('export_resume', { job, events: channel(onEvent), ...(mode ? { mode } : {}) }),
+  /** Deletes an unfinished export and its finished parts (a running one is stopped first). */
+  discard: (job: string) => call<void>('export_discard', { job }),
   /**
    * Stops the running export and deletes its job and parts. `job` names it (the run on screen); without it only the
    * open project's export is stopped (another project's is refused by name).
