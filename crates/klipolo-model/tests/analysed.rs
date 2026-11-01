@@ -1,14 +1,17 @@
 //! What analysis is for (`analysed::analysed_assets`): the videos and sounds a main-track clip plays, never music, a
 //! sound effect or a picture on a layer, nor a file imported and never placed. The page's `analysedAssets`
 //! (`apps/desktop/src/lib/analysed.ts`) is pinned to it by `apps/desktop/src/lib/analysed-parity.json`, written here
-//! with `UPDATE_GOLDEN=1`.
+//! with `UPDATE_GOLDEN=1`. A recording counts as one clip: the page offers its voice files, the ones its captions read
+//! (`speech::run_spans`), and knows which files are heard for their words only (`analysed::words_only`), both pinned by
+//! `apps/desktop/src/lib/voices-parity.json`, written here too.
 mod common;
 use std::path::PathBuf;
 
 use common::*;
 use klipolo_model::analysed::{analysed_assets, words_only};
 use klipolo_model::layout::{Anchor, BoxN, Layout};
-use klipolo_model::project::{Asset, AssetKind};
+use klipolo_model::project::{Asset, AssetKind, RecordingSource, SourceMix};
+use klipolo_model::speech::run_spans;
 use klipolo_model::timeline::{Clip, ClipSource, Item, ItemContent, Track, TrackKind};
 use klipolo_model::Project;
 use serde_json::json;
@@ -144,4 +147,143 @@ fn a_recordings_files_and_the_same_files_imported_again_are_words_only() {
     for id in ["broll", "music", "logo", "gone"] {
         assert!(!words_only(&p, id), "{id}");
     }
+}
+
+/// `p` with file `id`'s sound on or off.
+fn audio(p: &mut Project, id: &str, on: bool) {
+    p.assets.iter_mut().find(|a| a.id == id).unwrap().has_audio = on;
+}
+
+/// The fixture recording's source `id`.
+fn source<'a>(p: &'a mut Project, id: &str) -> &'a mut RecordingSource {
+    p.recordings[0]
+        .sources
+        .iter_mut()
+        .find(|s| s.id == id)
+        .unwrap()
+}
+
+/// A clip `id` of the fixture recording, `from` to `to` seconds of it.
+fn take_clip(id: &str, from: f64, to: f64) -> Clip {
+    let mut c = Clip::new(
+        ClipSource::Recording { id: "rec".into() },
+        secs(from),
+        secs(to),
+    );
+    c.id = id.into();
+    c
+}
+
+/// Takes whose voice the captions read from more than the mic, or from no mic at all: the fixture's take (screen with
+/// sound, camera without, mic) in clip "a", 0 to 20 s, then b-roll, changed as each case says.
+fn voice_cases() -> Vec<(&'static str, Project)> {
+    let mut cases = vec![("a mic", fixture())];
+
+    let mut p = fixture();
+    p.recordings[0].sources.retain(|s| s.id != "mic");
+    audio(&mut p, "screen", false);
+    audio(&mut p, "camera", true);
+    cases.push(("no mic: a camera with sound and a silent screen", p));
+
+    let mut p = fixture();
+    p.recordings[0].sources.retain(|s| s.id != "mic");
+    cases.push(("no mic: the screen's own sound", p));
+
+    // The mic reconnected 30 s in, into a second file; "a" plays the first 20 s, "a2" 25 to 40 s.
+    let mut p = fixture();
+    second_file(&mut p, "mic", "mic2");
+    let mic = source(&mut p, "mic");
+    mic.runs[0].duration_us = secs(30.0);
+    let mut run = mic.runs[0].clone();
+    run.asset_id = "mic2".into();
+    run.offset_us = secs(30.0);
+    mic.runs.push(run);
+    p.timeline.main.push(take_clip("a2", 25.0, 40.0));
+    cases.push(("a mic in two files under trimmed clips", p));
+
+    // The mic started 5 s late; the camera's own sound, muted, fills the stretch before it. "a2" starts after it.
+    let mut p = fixture();
+    audio(&mut p, "screen", false);
+    audio(&mut p, "camera", true);
+    let camera = source(&mut p, "camera");
+    (camera.mix.muted, camera.mix.fills_gaps) = (true, true);
+    let mic = source(&mut p, "mic");
+    (mic.runs[0].offset_us, mic.runs[0].duration_us) = (secs(5.0), secs(55.0));
+    p.timeline.main.push(take_clip("a2", 5.0, 20.0));
+    cases.push((
+        "a muted camera filling the stretch before a late mic",
+        p.clone(),
+    ));
+
+    // The same camera unmuted plays everywhere, so it fills the gap too, unless a clip's own mix mutes it there.
+    let camera = source(&mut p, "camera");
+    (camera.mix.muted, camera.mix.fills_gaps) = (false, false);
+    cases.push(("an unmuted camera with sound over a late mic", p.clone()));
+    let muted = SourceMix {
+        muted: true,
+        ..SourceMix::default()
+    };
+    p.timeline.main[0].source_mix.insert("camera".into(), muted);
+    cases.push(("a clip's own mix muting that camera", p));
+
+    // The mic nudged 2 s later: the screen's own sound plays before it.
+    let mut p = fixture();
+    source(&mut p, "mic").nudge_us = secs(2.0);
+    cases.push(("a nudged mic", p));
+
+    // The take's screen file imported again (the same path) and its silent camera, each a clip of its own.
+    let mut p = fixture();
+    let mut again = p.asset("screen").unwrap().clone();
+    again.id = "screen-again".into();
+    p.assets.push(again);
+    for (id, asset) in [("c", "screen-again"), ("d", "camera")] {
+        let mut c = Clip::new(ClipSource::Asset { id: asset.into() }, 0, secs(5.0));
+        c.id = id.into();
+        p.timeline.main.push(c);
+    }
+    cases.push(("a take's files placed on their own", p));
+    cases
+}
+
+#[test]
+fn voices_parity_json_is_current() {
+    let cases: Vec<serde_json::Value> = voice_cases()
+        .into_iter()
+        .map(|(name, p)| {
+            let spans = run_spans(&p);
+            let takes: Vec<serde_json::Value> = (p.timeline.main.iter())
+                .filter_map(|clip| {
+                    let ClipSource::Recording { id } = &clip.source else {
+                        return None;
+                    };
+                    let mut voices: Vec<&str> = (spans.iter())
+                        .filter(|s| s.clip == clip.id)
+                        .map(|s| s.asset.as_str())
+                        .collect();
+                    voices.sort_unstable();
+                    voices.dedup();
+                    Some(json!({ "clip": clip.id, "recording": id, "voices": voices }))
+                })
+                .collect();
+            let words_only: Vec<&str> = (p.assets.iter())
+                .filter(|a| words_only(&p, &a.id))
+                .map(|a| a.id.as_str())
+                .collect();
+            json!({
+                "name": name,
+                "project": {
+                    "assets": p.assets,
+                    "recordings": p.recordings,
+                    "timeline": { "main": p.timeline.main },
+                },
+                "takes": takes,
+                "wordsOnly": words_only,
+            })
+        })
+        .collect();
+    assert_golden(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../apps/desktop/src/lib/voices-parity.json"),
+        &sorted_keys(json!({ "cases": cases })),
+    );
 }
