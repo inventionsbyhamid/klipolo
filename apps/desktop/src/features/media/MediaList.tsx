@@ -1,22 +1,41 @@
 import { useLingui } from '@lingui/react/macro';
-import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
+import { useEffect, useRef, type PointerEvent, type ReactNode } from 'react';
 import type { Asset } from '../../bindings/Asset';
 import type { PackItem } from '../../bindings/PackItem';
 import type { Project } from '../../bindings/Project';
 import type { LibraryMarks } from '../../bridge/library';
 import { Icon } from '../../layout/Icon';
-import { assetName } from '../../lib/timeline';
 import { useProject } from '../../state/project';
 import type { LibraryTab } from '../../state/ui';
 import { beginMediaDrag } from '../timeline/drag/mediaDrag';
-import { addMedia } from './addMedia';
+import { addClip, addMedia, toTheEnd } from './addMedia';
 import { AssetMenu } from './AssetMenu';
 import { AssetRow } from './AssetRow';
 import { FavoriteButton, type Favorite } from './FavoriteButton';
-import { fileKey, loadMarks, marked, markUsed, markWhenAdded, packKey, setFavorite, useMarks } from './marks';
+import {
+  fileKey,
+  loadMarks,
+  marked,
+  markUsed,
+  markWhenAdded,
+  packKey,
+  setFavorite,
+  useMarks,
+  useSettledMarks,
+} from './marks';
 import { addImage, addMusic, addPackItem, addSound, dropPackItem } from './place';
 import { searchLibrary, type Searchable } from './search';
-import { loadPack, packAsset, packAssetId, shelves, useNearView, usePack, usePicture, uses } from './shelves';
+import {
+  loadPack,
+  packAsset,
+  packAssetId,
+  shelves,
+  useNearView,
+  usePack,
+  usePicture,
+  uses,
+  type ShelfClip,
+} from './shelves';
 
 /** On a Mac, Control-click is a right-click: it doesn't start a drag. */
 const MAC = typeof navigator !== 'undefined' && /^Mac/.test(navigator.platform);
@@ -147,34 +166,29 @@ const aboutOwn =
   (category: string, collection: string) =>
   (asset: Asset): Searchable => ({ name: asset.name, tags: [], category, kind: asset.kind, collection });
 
+/** How the search reads a Clips item: a video by its name, a recording by its name and its sources. */
+const aboutClip = (clip: ShelfClip): Searchable => ({
+  name: clip.name,
+  tags: clip.tags,
+  category: 'video',
+  kind: 'video',
+  collection: 'Your clips',
+});
+
+/** What a clip's "+" says: it goes after the last clip. */
+function addToTheEndLabel(t: ReturnType<typeof useLingui>['t'], name: string): string {
+  return t({ id: 'library.add.end', message: `Add ${name} to the end`, comment: '{name} is a file name or Recording 1' });
+}
+
 const ownKey = (asset: Asset) => fileKey(asset.path);
+/** A Clips item's mark key; one with no file to mark has none ('' is never marked). */
+const clipKey = (clip: ShelfClip) => clip.key ?? '';
 const packItemKey = (item: PackItem) => packKey(item.id);
 
 /**
- * The marks a tab's lists are in order by: as they were when the tab, the search or the marks read from Rust last
- * changed, or when the pointer or the focus last left the lists (`settle`). A star or an add shows on its own row at
- * once but moves no row while the person is on the list, so the next click lands on the item they aimed at, focus
- * stays on the star they pressed, and a drag that began meanwhile goes on.
- */
-function useSettledMarks(tab: LibraryTab, query: string) {
-  const reads = useMarks((s) => s.reads);
-  const key = `${tab}\n${query}\n${reads}`;
-  const [settled, setSettled] = useState(() => ({ key, marks: useMarks.getState().marks }));
-  let marks = settled.marks;
-  if (settled.key !== key) {
-    marks = useMarks.getState().marks;
-    setSettled({ key, marks });
-  }
-  const settle = () => {
-    const now = useMarks.getState().marks;
-    setSettled((s) => (s.marks === now ? s : { key: s.key, marks: now }));
-  };
-  return { marks, settle };
-}
-
-/**
  * What the Library shows on one tab: your files first, then Klipolo's pack where it has some. Clips are
- * the project's videos; Music and Sounds the sounds (by how they play, else by length) and the pack's beds and effects;
+ * the project's videos and its recordings, each take one row ("Recording 1", its length and sources) that adds the
+ * whole take; Music and Sounds the sounds (by how they play, else by length) and the pack's beds and effects;
  * Images a 3-column grid of your pictures, those made with Muse Image, and the pack's stickers. Drag any row onto the
  * lane it belongs to; the "+" adds it at the playhead. `query` (the panel's search) keeps the items it finds, best
  * first (`search.ts`); in each list, favorites come first, then what the library added most recently (`marks.ts`),
@@ -186,7 +200,7 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
   const project = useProject((s) => s.snapshot?.project);
   const pack = usePack((s) => s.items);
   const marks = useMarks((s) => s.marks);
-  const order = useSettledMarks(tab, query);
+  const order = useSettledMarks(`${tab}\n${query}`);
   useEffect(loadPack, []);
   useEffect(loadMarks, []);
   if (!project) return null;
@@ -202,17 +216,9 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
       {content}
     </div>
   );
-  // A recording's files are named by their source and recording ("Screen of Recording 1"), as the timeline names them,
-  // and a search finds them by that name.
-  const named = (asset: Asset): Asset => ({ ...asset, name: assetName(project, asset) });
-  const shelved = shelves(project);
-  const own = {
-    ...shelved,
-    clips: shelved.clips.map(named),
-    music: shelved.music.map(named),
-    sounds: shelved.sounds.map(named),
-  };
-  const used = uses(project).any;
+  const own = shelves(project);
+  const timelineUses = uses(project);
+  const used = timelineUses.any;
   const builtIn = t({ id: 'library.builtIn', message: 'Built in' });
   const free = t({ id: 'library.builtIn.free', message: 'Free to use' });
   const found = <T,>(items: T[], about: (item: T) => Searchable, keyOf: (item: T) => string) =>
@@ -257,29 +263,34 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
           </p>
         </div>
       );
-    const clips = found(own.clips, aboutOwn('video', 'Your clips'), ownKey);
+    const clips = found(own.clips, aboutClip, clipKey);
     if (clips.length === 0)
       return lists(
         none(t({ id: 'library.clips.noMatch', message: `No clips match “${asked}”.`, comment: '{asked} is what the person searched for' })),
       );
     return lists(
       <ul className="lib-list" aria-label={t({ id: 'library.clips', message: 'Your clips' })}>
-        {clips.map((clip) => (
-          <AssetRow
-            key={clip.id}
-            asset={clip}
-            art="clip"
-            title={clip.name}
-            used={used.has(clip.id)}
-            onAdd={() =>
-              addMedia(clip.id, { lane: 'main', index: project.timeline.main.length }, () => markUsed(ownKey(clip)))
-            }
-            addLabel={t({ id: 'library.add.end', message: `Add ${clip.name} to the end`, comment: '{clip.name} is a file name' })}
-            onDrop={(target) => addMedia(clip.id, target, () => markUsed(ownKey(clip)))}
-            menu={<AssetMenu asset={clip} />}
-            favorite={favoriteOf(marks, ownKey(clip))}
-          />
-        ))}
+        {clips.map((clip) => {
+          const { source, key } = clip;
+          const recording = source.type === 'recording' ? source.id : undefined;
+          const added = () => key && markUsed(key);
+          return (
+            <AssetRow
+              key={`${source.type}:${source.id}`}
+              asset={clip.asset}
+              art="clip"
+              title={clip.name}
+              meta={clip.meta}
+              recording={recording}
+              used={recording ? timelineUses.recordings.has(recording) : used.has(source.id)}
+              onAdd={() => addClip(source, toTheEnd, added)}
+              addLabel={addToTheEndLabel(t, clip.name)}
+              onDrop={(target) => addClip(source, target, added)}
+              menu={recording ? undefined : <AssetMenu asset={clip.asset} />}
+              favorite={key ? favoriteOf(marks, key) : undefined}
+            />
+          );
+        })}
       </ul>
     );
   }

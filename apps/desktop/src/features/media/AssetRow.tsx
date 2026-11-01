@@ -2,7 +2,7 @@ import { useLingui } from '@lingui/react/macro';
 import type { PointerEvent, ReactNode } from 'react';
 import type { Asset } from '../../bindings/Asset';
 import { Icon } from '../../layout/Icon';
-import { formatPrecise, formatTime } from '../../lib/time';
+import { formatRowLength } from '../../lib/time';
 import { beginMediaDrag } from '../timeline/drag/mediaDrag';
 import type { DropTarget } from '../timeline/drops';
 import { FavoriteButton, type Favorite } from './FavoriteButton';
@@ -32,15 +32,34 @@ interface AssetRowProps {
   addLabel?: string;
   /** Its star, after the "+". */
   favorite?: Favorite;
+  /** What its meta line says before "On the timeline", in place of its length (a recording's: "1:00, screen and mic"). */
+  meta?: string;
+  /**
+   * The recording the row is, by its id: the row is that whole take, not `asset` alone (which only says how its drag
+   * draws), and it drags onto the Video lane only.
+   */
+  recording?: string;
 }
 
 /**
- * One file in the Library (9.16): its art, its name and length (and "On the timeline" when the video uses
- * it), and a "+" that appears on hover or focus and adds it at the playhead, then its star (shown while it is a
- * favorite). Pressed and moved, it drags onto the timeline (`drag/mediaDrag`), where it lands on the lane under the
- * pointer.
+ * One file in the Library, or one recording as a whole: its art, its name and length (and "On the
+ * timeline" when the video uses it), and a "+" that appears on hover or focus and adds it at the playhead, then its
+ * star (shown while it is a favorite). Pressed and moved, it drags onto the timeline (`drag/mediaDrag`), where it
+ * lands on the lane under the pointer.
  */
-export function AssetRow({ asset, art, title, used, onAdd, onDrop, menu, addLabel, favorite }: AssetRowProps) {
+export function AssetRow({
+  asset,
+  art,
+  title,
+  used,
+  onAdd,
+  onDrop,
+  menu,
+  addLabel,
+  favorite,
+  meta,
+  recording,
+}: AssetRowProps) {
   const { t } = useLingui();
   const onPointerDown = (e: PointerEvent<HTMLLIElement>) => {
     // The buttons are their own controls.
@@ -48,14 +67,12 @@ export function AssetRow({ asset, art, title, used, onAdd, onDrop, menu, addLabe
     // No text selection and no native image drag; the row keeps the pointer wherever it goes.
     e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    beginMediaDrag(e, asset, onDrop);
+    beginMediaDrag(e, asset, onDrop, recording ? 'main' : 'any');
   };
-  // A short sound to the tenth ("0:00.4", never under "0:00.1"), anything longer to the second.
-  const length =
-    asset.durationUs < 10_000_000 ? formatPrecise(Math.max(100_000, asset.durationUs)) : formatTime(asset.durationUs);
   return (
     <li
-      data-asset-id={asset.id}
+      data-asset-id={recording ? undefined : asset.id}
+      data-recording-id={recording}
       className={favorite?.on ? 'row lib-row is-favorite' : 'row lib-row'}
       onPointerDown={onPointerDown}
       onDragStart={(e) => e.preventDefault()}
@@ -68,7 +85,7 @@ export function AssetRow({ asset, art, title, used, onAdd, onDrop, menu, addLabe
           {title}
         </span>
         <span className="row-meta">
-          <span>{length}</span>
+          <span title={meta}>{meta ?? formatRowLength(asset.durationUs)}</span>
           {used && <span>{t({ id: 'library.used', message: 'On the timeline' })}</span>}
         </span>
       </span>

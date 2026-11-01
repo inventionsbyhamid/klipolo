@@ -1,11 +1,15 @@
 import type { Asset } from '../bindings/Asset';
+import type { BoxN } from '../bindings/BoxN';
+import type { CameraLayout } from '../bindings/CameraLayout';
 import type { Clip } from '../bindings/Clip';
 import type { FormatKind } from '../bindings/FormatKind';
 import type { Item } from '../bindings/Item';
 import type { Look } from '../bindings/Look';
 import type { MotionUse } from '../bindings/MotionUse';
+import type { Recording } from '../bindings/Recording';
 import { builtinId } from './contrib';
 import { TITLE_SIZE, titleLayout } from './layout';
+import { recordingDurationUs } from './recording';
 
 export function newId(): string {
   return crypto.randomUUID();
@@ -26,6 +30,47 @@ export function newClipFor(asset: Asset): Clip {
     fadeOutUs: 0,
     look: DEFAULT_LOOK,
     camera: null,
+    framing: {},
+    effects: [],
+  };
+}
+
+/** Where the camera bubble sits in each main format, as `CameraLayout::for_primary` puts it. */
+const BUBBLE_RECT: Record<FormatKind, BoxN> = {
+  landscape: { x: 0.76, y: 0.6044, w: 0.2, h: 0.3556 },
+  portrait: { x: 0.6044, y: 0.76, w: 0.3556, h: 0.2 },
+  square: { x: 0.6044, y: 0.6044, w: 0.3556, h: 0.3556 },
+};
+
+/**
+ * The camera a recording's clip starts with in a project whose main format is `primary`, as `CameraLayout::for_primary`
+ * makes it: a round, bordered bubble at the bottom right (split at the bottom in 9:16), mirrored.
+ */
+export function cameraLayoutFor(primary: FormatKind): CameraLayout {
+  return {
+    mode: 'bubble',
+    modeOverrides: { portrait: 'splitBottom' },
+    shape: 'circle',
+    border: true,
+    mirror: true,
+    bubble: { anchor: 'bottomRight', rect: BUBBLE_RECT[primary], rotation: 0, opacity: 1, radius: 0, overrides: {} },
+  };
+}
+
+/** The whole of `recording` as a main-track clip (`klipolo_capture::clip_for`), with `camera` for its camera. */
+export function newRecordingClip(recording: Recording, camera: CameraLayout | null): Clip {
+  return {
+    id: newId(),
+    source: { type: 'recording', id: recording.id },
+    sourceInUs: 0,
+    sourceOutUs: recordingDurationUs(recording),
+    speed: 1,
+    volume: 1,
+    muted: false,
+    fadeInUs: 0,
+    fadeOutUs: 0,
+    look: DEFAULT_LOOK,
+    camera,
     framing: {},
     effects: [],
   };
