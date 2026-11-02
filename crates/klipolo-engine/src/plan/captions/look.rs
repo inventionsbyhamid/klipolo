@@ -22,8 +22,8 @@ pub struct CaptionLook {
     /// The style's id when this build doesn't have it and Clean stands in.
     pub missing: Option<Arc<str>>,
     pub colors: StyleColors,
-    /// What the style's word masks are drawn from: its id and look, never its colours (an atlas is white masks, so a
-    /// colour change or a swatch hover keeps the atlases). Part of the drawer's atlas key.
+    /// What the style's word masks are drawn from: its id and look and the person's size and case, never its colours (an
+    /// atlas is white masks, so a colour change or a swatch hover keeps the atlases). Part of the drawer's atlas key.
     pub key: u64,
     /// The font the captions ask for: the person's caption font, else the style's own family (at the style's weight
     /// and style; the drawer resolves the face).
@@ -38,6 +38,8 @@ impl CaptionLook {
         let key = {
             let mut h = DefaultHasher::new();
             (style.id.as_str(), variant).hash(&mut h);
+            // The masks are drawn at the words' size and in their case.
+            (p.captions.size.map(f64::to_bits), p.captions.upper).hash(&mut h);
             h.finish()
         };
         let missing = missing
@@ -71,5 +73,38 @@ impl CaptionLook {
             }
             _ => Arc::new(Self::of(p)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use klipolo_model::project::{CaptionSettings, Project};
+
+    use super::CaptionLook;
+
+    /// The word masks are drawn at the words' size and in their case, so a size or a case is part of the atlas key; the
+    /// words' colour isn't (the masks are white).
+    #[test]
+    fn a_size_or_case_changes_the_atlas_key_and_a_colour_doesnt() {
+        let p = Project::new("Look");
+        let key = |captions: CaptionSettings| {
+            CaptionLook::of(&Project {
+                captions,
+                ..p.clone()
+            })
+            .key
+        };
+        let mut c = CaptionSettings {
+            enabled: true,
+            ..CaptionSettings::default()
+        };
+        let own = key(c.clone());
+        c.color = Some("#FFD02E".into());
+        assert_eq!(key(c.clone()), own);
+        c.size = Some(1.3);
+        let bigger = key(c.clone());
+        assert_ne!(bigger, own);
+        c.upper = Some(true);
+        assert_ne!(key(c), bigger);
     }
 }
