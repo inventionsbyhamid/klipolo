@@ -177,6 +177,7 @@ async fn harness() {
         Some("copy") => return copy::run(&args[1..]).await,
         Some("analysis") => return analysis::run(&args[1..]).await,
         Some("export-job") => return export::write_job(&args[1..]),
+        Some("export-case") => return export::case(&args[1..]),
         Some("vt-memory") => return vt_memory::run(&args[1..]).await,
         Some("fontstart") => return fontstart::run(&args[1..]),
         Some("fontstart-child") => return fontstart::child(&args[1..]),

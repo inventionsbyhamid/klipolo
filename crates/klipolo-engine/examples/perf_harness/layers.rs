@@ -30,7 +30,7 @@ use super::project::secs;
 
 const WARM: usize = 15;
 
-fn asset(id: &str, path: &str) -> Asset {
+pub(super) fn asset(id: &str, path: &str) -> Asset {
     let m = probe_media(Path::new(path)).unwrap_or_else(|e| panic!("{path}: {e}"));
     Asset {
         id: id.into(),
@@ -60,7 +60,7 @@ fn keys(values: &[(f64, f64)]) -> Vec<Key> {
 }
 
 /// The main video Fit in portrait over its blurred picture, and `layers` of `videos` over it.
-fn project(main: &str, videos: &[String], layers: usize, seconds: f64) -> Project {
+pub(super) fn project(main: &str, videos: &[String], layers: usize, seconds: f64) -> Project {
     let mut p = Project::new("Layers");
     p.settings.formats = vec![FormatKind::Portrait];
     p.settings.primary_format = FormatKind::Portrait;
@@ -82,49 +82,61 @@ fn project(main: &str, videos: &[String], layers: usize, seconds: f64) -> Projec
     for k in 0..layers {
         let id = format!("v{k}");
         p.assets.push(asset(&id, &videos[k % videos.len()]));
+        // A video shorter than the case plays again from its start, as one layer after another.
+        let each = (p.assets[k + 1].duration_us as f64 / 1e6 - 0.1).min(seconds);
         let (x, y) = boxes[k];
-        let mut layout = Layout::new(
-            Anchor::TopLeft,
-            BoxN {
-                x,
-                y,
-                w: 0.44,
-                h: 0.22,
-            },
-        );
-        layout.motion = Some(Motion {
-            keys: Some(MotionKeys {
-                x: keys(&[(0.0, 0.0), (seconds / 2.0, 0.02), (seconds, 0.0)]),
-                scale: keys(&[(0.0, 1.0), (seconds / 2.0, 1.06), (seconds, 1.0)]),
-                ..MotionKeys::default()
-            }),
-            ..Motion::default()
-        });
-        let mut track = Track::new(TrackKind::Overlay, format!("Video {k}"));
-        track.items = vec![Item {
-            id: format!("layer-{k}"),
-            start_us: 0,
-            duration_us: secs(seconds),
-            attach: None,
-            layout,
-            content: ItemContent::Video {
-                asset_id: id,
-                source_in_us: 0,
-                speed: 1.0,
-                volume: 1.0,
-                muted: true,
-                mirror: false,
-                fill: true,
-                crop: Some(Crop {
-                    left: 0.08,
-                    top: 0.04,
-                    right: 0.08,
-                    bottom: 0.04,
+        // Each drifts and breathes over its own length.
+        let layout = |len: f64| {
+            let mut layout = Layout::new(
+                Anchor::TopLeft,
+                BoxN {
+                    x,
+                    y,
+                    w: 0.44,
+                    h: 0.22,
+                },
+            );
+            layout.motion = Some(Motion {
+                keys: Some(MotionKeys {
+                    x: keys(&[(0.0, 0.0), (len / 2.0, 0.02), (len, 0.0)]),
+                    scale: keys(&[(0.0, 1.0), (len / 2.0, 1.06), (len, 1.0)]),
+                    ..MotionKeys::default()
                 }),
-                tie: None,
-            },
-            effects: Vec::new(),
-        }];
+                ..Motion::default()
+            });
+            layout
+        };
+        let mut track = Track::new(TrackKind::Overlay, format!("Video {k}"));
+        let starts = (0..)
+            .map(|n| n as f64 * each)
+            .take_while(|t| *t < seconds - 0.5);
+        track.items = starts
+            .enumerate()
+            .map(|(n, t)| Item {
+                id: format!("layer-{k}-{n}"),
+                start_us: secs(t),
+                duration_us: secs(each.min(seconds - t)),
+                attach: None,
+                layout: layout(each.min(seconds - t)),
+                content: ItemContent::Video {
+                    asset_id: id.clone(),
+                    source_in_us: 0,
+                    speed: 1.0,
+                    volume: 1.0,
+                    muted: true,
+                    mirror: false,
+                    fill: true,
+                    crop: Some(Crop {
+                        left: 0.08,
+                        top: 0.04,
+                        right: 0.08,
+                        bottom: 0.04,
+                    }),
+                    tie: None,
+                },
+                effects: Vec::new(),
+            })
+            .collect();
         p.timeline.tracks.push(track);
     }
     klipolo_model::apply_ops(&p, &[]).expect("a checked project")
