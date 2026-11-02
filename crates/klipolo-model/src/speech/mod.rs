@@ -127,6 +127,36 @@ pub fn is_wide(c: char) -> bool {
     )
 }
 
+/// A combining mark that belongs to the letter before it: a vowel sign, virama, nukta or tone mark of the Indic, Thai,
+/// Lao, Myanmar and Khmer scripts, Hebrew points, Arabic vowel marks, or a combining accent. Not alphabetic to Rust
+/// (Tamil's pulli in "வணக்கம்", Thai's tone mark in "นี้", Hindi's nukta in "साफ़"), but trimming one off a word's edge
+/// changes the word. The scripts' own punctuation (the danda "।", Arabic's comma) is no mark.
+pub fn is_mark(c: char) -> bool {
+    match c as u32 {
+        0x0300..=0x036F | 0x0483..=0x0489 | 0x1AB0..=0x1AFF | 0x1DC0..=0x1DFF | 0x20D0..=0x20FF => {
+            true
+        }
+        // Hebrew points, less the maqaf, paseq and sof pasuq.
+        0x0591..=0x05C7 => !matches!(c as u32, 0x05BE | 0x05C0 | 0x05C3 | 0x05C6),
+        0x0610..=0x061A | 0x064B..=0x065F | 0x0670 | 0x06D6..=0x06DC | 0x06DF..=0x06E4 => true,
+        0x06E7..=0x06E8 | 0x06EA..=0x06ED | 0x08D3..=0x08FF => true,
+        // Devanagari to Sinhala: everything not a letter or digit, less the dandas and the abbreviation sign.
+        0x0900..=0x0DFF => {
+            !c.is_alphanumeric() && !matches!(c as u32, 0x0964 | 0x0965 | 0x0970 | 0x0DF4)
+        }
+        // Thai and Lao: their vowel signs and tone marks, not their punctuation (ฯ, ๏, ๚, ๛).
+        0x0E31 | 0x0E34..=0x0E3A | 0x0E47..=0x0E4E | 0x0EB1 | 0x0EB4..=0x0EBC | 0x0EC8..=0x0ECE => {
+            true
+        }
+        0x102B..=0x103E | 0x1056..=0x1059 | 0x105E..=0x1060 | 0x1062..=0x1064 | 0x1067..=0x106D => {
+            true
+        }
+        0x1071..=0x1074 | 0x1082..=0x108D | 0x108F | 0x109A..=0x109D => true,
+        0x17B4..=0x17D3 | 0x17DD => true,
+        _ => false,
+    }
+}
+
 /// Characters of scripts written without spaces between words (Han, kana and their punctuation and full-width forms:
 /// Chinese and Japanese): caption words that meet on two of them join without a space. Not Hangul: Korean separates
 /// its words with spaces.
