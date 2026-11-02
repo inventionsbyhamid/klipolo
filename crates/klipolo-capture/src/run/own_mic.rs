@@ -1,6 +1,5 @@
-//! The run controller's look for the person's own mic: no pipe looks for it in two cases, so
-//! the run controller does, once a second, in the OS's registry (`Backend::mics`, which opens nothing), for as long as the
-//! take runs.
+//! The run controller's look for the person's own mic: no pipe looks for it in two cases, so the run controller does,
+//! once a second, in the OS's registry (`Backend::mics`, which opens nothing), for as long as the take runs.
 //! - **On a fallback** (swapped to another mic). `DeviceBack` goes to the core once their mic has been listed for 3 s
 //!   straight (`mic::Presence`), and at most once per 30 s (`mic::SWITCH_BACK_EVERY_NS`) after the last switch back, so a
 //!   mic that flaps, or stays listed while it can't stream, never churns runs: the take stays on the fallback until it

@@ -6,7 +6,7 @@ const css = readFileSync(resolve(__dirname, 'tokens.css'), 'utf8');
 
 /** Colours the same in both themes: highlighter yellow, and the navy written on it. */
 const SAME_IN_BOTH = ['hilite', 'hilite-hover', 'hilite-press', 'navy'];
-/** Drawn by macOS, listed for reference only. */
+/** Drawn by macOS, listed for reference only: the app never draws them. */
 const MAC_ONLY = ['mac-close', 'mac-min', 'mac-zoom'];
 
 /** A colour token's light and dark values: `--color-name: light-dark(#light, #dark)`, or one `#hex` for both. */
