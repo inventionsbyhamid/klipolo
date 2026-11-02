@@ -53,14 +53,14 @@ export function useLineWindow(
   };
   const heightOf = (c: number) => heights.current.get(c) ?? lineHeight() * Math.min(CHUNK, count - c * CHUNK);
 
-  /** The chunks within reach of the view now; null without a layout. */
-  const inView = useCallback((): Set<number> | null => {
+  /** The chunks within `reach` px of the view now; null without a layout. */
+  const inView = useCallback((reach: number): Set<number> | null => {
     const list = listRef.current;
     const box = list?.closest<HTMLElement>('.cap-scroll');
     if (!list || !box || box.clientHeight === 0) return null;
     const listTop = list.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
-    const from = box.scrollTop - listTop - OVERSCAN_PX;
-    const to = box.scrollTop - listTop + box.clientHeight + OVERSCAN_PX;
+    const from = box.scrollTop - listTop - reach;
+    const to = box.scrollTop - listTop + box.clientHeight + reach;
     const out = new Set<number>();
     let y = 0;
     for (let c = 0; c < chunks; c++) {
@@ -74,8 +74,15 @@ export function useLineWindow(
   }, [listRef, chunks, count]);
 
   const update = useCallback(() => {
-    const next = inView();
-    if (next) setSeen((was) => (same(was, next) ? was : next));
+    // A chunk comes in within OVERSCAN_PX of the view and goes only past twice that, so one at the edge (or one whose
+    // height is still being measured) never comes and goes on every scroll.
+    const near = inView(OVERSCAN_PX);
+    const kept = inView(2 * OVERSCAN_PX);
+    if (!near || !kept) return;
+    setSeen((was) => {
+      const next = new Set([...near, ...[...was].filter((c) => kept.has(c))]);
+      return same(was, next) ? was : next;
+    });
   }, [inView]);
 
   // Scrolls and resizes of the box move the window, at most once a frame.
