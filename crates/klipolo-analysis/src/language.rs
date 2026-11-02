@@ -272,6 +272,11 @@ const LATIN_WORDS: [(&str, &str); 12] = [
     ),
 ];
 
+/// Whether `language` (as `of_words` names it) is written in Latin letters.
+pub fn is_latin(language: &str) -> bool {
+    language == DEFAULT || LATIN_WORDS.iter().any(|(l, _)| *l == language)
+}
+
 /// The Latin-script language whose common words `words` (bare, lowercased, hums left out) hold most of. English unless
 /// another language clearly wins: at least `LATIN_MIN` of its words, twice English's count, and `LATIN_SHARE_PCT` of
 /// all the words. A close call stays English.
@@ -438,6 +443,12 @@ mod tests {
     #[test]
     fn a_few_cjk_characters_outweigh_an_english_name() {
         assert_eq!(of("我们用 Final Cut 剪辑"), "zh");
+    }
+
+    #[test]
+    fn latin_languages_are_known_as_latin() {
+        assert!(is_latin("en") && is_latin("es") && is_latin("vi"));
+        assert!(!is_latin("hi") && !is_latin("ar") && !is_latin("zh"));
     }
 
     #[test]

@@ -671,6 +671,30 @@ pub fn finish(
     }
 }
 
+/// `out` tagged again from its words, as `finish` tags a new transcript: its language (`language::of_words`) and that
+/// language's fillers. Whether anything changed. For a transcript cached before transcripts were tagged by their
+/// words (every one was tagged English).
+pub fn retag(out: &mut TranscriptOut) -> bool {
+    let words = &mut out.transcript.words;
+    let spoken = language::of_words(
+        (words.iter())
+            .filter(|w| w.kind != WordKind::Pause)
+            .map(|w| w.text.as_str()),
+    );
+    let mut changed = out.transcript.language != spoken;
+    out.transcript.language = spoken.into();
+    for w in words.iter_mut().filter(|w| w.kind != WordKind::Pause) {
+        let kind = if is_filler(spoken, &w.text) {
+            WordKind::Filler
+        } else {
+            WordKind::Word
+        };
+        changed |= w.kind != kind;
+        w.kind = kind;
+    }
+    changed
+}
+
 /// A turn's words spread across it by character count (punctuation counts), end to end. No model timed them, so
 /// their confidence is 0.
 fn spread(turn: &Turn) -> Vec<Word> {

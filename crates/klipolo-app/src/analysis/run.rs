@@ -10,10 +10,12 @@ use klipolo_analysis::language;
 use klipolo_analysis::providers::meta::Meta;
 use klipolo_analysis::providers::{ProviderErrorKind, Transcriber};
 use klipolo_analysis::scenes::{self, SceneLog};
-use klipolo_analysis::transcript::{ROUGH_WORDS, Sound, TranscriptOut, align, finish, hear};
+use klipolo_analysis::transcript::{
+    ROUGH_WORDS, Sound, TranscriptOut, Turn, align, finish, hear, retag,
+};
 use klipolo_analysis::{AnalysisError, VideoError};
 use klipolo_model::speech::Levels;
-use klipolo_model::speech::{Word, WordKind};
+use klipolo_model::speech::{Word, WordKind, spaced_words};
 use klipolo_platform::qos::{self, Qos};
 use serde::{Deserialize, Serialize};
 
@@ -89,8 +91,9 @@ pub(crate) fn timed_again(found: &TranscriptOut) -> bool {
         && (found.approximate_reason.as_deref() != Some(ROUGH_WORDS) || made_as_english(found))
 }
 
-/// Tagged English, though its words are another language's: made when every transcript was tagged English. Timing it
-/// again tags it with its words' language (`transcript::finish`), so this holds once.
+/// Tagged English, though its words are in another script (Devanagari, Arabic ...): made when every transcript was
+/// tagged English and word timing read Latin letters alone. Timing it again tags it first (`transcript::retag`, cached
+/// at once), so this holds once, whatever the timing gives.
 fn made_as_english(found: &TranscriptOut) -> bool {
     let words = found
         .transcript
@@ -98,7 +101,7 @@ fn made_as_english(found: &TranscriptOut) -> bool {
         .iter()
         .filter(|w| w.kind != WordKind::Pause);
     found.transcript.language == language::DEFAULT
-        && language::of_words(words.map(|w| w.text.as_str())) != language::DEFAULT
+        && !language::is_latin(language::of_words(words.map(|w| w.text.as_str())))
 }
 
 /// What `hear_and_time` heard.
@@ -485,7 +488,7 @@ impl AnalysisState {
     async fn time_again(
         self: &Arc<Self>,
         job: &Job<'_>,
-        found: TranscriptOut,
+        mut found: TranscriptOut,
     ) -> Result<TranscriptOut, Outcome> {
         let Job {
             key,
@@ -496,6 +499,13 @@ impl AnalysisState {
             dir,
             ..
         } = *job;
+        // One cached before transcripts were tagged by their words: tagged now and cached, so it is timed again once
+        // (`made_as_english`) however this try ends.
+        if retag(&mut found) {
+            self.store(dir, "transcript", &found, &found.transcript.model)
+                .await;
+            self.found_transcript(key, &found);
+        }
         if run.cancelled() {
             return Err(self.timing_stopped(job, &found));
         }
@@ -519,11 +529,18 @@ impl AnalysisState {
         calls
             .meter
             .begin(AnalysisStep::Words, found.turns.len(), 0, 100);
-        let timing = align(calls, &sound, &found.turns).await;
+        // Chinese and Japanese turns cached as heard, unspaced, get one word per character, as new ones do.
+        let turns: Vec<Turn> = (found.turns.iter().cloned())
+            .map(|mut t| {
+                t.text = spaced_words(&t.text).into_owned();
+                t
+            })
+            .collect();
+        let timing = align(calls, &sound, &turns).await;
         let mut timed = finish(
             &found.transcript.model,
             sound.duration_us,
-            found.turns.clone(),
+            turns,
             Some(timing),
             found.cost_usd,
         );
@@ -726,7 +743,7 @@ impl AnalysisState {
 
 #[cfg(test)]
 mod tests {
-    use klipolo_analysis::transcript::{ROUGH_WORDS, TranscriptOut, Turn, finish};
+    use klipolo_analysis::transcript::{ROUGH_WORDS, TranscriptOut, Turn, finish, retag};
 
     use super::timed_again;
 
@@ -747,11 +764,20 @@ mod tests {
     }
 
     /// Words that didn't match their sound are timed again only when the transcript was tagged English though its
-    /// words are Hindi: made before word timing read other scripts.
+    /// words are in another script: made before word timing read other scripts. Spanish tagged English is not (word
+    /// timing always read it), and once tagged again, a Hindi one is not either.
     #[test]
     fn a_hindi_transcript_tagged_english_is_timed_again() {
-        assert!(timed_again(&rough("आज हम वीडियो एडिट करेंगे", "en")));
-        assert!(!timed_again(&rough("आज हम वीडियो एडिट करेंगे", "hi")));
+        let mut old = rough("आज हम वीडियो एडिट करेंगे", "en");
+        assert!(timed_again(&old));
+        assert!(retag(&mut old));
+        assert_eq!(old.transcript.language, "hi");
+        assert!(!timed_again(&old));
+        assert!(!retag(&mut old));
         assert!(!timed_again(&rough("Today we edit a video", "en")));
+        assert!(!timed_again(&rough(
+            "Hoy les voy a enseñar cómo editar un video",
+            "en"
+        )));
     }
 }

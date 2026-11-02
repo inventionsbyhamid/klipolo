@@ -2377,6 +2377,66 @@ async fn a_retime_that_times_nothing_more_says_why_now() {
     server.verify().await;
 }
 
+/// A Hindi transcript cached before transcripts were tagged by their words (tagged English, its words spread because
+/// word timing read Latin letters alone) is timed again once: tagged Hindi and cached first, so a try that times no
+/// more of its words still never makes it try again, not even when the person asks.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_old_hindi_transcript_is_timed_again_once_even_when_nothing_improves() {
+    let server = MockServer::start().await;
+    let h = harness(&server, key_store(), FakeMedia::whole(SECONDS));
+    let low = |text: &str, start: u64| json!({"text": text, "startMs": start, "endMs": start + 500, "score": 0.2, "turn": 0});
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(Counted {
+            count: h.aligns.clone(),
+            template: ResponseTemplate::new(200).set_body_json(json!({
+                "words": [low("आज", 500), low("हम", 1000), low("वीडियो", 1500), low("एडिट", 2000), low("करेंगे", 2500)],
+                "skipped": []
+            })),
+        })
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let file = h.clip("hindi.m4a", 2);
+    let turn = Turn {
+        start_us: 500_000,
+        end_us: 3_500_000,
+        text: "आज हम वीडियो एडिट करेंगे".into(),
+        speaker: Some("A".into()),
+        chunk: 0,
+        aligned: false,
+    };
+    let mut old = finish(
+        "muse-voice-transcribe-1.0",
+        us(SECONDS),
+        vec![turn],
+        None,
+        0.0003,
+    );
+    old.approximate_reason = Some(ROUGH_WORDS.into());
+    old.transcript.language = "en".into();
+    h.cache_dir(&file).store("transcript", &old).unwrap();
+    let clip = asset("hindi", AssetKind::Audio, &file, SECONDS);
+
+    for asked in [Asked::Page, Asked::Person, Asked::Person] {
+        h.state
+            .start_as(&IMPORTED, std::slice::from_ref(&clip), asked)
+            .await
+            .finished()
+            .await;
+    }
+
+    assert_eq!(
+        h.aligns.load(Ordering::SeqCst),
+        1,
+        "once, though nothing improved"
+    );
+    let cached: TranscriptOut = h.cache_dir(&file).load("transcript").unwrap();
+    assert_eq!(cached.transcript.language, "hi");
+    assert_eq!(h.state.state_of("hindi"), timed_roughly(ROUGH_WORDS, false));
+    server.verify().await;
+}
+
 /// A start still waiting for the relay's credit when another project opens: it does nothing (no request, no state,
 /// no event for the old project's clip) and promises no credit; an estimate overtaken the same way is empty.
 #[tokio::test(flavor = "multi_thread")]
