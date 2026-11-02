@@ -138,13 +138,6 @@ fn main() {
             )
         };
     }
-    // `KLIPOLO_PERF_DIRECT=on|off`: the sound pass reads every MP4 or MOV directly, or through its buffer, to compare
-    // the two (the app reads each as the file asks).
-    match std::env::var("KLIPOLO_PERF_DIRECT").as_deref() {
-        Ok("on") => klipolo_engine::audio::decode::force_direct_reads(Some(true)),
-        Ok("off") => klipolo_engine::audio::decode::force_direct_reads(Some(false)),
-        _ => {}
-    }
     // The export worker, as the app runs it (`--export-worker <job.json>`): tests and `export` use this binary.
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().map(String::as_str) == Some("--export-worker") {

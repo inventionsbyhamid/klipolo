@@ -14,7 +14,7 @@
 //! Prints the wall and CPU time, the peak memory (resident on Linux, the footprint on a Mac) and what the job wrote
 //! (files and MB) into `--cache` (a temporary folder by default, removed at the end). First it prints how much of the
 //! file the system's file cache holds; `--cold` runs the job on a copy it doesn't hold at all (`cold_copy`), as a file
-//! not read since the computer started. `KLIPOLO_PERF_DIRECT=on|off` (`main`) forces how the sound pass reads an MP4.
+//! not read since the computer started.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -125,13 +125,11 @@ pub async fn run(args: &[String]) {
         false => file,
     };
     println!(
-        "{}: {:.1}% of its pages cached before the job; sound reads {}",
+        "{}: {:.1}% of its pages cached before the job",
         Path::new(&file)
             .file_name()
             .map_or_else(String::new, |n| n.to_string_lossy().to_string()),
         cached_share(Path::new(&file)) * 100.0,
-        std::env::var("KLIPOLO_PERF_DIRECT")
-            .map_or("as each file asks".into(), |v| format!("direct {v}")),
     );
     let duration_us = probe_media(Path::new(&file)).map_or(0, |m| (m.duration * 1e6) as i64);
     let (cpu0, started) = (cpu_ms(), Instant::now());
