@@ -21,6 +21,10 @@ use crate::vendor::cap::audio_data::{AudioData, ResamplerOutput, high_quality_re
 /// Decoded audio before a seek point that is decoded and thrown away (a decoder needs it to settle).
 const PRE_ROLL: u64 = 2 * RATE as u64;
 
+/// Bytes of an MP4 or MOV per sound sample from which its sound is read directly (`read_sound_directly`): about 4 Mb/s
+/// of picture beside 48 kHz AAC (a 1.5 Mb/s one has 4 KB, 2-hour 4K at 10 Mb/s 28 KB).
+const DIRECT_FROM: i64 = 12 * 1024;
+
 #[cfg(test)]
 thread_local! {
     /// Tests: what the last pass on this thread had read from its file at its end.
@@ -96,16 +100,26 @@ pub fn decode(
 /// file's sample table, but through a 32 KB buffer it reads on through any gap under 64 KB instead of seeking past it:
 /// a file that lays sound and picture frame by frame (FFmpeg's own MP4s, OBS's) had nearly all of it read for its
 /// sound, 9.4 GB for 2 hours of 4K. Read directly (`AVIOContext::direct`), each sample is one seek and one read of
-/// its own bytes. Other containers are read in order (Matroska finds its blocks by reading), so they keep the buffer.
+/// its own bytes. That pays where the picture between two sound samples is large (`DIRECT_FROM`); for a small one,
+/// reading on costs no more locally, and fewer reads are kinder to a network volume. Other containers are read in
+/// order (Matroska finds its blocks by reading), so they keep the buffer.
 fn read_sound_directly(input: &mut ffmpeg::format::context::Input) {
     if !input.format().name().split(',').any(|name| name == "mov") {
         return;
     }
-    // SAFETY: `pb` belongs to `input`, which outlives this write (null for formats without one); `direct` is a plain
-    // field each read and seek checks.
+    let Some(packets) = input
+        .streams()
+        .best(ffmpeg::media::Type::Audio)
+        .map(|s| s.frames())
+        .filter(|&n| n > 0)
+    else {
+        return;
+    };
+    // SAFETY: `pb` belongs to `input`, which outlives this read and write (null for formats without one); `direct`
+    // is a plain field each read and seek checks.
     unsafe {
         let pb = (*input.as_mut_ptr()).pb;
-        if !pb.is_null() {
+        if !pb.is_null() && ffmpeg::ffi::avio_size(pb) / packets >= DIRECT_FROM {
             (*pb).direct = 1;
         }
     }
