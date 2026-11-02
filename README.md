@@ -233,9 +233,10 @@ open http://localhost:8000. Its two download links are in the
   stickers are Google's Noto Emoji under the Apache License 2.0.
   `assets/library/LICENSE.txt` credits each file, and
   `scripts/library-sources.json` lists where each one came from.
-- Each font in `assets/fonts` comes with its own licence file. Archivo, the
-  interface and site font, is under the SIL Open Font License
-  (`site/assets/fonts/OFL.txt`).
+- Each font in `assets/fonts` comes with its own licence file. Schibsted
+  Grotesk, the site font, is under the SIL Open Font License
+  (`site/assets/fonts/OFL.txt`); Archivo, the interface font, is under the SIL
+  Open Font License (`apps/desktop/src/styles/fonts/OFL.txt`).
 - The Rust crates and JavaScript packages the app uses are listed with their
   licences in `crates/klipolo-app/licenses/THIRD-PARTY-NOTICES.txt`.
 - The relay (`services/relay`) romanizes words in other scripts for word
