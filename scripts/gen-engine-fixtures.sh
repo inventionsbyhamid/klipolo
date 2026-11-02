@@ -145,6 +145,10 @@ ff -f lavfi -i "testsrc2=size=64x64:rate=30:duration=2" -itsoffset 0.0613333 \
    -c:a aac -b:a 128k -metadata creation_time=2026-10-16T10:00:00.000000Z "$OUT/lead-40ms.mp4"
 ff -f lavfi -i "testsrc2=size=64x64:rate=30:duration=2" -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=2" \
    -ac 2 "${H264[@]}" -b:v 200k -g 15 -pix_fmt yuv420p -c:a aac -b:a 128k "$OUT/aac-in-mov.mov"
+# Two sound tracks (a camera's mic and a second one): the sound pass reads one of them, whichever way it reads.
+ff -f lavfi -i "testsrc2=size=64x64:rate=30:duration=3" -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=3" \
+   -f lavfi -i "sine=frequency=880:sample_rate=48000:duration=3" -map 0 -map 1 -map 2 -ac 2 "${H264[@]}" -b:v 200k -g 15 \
+   -pix_fmt yuv420p -c:a aac -b:a 96k "$OUT/two-sounds.mov"
 # A phone file whose picture starts after its sound (Android's MPEG4Writer writes such an empty edit for
 # the later track): sound from 0 and the first frame at 70 ms (exactly: a 1/30000 s time base, the frames passed through
 # as they are, or ffmpeg 6 makes it 30000 fps), 2 s at 30 fps whose luma names the frame (16 + 8 × (frame mod 25)). No

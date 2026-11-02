@@ -379,37 +379,72 @@ mod tests {
         assert_eq!(loudest(&dir.path().join("missing.wav"), 1), None);
     }
 
+    fn fixture(name: &str) -> std::path::PathBuf {
+        let path = crate::fixture_set::fixture_dir().join(name);
+        assert!(path.exists(), "{name}: run scripts/gen-engine-fixtures.sh");
+        path
+    }
+
+    /// `path`'s sound from frame `from` as the sound pass decodes it, reading directly as `direct` says (None: as the
+    /// file asks), each sample's bits, and what it read.
+    fn pass(path: &Path, from: u64, direct: Option<bool>) -> (Vec<u32>, u64) {
+        let mut bits = Vec::new();
+        decode_reading(path, from, None, direct, &mut |_, block| {
+            bits.extend(block.iter().map(|s| s.to_bits()));
+            Ok(true)
+        })
+        .unwrap();
+        (bits, BYTES_READ.get())
+    }
+
+    /// The same through a buffer that reads on through the pictures, as every container was read before.
+    fn read_on(path: &Path, from: u64) -> Vec<u32> {
+        let mut bits = Vec::new();
+        let input = crate::media::open::input(path).unwrap();
+        decode_input(input, from, None, &mut |_, block| {
+            bits.extend(block.iter().map(|s| s.to_bits()));
+            Ok(true)
+        })
+        .unwrap();
+        bits
+    }
+
     /// An MP4 that lays its sound and picture frame by frame (FFmpeg's own, OBS's) has its sound read without the
-    /// pictures between: a quarter of the file at most, and the same samples as reading on through them.
+    /// pictures between: a quarter of the file at most, and the same samples as reading on through them, from its
+    /// start and from a seek (its pre-roll and first timestamp).
     #[test]
     fn an_interleaved_mp4_s_sound_is_read_without_its_pictures() {
-        let path = crate::fixture_set::fixture_dir().join("longgop-20s-1080p.mp4");
-        assert!(path.exists(), "run scripts/gen-engine-fixtures.sh");
+        let path = fixture("longgop-20s-1080p.mp4");
         let size = std::fs::metadata(&path).unwrap().len();
-        fn sound(samples: &mut Vec<f32>) -> impl FnMut(u64, &[f32]) -> Result<bool, String> + '_ {
-            move |_, block| {
-                samples.extend_from_slice(block);
-                Ok(true)
-            }
-        }
-        let mut read_on = Vec::new();
-        let input = crate::media::open::input(&path).unwrap();
-        decode_input(input, 0, None, &mut sound(&mut read_on)).unwrap();
-        let mut decoded = Vec::new();
-        decode(&path, 0, None, &mut sound(&mut decoded)).unwrap();
+        let (decoded, read) = pass(&path, 0, None);
         assert!(
             decoded.len() >= 20 * RATE as usize,
             "{} samples",
             decoded.len()
         );
-        assert!(
-            decoded
-                .iter()
-                .map(|s| s.to_bits())
-                .eq(read_on.iter().map(|s| s.to_bits())),
-            "the same sound"
-        );
-        let read = BYTES_READ.get();
+        assert!(decoded == read_on(&path, 0), "the same sound");
         assert!(read * 4 < size, "read {read} of {size} bytes");
+        let from = 7 * u64::from(RATE) + 1_234;
+        let (decoded, read) = pass(&path, from, None);
+        assert!(
+            decoded == read_on(&path, from),
+            "the same sound from a seek"
+        );
+        assert!(read * 4 < size, "read {read} of {size} bytes from a seek");
+    }
+
+    /// Read directly, a MOV's sound and one of two sound tracks are the same samples, from the start and from a seek.
+    #[test]
+    fn a_mov_and_one_of_two_sound_tracks_read_directly_are_the_same_sound() {
+        for name in ["aac-in-mov.mov", "two-sounds.mov"] {
+            let path = fixture(name);
+            for from in [0, u64::from(RATE) + 777] {
+                let (direct, _) = pass(&path, from, Some(true));
+                assert!(!direct.is_empty(), "{name} from {from}");
+                assert!(direct == read_on(&path, from), "{name} from {from}");
+                let (buffered, _) = pass(&path, from, Some(false));
+                assert!(buffered == direct, "{name} from {from}, through the buffer");
+            }
+        }
     }
 }
