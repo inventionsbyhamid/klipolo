@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Privacy, Klipolo</title>
+<meta name="description" content="What stays on your Mac, what Klipolo sends to Meta and to its own server, and what is kept.">
+<link rel="canonical" href="https://klipolo.com/privacy.html">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f2f3f1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<!-- BRAND FILES: scripts/site-brand/render.sh stamps ?v= from scripts/site-brand/VERSION into these links. -->
+<link rel="icon" href="/assets/favicon.ico?v=1" sizes="32x32">
+<link rel="icon" href="/assets/favicon.svg?v=1" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=1">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="preload" href="/assets/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Klipolo">
+<meta property="og:title" content="Privacy, Klipolo">
+<meta property="og:description" content="What stays on your Mac, what Klipolo sends to Meta and to its own server, and what is kept.">
+<meta property="og:url" content="https://klipolo.com/privacy.html">
+<meta property="og:image" content="https://klipolo.com/assets/og.png?v=1">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Klipolo. Ask for a short, and it’s done.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Privacy, Klipolo">
+<meta name="twitter:description" content="What stays on your Mac, what Klipolo sends to Meta and to its own server, and what is kept.">
+<meta name="twitter:image" content="https://klipolo.com/assets/og.png?v=1">
+<meta name="twitter:image:alt" content="Klipolo. Ask for a short, and it’s done.">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <a class="mark" href="/" aria-label="Klipolo home">
+    <img class="mark__icon" src="/assets/klipolo-icon.svg?v=1" alt="" width="24" height="24">
+    <span class="mark__name">Klipolo</span>
+  </a>
+  <div class="top__end">
+    <a class="pill" href="/#download">Download</a>
+  </div>
+</header>
+
+<main id="main" class="prose">
+  <h1 class="prose__title">Privacy</h1>
+  <p class="prose__lede">Your projects stay on your Mac. The AI features send what Meta’s models need, and Klipolo’s server keeps none of your audio, video or text.</p>
+  <p class="prose__date">Last changed November 2, 2026.</p>
+
+  <h2>The short version</h2>
+  <ul>
+    <li>Recording, editing and export happen on your Mac, and work offline.</li>
+    <li>The AI features send audio, small copies of the video and your chat to Meta’s model API.</li>
+    <li>Klipolo’s server times every word, and passes your requests to Meta when you use an access code. It keeps no audio, video or text.</li>
+    <li>No analytics, ads or trackers, in the app or on this site.</li>
+  </ul>
+
+  <h2>What stays on your Mac</h2>
+  <ul>
+    <li>Your projects, in ~/Movies/Klipolo, and your recordings, in ~/Movies/Klipolo/Recordings.</li>
+    <li>Your media, and the copies Klipolo makes to edit and analyze it.</li>
+    <li>Your Meta API key, your access code and the server’s device token, in your Mac’s Keychain.</li>
+    <li>Klipolo’s log, in ~/Library/Logs/Klipolo. It names files, never their folders, and stays on your Mac.</li>
+  </ul>
+
+  <h2>What goes to Meta</h2>
+  <p>When you use the AI features, Klipolo sends Meta’s model API:</p>
+  <ul>
+    <li>the audio, to write down what people say;</li>
+    <li>low-resolution copies of the video, to log scenes and track people;</li>
+    <li>short clips with their sound, to tell whose voice is speaking;</li>
+    <li>your chat messages, with the project’s name, its transcript, its scene log and your file names;</li>
+    <li>what you ask Muse Image to draw.</li>
+  </ul>
+  <p>Video copies are uploaded under a generic name, and Meta expires them after a day. Klipolo deletes the scene log’s copies as soon as each call ends. Meta handles what it receives under its own terms and privacy policy.</p>
+
+  <h2>What goes to Klipolo’s server</h2>
+  <p>Klipolo’s server is api.klipolo.com.</p>
+  <ul>
+    <li><strong>Word timing.</strong> Your Mac sends the audio and the transcript, so captions and cuts land on each word. This happens with your own Meta key too. The audio is deleted as soon as it’s timed.</li>
+    <li><strong>Access codes.</strong> With an access code, your requests to Meta pass through the server on their way to Meta.</li>
+    <li><strong>Registering.</strong> The first time you use the AI features, your Mac registers with a random id, and your access code if you entered one. No name, email or hardware id.</li>
+  </ul>
+  <p>The server keeps:</p>
+  <ul>
+    <li>each Mac’s random id, and the access code it used;</li>
+    <li>for each AI call: the time, the model, the usage and the cost;</li>
+    <li>each Mac’s word timing minutes for the day.</li>
+  </ul>
+  <p>Its database holds no audio, video, text or IP addresses, and its logs never hold what you send. It keeps these records as long as needed to run access codes.</p>
+
+  <h2>Your own Meta key</h2>
+  <p>Klipolo checks your key with Meta, then keeps it in your Mac’s Keychain. It goes only to Meta, never to Klipolo’s server. Meta bills your key.</p>
+
+  <h2>Fonts</h2>
+  <p>Browsing Klipolo’s list of free fonts sends nothing. When you download one, it comes straight from Google Fonts.</p>
+
+  <h2>Other apps</h2>
+  <p>If you turn on Let other apps edit with Klipolo, it listens on your Mac only, with a new token each time it runs.</p>
+
+  <h2>No analytics or trackers</h2>
+  <p>The app has no analytics, crash reporting or ads. This site has no analytics, cookies or trackers, and loads nothing from other sites. The server that hosts it keeps a standard access log.</p>
+
+  <h2>Changes</h2>
+  <p>If this changes, this page will say so, with a new date at the top.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about your privacy: <a href="mailto:hello@klipolo.com">hello@klipolo.com</a>.</p>
+</main>
+
+<footer class="foot">
+  <p class="foot__ship">Klipolo. The Mac video editor you talk to.</p>
+  <nav class="foot__nav" aria-label="Site">
+    <a href="/#download">Download</a>
+    <a href="/#faq">Questions</a>
+    <a href="/privacy.html">Privacy</a>
+    <a href="/terms.html">Terms</a>
+    <a href="https://github.com/inventionsbyhamid/klipolo">Source code</a>
+  </nav>
+  <div class="foot__credits">
+    <p>Built on Meta's Muse Spark, Muse Voice Transcribe, Muse Image, SAM 3.1 and MMS aligner. Klipolo is not made or endorsed by Meta.</p>
+    <p>This project uses the universal romanizer software 'uroman' written by Ulf Hermjakob, USC Information Sciences Institute (2015-2020).</p>
+    <p>&copy; 2026 Klipolo</p>
+  </div>
+</footer>
+</body>
+</html>

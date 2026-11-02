@@ -871,6 +871,79 @@ main > section:not(.hero) {
   max-width: 72ch;
 }
 
+/* ---------- small pages: privacy, terms, not found ---------- */
+
+.prose {
+  width: var(--w);
+  margin-inline: auto;
+  padding-block: clamp(112px, 18vh, 180px) clamp(64px, 12vh, 140px);
+}
+.prose__title {
+  font-size: var(--t-say);
+  font-weight: 500;
+  line-height: 1.04;
+  letter-spacing: -.038em;
+  max-width: 19ch;
+  text-wrap: balance;
+}
+.prose__lede {
+  margin-top: 14px;
+  font-size: var(--t-lede);
+  line-height: 1.45;
+  color: var(--quiet);
+  max-width: 44ch;
+}
+.prose__date { margin-top: 10px; font-size: var(--t-small); color: var(--quiet); }
+.prose h2 {
+  margin-top: 2.4em;
+  margin-bottom: .5em;
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -.02em;
+  line-height: 1.25;
+}
+.prose p, .prose li { line-height: 1.6; max-width: 60ch; }
+.prose p + p, .prose p + ul, .prose ul + p { margin-top: .8em; }
+.prose ul, .prose p { max-width: 640px; }
+.prose ul { padding-left: 1.15em; display: grid; gap: .4em; }
+.prose li::marker { color: var(--quiet); }
+.prose a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: .22em; text-decoration-color: var(--quiet); }
+.prose a:hover { text-decoration-color: currentColor; }
+
+.note-page {
+  width: var(--w);
+  min-height: 78svh;
+  margin-inline: auto;
+  padding-block: clamp(112px, 18vh, 180px) clamp(64px, 10vh, 120px);
+  display: grid;
+  align-content: start;
+  gap: 18px;
+}
+.note-page__code {
+  font-size: var(--t-big);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -.04em;
+  color: var(--quiet);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: clamp(8px, 2vh, 20px);
+}
+.note-page__title {
+  font-size: var(--t-say);
+  font-weight: 500;
+  line-height: 1.04;
+  letter-spacing: -.038em;
+  max-width: 19ch;
+  text-wrap: balance;
+}
+.note-page__body {
+  font-size: var(--t-lede);
+  line-height: 1.45;
+  color: var(--quiet);
+  max-width: 38ch;
+}
+.note-page__next { margin-top: 10px; font-size: var(--t-lede); font-weight: 500; }
+
 /* ================================================================
    Motion. Hidden starting states apply only when JS is running
    (html.js) and the visitor hasn't asked for reduced motion.
