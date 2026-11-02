@@ -3,7 +3,7 @@ import { memo, useCallback, useRef, type KeyboardEvent, type PointerEvent } from
 import { movedKey } from '../../../lib/keys';
 import { formatPrecise } from '../../../lib/time';
 import { deleteVolumeKey, moveVolumeKey, type Leveled } from '../../../state/keyEdits';
-import { isPicked, useKeyPick } from '../../../state/keyPick';
+import { isPicked, pickMoved, useKeyPick } from '../../../state/keyPick';
 import { usePlayback } from '../../../state/playback';
 import { registerFollower } from '../drag/registry';
 import { useSpeech } from '../media/speech';
@@ -108,7 +108,12 @@ export const VolumePoints = memo(function VolumePoints({
     if (click) return pick(p.fromUs);
     const { toUs, v } = moved(p, e.clientX, e.clientY);
     settle(e.currentTarget, p.fromUs);
-    void moveVolumeKey(target, p.fromUs, toUs, v).then(() => previewLine(id, null));
+    const landed = moveVolumeKey(target, p.fromUs, toUs, v);
+    // Delete straight after takes the point where it went, not the clip or sound. This point lets go of the focus (it
+    // stays drawn here until the move lands), so Delete goes to the pick.
+    e.currentTarget.blur();
+    pickMoved({ kind: 'volume', target, tUs: toUs }, p.fromUs, landed);
+    void landed.then(() => previewLine(id, null));
   };
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>, us: number) => {
     if (e.key === 'Enter' || e.key === ' ') {

@@ -272,6 +272,15 @@ export function movedKeysAt(keys: MotionKeys, fromUs: number, toUs: number, lenU
   return { ...keys, ...Object.fromEntries(moving.map((name) => [name, movedKey(keys[name], fromUs, t, lenUs, copy)])) };
 }
 
+/** Where `movedKeysAt` put the keys from `keys` in `next`: the time of the key it moved or copied, or null for none. */
+export function landedAt(keys: MotionKeys, next: MotionKeys): number | null {
+  for (const name of Object.keys(REST) as (keyof MotionKeys)[]) {
+    const moved = next[name].find((k) => !keys[name].includes(k));
+    if (moved) return moved.tUs;
+  }
+  return null;
+}
+
 /** The time of the key before `tUs` (more than `slackUs` earlier), or null. */
 export function previousKey(times: readonly number[], tUs: number, slackUs: number): number | null {
   let found: number | null = null;

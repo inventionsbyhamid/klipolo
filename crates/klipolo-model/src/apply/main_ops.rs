@@ -200,7 +200,9 @@ pub(super) fn freeze_frame(p: &mut Project, at_us: Us, duration_us: Us) -> Resul
 /// (the same turn the other way). Layers anchored to the clip keep their offset into it, so none moves. Refused for a
 /// freeze frame, a recording clip, a clip whose own sound plays in a layer (Separate sound: the layer would keep
 /// playing forward), a copy that doesn't hold the clip's whole range, and a clip with nothing to turn. Played forward,
-/// it never starts before its file's start (a copy measured a hair longer than the stretch it holds).
+/// it never starts before its file's start (a copy measured a hair longer than the stretch it holds), and its fades and
+/// volume keys fit what is left. A speaker's path and who it keeps turn with the footage, so it follows the same
+/// people either way.
 pub(super) fn reverse_clip(
     p: &mut Project,
     clip_id: &str,
@@ -267,6 +269,10 @@ pub(super) fn reverse_clip(
     c.source = new_source;
     (c.source_in_us, c.source_out_us) = (new_in, new_out);
     c.reversed = reversed;
+    for focus in c.fill_focus.values_mut() {
+        *focus = focus.turned(to);
+    }
+    clamp_fades(c);
     Ok(())
 }
 
