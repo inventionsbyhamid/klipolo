@@ -269,15 +269,20 @@ fn every_tool_schema_is_strict() {
             "addMusic.atSec",
             "addMusic.duck",
             "addMusic.volume",
+            "addSound.atSec",
+            "addSound.atWords",
             "addText.animation",
             "addText.atSec",
+            "addText.atWords",
             "addText.durationSec",
             "addText.font",
             "addImage.atSec",
+            "addImage.atWords",
             "addImage.durationSec",
             "addImage.position",
             "addImage.size",
             "makeSticker.atSec",
+            "makeSticker.atWords",
             "makeSticker.durationSec",
             "makeSticker.position",
             "makeTitleCard.atSec",
@@ -531,11 +536,13 @@ fn parses_each_tool_from_spike_shaped_calls() {
                 AddSound {
                     name: "Whoosh".into(),
                     at_us: vec![secs_to_us(12.8), secs_to_us(23.0), secs_to_us(51.5)],
+                    at_words: vec![],
                 },
                 AddText {
                     text: "Day 1".into(),
                     preset: TextPreset::Title,
                     at_us: Some(0),
+                    at_words: None,
                     duration_us: Some(secs_to_us(3.0)),
                     animation: None,
                     font: None,
@@ -549,6 +556,7 @@ fn parses_each_tool_from_spike_shaped_calls() {
                 size: Some(PictureSize::Small),
                 position: Some(Position::TopRight),
                 at_us: None,
+                at_words: None,
                 duration_us: None,
             }],
         ),
@@ -558,6 +566,7 @@ fn parses_each_tool_from_spike_shaped_calls() {
                 prompt: "paper plane".into(),
                 position: Some(Position::TopRight),
                 at_us: Some(secs_to_us(56.0)),
+                at_words: None,
                 duration_us: None,
             }],
         ),
@@ -1494,15 +1503,24 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "followSubject",
         "word-pop or bold-box",
         "addText, kinetic or pop",
-        "in the first 2 s of what you keep",
+        "on the first words you keep",
         "a striking later line said in the video, never the opening words",
         "at most 6 punchy words",
         "only where two clips already meet with spare footage; otherwise none",
         "never the text \"null\"",
-        "medium pack stickers",
-        "at a top corner",
-        "animate last",
-        "a sound",
+        // Stickers and sound effects on the words said, each for what it is for.
+        "give atWords: 1 to 4 words in a row copied exactly from Transcript",
+        "on their word, not at the start of a moment or range",
+        "only on a spoken word that names a thing, an action or a feeling, showing that word",
+        "a Library image whose name fits it, else makeSticker",
+        "Stickers, at most 3 in a short",
+        "Medium at a top corner, 2 s, at most one per 8 s",
+        "animate last with pop or bounce",
+        "at most one per 5 s: rise under the hook, the only sound over the opening words",
+        "whoosh or swoosh on a cut except the opening (the first words after it) or text sliding in",
+        "pop on a sticker or text popping in, as animate's sound, never also addSound there",
+        "ding or chime on a number, a key point or a reveal",
+        "impact or bass drop on a punchline or a big claim",
         "addMusic",
         "Place every layer inside the parts you keep",
         "one or two short, plain, friendly sentences",
@@ -1591,13 +1609,16 @@ fn the_prompt_is_one_fixed_text_and_small() {
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
     // The caps every lane's prompt lines and tools share: 914 prompt tokens measured with the clip tools' line and the
     // recordings' line, 1,126 with autoZoom's line and the short's recipe, about 335 more with the composing tools' lines
-    // and the catalogues they name (presets, effects, looks, fonts); 4,555 tools tokens with the clip tools (setClip,
+    // and the catalogues they name (presets, effects, looks, fonts), about 180 more with the short's stickers and sound
+    // effects placed on the words said (1,792 in all); 4,555 tools tokens with the clip tools (setClip,
     // setTransition), setBackground (about 210), freezeFrame (about 105), addText's font (about 25), the recording tools
     // (about 1,010) and followSubject's focus (about 117), about 390 more with animate, the words' entrance, autoZoom
-    // and the shorts' two caption styles, and about 1,030 more with the tools that compose any edit (setMotion,
-    // animateText, setLayer, styleText, setEffects).
+    // and the shorts' two caption styles, about 1,030 more with the tools that compose any edit (setMotion,
+    // animateText, setLayer, styleText, setEffects), and about 200 more with atWords on addSound, addText, addImage and
+    // makeSticker and atSec saying what it does beside it (6,530 in all). The tools cap rose from 6,500 to 6,600 for
+    // that last part.
     assert!(prompt_tokens <= 1_800, "prompt {prompt_tokens} tokens");
-    assert!(tools_tokens <= 6_500, "tools {tools_tokens} tokens");
+    assert!(tools_tokens <= 6_600, "tools {tools_tokens} tokens");
 }
 
 #[test]

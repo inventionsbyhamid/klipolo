@@ -4,8 +4,10 @@
 //!   given, else the video's start: background music, wherever the playhead is. "The song" and the like are the
 //!   person's one music file (`library::is_generic`).
 //! - `addSound`: a sound at each time as the library's + puts one (`media::sound::add_sound_ops`: the whole file at full
-//!   volume with no fades, attached to the clip under it, cut where the video ends); two times within
-//!   `evidence::TOLERANCE_US` of each other are one sound, at the first.
+//!   volume with no fades, attached to the clip under it, cut where the video ends); where each quote is said (the
+//!   times given beside quotes only pick among places), else at each time; two moments within
+//!   `evidence::TOLERANCE_US` of each other are one sound, at the first, and none goes on top of the same sound there
+//!   already from this answer (`sound_near`: a sticker's `animate` sound on the same word).
 //! - `addText`: the person's own words (`persons_words`; words of the model's own are refused back, for it to ask), or
 //!   another app's as it gave them (`apps_words`), in one of the four text presets, placed by the model's
 //!   `media::text::add_text_ops` exactly as the canvas's Add title and the library's presets place it: each format's
@@ -22,10 +24,10 @@
 //!   one, applied at once; and a `Job::MakeTitleBackground` for the picture to go under it, in the primary format as
 //!   the additions leave it. No title of theirs: refused back, for the model to ask.
 //!
-//! A time from the model stands on the evidence like any other (`Evidence::moment`: a change of shot or topic first),
-//! and is then mapped into the working copy. Nothing is placed at the video's end or past it, and a layer that would
-//! play past the end is cut there, so no media call makes the video longer. A file from the pack comes in with the ops
-//! that first place it.
+//! A moment from the model is where the words it quotes are said (`atWords`, `quote`), or its time snapped to a word's
+//! start or a cut near it (`Evidence::place`), and is then mapped into the working copy. Nothing is placed at the
+//! video's end or past it, and a layer that would play past the end is cut there, so no media call makes the video
+//! longer. A file from the pack comes in with the ops that first place it.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -52,10 +54,10 @@ use klipolo_model::validate::MAX_TEXT;
 use klipolo_model::{Project, apply_ops};
 
 use super::{
-    Compiler, Edit, Job, MakeSticker, Refused, animate, clear, label, to_model, unfounded,
+    Compiler, Edit, Job, MakeSticker, Refused, animate, clear, label, quote, to_model, unfounded,
 };
 use crate::context::{secs, within_video};
-use crate::evidence::TOLERANCE_US;
+use crate::evidence::{TOLERANCE_US, in_cut};
 use crate::library::{Found, LibraryItem, MediaKind, is_generic};
 use crate::sanitize;
 use crate::tools::{Entrance, PictureSize, Position, TextPreset, ToolCall};
@@ -131,20 +133,82 @@ fn music<'l>(c: &'l Compiler, asked: &str) -> Result<&'l LibraryItem, Refused> {
     pick(c, "addMusic", asked, &[MediaKind::Music])
 }
 
-/// Where a media call's time plays in `work`: the playhead when the model gave none, else its time standing on the
-/// evidence (`Evidence::moment`) or refused, naming `field`. A time past the main track's end keeps its distance from
-/// it. Nothing starts at the video's end or past it (refused, so no layer ever makes the video longer).
+/// Where a call places something, on the snapshot's timeline as the context showed it.
+#[derive(Clone, Copy, Debug)]
+pub(super) enum At<'q> {
+    /// No time given: the playhead.
+    Playhead,
+    /// Seconds a media tool gave: snapped to a word's start or a cut near it, else as given (`Evidence::place`).
+    Sec(Us),
+    /// Seconds that must stand on the evidence (`Evidence::moment`), or are refused: a layer's new start or split.
+    Edge(Us),
+    /// Where these words are said (`quote`); of several places, the one nearest one of these times (seconds given
+    /// beside them).
+    Words(&'q str, &'q [Us]),
+}
+
+impl<'q> At<'q> {
+    /// A media call's place: where its words are said when it quotes some (its time picking among several places),
+    /// else its time, else the playhead.
+    pub(super) fn of(at_us: &'q Option<Us>, at_words: Option<&'q str>) -> Self {
+        match (at_words, at_us) {
+            (Some(words), near) => At::Words(words, near.as_slice()),
+            (None, Some(t)) => At::Sec(*t),
+            (None, None) => At::Playhead,
+        }
+    }
+
+    /// The field it came from, for a call's one place.
+    pub(super) fn field(self) -> &'static str {
+        match self {
+            At::Words(..) => "atWords",
+            _ => "atSec",
+        }
+    }
+
+    /// How a refusal names it: `atSec 12.0`, `atWords "went flying" (10.6 s)`, `the playhead (3.0 s)`.
+    fn said(self, field: &str, t: Us) -> String {
+        match self {
+            At::Playhead => format!("the playhead ({} s)", secs(t)),
+            At::Sec(_) | At::Edge(_) => format!("{field} {}", secs(t)),
+            At::Words(words, _) => format!("{field} {} ({} s)", quote::echo(words), secs(t)),
+        }
+    }
+}
+
+/// Where a call's place `at` plays in `work`, said for `tool`'s `field`: the playhead, seconds snapped (`At::Sec`) or
+/// standing on the evidence (`At::Edge`), or where the words quoted are said (`At::Words`, refused when they are said
+/// nowhere, or in several places and no time picks one). The playhead or seconds in footage this answer's removals
+/// take out (`Compiler::cut`) are refused: the layer would go with it, or move, while the reply says it was added. A
+/// time past the main track's end keeps its distance from it. Nothing starts at the video's end or past it (refused, so
+/// no layer ever makes the video longer).
 pub(super) fn start(
     c: &Compiler,
     work: &Project,
     tool: &str,
     field: &str,
-    at: Option<Us>,
+    at: At,
 ) -> Result<Us, Refused> {
+    let playhead = within_video(c.snapshot, &c.inputs.view).0;
     let said = match at {
-        None => within_video(c.snapshot, &c.inputs.view).0,
-        Some(t) => (c.evidence.moment(t)).ok_or_else(|| to_model(unfounded(tool, field, t)))?,
+        At::Playhead => playhead,
+        At::Sec(t) => c.evidence.place(t, &c.cut),
+        At::Edge(t) => (c.evidence.moment(t)).ok_or_else(|| to_model(unfounded(tool, field, t)))?,
+        At::Words(words, near) => {
+            (c.said()).find(&c.cut, (tool, field), words, (near, playhead))?
+        }
     };
+    if matches!(at, At::Playhead | At::Sec(_)) && in_cut(&c.cut, said) {
+        // The tools without atWords are asked for a time.
+        let instead = match tool {
+            "makeTitleCard" | "addMusic" => "Give a time in the parts you keep.",
+            _ => "Quote words in the parts you keep.",
+        };
+        return Err(to_model(format!(
+            "{tool}: {} is in a part this answer cuts. {instead}",
+            at.said(field, said)
+        )));
+    }
     let snapshot_end = main_track_duration(&c.snapshot.timeline.main);
     let now = match c.map.time(work, said) {
         Some(now) => now,
@@ -153,18 +217,15 @@ pub(super) fn start(
         }
         None => {
             return Err(to_model(format!(
-                "{tool}: {field} {} s was taken out by an earlier change in this answer.",
-                secs(said)
+                "{tool}: {} was taken out by an earlier change in this answer.",
+                at.said(field, said)
             )));
         }
     };
     if video_duration(&work.timeline).saturating_sub(now) < MIN_DURATION_US {
-        let what = match at {
-            Some(_) => format!("{field} {}", secs(said)),
-            None => format!("the playhead ({} s)", secs(said)),
-        };
         return Err(to_model(format!(
-            "{tool}: {what} is at or past the video's end, where nothing can be added."
+            "{tool}: {} is at or past the video's end, where nothing can be added.",
+            at.said(field, said)
         )));
     }
     Ok(now)
@@ -316,7 +377,7 @@ pub(super) fn add_music(
     let start = match at {
         // No time given: background music, from the video's start, wherever the playhead is.
         None if video_duration(&work.timeline) >= MIN_DURATION_US => 0,
-        _ => start(c, work, "addMusic", "atSec", at)?,
+        _ => start(c, work, "addMusic", "atSec", At::of(&at, None))?,
     };
     let defaults = MusicOpts::default();
     let opts = MusicOpts {
@@ -340,11 +401,26 @@ pub(super) fn add_music(
     })
 }
 
+/// Whether an earlier call of this answer put the sound file `asset_id` within `TOLERANCE_US` of `at` in `work`: one
+/// more there would play on top of it (an `addSound` and a sticker's `animate` sound on one word), so it is left out.
+/// A sound the project had before the message doesn't count: "another ding there" adds one.
+pub(super) fn sound_near(c: &Compiler, work: &Project, asset_id: &str, at: Us) -> bool {
+    let had =
+        |id: &Id| (c.snapshot.timeline.tracks.iter()).any(|t| t.items.iter().any(|i| &i.id == id));
+    (work.timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .any(|item| {
+            matches!(&item.content, ItemContent::Audio { asset_id: a, .. } if a == asset_id)
+                && item.start_us.abs_diff(at) <= TOLERANCE_US.unsigned_abs()
+                && !had(&item.id)
+        })
+}
+
 pub(super) fn add_sound(
     c: &Compiler,
     work: &Project,
     name: &str,
-    times: &[Us],
+    (words, times): (&[String], &[Us]),
 ) -> Result<Edit, Refused> {
     let item = pick(c, "addSound", name, &[MediaKind::Sound])?;
     let asset = &item.asset;
@@ -354,14 +430,26 @@ pub(super) fn add_sound(
             item.name
         )));
     }
-    let mut starts: Vec<Us> = Vec::with_capacity(times.len());
-    for (k, &t) in times.iter().enumerate() {
-        let field = format!("atSec[{k}]");
-        let at = start(c, work, "addSound", &field, Some(t))?;
-        // Two times within the evidence's tolerance are one moment: one sound, at the first.
+    // With quotes, the times only pick where each is said: one each when there are as many, else any of them.
+    let mut starts: Vec<Us> = Vec::with_capacity(words.len() + times.len());
+    let quoted = (words.iter().enumerate()).map(|(k, w)| {
+        let near = match times.get(k) {
+            Some(t) if times.len() == words.len() => std::slice::from_ref(t),
+            _ => times,
+        };
+        (format!("atWords[{k}]"), At::Words(w, near))
+    });
+    let timed = (times.iter().enumerate())
+        .filter(|_| words.is_empty())
+        .map(|(k, &t)| (format!("atSec[{k}]"), At::Sec(t)));
+    for (field, at) in quoted.chain(timed) {
+        let at = start(c, work, "addSound", &field, at)?;
+        // Two moments within the evidence's tolerance are one: one sound, at the first. The same sound already there
+        // (an earlier call's) plays for this one too.
         if !starts
             .iter()
             .any(|&s| s.abs_diff(at) <= TOLERANCE_US.unsigned_abs())
+            && !sound_near(c, work, &asset.id, at)
         {
             starts.push(at);
         }
@@ -453,12 +541,12 @@ pub(super) fn add_text(
     work: &Project,
     text: &str,
     preset: TextPreset,
-    (at, duration): (Option<Us>, Option<Us>),
+    (at, duration): (At, Option<Us>),
     animation: Option<Entrance>,
     font: Option<&str>,
 ) -> Result<Edit, Refused> {
     let words = screen_words(c, ("addText", "text"), text)?;
-    let start = start(c, work, "addText", "atSec", at)?;
+    let start = start(c, work, "addText", at.field(), at)?;
     // Kinetic words are the kinetic title template, near the top whatever the preset, in its own font.
     if animation == Some(Entrance::Kinetic) {
         let (ops, _) = title_ops(
@@ -557,7 +645,7 @@ pub(super) fn add_image(
     work: &Project,
     file: &str,
     (size, position): (Option<PictureSize>, Option<Position>),
-    (at, duration): (Option<Us>, Option<Us>),
+    (at, duration): (At, Option<Us>),
 ) -> Result<Edit, Refused> {
     let item = pick(c, "addImage", file, &[MediaKind::Image])?;
     if item.asset.kind != AssetKind::Image {
@@ -566,7 +654,7 @@ pub(super) fn add_image(
             item.name
         )));
     }
-    let start = start(c, work, "addImage", "atSec", at)?;
+    let start = start(c, work, "addImage", at.field(), at)?;
     let size = size.unwrap_or(PictureSize::Medium);
     let spot = position.unwrap_or(Position::Center).spot();
     // As the library's + puts a picture (`add_image_ops`), at a size and in a corner when one was asked for.
@@ -619,16 +707,31 @@ pub fn sticker_ops(p: &Project, job: &MakeSticker, asset: &Asset) -> Option<Vec<
             Op::AddItem { item, .. } => item.layout.motion.clone(),
             _ => None,
         });
-        let exit_only = m
-            .as_ref()
-            .is_some_and(|m| m.enter.is_none() && m.looping.is_none());
-        let at = animate::sound_start(exit_only, start, duration, m.as_ref());
+        let at = animate::sound_start(exit_only(m.as_ref()), start, duration, m.as_ref());
         let with_picture = apply_ops(p, &ops).ok()?;
         if let Ok(more) = add_sound_ops(&with_picture, sound, at) {
             ops.extend(more);
         }
     }
     Some(ops)
+}
+
+/// Whether a picture moving as `m` has only an exit, so its sound plays as it goes out.
+fn exit_only(m: Option<&Motion>) -> bool {
+    m.is_some_and(|m| m.enter.is_none() && m.looping.is_none())
+}
+
+/// `job`'s sound, unless an earlier call of this answer put the same sound where it would play in `with_additions`
+/// (`sound_near`): left out of the job then, as `animate` leaves it out on a layer.
+pub(super) fn sticker_sound(c: &Compiler, with_additions: &Project, job: &mut MakeSticker) {
+    let Some(sound) = &job.sound else {
+        return;
+    };
+    let m = job.motion.as_deref();
+    let at = animate::sound_start(exit_only(m), job.at_us, job.duration_us, m);
+    if sound_near(c, with_additions, &sound.id, at) {
+        job.sound = None;
+    }
 }
 
 /// `makeSticker`'s job, on the project as the message's additions leave it (`with_additions`), whatever came before it
@@ -639,9 +742,9 @@ pub(super) fn make_sticker(
     with_additions: &Project,
     prompt: &str,
     position: Option<Position>,
-    (at, duration): (Option<Us>, Option<Us>),
+    (at, duration): (At, Option<Us>),
 ) -> Result<Job, Refused> {
-    let start = start(c, with_additions, "makeSticker", "atSec", at)?;
+    let start = start(c, with_additions, "makeSticker", at.field(), at)?;
     Ok(Job::MakeSticker(MakeSticker {
         prompt: sanitize::reply(prompt),
         at_us: start,
@@ -671,7 +774,7 @@ pub(super) fn make_title_card(
             ))
         })?
     };
-    let start = start(c, work, "makeTitleCard", "atSec", at)?;
+    let start = start(c, work, "makeTitleCard", "atSec", At::of(&at, None))?;
     let (ops, title_id) = title_ops(
         work,
         TitleTemplate::TitleCard,

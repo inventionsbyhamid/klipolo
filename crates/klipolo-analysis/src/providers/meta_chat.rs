@@ -31,19 +31,22 @@ use super::meta::RELAY_BUSY;
 
 /// The model chat runs on.
 pub const CHAT_MODEL: &str = "muse-spark-1.3";
-/// The most output tokens a chat answer may take, reasoning included. Meta bills only what an answer uses (a first
-/// trial of the planner took at most 1,291); this is room for long reasoning, so an answer is rarely cut off. The
-/// relay takes at most 16,384 and reserves the whole cap while the call runs.
-pub const CHAT_MAX_OUTPUT_TOKENS: u32 = 8192;
+/// The most output tokens a chat answer may take, reasoning included: the relay's own cap. Meta bills only what an
+/// answer uses; a short's whole plan in one answer took 6,016 in one paid run and reached 8,192 (cut off) in the next.
+/// The relay reserves the whole cap while the call runs: about $0.07 of output, with the input about $0.15 a call, far
+/// under a device's $2 cap.
+pub const CHAT_MAX_OUTPUT_TOKENS: u32 = 16_384;
 /// Chat calls at once: one of the device's four relay calls.
 pub const CHAT_CALLS: usize = 1;
 /// Times a busy answer is asked again.
 pub const CHAT_BUSY_RETRIES: u32 = 2;
 /// The longest wait before asking again, whatever `Retry-After` says.
 pub const CHAT_BUSY_WAIT_MAX: Duration = Duration::from_secs(5);
-/// The longest one model call of a message may take, from asking for chat's slot to the answer: the planner's longest
-/// answers took about 30 s, and the person is waiting. Past it the call is dropped (its request with it).
-pub const CHAT_ANSWER_TIMEOUT: Duration = Duration::from_secs(90);
+/// The longest one model call of a message may take, from asking for chat's slot to the answer. A short's whole plan
+/// cut off at 8,192 output tokens took about 48 s in a paid run, so a full `CHAT_MAX_OUTPUT_TOKENS` answer takes about
+/// 96 s: this leaves room for it under the relay's own 300 s read limit. Past it the call is dropped (its request with
+/// it), billed all the same.
+pub const CHAT_ANSWER_TIMEOUT: Duration = Duration::from_secs(180);
 
 /// Muse Spark as chat's language model, within chat's own slot. Its clones share the client and the slot.
 #[derive(Clone, Debug)]
@@ -172,9 +175,10 @@ fn item(item: &Item) -> Value {
     }
 }
 
-/// Meta's answer in chat's terms, priced from its usage. An answer that came back `failed`, or `incomplete` (cut off,
-/// at its output cap or otherwise), is an error: its calls may be partial, so none of them is used. It is still billed,
-/// so the error carries its cost.
+/// Meta's answer in chat's terms, priced from its usage. An answer cut off at its output cap is `ModelError::CutOff`
+/// with its words and the calls it finished (not marked `incomplete`, and arguments that read as a JSON object), for the
+/// planner to keep and ask again. One that came back `failed`, or `incomplete` for another reason, is an error, none of
+/// its calls used. Either is still billed, so the error carries its cost.
 fn answer(out: ResponseOut) -> Result<ModelResponse, ModelError> {
     let usage_usd = pricing::spark_usd(out.usage);
     // A code from the answer, for logs: only lowercase letters, digits and underscores, never free text.
@@ -189,7 +193,17 @@ fn answer(out: ResponseOut) -> Result<ModelResponse, ModelError> {
             .unwrap_or("no reason given")
             .to_owned()
     };
+    let cut_off = out.status.as_deref() == Some("incomplete")
+        && code("/incomplete_details/reason") == "max_output_tokens";
+    // In a cut-off answer, the calls Meta marks as cut part-way.
+    let unfinished: Vec<String> = (out.raw.pointer("/output").and_then(Value::as_array))
+        .into_iter()
+        .flatten()
+        .filter(|item| item["type"] == "function_call" && item["status"] == "incomplete")
+        .filter_map(|item| item["call_id"].as_str().map(str::to_owned))
+        .collect();
     let detail = match out.status.as_deref() {
+        _ if cut_off => None,
         Some("failed") => Some(format!("answer failed: {}", code("/error/code"))),
         Some("incomplete") => Some(format!("cut off: {}", code("/incomplete_details/reason"))),
         _ => None,
@@ -197,9 +211,14 @@ fn answer(out: ResponseOut) -> Result<ModelResponse, ModelError> {
     if let Some(detail) = detail {
         return Err(ModelError::Other { detail, usage_usd });
     }
-    Ok(ModelResponse {
+    let answer = ModelResponse {
         text: out.output_text.unwrap_or_default(),
         calls: (out.function_calls.into_iter())
+            .filter(|c| {
+                !cut_off
+                    || (!unfinished.contains(&c.call_id)
+                        && serde_json::from_str::<Value>(&c.arguments).is_ok_and(|v| v.is_object()))
+            })
             .map(|c| FunctionCall {
                 name: c.name,
                 call_id: c.call_id,
@@ -207,7 +226,11 @@ fn answer(out: ResponseOut) -> Result<ModelResponse, ModelError> {
             })
             .collect(),
         usage_usd,
-    })
+    };
+    if cut_off {
+        return Err(ModelError::CutOff(answer));
+    }
+    Ok(answer)
 }
 
 /// What the person is told when the relay, or Traefik in front of it, gave up waiting and said nothing (a bare 504 or

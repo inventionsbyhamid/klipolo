@@ -245,10 +245,20 @@
       "message": "add a sticker of a paper plane in the top right when she mentions flying",
       "expect": [
         {
-          "calls": [{"name": "makeSticker", "args": {"prompt": {"contains": "plane"}, "position": "top-right", "atSec": {"min": 63.0, "max": 86.0}}}],
-          "outcome": {"jobs": true, "applied": false}
+          "calls": [{"name": "makeSticker", "args": {"prompt": {"contains": "plane"}, "position": "top-right"}}],
+          "outcome": {"jobs": true, "applied": false, "stickerAt": {"min": 63.0, "max": 86.0}}
         },
         {"calls": [{"name": "askUser"}], "outcome": {"asked": true}}
+      ]
+    },
+    {
+      "id": "pop-on-a-word",
+      "message": "add a pop sound right when she says float",
+      "expect": [
+        {
+          "calls": [{"name": "addSound"}],
+          "outcome": {"applied": true, "soundAt": {"min": 75.7, "max": 76.3}}
+        }
       ]
     },
     {

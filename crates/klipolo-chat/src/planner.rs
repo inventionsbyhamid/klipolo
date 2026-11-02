@@ -20,6 +20,8 @@
 //! reply says it stopped (`STOPPED`).
 //!
 //! The reply is the model's closing words, then the sentences of refusals meant for the person that they don't say yet.
+//! When the steps run out right after an answer with calls and the edits did something, the model's last words were
+//! about what it was still doing: what the edits did is said instead (`summary`).
 //! Without closing words (the steps ran out, a call failed, or they were empty), it is built from the model's last
 //! text: that text, then Klipolo's own notes on what the edits did or left as they were (`Compiled::notes` and `waits`:
 //! a speed that shortens a transition, or waits for the person as it leaves one no room, a camera that is its own
@@ -52,10 +54,14 @@ use crate::tools::{FunctionCall, ToolCall, tools};
 pub const KEPT_TURNS: usize = 6;
 /// The most model calls one message makes: each answer with calls gets what came of them and is asked again, until
 /// one answers in words alone. A safety net: the prompt asks for calls that don't depend on each other in one answer,
-/// and the spend cap still bounds what a message costs.
-pub const MAX_STEPS: usize = 8;
+/// and the spend cap still bounds what a message costs (a paid short took 8 steps, about $0.19; an answer cut off at
+/// its output cap takes one more).
+pub const MAX_STEPS: usize = 10;
 /// Sent back when an answer says what it will do but calls no tool.
 pub const GO_ON: &str = "Go on: make the calls now.";
+/// Sent back after an answer cut off at its output cap: its finished calls are kept, and it is asked once more.
+pub const CUT_OFF: &str =
+    "Your last answer was cut off. Send fewer calls at a time; you can finish in the next step.";
 /// Said after what was done when a model call failed before the model was done.
 pub const STOPPED: &str = "I couldn't finish the rest of it.";
 
@@ -184,7 +190,9 @@ impl ChatError {
             ModelError::Network => (ChatErrorKind::Network, NO_CONNECTION.to_owned()),
             ModelError::Refused => (ChatErrorKind::Refused, NOT_ACCEPTED.to_owned()),
             ModelError::Declined(s) => (ChatErrorKind::Declined, said(Some(s), DECLINED)),
-            ModelError::Other { .. } => (ChatErrorKind::Other, FAILED.to_owned()),
+            ModelError::CutOff(_) | ModelError::Other { .. } => {
+                (ChatErrorKind::Other, FAILED.to_owned())
+            }
         };
         Self {
             kind,
@@ -243,14 +251,33 @@ pub async fn plan(
     let mut said = String::new();
     let mut closing: Option<String> = None;
     let mut stopped: Option<ChatError> = None;
+    // Whether an answer was cut off at its output cap: the first is kept and asked again once, the next fails.
+    let mut cut_before = false;
+    // The loop ran out of steps right after an answer with calls: the model never said it was done.
+    let mut out_of_steps = false;
     loop {
         steps += 1;
-        let answer = match ask(model, &request, spent, steps).await {
-            Ok(answer) => answer,
+        let (answer, cut) = match ask(model, &request, spent, steps).await {
+            Ok(answer) => (answer, false),
+            Err(Asked::CutOff(partial)) if !cut_before && steps < MAX_STEPS => {
+                cut_before = true;
+                (partial, true)
+            }
+            Err(Asked::CutOff(partial)) => {
+                let e = ModelError::CutOff(partial);
+                let usage_usd = spent + e.usage_usd();
+                let e = ChatError::from_model(e, usage_usd, steps);
+                if calls.is_empty() {
+                    return Err(e);
+                }
+                spent = e.usage_usd;
+                stopped = Some(e);
+                break;
+            }
             // Nothing done yet: the message failed.
-            Err(e) if calls.is_empty() => return Err(e),
+            Err(Asked::Failed(e)) if calls.is_empty() => return Err(e),
             // What was done stands, and the reply says it stopped.
-            Err(e) => {
+            Err(Asked::Failed(e)) => {
                 spent = e.usage_usd;
                 stopped = Some(e);
                 break;
@@ -258,9 +285,21 @@ pub async fn plan(
         };
         spent += answer.usage_usd;
         answers.push(answer.calls.clone());
-        let text = answer.text.trim();
+        // A cut-off answer's words end where its last whole sentence does.
+        let text = if cut {
+            whole_sentences(answer.text.trim())
+        } else {
+            answer.text.trim()
+        };
         if !text.is_empty() {
             said = text.to_owned();
+        }
+        if answer.calls.is_empty() && cut {
+            // Cut off before any call was finished: asked again, to send fewer at a time.
+            request.input.push(Item::User {
+                text: CUT_OFF.to_owned(),
+            });
+            continue;
         }
         if answer.calls.is_empty() {
             // It says what it will do but did nothing: told to go on.
@@ -282,7 +321,7 @@ pub async fn plan(
             .filter(|c| !calls.contains(c))
             .cloned()
             .collect();
-        if fresh.is_empty() && read.unreadable.is_empty() {
+        if fresh.is_empty() && read.unreadable.is_empty() && !cut {
             // Only what it already did: it has nothing more.
             break;
         }
@@ -333,11 +372,27 @@ pub async fn plan(
             .cloned()
             .collect();
         calls.extend(kept);
+        if cut {
+            // Its finished calls are kept; the rest is asked for once more, fewer at a time.
+            request.input.push(Item::User {
+                text: CUT_OFF.to_owned(),
+            });
+        }
         if steps >= MAX_STEPS {
+            out_of_steps = true;
             break;
         }
     }
     let compiled = compile(project, inputs, &calls);
+    // Its words then were written before what came of its calls, often what it was about to do: said instead is what
+    // the edits did.
+    if out_of_steps
+        && closing.is_none()
+        && stopped.is_none()
+        && (compiled.additions.is_some() || compiled.proposal.is_some())
+    {
+        said = summary(&calls, &compiled);
+    }
     // Closing words, when it had them, are the reply: written knowing what came of every call.
     let (text, summed) = match closing.filter(|c| !c.is_empty()) {
         Some(closing) => (closing, stopped.is_none()),
@@ -358,6 +413,28 @@ pub async fn plan(
             .to_owned();
     }
     Ok(out)
+}
+
+/// `text` up to the end of its last whole sentence: a `.`, `!` or `?` and any closing quotes or brackets, then a space
+/// or the end (so `1.5` ends none); empty when no sentence ends in it. The words of an answer cut off part-way.
+fn whole_sentences(text: &str) -> &str {
+    let closing = |c: char| matches!(c, '"' | '\'' | ')' | '\u{201d}' | '\u{2019}');
+    let mut end = 0;
+    let mut chars = text.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        if !matches!(c, '.' | '!' | '?') {
+            continue;
+        }
+        let mut stop = i + c.len_utf8();
+        while let Some(&(j, q)) = chars.peek().filter(|&&(_, q)| closing(q)) {
+            stop = j + q.len_utf8();
+            chars.next();
+        }
+        if chars.peek().is_none_or(|&(_, next)| next.is_whitespace()) {
+            end = stop;
+        }
+    }
+    &text[..end]
 }
 
 /// Whether `text`, an answer with no tool call, says the model will do something it hasn't yet ("I will turn this
@@ -435,11 +512,21 @@ async fn ask(
     request: &ModelRequest,
     spent: f64,
     nth: usize,
-) -> Result<ModelResponse, ChatError> {
-    (model.respond(request).await).map_err(|e| {
-        let usage_usd = spent + e.usage_usd();
-        ChatError::from_model(e, usage_usd, nth)
+) -> Result<ModelResponse, Asked> {
+    (model.respond(request).await).map_err(|e| match e {
+        ModelError::CutOff(partial) => Asked::CutOff(partial),
+        e => {
+            let usage_usd = spent + e.usage_usd();
+            Asked::Failed(ChatError::from_model(e, usage_usd, nth))
+        }
     })
+}
+
+/// Why a model call gave no whole answer: cut off at its output cap (what it finished, `ModelError::CutOff`), or
+/// failed.
+enum Asked {
+    CutOff(ModelResponse),
+    Failed(ChatError),
 }
 
 /// One answer's calls, read.
@@ -680,6 +767,99 @@ fn done(call: &ToolCall) -> Option<&'static str> {
         // Shown on their own (moments, questions), or proposed.
         _ => return None,
     })
+}
+
+/// One or two sentences on what a message's edits did, for a reply when the model never closed: what the additions
+/// did ("I made it vertical and added captions, a title, 3 stickers, 3 sounds and music."), from the calls that went
+/// through and the layers they added, then the cut waiting for the person and how long the video is once applied.
+fn summary(calls: &[ToolCall], compiled: &Compiled) -> String {
+    use klipolo_model::Op;
+    use klipolo_model::media::music::is_music;
+    use klipolo_model::timeline::ItemContent;
+    let through = |i: usize| {
+        !compiled.refusals.iter().any(|r| r.call_index == i)
+            && !compiled.proposed_calls.contains(&i)
+            && !compiled.unchanged.contains(&i)
+    };
+    let mut did: Vec<String> = Vec::new();
+    let mut added: Vec<String> = Vec::new();
+    let count = |n: usize, one: &str, many: &str| match n {
+        0 => None,
+        1 => Some(one.to_owned()),
+        n => Some(format!("{n} {many}")),
+    };
+    for (_, call) in calls.iter().enumerate().filter(|&(i, _)| through(i)) {
+        let said = match call {
+            ToolCall::SetFormat { format, .. } => match format {
+                klipolo_model::project::FormatKind::Portrait => "made it vertical",
+                klipolo_model::project::FormatKind::Square => "made it square",
+                klipolo_model::project::FormatKind::Landscape => "made it wide",
+            },
+            ToolCall::FollowSubject { .. } => "kept the speaker in frame",
+            ToolCall::AutoZoom { on: true, .. } => "zoomed in on the clicks",
+            _ => continue,
+        };
+        if !did.iter().any(|d| d == said) {
+            did.push(said.to_owned());
+        }
+    }
+    let ops: &[Op] = (compiled.additions.as_ref()).map_or(&[][..], |tx| tx.ops.as_slice());
+    let items = || {
+        ops.iter().filter_map(|op| match op {
+            Op::AddItem { item, .. } => Some(item),
+            _ => None,
+        })
+    };
+    let captions = (calls.iter().enumerate())
+        .any(|(i, c)| through(i) && matches!(c, ToolCall::SetCaptions { on: true, .. }));
+    if captions {
+        added.push("captions".to_owned());
+    }
+    let words = items()
+        .filter(|i| {
+            matches!(
+                i.content,
+                ItemContent::Text { .. } | ItemContent::Generator { .. }
+            )
+        })
+        .count();
+    let drawn = (compiled.jobs.iter())
+        .filter(|j| matches!(j, crate::Job::MakeSticker(_)))
+        .count();
+    let pictures = items()
+        .filter(|i| matches!(i.content, ItemContent::Image { .. }))
+        .count()
+        + drawn;
+    let sounds = items()
+        .filter(|i| matches!(i.content, ItemContent::Audio { .. }) && !is_music(i))
+        .count();
+    let music = items().any(is_music);
+    added.extend(count(words, "a title", "titles"));
+    added.extend(count(pictures, "a sticker", "stickers"));
+    added.extend(count(sounds, "a sound", "sounds"));
+    if music {
+        added.push("music".to_owned());
+    }
+    let list = |parts: &[String]| match parts {
+        [] => String::new(),
+        [one] => one.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    };
+    let mut out = match (did.is_empty(), added.is_empty()) {
+        (false, false) => format!("I {} and added {}.", list(&did), list(&added)),
+        (false, true) => format!("I {}.", list(&did)),
+        (true, false) => format!("I added {}.", list(&added)),
+        (true, true) if compiled.additions.is_some() => "I made the changes.".to_owned(),
+        (true, true) => String::new(),
+    };
+    if let Some(proposal) = &compiled.proposal {
+        let length = klipolo_model::query::video_duration(&proposal.review.after.timeline);
+        let secs = (length as f64 / US_PER_SEC as f64).round();
+        out = format!("{out} Approve the cut to keep the {secs} s version.")
+            .trim()
+            .to_owned();
+    }
+    out
 }
 
 /// The calls of `compiled` that went through, each said once (`done`), then the proposal if there is one.

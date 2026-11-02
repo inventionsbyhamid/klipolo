@@ -18,6 +18,7 @@ use klipolo_model::time::Us;
 use klipolo_model::timeline::{ItemContent, TrackKind};
 
 use super::animate::noun;
+use super::media::At;
 use super::motion::drawn;
 use super::{Compiler, Edit, Refused, label, to_model};
 use crate::context::secs;
@@ -133,7 +134,7 @@ pub(super) fn set_layer(
     }
     let start = match change.start_us {
         Some(at) => {
-            let now = super::media::start(c, work, "setLayer", "start", Some(at))?;
+            let now = super::media::start(c, work, "setLayer", "start", At::Edge(at))?;
             ops.push(Op::MoveItem {
                 id: id.clone(),
                 track_id: None,
@@ -151,7 +152,7 @@ pub(super) fn set_layer(
         });
     }
     if let Some(at) = change.split_us {
-        let now = super::media::start(c, work, "setLayer", "split", Some(at))?;
+        let now = super::media::start(c, work, "setLayer", "split", At::Edge(at))?;
         let end = start.saturating_add(change.length_us.unwrap_or(item.duration_us));
         if now <= start || now >= end {
             return Err(to_model(format!(

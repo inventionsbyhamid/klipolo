@@ -672,17 +672,31 @@
       "annotations": {
         "readOnlyHint": false
       },
-      "description": "Play a sound effect from Library at each time given.",
+      "description": "Play a sound effect from Library at each moment given.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
           "atSec": {
-            "description": "Every time it plays, from the context.",
+            "description": "Or times, from the context. With atWords, they pick where each is said.",
             "items": {
               "description": "A time it plays, timeline seconds.",
               "type": "number"
             },
-            "type": "array"
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "atWords": {
+            "description": "Each moment it plays: where the first word is said.",
+            "items": {
+              "description": "1 to 4 words said there, exactly as in Transcript",
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "name": {
             "description": "The sound's name in Library.",
@@ -691,6 +705,7 @@
         },
         "required": [
           "name",
+          "atWords",
           "atSec"
         ],
         "type": "object"
@@ -728,9 +743,16 @@
             ]
           },
           "atSec": {
-            "description": "Start. Null for the playhead.",
+            "description": "Start. With atWords, picks where they are said. Both null: the playhead.",
             "type": [
               "number",
+              "null"
+            ]
+          },
+          "atWords": {
+            "description": "Or 1 to 4 words said there, exactly as in Transcript; it starts on the first.",
+            "type": [
+              "string",
               "null"
             ]
           },
@@ -767,6 +789,7 @@
           "text",
           "preset",
           "atSec",
+          "atWords",
           "durationSec",
           "animation",
           "font"
@@ -784,9 +807,16 @@
         "additionalProperties": false,
         "properties": {
           "atSec": {
-            "description": "Start. Null for the playhead.",
+            "description": "Start. With atWords, picks where they are said. Both null: the playhead.",
             "type": [
               "number",
+              "null"
+            ]
+          },
+          "atWords": {
+            "description": "Or 1 to 4 words said there, exactly as in Transcript; it starts on the first.",
+            "type": [
+              "string",
               "null"
             ]
           },
@@ -835,6 +865,7 @@
           "size",
           "position",
           "atSec",
+          "atWords",
           "durationSec"
         ],
         "type": "object"
@@ -850,9 +881,16 @@
         "additionalProperties": false,
         "properties": {
           "atSec": {
-            "description": "Start. Null for the playhead.",
+            "description": "Start. With atWords, picks where they are said. Both null: the playhead.",
             "type": [
               "number",
+              "null"
+            ]
+          },
+          "atWords": {
+            "description": "Or 1 to 4 words said there, exactly as in Transcript; it starts on the first.",
+            "type": [
+              "string",
               "null"
             ]
           },
@@ -887,6 +925,7 @@
           "prompt",
           "position",
           "atSec",
+          "atWords",
           "durationSec"
         ],
         "type": "object"

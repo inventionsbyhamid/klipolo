@@ -1282,7 +1282,7 @@ fn a_short_is_a_look_then_one_batch_then_words() {
         "Here is your vertical short. Review the cut below."
     );
     // A short whose model goes one call a step still has room: the steps are a safety net, not the plan.
-    assert_eq!(MAX_STEPS, 8);
+    assert_eq!(MAX_STEPS, 10);
 }
 
 #[test]
@@ -1561,4 +1561,260 @@ fn a_corrective_keep_only_replaces_the_one_before() {
     let kept = klipolo_model::query::video_duration(&proposal.review.after.timeline);
     // Both parts, each snapped to the words it stands on: more than the first part alone (about 3.4 s).
     assert!((secs(4.4)..secs(5.3)).contains(&kept), "{kept}");
+}
+
+#[test]
+fn a_short_places_its_sticker_and_sounds_on_the_words_said() {
+    use klipolo_model::query::video_duration;
+    use klipolo_model::timeline::{ItemContent, TrackKind};
+    let (p, speech) = talk();
+    let i = with_pack(inputs(&p, speech));
+    // As the recipe asks: the cut, then a sticker on the word that names a thing, popping in with its sound, and a
+    // ding on the key point, each by the words said there. The ding's first quote is misheard and comes back with
+    // what is said most like it; the next step quotes it as said.
+    let batch = vec![
+        fc(
+            "call_2",
+            "keepOnly",
+            r#"{"ranges": [{"startSec": 2.9, "endSec": 7.8}]}"#,
+        ),
+        fc(
+            "call_3",
+            "addImage",
+            r#"{"file": "Star", "size": "medium", "position": "top-right", "atSec": null, "atWords": "the new module", "durationSec": 2.0}"#,
+        ),
+        fc(
+            "call_4",
+            "animate",
+            r#"{"layer": "last", "enter": "pop", "exit": null, "emphasis": null, "sound": "Pop"}"#,
+        ),
+        fc(
+            "call_5",
+            "addSound",
+            r#"{"name": "Ding", "atWords": ["a long tme"], "atSec": null}"#,
+        ),
+    ];
+    let fixed = fc(
+        "call_6",
+        "addSound",
+        r#"{"name": "Ding", "atWords": ["a long time."], "atSec": null}"#,
+    );
+    let model = Fake::new(vec![
+        answer("", vec![find_call("call_1")], 0.001),
+        answer("", batch, 0.002),
+        answer("", vec![fixed], 0.001),
+        answer("Here is your short. Review the cut below.", vec![], 0.001),
+    ]);
+    let mut i = i;
+    let ding = serde_json::from_value(serde_json::json!({
+        "id": "klipolo-pack-ding", "kind": "audio", "path": "/pack/ding", "name": "Ding", "durationUs": 800_000,
+        "width": 0, "height": 0, "fps": 0.0, "hasAudio": true,
+    }))
+    .unwrap();
+    i.library.items.push(LibraryItem {
+        name: "Ding".into(),
+        kind: MediaKind::Sound,
+        asset: ding,
+        pack: true,
+        tags: Vec::new(),
+    });
+    let out = send(&model, &[], "make a short with stickers and sounds", &i, &p).unwrap();
+    let seen = model.seen();
+    assert_eq!(seen.len(), 4);
+    // The tools offer the words said there, and the prompt asks for them.
+    let tools_text = serde_json::to_string(&seen[0].tools).unwrap();
+    assert!(tools_text.contains("atWords"), "{tools_text}");
+    assert!(seen[0].system.contains("atWords"));
+    assert_eq!(
+        output_for(&seen[2], "call_5"),
+        "addSound: atWords[0] \"a long tme\" is not said in the video. Said most like it: \"a long time.\" (6.7 s). \
+         Quote 1 to 4 words exactly as Transcript shows them."
+    );
+    assert_eq!(out.compiled.refusals, vec![], "{:?}", out.compiled.refusals);
+    // In the short as the cut leaves it (from "the" at 2.9 s, padded), the sticker starts on "the" with its pop, and
+    // the ding on "a".
+    let short = &out
+        .compiled
+        .proposal
+        .as_ref()
+        .expect("the cut")
+        .review
+        .after;
+    let from = short.timeline.main[0].source_in_us;
+    let starts = |kind: TrackKind, asset: Option<&str>| -> Vec<Us> {
+        (short.timeline.tracks.iter())
+            .filter(|t| t.kind == kind)
+            .flat_map(|t| t.items.iter())
+            .filter(|item| match (&item.content, asset) {
+                (ItemContent::Audio { asset_id, .. }, Some(a)) => asset_id == a,
+                (_, None) => true,
+                _ => false,
+            })
+            .map(|item| item.start_us)
+            .collect()
+    };
+    assert_eq!(starts(TrackKind::Overlay, None), [secs(2.9) - from]);
+    assert_eq!(
+        starts(TrackKind::Audio, Some("klipolo-pack-pop")),
+        [secs(2.9) - from]
+    );
+    assert_eq!(
+        starts(TrackKind::Audio, Some("klipolo-pack-ding")),
+        [secs(6.7) - from]
+    );
+    assert!(video_duration(&short.timeline) < secs(6.0));
+}
+
+#[test]
+fn an_answer_cut_off_keeps_its_finished_calls_and_is_asked_again_once() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let cut_off = |calls: Vec<FunctionCall>| {
+        Err(ModelError::CutOff(ModelResponse {
+            text: String::new(),
+            calls,
+            usage_usd: 0.004,
+        }))
+    };
+    // Its finished cut is kept and proposed; the model is told it was cut off and finishes in the next step.
+    let model = Fake::new(vec![
+        cut_off(vec![cut_call("call_1", 7.9, 29.8)]),
+        answer("I proposed the cut.", vec![], 0.001),
+    ]);
+    let out = send(&model, &[], "cut the end", &i, &p).unwrap();
+    let seen = model.seen();
+    assert_eq!(seen.len(), 2);
+    assert_eq!(output_for(&seen[1], "call_1"), PROPOSED_OUTPUT);
+    assert_eq!(
+        seen[1].input.last(),
+        Some(&Item::User {
+            text: klipolo_chat::CUT_OFF.into()
+        })
+    );
+    assert!(out.compiled.proposal.is_some());
+    assert_eq!(out.reply, "I proposed the cut.");
+    assert!((out.usage_usd - 0.005).abs() < 1e-12, "{}", out.usage_usd);
+    // Cut off before any call: asked again all the same.
+    let model = Fake::new(vec![
+        cut_off(vec![]),
+        answer("", vec![cut_call("call_2", 7.9, 29.8)], 0.002),
+    ]);
+    let out = send(&model, &[], "cut the end", &i, &p).unwrap();
+    assert!(out.compiled.proposal.is_some());
+    // Its words end at their last whole sentence, should the reply be built from them.
+    let model = Fake::new(vec![
+        Err(ModelError::CutOff(ModelResponse {
+            text: "I proposed cutting the end. Next I will add music at 1.5".into(),
+            calls: vec![cut_call("call_3", 7.9, 29.8)],
+            usage_usd: 0.004,
+        })),
+        answer("", vec![], 0.001),
+    ]);
+    let out = send(&model, &[], "cut the end", &i, &p).unwrap();
+    assert!(
+        out.reply.starts_with("I proposed cutting the end."),
+        "{}",
+        out.reply
+    );
+    assert!(!out.reply.contains("music"), "{}", out.reply);
+    let seen = model.seen();
+    assert!(
+        seen[1].input.contains(&Item::Assistant {
+            text: "I proposed cutting the end.".into()
+        }),
+        "{:?}",
+        seen[1].input
+    );
+    // Cut off again: the message fails, as any failed answer does, billed for both.
+    let model = Fake::new(vec![cut_off(vec![]), cut_off(vec![])]);
+    let e = send(&model, &[], "cut the end", &i, &p).unwrap_err();
+    assert_eq!(e.kind, ChatErrorKind::Other);
+    assert_plain(&e.message);
+    assert!((e.usage_usd - 0.008).abs() < 1e-12, "{}", e.usage_usd);
+    assert_eq!(model.seen().len(), 2);
+}
+
+#[test]
+fn a_message_that_runs_out_of_steps_says_what_its_edits_did() {
+    let (p, speech) = talk();
+    let i = with_pack(inputs(&p, speech));
+    // One call a step, each answer saying what comes next, until the steps run out mid-way: the reply says what the
+    // edits did, never the model's words about what it was still going to do.
+    let busy = "Now I'm adding the pop animations and final sounds to finish the short.";
+    let steps: Vec<Vec<FunctionCall>> = vec![
+        vec![find_call("call_1")],
+        vec![
+            fc(
+                "call_2",
+                "keepOnly",
+                r#"{"ranges": [{"startSec": 0.5, "endSec": 7.8}]}"#,
+            ),
+            fc(
+                "call_3",
+                "setFormat",
+                r#"{"format": "portrait", "keepOthers": true}"#,
+            ),
+        ],
+        vec![fc(
+            "call_4",
+            "setCaptions",
+            r#"{"on": true, "style": "word-pop"}"#,
+        )],
+        vec![fc(
+            "call_5",
+            "addText",
+            r#"{"text": "the new module", "preset": "title", "atSec": 0.5, "atWords": null, "durationSec": 2.0, "animation": "pop", "font": null}"#,
+        )],
+        vec![fc(
+            "call_6",
+            "addImage",
+            r#"{"file": "Star", "size": "medium", "position": "top-right", "atSec": null, "atWords": "the new module", "durationSec": 2.0}"#,
+        )],
+        vec![fc(
+            "call_7",
+            "animate",
+            r#"{"layer": "last", "enter": "pop", "exit": null, "emphasis": null, "sound": "Pop"}"#,
+        )],
+        vec![fc(
+            "call_8",
+            "addSound",
+            r#"{"name": "Pop", "atWords": ["a long time"], "atSec": null}"#,
+        )],
+        vec![fc(
+            "call_9",
+            "addMusic",
+            r#"{"file": "Soft ambient", "volume": 0.15, "duck": true, "atSec": null}"#,
+        )],
+        vec![fc(
+            "call_10",
+            "addImage",
+            r#"{"file": "Star", "size": "medium", "position": "top-left", "atSec": null, "atWords": "It took", "durationSec": 2.0}"#,
+        )],
+        vec![fc(
+            "call_11",
+            "findMoments",
+            r#"{"query": "the end", "ranges": [{"startSec": 6.7, "endSec": 7.8, "label": "the end"}]}"#,
+        )],
+    ];
+    assert_eq!(steps.len(), MAX_STEPS);
+    let model = Fake::new(
+        steps
+            .into_iter()
+            .map(|calls| answer(busy, calls, 0.001))
+            .collect(),
+    );
+    let out = send(&model, &[], "make a short with stickers and sounds", &i, &p).unwrap();
+    assert_eq!(model.seen().len(), MAX_STEPS);
+    assert_eq!(out.compiled.refusals, vec![], "{:?}", out.compiled.refusals);
+    assert!(!out.reply.contains("Now I'm adding"), "{}", out.reply);
+    assert!(
+        out.reply.starts_with(
+            "I made it vertical and added captions, a title, 2 stickers, 2 sounds and music. Approve the cut to keep \
+             the "
+        ),
+        "{}",
+        out.reply
+    );
+    assert!(out.reply.contains(" s version."), "{}", out.reply);
+    assert_plain(&out.reply);
 }

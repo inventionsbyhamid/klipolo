@@ -13,10 +13,10 @@ use klipolo_model::media::text::{TEMPLATE_US, TEXT_US};
 
 use super::animate::ENTRANCES;
 use super::schema::{
-    Word, list, nullable_boolean, nullable_number, nullable_string, nullable_words, seconds,
-    string, words,
+    Word, nullable_boolean, nullable_list, nullable_number, nullable_string, nullable_words,
+    seconds, string, words,
 };
-use super::{Tool, ToolCall};
+use super::{Problem, Tool, ToolCall};
 
 /// How long words show when the person gave no length: the model's text preset length (`media::text::TEXT_US`).
 pub const TEXT_SECS: f64 = TEXT_US as f64 / 1e6;
@@ -172,6 +172,24 @@ fn at_sec() -> (&'static str, serde_json::Value) {
     ("atSec", nullable_number("Start. Null for the playhead."))
 }
 
+/// What a quote of the words said at a moment is (`atWords`).
+const QUOTE: &str = "1 to 4 words said there, exactly as in Transcript";
+
+/// `atSec` beside `atWords`.
+fn at_sec_or_words() -> (&'static str, serde_json::Value) {
+    (
+        "atSec",
+        nullable_number("Start. With atWords, picks where they are said. Both null: the playhead."),
+    )
+}
+
+fn at_words() -> (&'static str, serde_json::Value) {
+    (
+        "atWords",
+        nullable_string(&format!("Or {QUOTE}; it starts on the first.")),
+    )
+}
+
 fn duration_sec(default_secs: f64) -> (&'static str, serde_json::Value) {
     (
         "durationSec",
@@ -220,23 +238,42 @@ pub(super) const ADD_MUSIC: Tool = Tool {
 
 pub(super) const ADD_SOUND: Tool = Tool {
     name: "addSound",
-    description: "Play a sound effect from Library at each time given.",
+    description: "Play a sound effect from Library at each moment given.",
     parameters: || {
         vec![
             ("name", string("The sound's name in Library.")),
             (
+                "atWords",
+                nullable_list(
+                    string(QUOTE),
+                    "Each moment it plays: where the first word is said.",
+                ),
+            ),
+            (
                 "atSec",
-                list(
+                nullable_list(
                     seconds("A time it plays, timeline seconds."),
-                    "Every time it plays, from the context.",
+                    "Or times, from the context. With atWords, they pick where each is said.",
                 ),
             ),
         ]
     },
     read: |a| {
+        let name = a.text("name")?;
+        let at_words = a.nullable_texts("atWords")?;
+        let at_us = a.nullable_times("atSec")?;
+        if at_words.is_empty() && at_us.is_empty() {
+            return Err(a.error(
+                "atWords",
+                Problem::NoChange {
+                    fields: "atWords or atSec",
+                },
+            ));
+        }
         Ok(ToolCall::AddSound {
-            name: a.text("name")?,
-            at_us: a.times("atSec")?,
+            name,
+            at_us,
+            at_words,
         })
     },
 };
@@ -256,7 +293,8 @@ pub(super) const ADD_TEXT: Tool = Tool {
                      caption: at the bottom.",
                 ),
             ),
-            at_sec(),
+            at_sec_or_words(),
+            at_words(),
             duration_sec(TEXT_SECS),
             ("animation", nullable_words(&ENTRANCES, "Null: fade.")),
             (
@@ -270,6 +308,7 @@ pub(super) const ADD_TEXT: Tool = Tool {
             text: a.shown("text")?,
             preset: a.word("preset", &TEXT_PRESETS)?,
             at_us: a.nullable_time("atSec")?,
+            at_words: a.nullable_quote("atWords")?,
             duration_us: a.nullable_length("durationSec", &OVERLAY_SECS)?,
             animation: a.nullable_word("animation", &ENTRANCES)?,
             font: a.optional_text("font")?,
@@ -288,7 +327,8 @@ pub(super) const ADD_IMAGE: Tool = Tool {
                 nullable_words(&SIZES, "A share of the frame's width. Null for medium."),
             ),
             position(),
-            at_sec(),
+            at_sec_or_words(),
+            at_words(),
             duration_sec(PICTURE_SECS),
         ]
     },
@@ -298,6 +338,7 @@ pub(super) const ADD_IMAGE: Tool = Tool {
             size: a.nullable_word("size", &SIZES)?,
             position: a.nullable_word("position", &POSITIONS)?,
             at_us: a.nullable_time("atSec")?,
+            at_words: a.nullable_quote("atWords")?,
             duration_us: a.nullable_length("durationSec", &OVERLAY_SECS)?,
         })
     },
@@ -313,7 +354,8 @@ pub(super) const MAKE_STICKER: Tool = Tool {
                 string("What it shows, a short noun phrase such as paper plane."),
             ),
             position(),
-            at_sec(),
+            at_sec_or_words(),
+            at_words(),
             duration_sec(PICTURE_SECS),
         ]
     },
@@ -322,6 +364,7 @@ pub(super) const MAKE_STICKER: Tool = Tool {
             prompt: a.text("prompt")?,
             position: a.nullable_word("position", &POSITIONS)?,
             at_us: a.nullable_time("atSec")?,
+            at_words: a.nullable_quote("atWords")?,
             duration_us: a.nullable_length("durationSec", &OVERLAY_SECS)?,
         })
     },

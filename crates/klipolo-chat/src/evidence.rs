@@ -15,9 +15,11 @@
 //! before what was heard or seen). An edge on a word is padded as `word_cut` pads a cut of the words the range holds,
 //! so a cut never clips a word it keeps or removes; no other edge is padded.
 //!
-//! A moment the media tools place something at (`moment`: a sound, a title, a sticker) stands on the same evidence,
-//! but lands on a change of shot or topic within the tolerance before anything heard or seen there (a whoosh "at every
-//! topic change" plays on the change, not on the word beside it); what the person pointed at still comes first.
+//! A moment the media tools place something at in seconds (`place`: a sound, a title, a sticker) needs no evidence: it
+//! lands on what the person pointed at within the tolerance, else on the nearest word start or cut (a clip's start, a
+//! change of shot or topic, the video's start) within `PLACE_US`, else where it was given. A moment given as the words
+//! said there needs no snapping (`compile::quote`). A layer's new start or split (`moment`) stands on the evidence as
+//! an edge does, landing on a change of shot or topic within the tolerance first.
 //!
 //! Times are the snapshot's timeline, as the context showed them; the compiler maps them into its working copy after.
 //! Building costs O(words + pauses + scene items + clips) once per message; a lookup is a binary search.
@@ -27,13 +29,15 @@ use std::collections::HashMap;
 use klipolo_model::Project;
 use klipolo_model::query::{clip_starts, main_track_duration};
 use klipolo_model::speech::silence::timeline_pauses;
-use klipolo_model::speech::{PAUSE_US, Speech, Spoken, spoken, word_cut};
+use klipolo_model::speech::{PAUSE_US, Speech, Spoken, WordKind, spoken, word_cut};
 use klipolo_model::time::{MAX_TIME_US, RangeUs, US_PER_SEC, Us, secs_to_us};
 
 use crate::context::{SceneLog, View, scene_changes, scene_spans, within_video};
 
 /// How far a model's time may lie from what it was shown.
 pub const TOLERANCE_US: Us = 300_000;
+/// How far a placed moment snaps to a word's start or a cut (`Evidence::place`).
+pub const PLACE_US: Us = 500_000;
 
 /// What an edge is. The order is the preference on a tie.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -57,12 +61,20 @@ pub(crate) enum Unfounded {
     Empty(Us),
 }
 
+/// Whether `t` lies in one of `cut`'s ranges (each from its start, up to but not at its end).
+pub(crate) fn in_cut(cut: &[RangeUs], t: Us) -> bool {
+    cut.iter().any(|r| r.start <= t && t < r.end)
+}
+
 /// Every edge the model may name in one message's snapshot.
 pub(crate) struct Evidence {
     /// Sorted by time, then by `Source`.
     edges: Vec<(Us, Source)>,
     /// Where a change of shot or topic starts (`context::scene_changes`), sorted.
     changes: Vec<Us>,
+    /// Where something placed may land (`place`): each spoken word's start (pause words left out), each clip's
+    /// start, each change of shot or topic (`context::scene_changes`) and the video's start; sorted, each once.
+    starts: Vec<Us>,
     spoken: Spoken,
     fps: u32,
 }
@@ -115,12 +127,28 @@ impl Evidence {
         let mut changes = scene_changes(p, scenes);
         changes.sort_unstable();
         changes.dedup();
+        let mut starts = changes.clone();
+        starts.extend(
+            (spoken.words.iter())
+                .filter(|w| w.kind != WordKind::Pause)
+                .map(|w| w.start_us),
+        );
+        starts.extend(clip_starts(main));
+        starts.push(0);
+        starts.sort_unstable();
+        starts.dedup();
         Self {
             edges,
             changes,
+            starts,
             spoken,
             fps: p.settings.fps,
         }
+    }
+
+    /// The snapshot's spoken words, in timeline order.
+    pub(crate) fn spoken(&self) -> &Spoken {
+        &self.spoken
     }
 
     /// The edges within `TOLERANCE_US` of `t`.
@@ -137,22 +165,41 @@ impl Evidence {
             .copied()
     }
 
-    /// Where something placed at `t` lands: the nearest of what the person pointed at (the selection's ends, a time
-    /// they typed, the playhead), else the nearest change of shot or topic, else the nearest edge (`snap`), each within
-    /// `TOLERANCE_US`; None when nothing is near.
-    pub(crate) fn moment(&self, t: Us) -> Option<Us> {
-        let pointed = (self.near(t))
-            .filter(|(_, source)| *source <= Source::Playhead)
+    /// The nearest of what the person pointed at (the selection's ends, a time they typed, the playhead) within
+    /// `TOLERANCE_US` of `t`, outside `cut`.
+    fn pointed(&self, t: Us, cut: &[RangeUs]) -> Option<Us> {
+        (self.near(t))
+            .filter(|&&(at, source)| source <= Source::Playhead && !in_cut(cut, at))
             .min_by_key(|&&(at, source)| (at.abs_diff(t), source))
-            .map(|&(at, _)| at);
+            .map(|&(at, _)| at)
+    }
+
+    /// Where a layer's new start or split at `t` lands (`setLayer`): what the person pointed at (`pointed`), else the
+    /// nearest change of shot or topic, else the nearest edge (`snap`), each within `TOLERANCE_US`; None when nothing
+    /// is near.
+    pub(crate) fn moment(&self, t: Us) -> Option<Us> {
         let from = (self.changes).partition_point(|&at| at < t.saturating_sub(TOLERANCE_US));
         let change = (self.changes[from..].iter())
             .take_while(|&&at| at <= t.saturating_add(TOLERANCE_US))
             .min_by_key(|&&at| at.abs_diff(t))
             .copied();
-        pointed
+        (self.pointed(t, &[]))
             .or(change)
             .or_else(|| self.snap(t).map(|(at, _)| at))
+    }
+
+    /// Where something placed at `t` lands: what the person pointed at (`pointed`), else the nearest word start or cut
+    /// within `PLACE_US` (the earlier on a tie), else `t` as given; neither in `cut`, the footage the answer's removals
+    /// take out (where a time left as given may still lie).
+    pub(crate) fn place(&self, t: Us, cut: &[RangeUs]) -> Us {
+        let pointed = self.pointed(t, cut);
+        let from = (self.starts).partition_point(|&at| at < t.saturating_sub(PLACE_US));
+        let start = (self.starts[from..].iter())
+            .take_while(|&&at| at <= t.saturating_add(PLACE_US))
+            .filter(|&&at| !in_cut(cut, at))
+            .min_by_key(|&&at| at.abs_diff(t))
+            .copied();
+        pointed.or(start).unwrap_or(t)
     }
 
     /// `t` on its nearest edge, or as given when none is near: for a time that needs no evidence (a split).

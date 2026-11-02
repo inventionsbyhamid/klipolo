@@ -235,8 +235,8 @@ fn assert_relay_takes(body: &Value) {
     assert!(body.get("reasoning").is_none());
     let max = body["max_output_tokens"].as_u64().expect("an output cap");
     assert!((1..=RELAY_MAX_OUTPUT_TOKENS).contains(&max), "{max}");
-    // Room for long reasoning: billed only when used.
-    assert_eq!(max, 8192);
+    // Room for long reasoning, the relay's own cap: billed only when used.
+    assert_eq!(max, 16_384);
     assert_eq!(body["model"], CHAT_MODEL);
     assert_eq!(body["tool_choice"], "auto");
     assert_eq!(body["parallel_tool_calls"], true);
@@ -528,9 +528,20 @@ fn spark_cost(input: f64, cached: f64, output: f64) -> f64 {
 }
 
 #[tokio::test]
-async fn a_cut_off_answer_is_an_error_that_still_counts() {
+async fn a_cut_off_answer_keeps_its_finished_calls_and_is_asked_again_once() {
     let server = MockServer::start().await;
-    // Cut off at the output cap: its call may be partial, so nothing of it is used, and no next step is asked.
+    // Cut off at the output cap: its finished call is kept, the one cut part-way is left out, and the model is asked
+    // once more, told to send fewer calls at a time.
+    let mut cut = function_call("call_2", "setFormat", json!({}));
+    cut["arguments"] = json!("{\"format\": \"squ");
+    cut["status"] = json!("incomplete");
+    // Marked incomplete though its arguments read: left out too.
+    let mut marked = function_call(
+        "call_3",
+        "setFormat",
+        json!({"format": "square", "keepOthers": true}),
+    );
+    marked["status"] = json!("incomplete");
     answer_once(
         &server,
         ok(ended(
@@ -540,13 +551,54 @@ async fn a_cut_off_answer_is_an_error_that_still_counts() {
                 reasoning(),
                 function_call(
                     "call_1",
-                    "cutRange",
-                    json!({"startSec": 12.3, "endSec": 19.7}),
+                    "setFormat",
+                    json!({"format": "portrait", "keepOthers": true}),
                 ),
+                marked,
+                cut,
             ],
         )),
     )
     .await;
+    answer_once(
+        &server,
+        ok(spark(vec![message("It is vertical now.")], 1800, 1700, 50)),
+    )
+    .await;
+    let (p, inputs, ctx) = talk();
+    let out = plan(&chat(&server), &[], &ctx, "make it vertical", &inputs, &p)
+        .await
+        .unwrap();
+    assert!(out.compiled.additions.is_some(), "{:?}", out.compiled);
+    assert_eq!(out.reply, "It is vertical now.");
+    let sent = bodies(&server).await;
+    assert_eq!(sent.len(), 2);
+    let again = sent[1]["input"].to_string();
+    assert!(
+        again.contains("\"call_1\"")
+            && !again.contains("\"call_2\"")
+            && !again.contains("\"call_3\""),
+        "{again}"
+    );
+    assert!(again.contains(klipolo_chat::CUT_OFF), "{again}");
+    let both = spark_cost(1800.0, 1700.0, 4096.0) + spark_cost(1800.0, 1700.0, 50.0);
+    assert!((out.usage_usd - both).abs() < 1e-12);
+}
+
+#[tokio::test]
+async fn an_answer_cut_off_twice_is_an_error_that_still_counts() {
+    let server = MockServer::start().await;
+    for _ in 0..2 {
+        answer_once(
+            &server,
+            ok(ended(
+                "incomplete",
+                json!({"incomplete_details": {"reason": "max_output_tokens"}}),
+                vec![reasoning()],
+            )),
+        )
+        .await;
+    }
     let (p, inputs, ctx) = talk();
     let before = p.clone();
     let e = plan(&chat(&server), &[], &ctx, "cut there", &inputs, &p)
@@ -554,9 +606,9 @@ async fn a_cut_off_answer_is_an_error_that_still_counts() {
         .unwrap_err();
     assert_eq!(e.kind, ChatErrorKind::Other);
     assert_eq!(e.detail, "failed: cut off: max_output_tokens");
-    assert!((e.usage_usd - spark_cost(1800.0, 1700.0, 4096.0)).abs() < 1e-12);
+    assert!((e.usage_usd - 2.0 * spark_cost(1800.0, 1700.0, 4096.0)).abs() < 1e-12);
     assert_eq!(p, before);
-    assert_eq!(bodies(&server).await.len(), 1);
+    assert_eq!(bodies(&server).await.len(), 2);
 }
 
 #[tokio::test]

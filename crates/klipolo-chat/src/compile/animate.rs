@@ -248,10 +248,14 @@ pub(super) fn animate(
             item.duration_us,
             layout.motion.as_ref(),
         );
-        ops.extend(
-            add_sound_ops(work, &sound.asset, at).map_err(|e| to_model(format!("animate: {e}")))?,
-        );
-        params.push(("sound", ErrorParam::from(sound.name.as_str())));
+        // The same sound this answer put there already (an `addSound` on the same word) plays for this one too.
+        if !media::sound_near(c, work, &sound.asset.id, at) {
+            ops.extend(
+                add_sound_ops(work, &sound.asset, at)
+                    .map_err(|e| to_model(format!("animate: {e}")))?,
+            );
+            params.push(("sound", ErrorParam::from(sound.name.as_str())));
+        }
     }
     Ok(Edit {
         ops,

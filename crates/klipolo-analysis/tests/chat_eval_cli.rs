@@ -86,11 +86,11 @@ async fn every_case_is_judged_and_the_cost_added_up_without_the_key() {
     assert!(stdout.contains("     reply: Undone."), "{stdout}");
     // Two model calls a case: the stub answers what came of its calls with the same calls, which ends the message.
     assert!(
-        stdout.contains("1/38 passed (target 36); 76 model calls; total $0.12"),
+        stdout.contains("1/39 passed (target 37); 78 model calls; total $0.13"),
         "{stdout}"
     );
     assert!(!stdout.contains(KEY) && !stderr.contains(KEY));
-    assert_eq!(server.received_requests().await.unwrap().len(), 76);
+    assert_eq!(server.received_requests().await.unwrap().len(), 78);
 
     // One case on its own must pass.
     let out = run(&env, &["--only", "undo"]).await;
@@ -226,6 +226,11 @@ fn ideal(message: &str) -> Vec<(&'static str, Value)> {
             "makeSticker",
             json!({"prompt": "paper plane", "position": "top-right", "atSec": 67.0, "durationSec": null}),
         )],
+        // A sound on the word it goes with, by the words said there.
+        "add a pop sound right when she says float" => vec![(
+            "addSound",
+            json!({"name": "Pop", "atWords": ["float and do"], "atSec": null}),
+        )],
         // Words on screen in a text preset, in the person's own words.
         "add a lower third that says Student questions at 13.5 seconds" => vec![(
             "addText",
@@ -285,7 +290,7 @@ async fn ideal_answers_pass_every_case() {
     ];
     let out = run(&env, &[]).await;
     let (stdout, stderr) = text(&out);
-    assert!(stdout.contains("38/38 passed"), "{stdout}{stderr}");
+    assert!(stdout.contains("39/39 passed"), "{stdout}{stderr}");
     // A case that allows more than one answer says which passed: the first for each (a question is the second).
     let sticker = &stdout[stdout.find("PASS plane-sticker").expect("the sticker case")..];
     assert!(
@@ -297,7 +302,7 @@ async fn ideal_answers_pass_every_case() {
     assert_eq!(out.status.code(), Some(0));
     // Two calls each (the stub answers what came of its calls with the same calls, which ends the message): clip A's
     // missing filler words are told to the person, never sent back.
-    assert!(stdout.contains("76 model calls"), "{stdout}");
+    assert!(stdout.contains("78 model calls"), "{stdout}");
     assert!(
         stdout.contains("     reply: There are no filler words to remove."),
         "{stdout}"
