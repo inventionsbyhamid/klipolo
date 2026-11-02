@@ -15,7 +15,8 @@ export function usePanelCommands(): Command[] {
   const { t } = useLingui();
   const chatFolded = useChatPanel((s) => s.collapsed);
   const carded = useCardWanted();
-  const libraryFolded = useLibraryPanel((s) => s.collapsed) && !carded;
+  const collapsed = useLibraryPanel((s) => s.collapsed);
+  const libraryFolded = collapsed && !carded;
   return useMemo(
     () => [
       {
@@ -43,9 +44,13 @@ export function usePanelCommands(): Command[] {
         id: 'toggle-side-panel',
         action: 'viewOptions',
         group: 'view',
-        label: libraryFolded
-          ? t({ id: 'library.open', message: 'Open library' })
-          : t({ id: 'library.collapse', message: 'Collapse library' }),
+        // Folded with the card over the preview, a press only hides the card: the library stays folded.
+        label:
+          collapsed && carded
+            ? t({ id: 'library.hideSettings', message: 'Hide settings' })
+            : libraryFolded
+              ? t({ id: 'library.open', message: 'Open library' })
+              : t({ id: 'library.collapse', message: 'Collapse library' }),
         // Control Command S works too (`CONTROL_COMMAND`).
         shortcut: '⌘B',
         keywords: searchWords(
@@ -59,6 +64,6 @@ export function usePanelCommands(): Command[] {
         run: () => useLibraryPanel.getState().toggle(cardWanted()),
       },
     ],
-    [t, chatFolded, libraryFolded],
+    [t, chatFolded, libraryFolded, collapsed, carded],
   );
 }
