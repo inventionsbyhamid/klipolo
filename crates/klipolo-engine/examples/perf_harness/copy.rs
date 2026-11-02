@@ -96,7 +96,7 @@ pub async fn run(args: &[String]) {
 }
 
 /// Makes `file`'s editing copy in `dir` as the app's worker would on an Intel Mac, and says what it took.
-async fn make_copy(dir: &Path, file: &str, facts: &SourceFacts) -> PathBuf {
+pub(super) async fn make_copy(dir: &Path, file: &str, facts: &SourceFacts) -> PathBuf {
     let policy = ProxyPolicy::with_encoder(GpuClass::Integrated, true);
     let job = ProxyJob::create(&dir.join("proxies"), file, facts, &policy).expect("a copy job");
     let started = Instant::now();

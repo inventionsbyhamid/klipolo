@@ -6,6 +6,8 @@
 //!   app runs it;
 //! - `sound-decode`: the sound cache's decode alone (`audio::decode::decode`), every block dropped;
 //! - `poster`: the file's poster (`make_poster`);
+//! - `proxy`: the file's editing copy, made as an Intel Mac's worker makes it (`copy::make_copy`; a Mac only: Linux
+//!   has no H.264 encoder);
 //! - `decode`: every file given decoded at once, frame after frame from the start for `--seconds` (10), as playback
 //!   asks the preview's decoders (`spawn_decoder`): frames a second for each and together.
 //!
@@ -104,7 +106,7 @@ pub async fn run(args: &[String]) {
         .collect();
     let Some(file) = files.first().cloned() else {
         eprintln!(
-            "usage: media probe|sound|thumbs|poster|decode <file>... [--seconds <s>] [--cache <folder>]"
+            "usage: media probe|sound|sound-decode|thumbs|poster|proxy|decode <file>... [--seconds <s>] [--cache <folder>]"
         );
         std::process::exit(2);
     };
@@ -165,6 +167,15 @@ pub async fn run(args: &[String]) {
             })
             .expect("decodes");
             format!("{frames} samples")
+        }
+        "proxy" => {
+            let facts = klipolo_engine::media::proxy::facts::probe_facts(Path::new(&file))
+                .expect("a video the probe reads");
+            let copy = super::copy::make_copy(&cache, &file, &facts).await;
+            format!(
+                "an editing copy as an Intel Mac makes it: {}",
+                copy.display()
+            )
         }
         "poster" => {
             let made = make_poster(&cache.join("thumbs"), &Os, &file).expect("makes a poster");
