@@ -157,7 +157,8 @@ pub fn read_ease(text: &str) -> Option<Ease> {
 }
 
 impl Args {
-    /// An ease (`EASE_FORMS`), or None when it is null or left out.
+    /// An ease (`EASE_FORMS`), or None when it is null, left out, or the text "null" (as some models write it inside a
+    /// list, where the call's own nullable fields are already read so).
     pub(super) fn nullable_ease(&mut self, key: &str) -> Result<Option<Ease>, ToolError> {
         let Some(value) = self.take_nullable(key) else {
             return Ok(None);
@@ -171,6 +172,9 @@ impl Args {
                 },
             ));
         };
+        if text.trim().eq_ignore_ascii_case("null") {
+            return Ok(None);
+        }
         read_ease(text).map(Some).ok_or_else(|| {
             self.error(
                 key,
