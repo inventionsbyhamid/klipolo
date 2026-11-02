@@ -197,7 +197,7 @@ export function forgetPictures() {
 }
 
 /** Which opening of which project the copy holds. */
-const opening = (p: { snapshot: { project: { id: string }; opening?: number } | null }) =>
+export const opening = (p: { snapshot: { project: { id: string }; opening?: number } | null }) =>
   p.snapshot ? `${p.snapshot.project.id}:${p.snapshot.opening ?? ''}` : '';
 useProject.subscribe((s, prev) => {
   if (opening(s) !== opening(prev)) forgetPictures();
