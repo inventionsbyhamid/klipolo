@@ -1,8 +1,11 @@
 import type { RecorderSetup } from '../../bindings/RecorderSetup';
 import type { Picks } from './choices';
 
-/** Which kinds of take record through macOS's Screen Recording: the whole screen and one app's windows both do. */
-const RECORDS_THE_SCREEN: Record<Picks['kind'], boolean> = { screen: true, app: true };
+/**
+ * Which kinds of take record through macOS's Screen Recording: the whole screen and one app's windows both do; "Record
+ * yourself" (the camera and the mic) never does.
+ */
+const RECORDS_THE_SCREEN: Record<Picks['kind'], boolean> = { screen: true, app: true, camera: false };
 
 /**
  * Whether the dialog shows its Screen Recording step in place of Record: the take records the screen, and macOS hasn't

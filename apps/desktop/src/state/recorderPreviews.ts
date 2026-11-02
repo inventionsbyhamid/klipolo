@@ -99,22 +99,22 @@ function inTurn(run: () => Promise<void>): Promise<void> {
   return next;
 }
 
-/** The card key a live picture of `what` carries (`display:<id>`, `app:<appId>`). */
+/** The card key a live picture of `what` carries (`display:<id>`, `app:<appId>`); the camera alone has no card. */
 export function cardKey(what: WhatToRecord | null): string | null {
-  if (what === null) return null;
+  if (what === null || what.kind === 'camera') return null;
   return what.kind === 'screen' ? `display:${what.display}` : `app:${what.appId}`;
 }
 
 /**
  * What the dialog previews for these choices: every card's still and the live picture of what is chosen while Screen
  * Recording is allowed (`screenRefused`: a take or the previews were refused it in this opening), and the camera and
- * the mic chosen (the app starts those only once allowed, or on an Allow press). Null when nothing should run: no
- * setup yet, or a take runs. The live picture's box is the dialog's own, added as the previews start
- * (`startPreviews`).
+ * the mic chosen (the app starts those only once allowed, or on an Allow press). "Record yourself" shows no screen:
+ * only the camera and the mic. Null when nothing should run: no setup yet, or a take runs. The live picture's box is
+ * the dialog's own, added as the previews start (`startPreviews`).
  */
 export function previewsFor(setup: RecorderSetup | null, picks: Picks, screenRefused: boolean): Previews | null {
   if (setup === null || setup.busy || setup.ownTake) return null;
-  const screen = setup.permissions.screen === 'granted' && !screenRefused;
+  const screen = setup.permissions.screen === 'granted' && !screenRefused && picks.kind !== 'camera';
   const cards = setup.devices.displays.length + setup.devices.apps.length;
   return {
     thumbs: screen && cards > 0,
