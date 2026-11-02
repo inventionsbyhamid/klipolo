@@ -792,21 +792,6 @@ ol {
   }
 }
 
-/* ---------- Coming soon tag ---------- */
-
-/* Dashed outline: planned, not shipped */
-.tag-soon {
-  display: inline-block;
-  padding: 0.1rem 0.55rem;
-  border: 1.5px dashed currentColor;
-  border-radius: 999px;
-  font-size: 0.8125rem;
-  font-weight: 650;
-  line-height: 1.4;
-  white-space: nowrap;
-  vertical-align: 0.1em;
-}
-
 /* ---------- The problem ---------- */
 
 .problem {
@@ -847,10 +832,6 @@ ol {
 .answer-note {
   color: var(--ink-soft);
   font-size: 0.9375rem;
-}
-
-.answer-note .tag-soon {
-  margin-right: 0.4rem;
 }
 
 @media (min-width: 900px) {
@@ -1112,6 +1093,271 @@ ol {
   box-shadow: inset 0 0 0 2px var(--cut);
 }
 
+/* Record, plan and follow: the same card as the approve diagram */
+
+.stage {
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1.25rem, 0.75rem + 2vw, 2rem);
+  border-radius: var(--radius-l);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+/* A person, drawn as in the editor illustration: head and shoulders */
+.who {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.who i {
+  width: 42%;
+  aspect-ratio: 1;
+  margin-bottom: 6%;
+  border-radius: 50%;
+  background: #E3AE8A;
+}
+
+.who b {
+  width: 100%;
+  height: 36%;
+  border-radius: 50% 50% 0 0 / 80% 80% 0 0;
+  background: var(--shirt, #FFD02E);
+}
+
+/* Record: a screen take, a click zoomed in on, and the camera bubble */
+
+.rec .strip-label {
+  margin-top: 0;
+}
+
+.rec-screen {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-m);
+  overflow: hidden;
+  background: var(--bay);
+  border: 1px solid var(--bay-edge);
+  container-type: inline-size;
+}
+
+.rec-window {
+  position: absolute;
+  left: 6%;
+  top: 9%;
+  width: 66%;
+  height: 80%;
+  border-radius: 2cqi;
+  background: var(--bay-2);
+}
+
+.rec-lines {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 12%;
+  display: grid;
+  justify-items: start;
+  gap: 2.4cqi;
+}
+
+.rec-lines i {
+  display: block;
+  width: var(--w);
+  height: 2.6cqi;
+  border-radius: 1.3cqi;
+  background: var(--bay-3);
+}
+
+.rec-zoom {
+  position: absolute;
+  left: 4%;
+  bottom: 8%;
+  width: 52%;
+  height: 40%;
+  border: 0.5cqi dashed var(--hilite);
+  border-radius: 1.6cqi;
+}
+
+.rec-zoom b {
+  position: absolute;
+  left: -0.25cqi;
+  bottom: 100%;
+  margin-bottom: 0.8cqi;
+  padding: 0.1em 0.55em;
+  border-radius: 999px;
+  background: var(--hilite);
+  color: var(--on-hilite);
+  font-size: max(0.6875rem, 2.6cqi);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rec-target {
+  position: absolute;
+  left: 14%;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0.35em 0.9em;
+  border-radius: 0.45em;
+  background: var(--clip);
+  color: #FFFFFF;
+  font-size: max(0.75rem, 3.2cqi);
+  font-weight: 700;
+}
+
+/* The cursor sits on the button's corner, as it clicks */
+.rec-cursor {
+  position: absolute;
+  left: 88%;
+  top: 55%;
+  width: 1.1em;
+  height: 1.65em;
+  background: #FFFFFF;
+  clip-path: polygon(0 0, 0 82%, 24% 64%, 44% 100%, 60% 92%, 41% 58%, 76% 58%);
+}
+
+.rec-cam {
+  position: absolute;
+  right: 5%;
+  bottom: 9%;
+  width: 21%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 0.6cqi solid var(--bay-ink);
+  border-radius: 50%;
+  background: #2A3560;
+}
+
+/* Plan: one request, and what it plans */
+
+.plan-ask {
+  justify-self: end;
+  max-width: 100%;
+}
+
+.plan-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.plan-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.9rem;
+  border: 1.5px solid var(--ink-soft);
+  border-radius: 14px;
+  font-weight: 600;
+}
+
+/* A tick: done, in one go */
+.plan-list li::before {
+  content: "";
+  flex: none;
+  width: 0.7rem;
+  height: 0.38rem;
+  border-left: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-0.12em) rotate(-45deg);
+}
+
+/* Follow: a wide shot of two people, and the vertical crop on the one talking */
+
+.follow-shot {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-m);
+  overflow: hidden;
+  background:
+    linear-gradient(transparent 74%, #1B2441 74%),
+    linear-gradient(#2A3560, #222C52);
+  container-type: inline-size;
+}
+
+.follow-shot .who {
+  position: absolute;
+  bottom: 0;
+  left: var(--x);
+  width: 19%;
+  height: 72%;
+  transform: translateX(-50%);
+}
+
+/* The part outside the crop is dimmed, as it won't be in the vertical version */
+.follow-crop {
+  position: absolute;
+  top: 0;
+  left: var(--x);
+  height: 100%;
+  aspect-ratio: 9 / 16;
+  transform: translateX(-50%);
+  border: 0.6cqi solid var(--hilite);
+  border-radius: 1cqi;
+  box-shadow: 0 0 0 100cqi rgb(8 12 24 / 0.55);
+}
+
+.follow-crop b {
+  position: absolute;
+  top: 2.4cqi;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.1em 0.6em;
+  border-radius: 999px;
+  background: var(--hilite);
+  color: var(--on-hilite);
+  font-size: max(0.6875rem, 2.6cqi);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.keep-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.keep-row span {
+  padding: 0.3rem 0.85rem;
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+}
+
+.keep-row .keep-label {
+  padding-inline: 0 0.25rem;
+  border: 0;
+  color: var(--ink-soft);
+}
+
+.keep-row .keep-on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
+@media (max-width: 559px) {
+  .keep-row {
+    gap: 0.35rem;
+    font-size: 0.8125rem;
+  }
+
+  .keep-row span {
+    padding-inline: 0.6rem;
+  }
+
+  .plan-list li {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.9375rem;
+  }
+}
+
 /* Captions: one line in each style */
 
 .cap-styles {
@@ -1123,6 +1369,13 @@ ol {
 @media (min-width: 560px) {
   .cap-styles {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Seven styles: 4 and 3 where the row is wide enough */
+@media (min-width: 1080px) {
+  .cap-styles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
@@ -1211,6 +1464,35 @@ ol {
   border-radius: 0.2em;
   background: rgb(8 12 24 / 0.88);
   font-weight: 600;
+}
+
+/* The two made for shorts */
+.cap-wordpop {
+  font-weight: 900;
+  font-stretch: 75%;
+  text-transform: uppercase;
+  text-shadow:
+    0.05em 0 0 #0D1222,
+    -0.05em 0 0 #0D1222,
+    0 0.05em 0 #0D1222,
+    0 -0.05em 0 #0D1222,
+    0.04em 0.08em 0 #0D1222;
+}
+
+/* The word being said, a little bigger and in colour */
+.cap-wordpop b {
+  font-size: 1.1em;
+  color: #39E508;
+}
+
+.cap-boldbox {
+  padding: 0.12em 0.4em;
+  border-radius: 0.3em;
+  background: #FFFFFF;
+  color: #0D1222;
+  font-weight: 900;
+  font-stretch: 75%;
+  text-transform: uppercase;
 }
 
 .cap-name {
@@ -1359,7 +1641,7 @@ ol {
   margin: 0;
 }
 
-/* Four models, 2 by 2: four in a row would squeeze the longer names */
+/* Five models: 2 a row, then 3 on wide screens. More in a row would squeeze the longer names */
 @media (min-width: 860px) {
   .model-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1370,6 +1652,12 @@ ol {
   .model {
     grid-row: span 2;
     grid-template-rows: subgrid;
+  }
+}
+
+@media (min-width: 1080px) {
+  .model-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -1520,40 +1808,4 @@ ol {
   .faq-list summary::after {
     transition: none;
   }
-}
-
-/* ---------- First build placeholder ---------- */
-
-.build {
-  background: var(--band);
-}
-
-.build-inner {
-  display: grid;
-  justify-items: start;
-  gap: 1.25rem;
-}
-
-.build h2 {
-  font-size: clamp(2.5rem, 1.4rem + 4.6vw, 5rem);
-  line-height: 0.98;
-  max-width: 14em;
-}
-
-.build-date {
-  padding: 0 0.08em;
-  border-radius: 0.08em;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-  transition: background-color 0.3s ease, color 0.3s ease;
-}
-
-/* Arriving from a download button highlights the date, caption style */
-.build:target .build-date {
-  background: var(--hilite);
-  color: var(--on-hilite);
-}
-
-.build .btn {
-  margin-top: 0.5rem;
 }
