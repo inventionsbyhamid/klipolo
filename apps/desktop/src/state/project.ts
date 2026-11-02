@@ -26,6 +26,15 @@ export { settled } from './projectSerial';
 let steps = 0;
 export const historySteps = () => steps;
 
+/** What hears each undo or redo as it is asked for (those `historySteps` counts). */
+const stepListeners = new Set<() => void>();
+
+/** `listener` is told of each undo or redo as it is asked for, before it lands. Returns what stops that. */
+export function onHistoryStep(listener: () => void): () => void {
+  stepListeners.add(listener);
+  return () => void stepListeners.delete(listener);
+}
+
 /** A different project (or none) starts at the beginning, with nothing selected, in its primary format. */
 function resetView() {
   usePlayback.getState().reset();
@@ -136,7 +145,10 @@ export const useProject = create<ProjectStore>((set, get) => {
    * (`historySteps`).
    */
   function step(task: () => Promise<SnapshotPatch>, check?: () => boolean, counted = true): Promise<boolean> {
-    if (counted) steps++;
+    if (counted) {
+      steps++;
+      stepListeners.forEach((listener) => listener());
+    }
     flushBursts();
     return new Promise((resolve) => {
       const turn = () => {
