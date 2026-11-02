@@ -14,8 +14,10 @@
 use std::fs::File;
 use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use std::ops::Range;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, PoisonError};
+use std::time::SystemTime;
 
 use klipolo_engine::audio::decode::{self, DecodeError};
 use klipolo_engine::render::probe::probe_media;
@@ -112,6 +114,7 @@ pub fn extract_wav_16k_paced(
         if let Some(dir) = out.parent().filter(|d| !d.as_os_str().is_empty()) {
             durable::fsync_dir(dir)?;
         }
+        note_written(out);
         Ok(info)
     });
     if written.is_err() {
@@ -468,11 +471,48 @@ pub fn read_pcm_file(path: &Path) -> Result<MonoPcm, AudioError> {
     Ok(MonoPcm { rate, samples })
 }
 
+/// Tests: files whose mapping fails, as a volume that refuses it would.
+#[cfg(test)]
+pub(crate) static REFUSE_MAPS: std::sync::Mutex<Vec<std::path::PathBuf>> =
+    std::sync::Mutex::new(Vec::new());
+
+/// The WAVs `extract_wav_16k` wrote in this process, each with the length and modification time it was given: the
+/// ones `Sound::load` may map (`written_here`). The last few only (a clip's WAV is loaded right after it is written).
+static WRITTEN: Mutex<Vec<(PathBuf, u64, SystemTime)>> = Mutex::new(Vec::new());
+const WRITTEN_KEPT: usize = 16;
+
+/// Notes `path`, just written whole by the extraction, as this process's own.
+fn note_written(path: &Path) {
+    let Ok((len, modified)) = std::fs::metadata(path).and_then(|m| Ok((m.len(), m.modified()?)))
+    else {
+        return;
+    };
+    let mut written = WRITTEN.lock().unwrap_or_else(PoisonError::into_inner);
+    written.retain(|(p, ..)| p != path);
+    if written.len() >= WRITTEN_KEPT {
+        written.remove(0);
+    }
+    written.push((path.to_owned(), len, modified));
+}
+
+/// Whether `path` is a WAV `extract_wav_16k` wrote in this process, still the length and age it was written with.
+pub(crate) fn written_here(path: &Path) -> bool {
+    let Ok((len, modified)) = std::fs::metadata(path).and_then(|m| Ok((m.len(), m.modified()?)))
+    else {
+        return false;
+    };
+    WRITTEN
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .iter()
+        .any(|(p, l, m)| p == path && *l == len && *m == modified)
+}
+
 /// A mono 16-bit WAV file's samples mapped from the file instead of read (`map_pcm_file`): the system brings them in
 /// as they are read and can let them go again, so a 2-hour clip's 230 MB of speech sound never sit in the app's own
 /// memory while it is transcribed.
-pub struct MappedPcm {
-    pub rate: u32,
+pub(crate) struct MappedPcm {
+    pub(crate) rate: u32,
     map: Mmap,
     /// The samples' byte offset in the file, and how many there are.
     from: usize,
@@ -480,7 +520,7 @@ pub struct MappedPcm {
 }
 
 impl MappedPcm {
-    pub fn samples(&self) -> &[i16] {
+    pub(crate) fn samples(&self) -> &[i16] {
         if self.len == 0 {
             return &[];
         }
@@ -502,17 +542,30 @@ impl std::fmt::Debug for MappedPcm {
 }
 
 /// `read_pcm_file`'s samples (the same rules and answers), mapped from the file in place: None where they can't be
-/// used in place (a big-endian computer), for the caller to read them instead. The WAVs analysis writes are written
-/// whole under another name and renamed into place (`extract_wav_16k`), never changed after, so what is mapped stays
-/// what it was.
-pub fn map_pcm_file(path: &Path) -> Result<Option<MappedPcm>, AudioError> {
+/// (a big-endian computer, a volume that refuses mapping), for the caller to read them instead.
+///
+/// # Safety
+///
+/// Nothing may shorten or rewrite the file, or take its volume away, while the mapping lives: reading a mapped page
+/// that is gone stops the process (SIGBUS). A WAV `extract_wav_16k` wrote in analysis's own work folder, still as it
+/// wrote it (`written_here`), is never touched again until it is removed, and a removed file stays readable while
+/// mapped.
+pub(crate) unsafe fn map_pcm_file(path: &Path) -> Result<Option<MappedPcm>, AudioError> {
     let mut file = File::open(path)?;
     let (rate, at, bytes) = pcm_layout(&mut file)?;
     if cfg!(target_endian = "big") {
         return Ok(None);
     }
-    // SAFETY: see above: the file is never written again once it has its name.
-    let map = unsafe { Mmap::map(&file) }?;
+    // SAFETY: the caller's (above).
+    let map = unsafe { Mmap::map(&file) };
+    #[cfg(test)]
+    let map = match REFUSE_MAPS.lock().unwrap().iter().any(|p| p == path) {
+        true => Err(io::Error::other("this volume refuses mapping")),
+        false => map,
+    };
+    let Ok(map) = map else {
+        return Ok(None);
+    };
     let from = usize::try_from(at).map_err(|_| AudioError::NotWav)?;
     let len = bytes / 2;
     let fits = from.checked_add(bytes).is_some_and(|end| end <= map.len());
@@ -833,7 +886,8 @@ mod tests {
             let path = dir.path().join(format!("{name}.wav"));
             std::fs::write(&path, &bytes).unwrap();
             let read = read_pcm_file(&path).map_err(|e| e.to_string());
-            let mapped = map_pcm_file(&path)
+            // SAFETY: the test's own file, unchanged while it is mapped.
+            let mapped = unsafe { map_pcm_file(&path) }
                 .map(|m| {
                     let m = m.expect("mapped in place");
                     MonoPcm {
@@ -845,7 +899,8 @@ mod tests {
             assert_eq!(mapped, read, "{name}");
         }
         assert!(matches!(
-            map_pcm_file(&dir.path().join("missing.wav")),
+            // SAFETY: there is no such file to map.
+            unsafe { map_pcm_file(&dir.path().join("missing.wav")) },
             Err(AudioError::Io(_))
         ));
     }

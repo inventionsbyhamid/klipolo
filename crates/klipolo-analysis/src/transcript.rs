@@ -1,8 +1,8 @@
 //! A clip's words from its 16 kHz WAV (what `audio::extract_wav_16k` wrote), in four steps:
-//! - `Sound::load`: the WAV's samples mapped from the file (not held in memory), and cut into transcription requests at
-//!   pauses (`chunks::plan_with_loud_cuts`), planned one second under the transcriber's limit so a last chunk under
-//!   `MIN_CHUNK_US` can join the one before. Each request's WAV is made from the samples when it is sent. A chunk with
-//!   nothing louder than `SILENT_PEAK_DBFS` makes no request; a silent clip makes none at all.
+//! - `Sound::load`: the WAV's samples (the extraction's own mapped from the file, not held in memory), cut into
+//!   transcription requests at pauses (`chunks::plan_with_loud_cuts`), planned one second under the transcriber's limit
+//!   so a last chunk under `MIN_CHUNK_US` can join the one before. Each request's WAV is made from the samples when it
+//!   is sent. A chunk with nothing louder than `SILENT_PEAK_DBFS` makes no request; a silent clip makes none at all.
 //! - `hear`: each chunk's speaker turns from the `Transcriber`, as many requests at once as it takes
 //!   (`Transcriber::max_in_flight`). The first failure stops the step.
 //! - `align`: the turns' word times from the `Aligner`, in requests within its `AlignLimits`. Each request is the WAV
@@ -175,21 +175,36 @@ impl Sound {
         Ok(Self::from_pcm(audio::read_pcm(wav)?, max_audio_s))
     }
 
-    /// `from_pcm` of the WAV file at `path`, on a blocking thread: its samples mapped from the file
-    /// (`audio::map_pcm_file`), so a long clip's sound isn't held in memory while it is transcribed, or read straight
-    /// into memory where they can't be (`audio::read_pcm_file`).
+    /// `from_pcm` of the WAV file at `path`, on a blocking thread. The WAV `audio::extract_wav_16k` wrote in this
+    /// process, still as it wrote it, is mapped from its file (`audio::map_pcm_file`), so a long clip's sound isn't held
+    /// in memory while it is transcribed; any other WAV, or one whose volume refuses mapping, is read straight into
+    /// memory (`audio::read_pcm_file`).
     pub async fn load(path: &Path, max_audio_s: u32) -> Result<Self, AnalysisError> {
         let path = path.to_owned();
-        let sound = tokio::task::spawn_blocking(move || match audio::map_pcm_file(&path)? {
-            Some(map) => {
-                let rate = map.rate;
-                Ok(Self::from_samples(Samples::Mapped(map), rate, max_audio_s))
+        let sound = tokio::task::spawn_blocking(move || {
+            let mapped = match audio::written_here(&path) {
+                // SAFETY: the extraction's own WAV, as it wrote it: written whole in analysis's work folder and renamed
+                // into place, it is never changed again (`map_pcm_file`'s contract).
+                true => unsafe { audio::map_pcm_file(&path) }?,
+                false => None,
+            };
+            match mapped {
+                Some(map) => {
+                    let rate = map.rate;
+                    Ok(Self::from_samples(Samples::Mapped(map), rate, max_audio_s))
+                }
+                None => audio::read_pcm_file(&path).map(|pcm| Self::from_pcm(pcm, max_audio_s)),
             }
-            None => audio::read_pcm_file(&path).map(|pcm| Self::from_pcm(pcm, max_audio_s)),
         })
         .await
         .map_err(|e| AudioError::Io(std::io::Error::other(e.to_string())))??;
         Ok(sound)
+    }
+
+    /// Tests: whether the samples are mapped from the file rather than read.
+    #[cfg(test)]
+    fn mapped(&self) -> bool {
+        matches!(*self.samples, Samples::Mapped(_))
     }
 
     /// Nothing to transcribe.
@@ -731,5 +746,81 @@ impl TranscriptOut {
             empty_reason: Some(NO_SPEECH.into()),
             approximate_reason: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::Sound;
+    use crate::audio::{self, REFUSE_MAPS, wav_header};
+
+    /// `seconds` of a 48 kHz mono 16-bit WAV at `path`: a tone with a pause in the middle.
+    fn source(path: &Path, seconds: u32) {
+        let n = 48_000 * seconds;
+        let samples: Vec<u8> = (0..n)
+            .flat_map(|i| {
+                let quiet = (n / 3..2 * n / 3).contains(&i);
+                let s = if quiet {
+                    0.0
+                } else {
+                    (i as f32 * 0.05).sin() * 12_000.0
+                };
+                (s as i16).to_le_bytes()
+            })
+            .collect();
+        let wav = [
+            wav_header(48_000, 1, samples.len() as u32).to_vec(),
+            samples,
+        ]
+        .concat();
+        std::fs::write(path, wav).unwrap();
+    }
+
+    /// A WAV this process didn't write (the caller's, anywhere: a volume that may go away) is read into memory, never
+    /// mapped.
+    #[tokio::test]
+    async fn a_wav_written_elsewhere_is_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let wav = dir.path().join("theirs.wav");
+        source(&wav, 2);
+        let sound = Sound::load(&wav, 600).await.unwrap();
+        assert!(!sound.mapped());
+        assert_eq!(sound.duration_us, 2_000_000);
+    }
+
+    /// The WAV the extraction wrote is mapped, with the same requests as reading it; changed since, it is read.
+    #[tokio::test]
+    async fn the_extracted_wav_is_mapped_until_it_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let (src, wav) = (dir.path().join("clip.wav"), dir.path().join("sound.wav"));
+        source(&src, 3);
+        audio::extract_wav_16k(&src, &wav).unwrap();
+        let mapped = Sound::load(&wav, 1).await.unwrap();
+        assert!(mapped.mapped());
+        let read = Sound::from_wav(&std::fs::read(&wav).unwrap(), 1).unwrap();
+        assert_eq!(
+            (&mapped.chunks, mapped.duration_us),
+            (&read.chunks, read.duration_us)
+        );
+        assert_eq!(mapped.wav_of(mapped.chunks[0]), read.wav_of(read.chunks[0]));
+        let mut bytes = std::fs::read(&wav).unwrap();
+        bytes.extend_from_slice(&[0, 0]);
+        std::fs::write(&wav, bytes).unwrap();
+        assert!(!Sound::load(&wav, 1).await.unwrap().mapped());
+    }
+
+    /// Where the file can't be mapped (a volume that refuses it), the extracted WAV is read instead.
+    #[tokio::test]
+    async fn a_wav_that_cannot_be_mapped_is_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let (src, wav) = (dir.path().join("clip.wav"), dir.path().join("sound.wav"));
+        source(&src, 2);
+        audio::extract_wav_16k(&src, &wav).unwrap();
+        REFUSE_MAPS.lock().unwrap().push(wav.clone());
+        let sound = Sound::load(&wav, 600).await.unwrap();
+        assert!(!sound.mapped());
+        assert_eq!(sound.duration_us, 2_000_000);
     }
 }
