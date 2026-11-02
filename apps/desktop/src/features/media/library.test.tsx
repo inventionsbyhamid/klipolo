@@ -641,14 +641,21 @@ describe('the Library', () => {
 });
 
 describe('a library of hundreds of clips', () => {
-  it('an edit draws again only the rows it changes', async () => {
+  it('an edit draws again only the rows it changes', () => {
     const snapshot = useProject.getState().snapshot!;
     const broll = snapshot.project.assets.find((a) => a.id === 'broll')!;
     for (let i = 0; i < 200; i++) snapshot.project.assets.push({ ...broll, id: `take${i}`, name: `take${i}.mp4` });
-    renderWithProviders(<Library />);
     // The first rows at once, the rest a few a frame.
-    expect(screen.queryByText('take199.mp4')).toBeNull();
-    expect(await screen.findByText('take199.mp4', undefined, { timeout: 5000 })).toBeInTheDocument();
+    vi.useFakeTimers();
+    try {
+      renderWithProviders(<Library />);
+      expect(screen.queryByText('take199.mp4')).toBeNull();
+      for (let frame = 0; frame < 20 && !screen.queryByText('take199.mp4'); frame++)
+        act(() => vi.advanceTimersByTime(20));
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(screen.getByText('take199.mp4')).toBeInTheDocument();
     renderCounts.clear();
     // The title moves: no row shows anything else.
     act(() => {
