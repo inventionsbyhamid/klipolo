@@ -771,8 +771,8 @@ fn a_push_zoom_ramps_inside_its_item() {
     let json = serde_json::to_value(&zoom.content).unwrap();
     assert_eq!(json["target"]["type"], "push");
     assert_eq!(json["target"]["rampUs"], secs(5.0));
-    for ramp in [0.0, 6.5] {
-        let refused = apply_ops(
+    let add = |ramp: f64| {
+        apply_ops(
             &p,
             &[Op::AddItem {
                 track: TrackTarget::Auto,
@@ -780,7 +780,74 @@ fn a_push_zoom_ramps_inside_its_item() {
                 attach: true,
             }],
         )
-        .unwrap_err();
-        assert_eq!(refused.coded().code, "model.layer.zoomRamp", "{ramp}");
-    }
+    };
+    assert_eq!(
+        add(0.0).unwrap_err().coded().code,
+        "model.layer.zoomRamp",
+        "a push needs a ramp"
+    );
+    // A ramp longer than the layer (an edit made the layer shorter): the push just never fully arrives.
+    add(6.5).unwrap();
+}
+
+/// A 6 s clip with a push over it that reaches its size 5 s in, as chat makes one.
+fn pushed_six_seconds() -> Project {
+    let mut p = fixture();
+    p.timeline.main[0].source_out_us = secs(6.0);
+    p.timeline.main.truncate(1);
+    let push = item(
+        "push",
+        0.0,
+        6.0,
+        full(),
+        ItemContent::Zoom {
+            target: ZoomTarget::Push {
+                rect: BoxN {
+                    x: 0.1,
+                    y: 0.1,
+                    w: 0.75,
+                    h: 0.75,
+                },
+                ramp_us: secs(5.0),
+            },
+            scale: 1.3,
+        },
+    );
+    add(&p, push, true)
+}
+
+/// Edits that shorten the push's layer below its ramp still apply: trimming its clip, and removing a silence in it.
+#[test]
+fn a_push_layer_shorter_than_its_ramp_still_edits() {
+    let p = pushed_six_seconds();
+    let trimmed = apply_ops(
+        &p,
+        &[Op::TrimClip {
+            id: "a".into(),
+            edge: Edge::End,
+            source_us: secs(4.5),
+        }],
+    )
+    .unwrap();
+    assert!(find(&trimmed, "push").1.duration_us < secs(5.0));
+    let quieter = apply_ops(
+        &p,
+        &[Op::DeleteRanges {
+            ranges: vec![RangeUs {
+                start: secs(2.0),
+                end: secs(3.2),
+            }],
+        }],
+    )
+    .unwrap();
+    assert!(find(&quieter, "push").1.duration_us < secs(5.0));
+}
+
+/// A build without push zooms can't read one: the project needs `push@1` exactly while it has one.
+#[test]
+fn the_project_needs_push_zooms_while_it_has_one() {
+    let p = pushed_six_seconds();
+    assert!(p.requires.contains("push@1"));
+    let p = apply_ops(&p, &[Op::RemoveItem { id: "push".into() }]).unwrap();
+    assert!(!p.requires.contains("push@1"));
 }
