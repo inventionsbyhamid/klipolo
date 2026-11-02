@@ -2,13 +2,14 @@
 
 /* ---------- The pill ---------- */
 
+/* A 32 px top bar control with 6 px corners: its progress ring, then the words. */
 .copies-pill {
   display: inline-flex;
   align-items: center;
   gap: var(--space-3);
   height: 32px;
   padding: 0 var(--space-5) 0 var(--space-4);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-md);
   background: var(--color-bay);
   color: var(--color-ink-soft);
   font-size: var(--text-sm);
@@ -49,11 +50,11 @@
 }
 
 .copies-ring-track {
-  stroke: var(--color-bay-press);
+  stroke: var(--color-paper-track);
 }
 
 .copies-ring-fill {
-  stroke: var(--color-paper);
+  stroke: var(--color-signal-ink);
   transition: stroke-dashoffset var(--dur-base) var(--ease-out);
 }
 
@@ -168,13 +169,14 @@
   font-size: var(--text-xs);
 }
 
-/* The mini bar: a pill track with a paper fill; a paused copy's fill is soft, it isn't moving. */
+/* The mini bar: a rounded sunken track with a signal red fill; a paused copy's fill is grey, it isn't moving. */
+   moving. */
 .copies-bar {
   height: 4px;
   margin-top: var(--space-1);
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: var(--color-bay-press);
+  background: var(--color-sunken);
 }
 
 .copies-bar-fill {
@@ -188,8 +190,9 @@
   background: var(--color-ink-soft);
 }
 
+/* Stop: the small ghost button, square. */
 .copies-stop {
-  width: 30px;
+  width: 28px;
   padding: 0;
 }
 
