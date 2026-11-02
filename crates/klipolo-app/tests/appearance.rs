@@ -16,9 +16,9 @@ fn the_window_takes_the_canvas_of_the_theme_in_use() {
         assert!(!appearance::is_dark(Theme::Light, system_dark));
         assert!(appearance::is_dark(Theme::Dark, system_dark));
     }
-    assert_eq!(appearance::canvas(Theme::Light, true), [0xE1, 0xE7, 0xEF]);
-    assert_eq!(appearance::canvas(Theme::Dark, false), [0x07, 0x0A, 0x14]);
-    assert_eq!(appearance::canvas(Theme::System, false), [0xE1, 0xE7, 0xEF]);
+    assert_eq!(appearance::canvas(Theme::Light, true), [0xEC, 0xEE, 0xF1]);
+    assert_eq!(appearance::canvas(Theme::Dark, false), [0x1A, 0x1C, 0x20]);
+    assert_eq!(appearance::canvas(Theme::System, false), [0xEC, 0xEE, 0xF1]);
 }
 
 /// The page's `--color-night` (`light-dark(light, dark)`) is the window's colour in each theme, so the gaps between the

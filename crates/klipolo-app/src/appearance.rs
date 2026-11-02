@@ -8,9 +8,9 @@ use std::path::{Path, PathBuf};
 use crate::prefs::Theme;
 
 /// `--color-night` in the light theme (0xRRGGBB).
-pub const CANVAS_LIGHT: u32 = 0xE1E7EF;
+pub const CANVAS_LIGHT: u32 = 0xECEEF1;
 /// `--color-night` in the dark theme (0xRRGGBB).
-pub const CANVAS_DARK: u32 = 0x070A14;
+pub const CANVAS_DARK: u32 = 0x1A1C20;
 
 /// Whether `theme` shows dark, the system's appearance being dark or not.
 pub fn is_dark(theme: Theme, system_dark: bool) -> bool {
