@@ -347,7 +347,7 @@ function finish() {
   if (s.started) lower(s, false);
 }
 
-/** The live gesture ends: no pointer, key or store event reaches it any more, and the preview docks again. */
+/** The live gesture ends: no pointer, key or store event reaches it any more, and the left column follows the selection again. */
 function detach(s: Session) {
   if (session === s) session = null;
   unshowEdge(s);

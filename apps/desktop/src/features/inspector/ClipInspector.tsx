@@ -18,7 +18,7 @@ import { ClipCameraFields } from './CameraFields';
 import { ClipFadesField } from './ClipFadesField';
 import { EffectsButton } from './EffectsButton';
 import { setClipSpeed } from './clipSpeed';
-import { cardEscape } from './common';
+import { BackToLibrary, cardEscape } from './common';
 import { CropField } from './CropField';
 import { FramingField } from './FramingField';
 import { LookField } from './LookField';
@@ -59,6 +59,7 @@ export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind
       onKeyDown={cardEscape(close)}
     >
       <div className="insp-head">
+        <BackToLibrary />
         <h3 title={title}>
           <Icon name="film" />
           <span className="insp-name">{title}</span>

@@ -2,10 +2,10 @@ import { create } from 'zustand';
 import { SETTLE_MS } from './bursts';
 
 /**
- * Whether the preview keeps its dock (the card at the frame's right, or none) as it is for now: while a timeline press
- * or drag is under way (`press`), the card never comes or goes under the pointer, or over the edge frame a trim shows;
- * while the keyboard walks the lanes (`walk`), it doesn't come and go at every bare cut on the way. The preview docks
- * as the selection says once nothing holds it. The frame keeps its size either way (`stageLayout`).
+ * Whether the left column keeps its card (over the library, or none) as it is for now: while a timeline press or drag
+ * is under way (`press`), the card never comes or goes under the pointer, and a folded column doesn't open mid-gesture;
+ * while the keyboard walks the lanes (`walk`), it doesn't come and go at every bare cut on the way. The column follows
+ * the selection once nothing holds it (`useColumnCard`). The frame keeps its size either way.
  */
 export const useDockHold = create<{ press: boolean; walk: boolean }>(() => ({ press: false, walk: false }));
 

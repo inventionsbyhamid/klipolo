@@ -1,24 +1,19 @@
 import { useLingui } from '@lingui/react/macro';
-import { useState } from 'react';
 import { AnalysisBanner } from '../features/analysis/AnalysisBanner';
 import { MissingFontsBanner } from '../features/fonts/MissingFontsBanner';
 import { RoughCaptionsNote } from '../features/analysis/RoughCaptionsNote';
 import { FormatPills } from '../features/editor/FormatPills';
 import { useShownFormat } from '../features/editor/formats';
-import { Inspector, useInspected } from '../features/inspector/Inspector';
-import { useInspectedTransition } from '../features/inspector/TransitionInspector';
 import { useImportMedia } from '../features/media/useImportMedia';
 import { AddTitleMenu } from '../features/preview/AddTitleMenu';
 import { SafeAreaMenu } from '../features/preview/SafeAreaMenu';
 import { Stage } from '../features/preview/Stage';
 import { EditFrames } from '../features/timeline/commands';
 import { Icon } from '../layout/Icon';
-import { useDockHold } from '../state/dockHold';
 import { useEngine } from '../state/engine';
 import { useFullScreen } from '../state/fullScreen';
 import { useProject } from '../state/project';
 import { recordYourScreen } from '../state/recorder';
-import { useSelection } from '../state/selection';
 
 /** The format the preview shows (it lives with the format switch). */
 export { useShownFormat };
@@ -63,40 +58,19 @@ function DropZone({ over }: { over: boolean }) {
 }
 
 /**
- * Whether the card shows: `wanted`, except while a timeline press or drag, or a keyboard walk along the lanes, holds
- * the dock (`state/dockHold`); then what it was before, so the card doesn't come and go under the pointer or at every
- * bare cut. It follows `wanted` again once the hold ends.
- */
-function useSteadyDock(wanted: boolean): boolean {
-  const held = useDockHold((s) => s.press || s.walk);
-  const [shown, setShown] = useState(wanted);
-  if (!held && shown !== wanted) setShown(wanted);
-  return held ? shown : wanted;
-}
-
-/**
  * The preview panel: the format pills, Add title, the safe area menu (9:16 only), Full screen (F; it
  * fills the screen with this panel, and Escape or the same button leaves), and the engine's frames fitted to the panel
- * in the chosen format with the layers there selectable and editable (`Stage`), under the analysis banner; the inspector
- * shows at the right under the banner while a main clip, a transition or a layer it has fields for is selected (never
- * mid-press or mid-walk on the timeline: `useSteadyDock`; never in full screen). Selecting never resizes or moves the
- * frame: the card goes in a slot of its own beside it, or over its right side when a slot would cost the frame too much
- * of its size (`stageLayout`). An empty slot says what goes there. With no clip yet, the drop zone.
- * `filesOver`: files from Finder are held over the window.
+ * in the chosen format with the layers there selectable and editable (`Stage`), under the analysis banner. Selecting
+ * never resizes or moves the frame: the inspector card shows in the left column, over the library (`Library`). With no
+ * clip yet, the drop zone. `filesOver`: files from Finder are held over the window.
  */
 export function Preview({ filesOver = false }: { filesOver?: boolean }) {
   const { t } = useLingui();
   const status = useEngine((s) => s.status);
   const message = useEngine((s) => s.message);
   const hasVideo = useProject((s) => (s.snapshot?.project.timeline.main.length ?? 0) > 0);
-  const format = useShownFormat();
-  const inspected = useInspected();
-  const transition = useInspectedTransition();
   const native = useEngine((s) => s.presenter === 'native' && !!s.info);
   const full = useFullScreen((s) => s.on);
-  // Full screen is for watching: the card stays out of the way until it ends.
-  const docked = useSteadyDock(inspected !== null || transition !== null) && hasVideo && !full;
-  const nothingSelected = useSelection((s) => s.selectedId === null);
   return (
     // Focusable from code only: a project that opens puts the keyboard here, so Space plays (`useKeysOnEditor`).
     <main className={native && hasVideo ? 'panel stage has-hole' : 'panel stage'} aria-label="Preview" tabIndex={-1}>
@@ -131,23 +105,14 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
           <Icon name={full ? 'full-exit' : 'full'} />
         </button>
       </div>
-      <div className={docked ? 'stage-body has-inspector' : 'stage-body'}>
+      <div className="stage-body">
         {hasVideo && <AnalysisBanner />}
         <MissingFontsBanner />
-        {/* Under the banners: the frame, and the inspector at its right (in the slot, or over the frame). */}
+        {/* Under the banners: the frame. */}
         <div className="stage-main">
           {hasVideo ? <Stage /> : <DropZone over={filesOver} />}
           {/* A roll's, slip's or slide's two frames at the edit, while one is dragged. */}
           {hasVideo && <EditFrames />}
-          {docked && <Inspector format={format} />}
-          {/* The empty slot's outline, drawn in the slot only (app.css): over the frame it would cover the video. It
-              says what goes there while nothing is selected; a selection waiting for its card leaves it blank. */}
-          {hasVideo && !docked && !full && (
-            <p className="stage-hint" aria-hidden={!nothingSelected || undefined}>
-              {nothingSelected &&
-                t({ id: 'preview.hint.select', message: 'Select something on the video to change it.' })}
-            </p>
-          )}
         </div>
       </div>
     </main>

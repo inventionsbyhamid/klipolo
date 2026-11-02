@@ -25,7 +25,7 @@ import {
   pasteClipboard,
   pasteEffectsGroup,
 } from '../timeline/commands';
-import { cardEscape } from './common';
+import { BackToLibrary, cardEscape } from './common';
 import { Field } from './fields';
 import { ToolSlider } from './ToolSlider';
 
@@ -71,6 +71,7 @@ export function GroupInspector({ ids }: { ids: readonly string[] }) {
       onKeyDown={cardEscape(close)}
     >
       <div className="insp-head">
+        <BackToLibrary />
         <h3>
           <Icon name="layers" />
           {title}

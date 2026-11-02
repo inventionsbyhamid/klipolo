@@ -149,6 +149,7 @@
   /* ---------- Layout ---------- */
   --gutter: 8px;                 /* between panels and around the workspace */
   --topbar-h: 52px;
+  --stage-head-h: 56px;          /* the preview's head: format pills, Add title, Full screen */
   --playerbar-h: 76px;
   --traffic-lights-w: 76px;      /* space kept clear for the macOS window controls */
 
@@ -167,7 +168,6 @@
   --timeline-max: 360px;
   --timeline-gutter: 40px;       /* lane icons column */
 
-  --inspector-w: 264px;
   --dialog-w: 560px;
 
   --hit-min: 28px;               /* smallest pointer target (timeline handles get a 12 px invisible pad) */
@@ -188,7 +188,6 @@
   :root {
     --library-w: 256px;
     --chat-w: 304px;
-    --inspector-w: 236px;
   }
 }
 

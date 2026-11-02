@@ -114,7 +114,8 @@ describe('the Effects popover', () => {
     expect(screen.getByRole('dialog', { name: 'Effects' })).toHaveAttribute('data-align', 'end');
     const css = readFileSync(resolve(__dirname, '../../styles/app.css'), 'utf8');
     const pop = /\.fx-pop \{([^}]*)\}/.exec(css)![1];
-    expect(pop).toMatch(/width: calc\(var\(--inspector-w\)/);
+    // The card fills the library column: the popover takes its width.
+    expect(pop).toMatch(/width: calc\(var\(--library-w\)/);
     expect(pop).toMatch(/max-height: min\([^;]*var\(--radix-popover-content-available-height\)\)/);
   });
 });

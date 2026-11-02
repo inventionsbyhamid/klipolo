@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 import type { EngineInfo } from '../../bindings/EngineInfo';
 import type { FormatKind } from '../../bindings/FormatKind';
 import { engine } from '../../bridge/engine';
@@ -7,7 +7,6 @@ import type { Size } from '../../lib/preview';
 import { ASPECT, holeRect, previewPixels } from '../../preview/viewSize';
 import { SocketCanvas } from '../../preview/SocketCanvas';
 import { useEngine } from '../../state/engine';
-import { useFullScreen } from '../../state/fullScreen';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
@@ -15,7 +14,7 @@ import { useShownFormat } from '../editor/formats';
 import { clipIndexAt, mainIndex } from '../timeline/model/index';
 import { GizmoLayer } from './GizmoLayer';
 import { sceneStartUs } from './sceneStart';
-import { cardAnchor, selectedBox, stageLayout } from './stageLayout';
+import { fitBox } from './stageLayout';
 import { useDevicePixelRatio } from './useDevicePixelRatio';
 import { useSettledSize } from './useSettledSize';
 
@@ -27,13 +26,6 @@ function fitsAs(width: number, height: number, [w, h]: readonly [number, number]
 }
 
 export { useShownFormat };
-
-/** The card's width and the gap before its slot (CSS px), from the design tokens. */
-function cardSize(el: Element | null): { width: number; gap: number } {
-  const style = el ? getComputedStyle(el) : null;
-  const px = (name: string, fallback: number) => parseFloat(style?.getPropertyValue(name) ?? '') || fallback;
-  return { width: px('--inspector-w', 264), gap: px('--space-6', 16) };
-}
 
 /**
  * Tells the engine what to render: the format, at the frame box's size in device pixels (within the engine's
@@ -145,9 +137,8 @@ function pressedOn(target: EventTarget, stage: Element, video: Element | null): 
  * While its area resizes the video box follows in CSS, with no render, and the handles hide while the box's size
  * differs from the one drawn; it re-renders once, at the settled size (`useSettledSize`).
  *
- * Only the area and the format place the video, never the selection (`stageLayout`): the card that a selection shows
- * goes in a slot kept clear at the area's right (`data-card="slot"`), or over the video (`"over"`), in the stage's corner
- * that covers the selected layer least (`data-anchor`), so selecting never resizes the video or the engine's drawable.
+ * Only the area and the format place the video, never the selection (`fitBox`): the card that a selection shows goes in
+ * the left column (`Library`), so selecting never resizes the video or the engine's drawable.
  */
 export function Stage() {
   const project = useProject((s) => s.snapshot!.project);
@@ -167,17 +158,10 @@ export function Stage() {
   const area = useSettledSize(areaRef, (on, width, height) =>
     handlesRef.current?.toggleAttribute(
       'data-settling',
-      on && !fitsAs(width - pad, height, FORMAT_SIZE[format], canvas),
+      on && !fitsAs(width, height, FORMAT_SIZE[format], canvas),
     ),
   );
-  // The tokens change with the window's width, which changes the area too. Full screen shows no card: no slot.
-  const full = useFullScreen((s) => s.on);
-  const size = useMemo(() => cardSize(areaRef.current), [area]);
-  const { card, pad, canvas } = stageLayout(area, FORMAT_SIZE[format], full ? 0 : size.width + size.gap);
-  // Over the video, the card's corner follows the selected layer as the project has it: never mid-drag.
-  const anchor = useSelection((s) =>
-    card === 'over' ? cardAnchor(selectedBox(project, s.selectedId, format), area, canvas, size.width) : undefined,
-  );
+  const canvas = fitBox(area, FORMAT_SIZE[format]);
   const dpr = useDevicePixelRatio();
   useViewSync(videoRef, info, format, dpr);
   useNativeHole(videoRef, native, dpr);
@@ -187,9 +171,6 @@ export function Stage() {
       ref={areaRef}
       data-testid="stage-area"
       className="screen"
-      data-card={card}
-      data-anchor={anchor}
-      style={pad > 0 ? { paddingRight: pad } : undefined}
       onPointerDown={(e) => {
         pressed.current = pressedOn(e.target, e.currentTarget, videoRef.current);
       }}

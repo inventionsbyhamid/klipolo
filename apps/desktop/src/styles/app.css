@@ -172,10 +172,42 @@
   display: none;
 }
 
+/* Focused from code only, once the card goes with the keyboard in it: no ring around the whole panel. */
+.library:focus-visible {
+  outline: none;
+}
+
 /* Folded (Control Command S), the library is its rail: Open library and Add files, then the clips' thumbnails (design
-   8). Wins over the Captions view's wider panel. */
+   8). Wins over the Captions view's wider panel. `--library-w` stays the open library's width: the card's, while it
+   lies over the preview's left edge. */
 .workspace:has(.library.panel[data-collapsed="true"]) {
-  --library-w: var(--library-rail);
+  grid-template-columns: var(--library-rail) minmax(0, 1fr) var(--chat-w);
+}
+
+/* Folded with something selected: the rail's panel lets its card out over the preview's left edge, at the open
+   library's width and lifted off the video, so the preview never changes size. It starts under the preview's head, so
+   the format pills stay in reach, and ends where the row does. */
+.library[data-collapsed="true"][data-card] {
+  z-index: 4;
+  overflow: visible;
+}
+
+.library[data-collapsed="true"] > .inspector {
+  top: var(--stage-head-h);
+  right: auto;
+  width: var(--library-w);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+}
+
+.library-rail[hidden] {
+  display: none;
+}
+
+/* Back to settings, over the Looks a clip's card opened: at its own width, under the head. */
+.lib-back-card {
+  align-self: flex-start;
+  margin: 0 var(--space-6) var(--space-4);
 }
 
 .library-rail {
@@ -817,7 +849,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  min-height: 56px;
+  min-height: var(--stage-head-h);
   padding: var(--space-5) var(--space-5) var(--space-3) var(--space-6);
   pointer-events: none;
 }
@@ -3189,8 +3221,8 @@
 
 /* ---------- Inspector ---------- */
 
-/* What sits under the analysis banner: the frame, and the inspector at its right. Selecting never resizes or moves the
-   frame: the card goes in the slot the stage keeps clear beside it (`data-card="slot"`), or floats over it ("over"). */
+/* What sits under the analysis banner: the frame. Selecting never resizes or moves it: the inspector card shows in the
+   left column, over the library. */
 .stage-main {
   position: relative;
   flex: 1;
@@ -3199,67 +3231,23 @@
   flex-direction: column;
 }
 
-/* Over the frame: only as tall as its fields, up to 60 % of the stage (they scroll inside), lifted off the video, in
-   the stage's corner that covers the selected layer least (`data-anchor`: the top right unless it says otherwise). */
-.screen[data-card="over"] ~ .inspector {
-  bottom: auto;
-  max-height: 60%;
-  box-shadow: var(--shadow-2);
-}
-
-.screen[data-card="over"][data-anchor^="bottom"] ~ .inspector {
-  top: auto;
-  bottom: 0;
-}
-
-.screen[data-card="over"][data-anchor$="left"] ~ .inspector {
-  right: auto;
-  left: 0;
-}
-
-/* The empty slot says what goes there. Never over the frame. */
-.stage-hint {
-  display: none;
-}
-
-.screen[data-card="slot"] ~ .stage-hint {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: var(--inspector-w);
-  display: grid;
-  place-content: center;
-  margin: 0;
-  padding: var(--space-8);
-  border: 1px dashed var(--color-line);
-  border-radius: var(--radius-md);
-  color: var(--color-ink-faint);
-  font-size: var(--text-sm);
-  line-height: var(--lh-sm);
-  text-align: center;
-  pointer-events: none;
-}
-
+/* The card fills the left column over the library (`Library`), above its edge, at the panel's own corners. */
 .inspector {
   position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 2;
-  width: var(--inspector-w);
+  inset: 0;
+  z-index: 3;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: var(--radius-md);
   background: var(--color-bay-raised);
 }
 
+/* Back to library at the start, then the kind and its name, More and Close. */
 .insp-head {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-3) var(--space-4) var(--space-5);
+  padding: var(--space-4) var(--space-3);
   border-bottom: 1px solid var(--color-line);
 }
 
@@ -3340,7 +3328,7 @@
   gap: var(--space-3);
 }
 
-/* Below 1280 wide the inspector is 236 px: Background's label goes above its choices. */
+/* Below 1280 wide the card is the 256 px column: Background's label goes above its choices. */
 @media (max-width: 1279px) {
   .field-narrow-col {
     grid-template-columns: minmax(0, 1fr);
@@ -3443,7 +3431,7 @@
 
 /* The Effects popover: the card's width, never taller than the room it has, the stack scrolling inside it. */
 .fx-pop {
-  width: calc(var(--inspector-w) - 2 * var(--space-3));
+  width: calc(var(--library-w) - 2 * var(--space-3));
   max-height: min(32rem, 70vh, var(--radix-popover-content-available-height));
   overflow-y: auto;
   scrollbar-width: thin;

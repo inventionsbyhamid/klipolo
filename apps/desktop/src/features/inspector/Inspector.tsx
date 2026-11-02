@@ -16,7 +16,7 @@ import { AdjustmentInspector } from './AdjustmentInspector';
 import { AudioInspector } from './AudioInspector';
 import { CameraInspector } from './CameraInspector';
 import { ClipInspector } from './ClipInspector';
-import { cardEscape } from './common';
+import { BackToLibrary, cardEscape } from './common';
 import { GeneratorInspector } from './GeneratorInspector';
 import { GroupInspector } from './GroupInspector';
 import { ImageInspector } from './ImageInspector';
@@ -111,10 +111,10 @@ const ICONS: Record<Inspected, IconName> = {
 };
 
 /**
- * The inspector: a raised card docked to the right inside the preview while a layer is selected. Its
- * header has the kind's icon and name, a more menu (Duplicate, Bring forward and Send back for a layer drawn over the
- * video, Delete) and a close button; its body the fields of that kind, scrolling with a fade at the bottom. On a
- * locked track it says so and offers Unlock. Changes apply at once and each is one undo step.
+ * The inspector: a raised card that fills the left column over the library while a layer is selected
+ * (`Library`). Its header has Back to library, the kind's icon and name, a more menu (Duplicate, Bring forward and
+ * Send back for a layer drawn over the video, Delete) and a close button; its body the fields of that kind, scrolling
+ * with a fade at the bottom. On a locked track it says so and offers Unlock. Changes apply at once and each is one undo step.
  * A main-track clip has a card of its own (`ClipInspector`), and so has a recording's camera (`CameraInspector`).
  */
 export function Inspector({ format }: { format: FormatKind }) {
@@ -172,6 +172,7 @@ export function Inspector({ format }: { format: FormatKind }) {
       onKeyDown={cardEscape(close)}
     >
       <div className="insp-head">
+        <BackToLibrary />
         <h3>
           <Icon name={ICONS[kind]} />
           {title}
