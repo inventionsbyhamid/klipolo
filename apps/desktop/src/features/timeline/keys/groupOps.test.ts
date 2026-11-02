@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { Op } from '../../../bindings/Op';
 import type { Project } from '../../../bindings/Project';
 import { fixtureProject, titleItem } from '../../../test/fixtures';
 import {
@@ -25,6 +26,43 @@ function twoTitles(): Project {
   return p;
 }
 
+/**
+ * Overlay tracks o1 to o5 (bottom to top) alone on the timeline: l1 on o2 from 3 s, l2 on o3 from 2 s and l3 on o4 from
+ * 1 s, each 5 s long, so all three overlap.
+ */
+function stacked(): Project {
+  const p = fixtureProject();
+  const at = (id: string, start: number) => ({ ...titleItem, id, startUs: start * S, durationUs: 5 * S, attach: null });
+  const lane = { ...p.timeline.tracks[0], items: [] };
+  p.timeline.tracks = [
+    { ...lane, id: 'o1', name: 'Overlay 1' },
+    { ...lane, id: 'o2', name: 'Overlay 2', items: [at('l1', 3)] },
+    { ...lane, id: 'o3', name: 'Overlay 3', items: [at('l2', 2)] },
+    { ...lane, id: 'o4', name: 'Overlay 4', items: [at('l3', 1)] },
+    { ...lane, id: 'o5', name: 'Overlay 5' },
+  ];
+  return p;
+}
+
+/**
+ * Whether each `moveItem` of `ops`, applied in turn, lands on a track with nothing in its way: where the model would
+ * otherwise bump the layer to another track.
+ */
+function landsFree(p: Project, ops: Op[]): boolean {
+  const tracks = p.timeline.tracks.map((t) => ({ id: t.id, items: t.items.map((i) => ({ ...i })) }));
+  for (const op of ops) {
+    if (op.type !== 'moveItem') continue;
+    const from = tracks.find((t) => t.items.some((i) => i.id === op.id))!;
+    const item = from.items.find((i) => i.id === op.id)!;
+    from.items = from.items.filter((i) => i !== item);
+    const to = tracks.find((t) => t.id === (op.trackId ?? from.id))!;
+    const end = op.startUs + item.durationUs;
+    if (to.items.some((i) => i.startUs < end && op.startUs < i.startUs + i.durationUs)) return false;
+    to.items.push({ ...item, startUs: op.startUs });
+  }
+  return true;
+}
+
 describe("a group's edits", () => {
   it('deletes its layers, then takes its clips out in one deleteRanges', () => {
     const p = fixtureProject();
@@ -47,6 +85,30 @@ describe("a group's edits", () => {
     expect(groupMoveOps(p, m, 0, 1)).toBe('kind');
     p.timeline.tracks[0].locked = true;
     expect(groupMoveOps(p, membersOf(p, ['title', 'second']), S)).toBe('locked');
+  });
+
+  it('moves its layers across tracks the top one first going up and the bottom one first going down', () => {
+    const p = stacked();
+    const m = membersOf(p, ['l1', 'l2', 'l3']);
+    // Up a track and 1 s later: each lands on the track the one above it has just left.
+    const up = groupMoveOps(p, m, S, 1);
+    expect(up).toEqual([
+      { type: 'moveItem', id: 'l3', trackId: 'o5', startUs: 2 * S },
+      { type: 'moveItem', id: 'l2', trackId: 'o4', startUs: 3 * S },
+      { type: 'moveItem', id: 'l1', trackId: 'o3', startUs: 4 * S },
+    ]);
+    expect(landsFree(p, up as Op[])).toBe(true);
+    // Down a track and 1 s earlier: the bottom one first.
+    const down = groupMoveOps(p, m, -S, -1);
+    expect(down).toEqual([
+      { type: 'moveItem', id: 'l1', trackId: 'o1', startUs: 2 * S },
+      { type: 'moveItem', id: 'l2', trackId: 'o2', startUs: 1 * S },
+      { type: 'moveItem', id: 'l3', trackId: 'o3', startUs: 0 },
+    ]);
+    expect(landsFree(p, down as Op[])).toBe(true);
+    // Up with no time change, and down: still none in another's way.
+    expect(landsFree(p, groupMoveOps(p, m, 0, 1) as Op[])).toBe(true);
+    expect(landsFree(p, groupMoveOps(p, m, 0, -1) as Op[])).toBe(true);
   });
 
   it('carries its clips together to the nearest other place on the main track, and the others close up', () => {
