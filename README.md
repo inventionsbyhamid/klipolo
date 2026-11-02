@@ -235,3 +235,7 @@ open http://localhost:8000. Its two download links are in the
   (`site/assets/fonts/OFL.txt`).
 - The Rust crates and JavaScript packages the app uses are listed with their
   licences in `crates/klipolo-app/licenses/THIRD-PARTY-NOTICES.txt`.
+- The relay (`services/relay`) romanizes words in other scripts for word
+  timing with uroman (https://github.com/isi-nlp/uroman), under its MIT-style
+  licence: "This project uses the universal romanizer software 'uroman'
+  written by Ulf Hermjakob, USC Information Sciences Institute (2015-2020)".

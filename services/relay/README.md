@@ -67,7 +67,7 @@ uv venv && uv pip install -e '.[dev]'
 
 Alignment needs torch 2.8 and the MMS model, which live in the container image. Without them `/v1/align` answers 503 `align_unavailable`.
 
-The romanizer (uroman) is a plain Python package installed with the rest. It takes about 10 s to load its tables, at startup with `ALIGN_WARMUP` on, otherwise on the first turn with words in another script.
+The romanizer (uroman) is a plain Python package installed with the rest. It takes about 10 s and 45 MB to load its tables, at startup with `ALIGN_WARMUP` on, otherwise on the first turn with words in another script. If it fails to load, it is tried again after 5 minutes; until then words in other scripts get interpolated times.
 
 ## Test
 
@@ -222,4 +222,10 @@ Put that digest after `@sha256:` in the `FROM` line, rebuild, and run the full t
 
 ## Third-party software
 
-The relay romanizes words in other scripts than Latin with uroman 1.3.1.1 (https://github.com/isi-nlp/uroman), under its MIT-style licence, which asks for this note: This project uses the universal romanizer software 'uroman' written by Ulf Hermjakob, USC Information Sciences Institute (2015-2020). Ulf Hermjakob, Jonathan May, and Kevin Knight. 2018. Out-of-the-box universal romanization tool uroman. In Proceedings of the 56th Annual Meeting of Association for Computational Linguistics, Demo Track.
+The relay romanizes words in other scripts than Latin with uroman 1.3.1.1 (https://github.com/isi-nlp/uroman), under its MIT-style licence, which asks for this acknowledgement:
+
+"This project uses the universal romanizer software 'uroman' written by Ulf Hermjakob, USC Information Sciences Institute (2015-2020)".
+
+Bibliography: Ulf Hermjakob, Jonathan May, and Kevin Knight. 2018. Out-of-the-box universal romanization tool uroman. In Proceedings of the 56th Annual Meeting of Association for Computational Linguistics, Demo Track.
+
+The Hindi and Arabic test recordings come from FLEURS (CC BY 4.0) and their text from FLoRes-101 (CC BY-SA 4.0): see `tests/fixtures/README.md`.
