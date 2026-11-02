@@ -969,6 +969,11 @@
     "params": []
   },
   {
+    "code": "model.layer.zoomRamp",
+    "message": "A slow zoom must reach its size within the zoom.",
+    "params": []
+  },
+  {
     "code": "model.param.range",
     "message": "{label} must be between {min} and {max}.",
     "params": [

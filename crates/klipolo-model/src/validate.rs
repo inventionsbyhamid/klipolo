@@ -798,10 +798,17 @@ fn validate_content(p: &Project, content: &ItemContent, duration: Us) -> Result<
         }
         ItemContent::Zoom { target, scale } => {
             check(in_range(*scale, 1.0, 5.0), code!("model.layer.zoom"))?;
-            if let ZoomTarget::Rect { rect } = target {
-                check(valid_box(rect), code!("model.layer.zoomArea"))?;
+            match target {
+                ZoomTarget::Rect { rect } => check(valid_box(rect), code!("model.layer.zoomArea")),
+                ZoomTarget::Push { rect, ramp_us } => {
+                    check(valid_box(rect), code!("model.layer.zoomArea"))?;
+                    check(
+                        *ramp_us > 0 && *ramp_us <= duration,
+                        code!("model.layer.zoomRamp"),
+                    )
+                }
+                ZoomTarget::Auto { .. } => Ok(()),
             }
-            Ok(())
         }
         ItemContent::Generator {
             source,
