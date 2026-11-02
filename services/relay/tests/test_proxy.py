@@ -3051,6 +3051,27 @@ def test_meta_billing_more_frames_than_reserved_turns_sam_off_for_the_code(clien
     assert meta.calls.call_count == sent
 
 
+def test_the_breaker_turns_sam_off_for_the_code_the_call_came_under(client, conn, meta):
+    device = add_device(conn)
+    add_device(conn, code="othercode")
+    counted(client.app, device, "file-1", 120)
+    done = {"type": "response.completed", "response": {"status": "completed", "usage": {"video_frames_processed": 500}}}
+
+    def moved_then_answer(request):
+        # The device registers again with another code while its call is with Meta.
+        conn.execute("UPDATE devices SET code = 'othercode' WHERE device_id = ?", (device.device_id,))
+        return httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, stream=MetaStream([sse(CREATED), sse(done)])
+        )
+
+    meta.post("/responses").mock(side_effect=moved_then_answer)
+
+    assert client.post("/meta/v1/responses", json=sam_on("file-1"), headers=device.headers).status_code == 200
+
+    sam_off = dict(conn.execute("SELECT code, sam_off FROM codes").fetchall())
+    assert sam_off == {"testcode": 1, "othercode": 0}
+
+
 @pytest.mark.parametrize(("billed", "sam_off"), [(52, 0), (53, 0), (54, 1)])
 def test_the_breaker_allows_a_couple_of_frames_over_a_small_copy(client, conn, meta, billed, sam_off):
     # A 50-frame copy: 2% is a single frame, so 2 frames more are allowed on top (50 * 1.02 + 2 = 53).

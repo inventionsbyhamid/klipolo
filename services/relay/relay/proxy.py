@@ -590,7 +590,8 @@ async def charge(settings: Settings, slot: Slot, meter: Meter, candidates: list[
 
 async def _check_sam_billing(settings: Settings, slot: Slot, meter: Meter, usage: Mapping[str, Any]) -> None:
     """The breaker: Meta billing more frames than were reserved means the relay's
-    count was wrong somewhere, so SAM goes off for the device's access code."""
+    count was wrong somewhere, so SAM goes off for the access code the call came
+    under (the device may have moved to another code meanwhile)."""
     if meter.model != SAM_MODEL or usage.get("reserved"):
         return
     billed = usage.get("video_frames_processed")
@@ -605,7 +606,7 @@ async def _check_sam_billing(settings: Settings, slot: Slot, meter: Meter, usage
         slot.device_id[:8],
     )
     try:
-        await anyio.to_thread.run_sync(_turn_sam_off, settings.db_path, slot.device_id)
+        await anyio.to_thread.run_sync(_turn_sam_off, settings.db_path, slot.code)
     except Exception:
         logger.exception("Could not turn SAM off for device %s", slot.device_id[:8])
 
@@ -1416,15 +1417,12 @@ def _check_sam_on(conn: sqlite3.Connection, device: sqlite3.Row) -> None:
         raise RelayError(403, "sam_off", SAM_OFF_MESSAGE)
 
 
-def _turn_sam_off(db_path: Path, device_id: str) -> None:
-    """SAM off for every device on `device_id`'s access code."""
+def _turn_sam_off(db_path: Path, code: str | None) -> None:
+    """SAM off for every device on access code `code`."""
     conn = db.connect(db_path)
     try:
         with db.transaction(conn):
-            conn.execute(
-                "UPDATE codes SET sam_off = 1 WHERE code = (SELECT code FROM devices WHERE device_id = ?)",
-                (device_id,),
-            )
+            conn.execute("UPDATE codes SET sam_off = 1 WHERE code = ?", (code,))
     finally:
         conn.close()
 
