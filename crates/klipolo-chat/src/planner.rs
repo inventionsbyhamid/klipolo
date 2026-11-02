@@ -280,7 +280,12 @@ pub async fn plan(
         };
         spent += answer.usage_usd;
         answers.push(answer.calls.clone());
-        let text = answer.text.trim();
+        // A cut-off answer's words end where its last whole sentence does.
+        let text = if cut {
+            whole_sentences(answer.text.trim())
+        } else {
+            answer.text.trim()
+        };
         if !text.is_empty() {
             said = text.to_owned();
         }
@@ -393,6 +398,28 @@ pub async fn plan(
             .to_owned();
     }
     Ok(out)
+}
+
+/// `text` up to the end of its last whole sentence: a `.`, `!` or `?` and any closing quotes or brackets, then a space
+/// or the end (so `1.5` ends none); empty when no sentence ends in it. The words of an answer cut off part-way.
+fn whole_sentences(text: &str) -> &str {
+    let closing = |c: char| matches!(c, '"' | '\'' | ')' | '\u{201d}' | '\u{2019}');
+    let mut end = 0;
+    let mut chars = text.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        if !matches!(c, '.' | '!' | '?') {
+            continue;
+        }
+        let mut stop = i + c.len_utf8();
+        while let Some(&(j, q)) = chars.peek().filter(|&&(_, q)| closing(q)) {
+            stop = j + q.len_utf8();
+            chars.next();
+        }
+        if chars.peek().is_none_or(|&(_, next)| next.is_whitespace()) {
+            end = stop;
+        }
+    }
+    &text[..end]
 }
 
 /// Whether `text`, an answer with no tool call, says the model will do something it hasn't yet ("I will turn this

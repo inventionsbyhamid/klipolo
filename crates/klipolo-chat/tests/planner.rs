@@ -1701,6 +1701,30 @@ fn an_answer_cut_off_keeps_its_finished_calls_and_is_asked_again_once() {
     ]);
     let out = send(&model, &[], "cut the end", &i, &p).unwrap();
     assert!(out.compiled.proposal.is_some());
+    // Its words end at their last whole sentence, should the reply be built from them.
+    let model = Fake::new(vec![
+        Err(ModelError::CutOff(ModelResponse {
+            text: "I proposed cutting the end. Next I will add music at 1.5".into(),
+            calls: vec![cut_call("call_3", 7.9, 29.8)],
+            usage_usd: 0.004,
+        })),
+        answer("", vec![], 0.001),
+    ]);
+    let out = send(&model, &[], "cut the end", &i, &p).unwrap();
+    assert!(
+        out.reply.starts_with("I proposed cutting the end."),
+        "{}",
+        out.reply
+    );
+    assert!(!out.reply.contains("music"), "{}", out.reply);
+    let seen = model.seen();
+    assert!(
+        seen[1].input.contains(&Item::Assistant {
+            text: "I proposed cutting the end.".into()
+        }),
+        "{:?}",
+        seen[1].input
+    );
     // Cut off again: the message fails, as any failed answer does, billed for both.
     let model = Fake::new(vec![cut_off(vec![]), cut_off(vec![])]);
     let e = send(&model, &[], "cut the end", &i, &p).unwrap_err();
