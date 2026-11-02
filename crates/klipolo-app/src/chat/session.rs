@@ -84,8 +84,8 @@ pub const MOVED: &str =
 /// Said when the answer's changes couldn't be applied (they don't fit the project any more).
 pub const NOT_APPLIED: &str =
     "I couldn't make those changes, so I left the project as it was. Ask me again.";
-/// Said when the model's undo would take back a step that isn't chat's own last change (the person's, or another
-/// app's): nothing of the answer was applied or proposed.
+/// Said when the model's undo would take back a step that isn't chat's last change (a hand edit, or a change another
+/// app made itself): nothing of the answer was applied or proposed.
 pub const NOT_CHATS: &str =
     "I can only undo my own last change. Use Undo in the top bar for the rest.";
 /// Said beside the additions applied when the removals of the same answer couldn't be proposed.
@@ -849,7 +849,9 @@ impl ChatSession {
             CommitError::Moved | CommitError::NoProject => MOVED,
         };
         if compiled.undo {
-            // Only chat's own last change, as its Undo chip (`undo_last`): never the person's step or another app's.
+            // Only chat's last change, as its Undo chip (`undo_last`) takes back: what chat committed, or a
+            // proposal the person applied in the chat panel (chat's or another app's). Never a hand edit, or a
+            // change an app made itself.
             if lock(&self.talk).last_change.as_ref() != Some(&at) {
                 landed.lost = Some(NOT_CHATS);
                 return landed;
