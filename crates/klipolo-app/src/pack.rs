@@ -4,11 +4,15 @@
 //! path is where the pack was when the file was added: the app moved, macOS ran it from a translocated copy, or another
 //! build saved the project, and it is somewhere else now. So each opening points the project's pack files at this
 //! install's pack again (`Pack::repoint`), by id; the decoders, the peaks, the page's media and export all read the
-//! path as it is then.
+//! path as it is then. A newer pack can also hold a different recording under the same id, so the length and size come
+//! from this pack too, and the timeline's pieces of a sound fit its length now (`fit_to_file`).
 
 use std::path::{Path, PathBuf};
 
 use klipolo_model::project::{Asset, AssetKind, Project};
+use klipolo_model::time::{MIN_DURATION_US, Us, drifted};
+use klipolo_model::timeline::{ClipSource, ItemContent};
+use klipolo_model::volume;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -125,23 +129,39 @@ impl Pack {
             .map(|(_, file)| file.as_path())
     }
 
-    /// Points `project`'s pack files (assets whose id is `klipolo-pack-<item>`) at this pack's copy of each item; an item
-    /// this pack doesn't have keeps its path (it reports as missing if it is gone). How many it changed.
+    /// Points `project`'s pack files (assets whose id is `klipolo-pack-<item>`) at this pack's copy of each item, with its
+    /// length and size as this pack lists them; an item this pack doesn't have keeps its path (it reports as missing if it
+    /// is gone). A sound whose length changed (a pack update holds another recording under its id) has its pieces on the
+    /// timeline fitted to it (`fit_to_file`). How many assets it changed.
     pub(crate) fn repoint(&self, project: &mut Project) -> usize {
         let mut changed = 0;
+        let mut lengths = Vec::new();
         for asset in &mut project.assets {
-            let Some(file) = asset
-                .id
-                .strip_prefix(ASSET_PREFIX)
-                .and_then(|item| self.file(item))
-            else {
+            let Some((item, file)) = asset.id.strip_prefix(ASSET_PREFIX).and_then(|id| {
+                self.items
+                    .iter()
+                    .find(|(item, _)| item.id == id)
+                    .map(|(item, file)| (item, file))
+            }) else {
                 continue;
             };
             let path = file.to_string_lossy();
-            if asset.path != path {
-                asset.path = path.into_owned();
-                changed += 1;
+            let listed = (item.duration_us, item.width, item.height);
+            if asset.path == path && (asset.duration_us, asset.width, asset.height) == listed {
+                continue;
             }
+            if asset.kind == AssetKind::Audio
+                && item.duration_us > 0
+                && asset.duration_us != item.duration_us
+            {
+                lengths.push((asset.id.clone(), asset.duration_us, item.duration_us));
+            }
+            asset.path = path.into_owned();
+            (asset.duration_us, asset.width, asset.height) = listed;
+            changed += 1;
+        }
+        for (id, was, now) in lengths {
+            fit_to_file(project, &id, was, now);
         }
         changed
     }
@@ -168,6 +188,81 @@ impl Pack {
             made_with: None,
         })
     }
+}
+
+/// Fits the timeline's pieces of sound asset `id` to its file, now `now` long where it was `was`. A piece that would play
+/// past the file's end ends at it (from the file's start, if it started past it), its fades and volume keys fitted too,
+/// so the project stays valid. A layer that played the whole of the file to its end plays the whole of the longer one,
+/// as far as the next layer on its track lets it. Main-track clips only shorten: lengthening one would move everything
+/// after it.
+fn fit_to_file(project: &mut Project, id: &str, was: Us, now: Us) {
+    for track in &mut project.timeline.tracks {
+        let starts: Vec<Us> = track.items.iter().map(|item| item.start_us).collect();
+        for (k, item) in track.items.iter_mut().enumerate() {
+            let ItemContent::Audio {
+                asset_id,
+                source_in_us,
+                fade_in_us,
+                fade_out_us,
+                drift_ppm,
+                volume_keys,
+                ..
+            } = &mut item.content
+            else {
+                continue;
+            };
+            if asset_id != id {
+                continue;
+            }
+            // The timeline length that plays `footage` of the file.
+            let timeline = |footage: Us| {
+                let mut length = (footage as f64 / (1.0 + *drift_ppm * 1e-6)).floor() as Us;
+                while length > 0 && drifted(length, *drift_ppm) > footage {
+                    length -= 1;
+                }
+                length
+            };
+            let end = source_in_us.saturating_add(drifted(item.duration_us, *drift_ppm));
+            let length = if end > now {
+                if *source_in_us > now - MIN_DURATION_US {
+                    *source_in_us = 0;
+                }
+                item.duration_us.min(timeline(now - *source_in_us))
+            } else if *source_in_us == 0 && end + 1_000 >= was && now > was {
+                let room = starts
+                    .get(k + 1)
+                    .map_or(Us::MAX, |next| next - item.start_us);
+                timeline(now).min(room).max(item.duration_us)
+            } else {
+                continue;
+            };
+            if length < item.duration_us {
+                volume::fit(volume_keys, length);
+            }
+            item.duration_us = length;
+            fit_fades(fade_in_us, fade_out_us, length);
+        }
+    }
+    for clip in &mut project.timeline.main {
+        if !matches!(&clip.source, ClipSource::Asset { id: asset } if asset == id)
+            || clip.source_out_us <= now
+        {
+            continue;
+        }
+        if clip.source_in_us > now - MIN_DURATION_US {
+            clip.source_in_us = 0;
+        }
+        clip.source_out_us = now;
+        let length = clip.duration_us();
+        volume::fit(&mut clip.volume_keys, length);
+        fit_fades(&mut clip.fade_in_us, &mut clip.fade_out_us, length);
+    }
+}
+
+/// Fades that together take no more than `length`: the fade out keeps what it can, the fade in the rest.
+fn fit_fades(fade_in: &mut Us, fade_out: &mut Us, length: Us) {
+    *fade_out = (*fade_out).min(length);
+    *fade_in = (*fade_in).min(length - *fade_out);
 }
 
 /// Where the pack is: `KLIPOLO_LIBRARY_DIR`; else `library` in the app's resources; else, in debug builds only, the

@@ -960,3 +960,130 @@ fn pack_files_saved_with_one_pack_dir_open_from_another() {
         project.assets[0].path
     );
 }
+
+/// A pack in `dir` whose whoosh and bubbles are `whoosh_ms` and `bubbles_ms` long.
+fn pack_of(dir: &Path, whoosh_ms: i64, bubbles_ms: i64) -> Pack {
+    std::fs::create_dir_all(dir.join("sounds")).unwrap();
+    for name in ["whoosh", "bubbles"] {
+        std::fs::write(dir.join(format!("sounds/{name}.wav")), b"RIFF").unwrap();
+    }
+    std::fs::write(
+        dir.join("manifest.json"),
+        format!(
+            r#"{{"items": [
+                {{"id": "whoosh", "name": "Whoosh", "category": "sound", "file": "sounds/whoosh.wav", "duration_ms": {whoosh_ms}}},
+                {{"id": "bubbles", "name": "Bubble pops", "category": "sound", "file": "sounds/bubbles.wav", "duration_ms": {bubbles_ms}}}
+            ]}}"#
+        ),
+    )
+    .unwrap();
+    Pack::read(dir)
+}
+
+/// A project saved with an older pack, whose whoosh was longer and whose bubbles were shorter than this pack's, opens
+/// valid with this pack's lengths: the whoosh ends where its file does now (its fade and volume keys with it), and the
+/// bubbles that played the whole old file play the whole new one, as far as the next layer lets them.
+#[test]
+fn a_project_from_an_older_pack_opens_with_this_packs_sound_lengths() {
+    use klipolo_model::layout::Layout;
+    use klipolo_model::motion::Key;
+    use klipolo_model::timeline::{Item, ItemContent, Track, TrackKind};
+    let dir = tempfile::tempdir().unwrap();
+    let (old, new) = (
+        pack_of(&dir.path().join("old"), 900, 410),
+        pack_of(&dir.path().join("new"), 426, 1_460),
+    );
+    let layer = |id: &str,
+                 asset: &str,
+                 start_us: i64,
+                 duration_us: i64,
+                 fade_out_us: i64,
+                 keys: Vec<Key>| Item {
+        id: id.into(),
+        start_us,
+        duration_us,
+        attach: None,
+        layout: Layout::full_frame(),
+        content: ItemContent::Audio {
+            asset_id: asset.into(),
+            source_in_us: 0,
+            volume: 1.0,
+            muted: false,
+            fade_in_us: 300_000,
+            fade_out_us,
+            effect: None,
+            drift_ppm: 0.0,
+            centre_from: None,
+            tie: None,
+            duck: None,
+            volume_keys: keys,
+        },
+        effects: Vec::new(),
+    };
+    let key = |t_us, v| Key {
+        t_us,
+        v,
+        ease: None,
+    };
+    let mut project = Project::new("Old pack");
+    project.assets = vec![old.asset("whoosh").unwrap(), old.asset("bubbles").unwrap()];
+    let mut sounds = Track::new(TrackKind::Audio, "Sounds");
+    sounds.items = vec![
+        layer(
+            "w",
+            "klipolo-pack-whoosh",
+            0,
+            900_000,
+            400_000,
+            vec![key(0, 1.0), key(800_000, 0.5)],
+        ),
+        layer(
+            "b1",
+            "klipolo-pack-bubbles",
+            2_000_000,
+            410_000,
+            100_000,
+            Vec::new(),
+        ),
+        layer(
+            "b2",
+            "klipolo-pack-bubbles",
+            3_000_000,
+            410_000,
+            100_000,
+            Vec::new(),
+        ),
+    ];
+    project.timeline.tracks = vec![sounds];
+    klipolo_model::Document::new(project.clone()).expect("valid with the old pack");
+    let file = dir.path().join("Old pack.klipolo");
+    save(&file, &project, Durability::Full).unwrap();
+
+    let open = open_file(&file, &new).unwrap();
+    let opened = open.document.project();
+    let lengths: Vec<i64> = opened.assets.iter().map(|a| a.duration_us).collect();
+    assert_eq!(lengths, [426_000, 1_460_000]);
+    let items = &opened.timeline.tracks[0].items;
+    let fitted: Vec<(i64, i64)> = items
+        .iter()
+        .map(|item| match &item.content {
+            ItemContent::Audio {
+                fade_in_us,
+                fade_out_us,
+                ..
+            } => (item.duration_us, fade_in_us + fade_out_us),
+            _ => unreachable!(),
+        })
+        .collect();
+    // The whoosh ends with its file (its fades fitted into it); the first bubbles stop where the next ones start; the
+    // last bubbles play the whole new file.
+    assert_eq!(
+        fitted,
+        [
+            (426_000, 426_000),
+            (1_000_000, 400_000),
+            (1_460_000, 400_000)
+        ]
+    );
+    assert_eq!(items[0].content.volume_keys().last().unwrap().t_us, 426_000);
+}
