@@ -1,14 +1,16 @@
 //! The media commands: music, sound effects, pictures and words put on the timeline, and a layer's settings changed.
 //! Each is thin: the model builds the ops (`klipolo_model::media`) from the open project as it is, and they commit by the
 //! path every edit takes (`project::build_and_apply`: one undo step, the engine, the save, music fitted to a new end),
-//! returning what changed, as `project_apply` does. Also the bundled pack, a picture's bytes for the library, and where
-//! someone speaks for the Music lane's ducking dips.
+//! returning what changed, as `project_apply` does. Also the bundled pack, a picture's bytes and a sound to play for the
+//! library, and where someone speaks for the Music lane's ducking dips.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use image::codecs::png::{CompressionType, FilterType, PngEncoder};
 use image::{ExtendedColorType, ImageEncoder};
+use klipolo_engine::audio::decode;
+use klipolo_engine::audio::mix::RATE;
 use klipolo_engine::render::image_load::decode_rgba;
 use klipolo_model::coded::{CodedError, Said};
 use klipolo_model::history::SnapshotPatch;
@@ -426,6 +428,113 @@ pub(crate) fn thumbnail(file: &Path) -> Result<Vec<u8>, String> {
     Ok(png)
 }
 
+/// How much of a sound the library plays before it is added: a song's first 30 s says what it is, and a long file never
+/// goes to the page whole.
+const SOUND_PREVIEW_FRAMES: u64 = 30 * RATE as u64;
+const SOUND_UNREADABLE: &str = "That sound couldn't be played.";
+
+/// A sound for the library to play before it is added, as a WAV of its first 30 s at most (16-bit, 48 kHz): a pack sound
+/// or music bed by its id, or a sound the open project uses (its path), never any other file. Only decoded sound goes
+/// back, never a file's bytes, so a path that leads elsewhere gives nothing away. The decode runs on a blocking thread.
+#[tauri::command]
+pub async fn media_sound(
+    state: State<'_, ProjectSessionState>,
+    pack_id: Option<String>,
+    path: Option<String>,
+) -> Result<tauri::ipc::Response, String> {
+    let file = match (pack_id, path) {
+        (Some(id), _) => pack_sound(&state.pack(), &id)?,
+        (None, Some(path)) => sound_file(&state, &path)?,
+        (None, None) => return Err(NOT_IN_PROJECT.into()),
+    };
+    let wav = tauri::async_runtime::spawn_blocking(move || sound_preview(&file))
+        .await
+        .map_err(|error| {
+            tracing::warn!(%error, "a library sound's decode stopped");
+            SOUND_UNREADABLE.to_string()
+        })??;
+    Ok(tauri::ipc::Response::new(wav))
+}
+
+/// Pack item `id`'s file, when it is a sound or a music bed.
+pub(crate) fn pack_sound(pack: &Pack, id: &str) -> Result<PathBuf, String> {
+    pack.asset(id)
+        .filter(|asset| asset.kind == AssetKind::Audio)
+        .and(pack.file(id))
+        .map(Path::to_path_buf)
+        .ok_or_else(|| NOT_IN_PACK.into())
+}
+
+/// The file behind `path`, a sound the open project uses, with every link followed: refused unless what it leads to is a
+/// regular file Klipolo imports, or a recording's own sound, and not a picture (a `song.mp3` linked to `~/.ssh/id_rsa`
+/// or to `logo.png` is not).
+pub(crate) fn sound_file(state: &ProjectSessionState, path: &str) -> Result<PathBuf, String> {
+    if asset_kind(state, path) != Some(AssetKind::Audio) {
+        return Err(NOT_IN_PROJECT.into());
+    }
+    let real = std::fs::canonicalize(path).map_err(|_| "That sound isn't there anymore.")?;
+    let regular = std::fs::metadata(&real).is_ok_and(|meta| meta.is_file());
+    let media = servable(&real.to_string_lossy()) || is_recorded_sound(&real);
+    if !regular || !media || is_picture(&real) {
+        return Err(NOT_IN_PROJECT.into());
+    }
+    Ok(real)
+}
+
+/// A recording's own sound, by its extension: a mic's runs are CAF files (`mic/run-01.caf`, a separated sound's file),
+/// which Klipolo makes but doesn't import.
+fn is_recorded_sound(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("caf"))
+}
+
+/// `file`'s sound from its start, decoded to 48 kHz (mono kept mono, more channels made stereo) for at most
+/// `SOUND_PREVIEW_FRAMES`, as a 16-bit PCM WAV.
+pub(crate) fn sound_preview(file: &Path) -> Result<Vec<u8>, String> {
+    let unreadable = |error: String| {
+        tracing::info!(%error, "a sound couldn't be played in the library");
+        SOUND_UNREADABLE.to_string()
+    };
+    let channels = decode::probe(file).map_err(unreadable)?.channels;
+    let mut samples = Vec::new();
+    decode::decode(
+        file,
+        0,
+        Some(SOUND_PREVIEW_FRAMES),
+        &mut |_, block: &[f32]| {
+            samples.extend_from_slice(block);
+            Ok(true)
+        },
+    )
+    .map_err(|error| unreadable(format!("{error:?}")))?;
+    Ok(wav(&samples, channels))
+}
+
+/// Interleaved `samples` of `channels` channels at `RATE`, as a 16-bit PCM WAV.
+fn wav(samples: &[f32], channels: u16) -> Vec<u8> {
+    let data = u32::try_from(samples.len() * 2).unwrap_or(u32::MAX);
+    let block = channels * 2;
+    let mut out = Vec::with_capacity(44 + samples.len() * 2);
+    out.extend_from_slice(b"RIFF");
+    out.extend_from_slice(&data.saturating_add(36).to_le_bytes());
+    out.extend_from_slice(b"WAVEfmt ");
+    out.extend_from_slice(&16u32.to_le_bytes());
+    out.extend_from_slice(&1u16.to_le_bytes());
+    out.extend_from_slice(&channels.to_le_bytes());
+    out.extend_from_slice(&RATE.to_le_bytes());
+    out.extend_from_slice(&(RATE * u32::from(block)).to_le_bytes());
+    out.extend_from_slice(&block.to_le_bytes());
+    out.extend_from_slice(&16u16.to_le_bytes());
+    out.extend_from_slice(b"data");
+    out.extend_from_slice(&data.to_le_bytes());
+    for sample in samples {
+        let value = (sample.clamp(-1.0, 1.0) * f32::from(i16::MAX)).round() as i16;
+        out.extend_from_slice(&value.to_le_bytes());
+    }
+    out
+}
+
 /// Where someone speaks on the open project's timeline, as the mix ducks music under it: the Music lane draws its dips
 /// there.
 #[tauri::command(async)]
@@ -440,22 +549,28 @@ mod tests {
 
     /// A session with a project open that uses each of `pictures` as a picture.
     fn open_with(dir: &Path, pictures: &[&Path]) -> ProjectSessionState {
+        let files: Vec<_> = pictures.iter().map(|p| (*p, AssetKind::Image)).collect();
+        open_using(dir, &files)
+    }
+
+    /// A session with a project open that uses each file as its kind.
+    fn open_using(dir: &Path, files: &[(&Path, AssetKind)]) -> ProjectSessionState {
         let state = ProjectSessionState::default();
         let mut project = Project::new("Pictures");
-        project.assets = pictures
+        project.assets = files
             .iter()
             .enumerate()
-            .map(|(n, path)| Asset {
+            .map(|(n, (path, kind))| Asset {
                 id: format!("p{n}"),
-                kind: AssetKind::Image,
+                kind: *kind,
                 path: path.to_string_lossy().into_owned(),
-                name: format!("p{n}.png"),
+                name: format!("p{n}"),
                 duration_us: 0,
                 width: 10,
                 height: 10,
                 fps: 0.0,
                 rotation: None,
-                has_audio: false,
+                has_audio: *kind == AssetKind::Audio,
                 audio_lead_us: None,
                 made_with: None,
             })
@@ -492,5 +607,169 @@ mod tests {
         );
         let shown = image::load_from_memory(&thumbnail(&file).unwrap()).unwrap();
         assert_eq!((shown.width(), shown.height()), (256, 128));
+    }
+
+    /// `seconds` of a quiet 440 Hz tone, mono, as a WAV at 48 kHz.
+    fn tone(seconds: u64) -> Vec<u8> {
+        let samples: Vec<f32> = (0..seconds * u64::from(RATE))
+            .map(|n| 0.25 * (n as f32 * 440.0 * std::f32::consts::TAU / RATE as f32).sin())
+            .collect();
+        wav(&samples, 1)
+    }
+
+    /// The library plays a pack sound or music bed by its id, and nothing else from the pack: an id it doesn't have, or a
+    /// sticker's, is refused.
+    #[test]
+    fn a_pack_sound_is_refused_unless_the_pack_has_it_as_a_sound() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("pop.wav"), tone(1)).unwrap();
+        std::fs::write(dir.path().join("star.png"), b"PNG").unwrap();
+        std::fs::write(
+            dir.path().join("manifest.json"),
+            r#"{"items": [
+                {"id": "pop", "name": "Pop", "category": "sound", "file": "pop.wav", "duration_ms": 1000},
+                {"id": "star", "name": "Star", "category": "sticker", "file": "star.png", "width": 8, "height": 8}
+            ]}"#,
+        )
+        .unwrap();
+        let pack = Pack::read(dir.path());
+        assert_eq!(
+            pack_sound(&pack, "pop").unwrap(),
+            dir.path().join("pop.wav")
+        );
+        assert_eq!(pack_sound(&pack, "nope").unwrap_err(), NOT_IN_PACK);
+        assert_eq!(pack_sound(&pack, "star").unwrap_err(), NOT_IN_PACK);
+        assert_eq!(pack_sound(&pack, "../pop").unwrap_err(), NOT_IN_PACK);
+    }
+
+    /// A sound by its path plays only when the open project uses that path as a sound, and what it leads to is a media
+    /// file: any other file on disk, a `tune.mp3` linked to a key file, or a picture the project uses is refused.
+    #[test]
+    fn a_sound_by_path_is_refused_unless_the_project_uses_it_as_a_sound() {
+        let dir = tempfile::tempdir().unwrap();
+        let song = dir.path().join("song.wav");
+        std::fs::write(&song, tone(1)).unwrap();
+        let secret = dir.path().join("id_rsa");
+        std::fs::write(&secret, b"-----BEGIN KEY-----").unwrap();
+        let sneaky = dir.path().join("tune.mp3");
+        std::os::unix::fs::symlink(&secret, &sneaky).unwrap();
+        let picture = dir.path().join("logo.png");
+        image::RgbaImage::from_pixel(4, 4, image::Rgba([255, 0, 0, 255]))
+            .save(&picture)
+            .unwrap();
+        // A sound by name that leads to a picture.
+        let pictured = dir.path().join("cover.mp3");
+        std::os::unix::fs::symlink(&picture, &pictured).unwrap();
+        let state = open_using(
+            dir.path(),
+            &[
+                (&song, AssetKind::Audio),
+                (&sneaky, AssetKind::Audio),
+                (&pictured, AssetKind::Audio),
+                (&picture, AssetKind::Image),
+            ],
+        );
+        let path = |p: &Path| p.to_string_lossy().into_owned();
+        assert_eq!(
+            sound_file(&state, &path(&song)).unwrap(),
+            std::fs::canonicalize(&song).unwrap()
+        );
+        for refused in [
+            &secret,
+            &sneaky,
+            &pictured,
+            &picture,
+            Path::new("/etc/passwd"),
+        ] {
+            assert_eq!(
+                sound_file(&state, &path(refused)).unwrap_err(),
+                NOT_IN_PROJECT,
+                "{}",
+                refused.display()
+            );
+        }
+        // With no project open, no path plays.
+        assert_eq!(
+            sound_file(&ProjectSessionState::default(), &path(&song)).unwrap_err(),
+            NOT_IN_PROJECT
+        );
+    }
+
+    /// `seconds` of the same tone as a CAF file of 16-bit little-endian PCM at 48 kHz, as a recording's mic writes.
+    fn caf_tone(seconds: u64) -> Vec<u8> {
+        let pcm = &tone(seconds)[44..];
+        let mut caf = b"caff\x00\x01\x00\x00desc".to_vec();
+        caf.extend_from_slice(&32i64.to_be_bytes());
+        caf.extend_from_slice(&48_000f64.to_be_bytes());
+        caf.extend_from_slice(b"lpcm");
+        // Flags (little-endian integers), bytes per packet, frames per packet, channels, bits per channel.
+        for field in [2u32, 2, 1, 1, 16] {
+            caf.extend_from_slice(&field.to_be_bytes());
+        }
+        caf.extend_from_slice(b"data");
+        caf.extend_from_slice(&(pcm.len() as i64 + 4).to_be_bytes());
+        caf.extend_from_slice(&0u32.to_be_bytes());
+        caf.extend_from_slice(pcm);
+        caf
+    }
+
+    /// A recording's separated sound, its mic's `mic/run-01.caf`, plays: Klipolo makes CAF files but doesn't import
+    /// them, and the project uses this one as a sound.
+    #[test]
+    fn a_recordings_mic_run_plays() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("mic")).unwrap();
+        let run = dir.path().join("mic/run-01.caf");
+        std::fs::write(&run, caf_tone(1)).unwrap();
+        let state = open_using(dir.path(), &[(&run, AssetKind::Audio)]);
+        let file = sound_file(&state, &run.to_string_lossy()).unwrap();
+        assert_eq!(file, std::fs::canonicalize(&run).unwrap());
+        let wav = sound_preview(&file).unwrap();
+        let data = u32::from_le_bytes(wav[40..44].try_into().unwrap());
+        assert_eq!(
+            (u16::from_le_bytes([wav[22], wav[23]]), data),
+            (1, 48_000 * 2)
+        );
+    }
+
+    /// What plays is the sound decoded from its start, 30 s at most, as a 16-bit WAV at 48 kHz: a long song never goes to
+    /// the page whole.
+    #[test]
+    fn a_sound_plays_as_its_first_30_seconds() {
+        let dir = tempfile::tempdir().unwrap();
+        let (short, long) = (dir.path().join("short.wav"), dir.path().join("long.wav"));
+        std::fs::write(&short, tone(2)).unwrap();
+        std::fs::write(&long, tone(31)).unwrap();
+        /// A WAV's tags, channels, rate, data length and whole length.
+        fn header(wav: &[u8]) -> (&[u8], &[u8], u16, u32, usize, usize) {
+            let channels = u16::from_le_bytes([wav[22], wav[23]]);
+            let rate = u32::from_le_bytes(wav[24..28].try_into().unwrap());
+            let data = u32::from_le_bytes(wav[40..44].try_into().unwrap());
+            (
+                &wav[..4],
+                &wav[8..16],
+                channels,
+                rate,
+                data as usize,
+                wav.len(),
+            )
+        }
+        let played = sound_preview(&short).unwrap();
+        assert_eq!(
+            header(&played),
+            (
+                &b"RIFF"[..],
+                &b"WAVEfmt "[..],
+                1,
+                RATE,
+                2 * 48_000 * 2,
+                44 + 2 * 48_000 * 2
+            )
+        );
+        let (.., data, _) = header(&sound_preview(&long).unwrap());
+        assert_eq!(data, 30 * 48_000 * 2);
+        let bad = dir.path().join("bad.wav");
+        std::fs::write(&bad, b"not a sound").unwrap();
+        assert_eq!(sound_preview(&bad).unwrap_err(), SOUND_UNREADABLE);
     }
 }

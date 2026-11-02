@@ -49,6 +49,12 @@ export const library = {
   /** A picture's bytes: a pack sticker (`packId`) or one the open project uses (`path`). */
   picture: (from: { packId: string } | { path: string }) =>
     invoke<ArrayBuffer>('media_picture', 'packId' in from ? { packId: from.packId } : { path: from.path }),
+  /**
+   * A sound to play before it is added, as a WAV of its first 30 s at most: a pack sound or music bed (`packId`) or one
+   * the open project uses (`path`).
+   */
+  sound: (from: { packId: string } | { path: string }) =>
+    invoke<ArrayBuffer>('media_sound', 'packId' in from ? { packId: from.packId } : { path: from.path }),
   /** Where someone speaks on the timeline, as the mix ducks music under it. */
   speechRanges: () => call<RangeUs[]>('media_speech_ranges'),
 };

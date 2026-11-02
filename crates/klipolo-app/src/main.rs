@@ -266,6 +266,7 @@ fn main() {
             commands::media::media_add_text,
             commands::media::media_update_item,
             commands::media::media_picture,
+            commands::media::media_sound,
             commands::media::media_speech_ranges,
             commands::reverse::clip_reverse,
             commands::reverse::clip_reverse_stop,

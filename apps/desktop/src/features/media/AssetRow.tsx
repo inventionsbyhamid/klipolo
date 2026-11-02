@@ -1,12 +1,15 @@
 import { useLingui } from '@lingui/react/macro';
-import { isValidElement, memo, type PointerEvent, type ReactNode } from 'react';
+import { isValidElement, memo, useRef, type MouseEvent, type PointerEvent, type ReactNode } from 'react';
 import type { Asset } from '../../bindings/Asset';
+import { cn } from '../../design/cn';
 import { Icon } from '../../layout/Icon';
 import { countRender } from '../../lib/renderCount';
 import { formatRowLength } from '../../lib/time';
 import { beginMediaDrag } from '../timeline/drag/mediaDrag';
+import { DRAG_SLOP_PX } from '../timeline/drag/session';
 import type { DropTarget } from '../timeline/drops';
 import { FavoriteButton, type Favorite } from './FavoriteButton';
+import { PREVIEW_MAX_US } from './preview';
 
 /** On a Mac, Control-click is a right-click: it doesn't start a drag. */
 const MAC = typeof navigator !== 'undefined' && /^Mac/.test(navigator.platform);
@@ -15,6 +18,15 @@ const MAC = typeof navigator !== 'undefined' && /^Mac/.test(navigator.platform);
 export type RowArt = 'clip' | 'music' | 'sound';
 
 const TILE_ICON = { clip: 'film', music: 'music', sound: 'pulse' } as const;
+
+/** A sound row's preview (`preview.ts`): whether it is asked to play, whether it is heard yet, and its play button. */
+export interface RowPreview {
+  /** Pressed: playing, or about to (its button stops it). */
+  on: boolean;
+  /** Heard: the row's progress runs. */
+  sounding: boolean;
+  toggle: () => void;
+}
 
 interface AssetRowProps {
   /** What it drags onto the timeline: its kind and length draw where it would land. */
@@ -40,6 +52,8 @@ interface AssetRowProps {
    * draws), and it drags onto the Video lane only.
    */
   recording?: string;
+  /** Its play button, over its art: a sound or music row hears it before it is added. */
+  preview?: RowPreview;
 }
 
 /** The same fields with the same values: an asset rebuilt from the same project reads the same. */
@@ -67,6 +81,9 @@ function sameRow(a: AssetRowProps, b: AssetRowProps): boolean {
     a.addLabel === b.addLabel &&
     a.meta === b.meta &&
     a.recording === b.recording &&
+    !!a.preview === !!b.preview &&
+    a.preview?.on === b.preview?.on &&
+    a.preview?.sounding === b.preview?.sounding &&
     !!a.favorite === !!b.favorite &&
     a.favorite?.on === b.favorite?.on &&
     !!a.menu === !!b.menu &&
@@ -77,7 +94,8 @@ function sameRow(a: AssetRowProps, b: AssetRowProps): boolean {
 /**
  * One file in the Library, or one recording as a whole: its art, its name and length (and "On the
  * timeline" when the video uses it), and a "+" that appears on hover or focus and adds it at the playhead, then its
- * star (shown while it is a favorite). Pressed and moved, it drags onto the timeline (`drag/mediaDrag`), where it
+ * star (shown while it is a favorite). A sound or music row's art is its play button: it shows play on hover or focus,
+ * and stop while it plays, with a thin bar along the row's foot for how far it has played. Pressed and moved, it drags onto the timeline (`drag/mediaDrag`), where it
  * lands on the lane under the pointer.
  */
 export const AssetRow = memo(function AssetRow({
@@ -92,28 +110,65 @@ export const AssetRow = memo(function AssetRow({
   favorite,
   meta,
   recording,
+  preview,
 }: AssetRowProps) {
   countRender(`row:${recording ?? asset.id}`);
   const { t } = useLingui();
+  /** Where a press on the play button began: one that became a drag doesn't play as it is let go. */
+  const pressedAt = useRef<{ x: number; y: number } | null>(null);
   const onPointerDown = (e: PointerEvent<HTMLLIElement>) => {
-    // The buttons are their own controls.
-    if (e.button !== 0 || (MAC && e.ctrlKey) || (e.target as Element).closest('button')) return;
-    // No text selection and no native image drag; the row keeps the pointer wherever it goes.
+    if (e.button !== 0 || (MAC && e.ctrlKey)) return;
+    // The buttons are their own controls, but the play button is the row's art: pressed and moved, it drags the row.
+    const control = (e.target as Element).closest('button');
+    const art = !!control?.classList.contains('preview-play');
+    if (control && !art) return;
+    // No text selection and no native image drag.
     e.preventDefault();
-    e.currentTarget.setPointerCapture?.(e.pointerId);
+    // The row keeps the pointer wherever it goes; from the play button it doesn't, so a click still lands there.
+    if (art) pressedAt.current = { x: e.clientX, y: e.clientY };
+    else e.currentTarget.setPointerCapture?.(e.pointerId);
     beginMediaDrag(e, asset, onDrop, recording ? 'main' : 'any');
+  };
+  /** The play button's click: plays or stops, unless it ends a drag (a key's click has no pointer). */
+  const onPlay = (e: MouseEvent<HTMLButtonElement>) => {
+    const at = pressedAt.current;
+    pressedAt.current = null;
+    if (at && e.detail > 0 && Math.hypot(e.clientX - at.x, e.clientY - at.y) >= DRAG_SLOP_PX) return;
+    preview?.toggle();
   };
   return (
     <li
       data-asset-id={recording ? undefined : asset.id}
       data-recording-id={recording}
-      className={favorite?.on ? 'row lib-row is-favorite' : 'row lib-row'}
+      className={cn('row lib-row', favorite?.on && 'is-favorite', preview?.on && 'is-previewing')}
       onPointerDown={onPointerDown}
       onDragStart={(e) => e.preventDefault()}
     >
-      <span className={art === 'clip' ? 'art-clip' : `art-tile is-${art}`} aria-hidden>
-        <Icon name={TILE_ICON[art]} />
-      </span>
+      {preview && art !== 'clip' ? (
+        <button
+          type="button"
+          tabIndex={0}
+          className={`art-tile is-${art} preview-play`}
+          aria-label={
+            preview.on
+              ? t({ id: 'library.preview.stop', message: `Stop ${title}`, comment: '{title} is a sound or a song’s name' })
+              : t({ id: 'library.preview.play', message: `Play ${title}`, comment: '{title} is a sound or a song’s name' })
+          }
+          title={
+            preview.on
+              ? t({ id: 'library.preview.stop.tip', message: 'Stop' })
+              : t({ id: 'library.preview.play.tip', message: 'Play' })
+          }
+          onClick={onPlay}
+        >
+          <Icon name={TILE_ICON[art]} className="preview-art" />
+          <Icon name={preview.on ? 'stop' : 'play'} className="preview-icon" />
+        </button>
+      ) : (
+        <span className={art === 'clip' ? 'art-clip' : `art-tile is-${art}`} aria-hidden>
+          <Icon name={TILE_ICON[art]} />
+        </span>
+      )}
       <span className="row-text">
         <span className="row-title" title={title}>
           {title}
@@ -144,6 +199,13 @@ export const AssetRow = memo(function AssetRow({
         </button>
         {favorite && <FavoriteButton title={title} favorite={favorite} />}
       </span>
+      {preview?.sounding && (
+        <span
+          className="preview-progress"
+          aria-hidden
+          style={{ animationDuration: `${Math.min(asset.durationUs, PREVIEW_MAX_US) / 1000}ms` }}
+        />
+      )}
     </li>
   );
 }, sameRow);
