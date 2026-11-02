@@ -115,11 +115,16 @@ fn ideal(message: &str) -> Vec<(&'static str, Value)> {
             "setEffects",
             json!({"target": "c1", "name": "vignette", "set": [pair("softness", json!(0.8))]}),
         )],
+        "make the captions bigger and yellow, and move them to the top" => vec![(
+            "setCaptions",
+            json!({"on": true, "style": null, "set": [pair("size", json!(1.3)), pair("color", json!("#FFD02E")),
+                   pair("position", json!("top"))]}),
+        )],
         other => panic!("no ideal answer for {other:?}"),
     }
 }
 
-const MESSAGES: [&str; 10] = [
+const MESSAGES: [&str; 11] = [
     "slide the title in from the left with a little overshoot",
     "make the logo spin in and bounce",
     "make each word pop in one by one",
@@ -130,6 +135,7 @@ const MESSAGES: [&str; 10] = [
     "put the logo in the top right corner and make it a bit see-through",
     "add a soft vignette to the video",
     "duck the music between 0:10 and 0:20",
+    "make the captions bigger and yellow, and move them to the top",
 ];
 
 async fn meta(answer: impl Fn(&str) -> Vec<(&'static str, Value)>) -> MockServer {
@@ -163,7 +169,7 @@ async fn every_composed_edit_answered_as_it_should_be_passes() {
     let out = run(&env(&server), &["--cases", CASES]).await;
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stdout.contains("11/11 passed"), "{stdout}{stderr}");
+    assert!(stdout.contains("12/12 passed"), "{stdout}{stderr}");
     assert_eq!(out.status.code(), Some(0));
     assert!(!stdout.contains(KEY) && !stderr.contains(KEY));
 }
