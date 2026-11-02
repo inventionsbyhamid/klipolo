@@ -4,8 +4,7 @@
 //! timestamps), which collects every sample in a `Vec` instead.
 //!
 //! Every stream but the sound is discarded at the demuxer: no other stream becomes packets, and their bytes are skipped
-//! where the file's layout allows: all of them in an MP4 or MOV, whose sound is read directly (`read_sound_directly`),
-//! elsewhere runs longer than FFmpeg's 32 KB short-seek window. The pass reads sound only:
+//! where the file's layout allows (runs longer than FFmpeg's 32 KB short-seek window). The pass reads sound only:
 //! thumbnails come from a scan of their own after it (`media::store`). A read error (an unplugged drive)
 //! fails the decode: it is never taken for the end of the file.
 
@@ -20,16 +19,6 @@ use crate::vendor::cap::audio_data::{AudioData, ResamplerOutput, high_quality_re
 
 /// Decoded audio before a seek point that is decoded and thrown away (a decoder needs it to settle).
 const PRE_ROLL: u64 = 2 * RATE as u64;
-
-/// Bytes of an MP4 or MOV per sound sample from which its sound is read directly (`read_sound_directly`): about 4 Mb/s
-/// of picture beside 48 kHz AAC (a 1.5 Mb/s one has 4 KB, 2-hour 4K at 10 Mb/s 28 KB).
-const DIRECT_FROM: i64 = 12 * 1024;
-
-#[cfg(test)]
-thread_local! {
-    /// Tests: what the last pass on this thread had read from its file at its end.
-    static BYTES_READ: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
-}
 
 /// What a file holds, before decoding it.
 #[derive(Clone, Copy, Debug)]
@@ -91,38 +80,8 @@ pub fn decode(
     until: Option<u64>,
     emit: &mut Emit,
 ) -> Result<(), DecodeError> {
-    let mut input = crate::media::open::input(&path).map_err(|e| format!("Input Open / {e}"))?;
-    read_sound_directly(&mut input);
+    let input = crate::media::open::input(&path).map_err(|e| format!("Input Open / {e}"))?;
     decode_input(input, from, until, emit)
-}
-
-/// An MP4 or MOV's sound read straight from where its samples are. Its demuxer goes to each sound sample through the
-/// file's sample table, but through a 32 KB buffer it reads on through any gap under 64 KB instead of seeking past it:
-/// a file that lays sound and picture frame by frame (FFmpeg's own MP4s, OBS's) had nearly all of it read for its
-/// sound, 9.4 GB for 2 hours of 4K. Read directly (`AVIOContext::direct`), each sample is one seek and one read of
-/// its own bytes. That pays where the picture between two sound samples is large (`DIRECT_FROM`); for a small one,
-/// reading on costs no more locally, and fewer reads are kinder to a network volume. Other containers are read in
-/// order (Matroska finds its blocks by reading), so they keep the buffer.
-fn read_sound_directly(input: &mut ffmpeg::format::context::Input) {
-    if !input.format().name().split(',').any(|name| name == "mov") {
-        return;
-    }
-    let Some(packets) = input
-        .streams()
-        .best(ffmpeg::media::Type::Audio)
-        .map(|s| s.frames())
-        .filter(|&n| n > 0)
-    else {
-        return;
-    };
-    // SAFETY: `pb` belongs to `input`, which outlives this read and write (null for formats without one); `direct`
-    // is a plain field each read and seek checks.
-    unsafe {
-        let pb = (*input.as_mut_ptr()).pb;
-        if !pb.is_null() && ffmpeg::ffi::avio_size(pb) / packets >= DIRECT_FROM {
-            (*pb).direct = 1;
-        }
-    }
 }
 
 /// [`decode`] of an input already open (a test's, read through a connection that fails part-way: `media::open` reads
@@ -229,10 +188,10 @@ pub(crate) fn decode_input(
             return Ok(());
         }
     }
-    let read = crate::media::scan::bytes_read(&input);
-    #[cfg(test)]
-    BYTES_READ.set(read);
-    tracing::debug!(bytes_read = read, "audio pass");
+    tracing::debug!(
+        bytes_read = crate::media::scan::bytes_read(&input),
+        "audio pass"
+    );
     decoder.send_eof().map_err(|e| format!("Send EOF / {e}"))?;
     while decoder.receive_frame(&mut frame).is_ok() {
         let at = next.unwrap_or(from);
@@ -330,37 +289,26 @@ mod tests {
         assert_eq!(loudest(&dir.path().join("missing.wav"), 1), None);
     }
 
-    /// An MP4 that lays its sound and picture frame by frame (FFmpeg's own, OBS's) has its sound read without the
-    /// pictures between: a quarter of the file at most, and the same samples as reading on through them.
+    /// A decode from a seek (its 2 s pre-roll thrown away, placed by its first frame's timestamp) gives exactly the
+    /// samples a decode from the start gives from there.
     #[test]
-    fn an_interleaved_mp4_s_sound_is_read_without_its_pictures() {
+    fn a_seek_decodes_the_same_samples_as_reading_from_the_start() {
         let path = crate::fixture_set::fixture_dir().join("longgop-20s-1080p.mp4");
         assert!(path.exists(), "run scripts/gen-engine-fixtures.sh");
-        let size = std::fs::metadata(&path).unwrap().len();
-        fn sound(samples: &mut Vec<f32>) -> impl FnMut(u64, &[f32]) -> Result<bool, String> + '_ {
-            move |_, block| {
-                samples.extend_from_slice(block);
+        let from_frame = |from: u64| {
+            let mut bits = Vec::new();
+            decode(&path, from, None, &mut |_, block| {
+                bits.extend(block.iter().map(|s| s.to_bits()));
                 Ok(true)
-            }
-        }
-        let mut read_on = Vec::new();
-        let input = crate::media::open::input(&path).unwrap();
-        decode_input(input, 0, None, &mut sound(&mut read_on)).unwrap();
-        let mut decoded = Vec::new();
-        decode(&path, 0, None, &mut sound(&mut decoded)).unwrap();
-        assert!(
-            decoded.len() >= 20 * RATE as usize,
-            "{} samples",
-            decoded.len()
-        );
-        assert!(
-            decoded
-                .iter()
-                .map(|s| s.to_bits())
-                .eq(read_on.iter().map(|s| s.to_bits())),
-            "the same sound"
-        );
-        let read = BYTES_READ.get();
-        assert!(read * 4 < size, "read {read} of {size} bytes");
+            })
+            .unwrap();
+            bits
+        };
+        let whole = from_frame(0);
+        // Mono: one sample a frame.
+        let from = 7 * u64::from(RATE) + 1_234;
+        let seeked = from_frame(from);
+        assert!(!seeked.is_empty() && whole.len() > from as usize);
+        assert!(seeked == whole[from as usize..], "from {from}");
     }
 }
