@@ -157,7 +157,8 @@ describe('back to the library', () => {
   it('Escape and Close deselect, as before, and the keyboard stays on the panel', async () => {
     renderWithProviders(<Library />);
     select('b');
-    act(() => within(card()!).getByRole('button', { name: 'Close' }).focus());
+    // From a control with no tooltip (an open tooltip takes the first Escape for itself).
+    act(() => within(card()!).getByRole('button', { name: 'More' }).focus());
     await userEvent.keyboard('{Escape}');
     expect(useSelection.getState().selectedId).toBeNull();
     expect(card()).toBeNull();

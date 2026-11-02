@@ -142,8 +142,12 @@ describe('the editor from the keyboard', () => {
     // Every control marked 0 and not off is reached.
     const tabbable = controls.filter((c) => c.getAttribute('tabindex') === '0' && !c.matches(':disabled'));
     expect(tabbable.filter((c) => !stops.includes(c)).map((c) => c.outerHTML.slice(0, 80))).toEqual([]);
-    // The regions, in the window's order.
-    const order = stops.map(regionOf).filter((r, i, all) => r !== all[i - 1]);
+    // The regions, in the window's order, as WebKit walks them: it skips what is `inert` (the library under the card),
+    // which jsdom doesn't know.
+    const order = stops
+      .filter(live)
+      .map(regionOf)
+      .filter((r, i, all) => r !== all[i - 1]);
     expect(order).toEqual([
       'top bar',
       'inspector',
@@ -155,8 +159,8 @@ describe('the editor from the keyboard', () => {
       'player bar',
     ]);
     // The column's first stop is the card's Back to library; the library under the card is out of reach.
-    expect(stops.find((s) => regionOf(s) === 'inspector')).toHaveAccessibleName('Back to library');
-    expect(stops.filter((s) => s.closest('.library-body'))).toEqual([]);
+    expect(stops.filter(live).find((s) => regionOf(s) === 'inspector')).toHaveAccessibleName('Back to library');
+    expect(document.querySelector('.library-body')).toHaveAttribute('inert');
   });
 
   it('Back to library leaves the keyboard on the panel, and Tab goes on to each of the library’s view tabs', async () => {
