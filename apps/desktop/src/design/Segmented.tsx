@@ -28,8 +28,8 @@ interface SegmentedProps<T extends string> {
 }
 
 /**
- * A segmented control: a raised track with 3 px padding, small options in ink-soft, the checked one a paper
- * pill with on-paper text. A radio group: the arrow keys move. An option with an icon shows it alone, named by its label.
+ * A segmented control: a sunken track with 2 px padding, small options in ink-soft, the checked one a signal wash with
+ * a signal-ink ring. A radio group: the arrow keys move. An option with an icon shows it alone, named by its label.
  */
 export function Segmented<T extends string>({
   label,
@@ -59,7 +59,7 @@ export function Segmented<T extends string>({
             aria-label={OptionIcon ? name : undefined}
             className={OptionIcon ? 'seg-icon' : undefined}
           >
-            {OptionIcon ? <OptionIcon size={14} strokeWidth={1.8} aria-hidden /> : name}
+            {OptionIcon ? <OptionIcon size={16} aria-hidden /> : name}
           </ToggleGroup.Item>
         );
         const tip = tooltip ?? (OptionIcon ? name : undefined);

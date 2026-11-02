@@ -1,22 +1,25 @@
-/* The AI surfaces' shared pieces (NeedsKey). Values from tokens.css only. The secondary button and the
-   raised card are scoped here until the shared design primitives carry them. Rules name `.card.needs-key`, so the card
-   keeps its own look inside a surface whose headings are styled (the empty chat's display title). */
+/* The AI surfaces' shared pieces (NeedsKey). Values from tokens.css only. The card is raised grey with a hairline
+   edge, 8 px corners and 12 px inside; its secondary button matches the shared one. Rules name `.card.needs-key`, so
+   the card keeps its own look inside a surface whose headings are styled (the empty chat's display title). */
 
 .card.needs-key {
   display: grid;
   gap: var(--space-4);
-  padding: var(--space-6);
-  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
   background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
+/* The key icon on a small square tile, set into the card. */
 .needs-key-ico {
   display: grid;
   place-items: center;
   width: 40px;
   height: 40px;
-  border-radius: 50%;
-  background: var(--color-bay-hover);
+  border-radius: var(--radius-lg);
+  background: var(--color-bay);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   color: var(--color-ink);
 }
 
@@ -25,7 +28,6 @@
   word-spacing: normal;
   font-size: var(--text-lg);
   line-height: var(--lh-lg);
-  font-stretch: 92%;
   font-weight: var(--weight-strong);
 }
 
@@ -41,10 +43,11 @@
 }
 
 .card.needs-key .btn-secondary {
-  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   color: var(--color-ink);
 }
 
 .card.needs-key .btn-secondary:not(:disabled):hover {
-  box-shadow: inset 0 0 0 1px var(--color-ink);
+  background: var(--color-sunken);
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }

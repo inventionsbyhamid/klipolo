@@ -60,22 +60,28 @@
   white-space: nowrap;
 }
 
+/* Your message: a sunken grey bubble on the right, 8 px corners, plain 13 px text. */
 .msg-you {
   align-self: flex-end;
   max-width: 86%;
-  padding: 9px 14px;
-  border-radius: 18px 18px 4px 18px;
-  background: var(--color-paper);
-  color: var(--color-on-paper);
-  font-weight: var(--weight-medium);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--color-sunken);
+  color: var(--color-ink);
+  font-size: var(--text-md);
+  line-height: var(--lh-md);
+  font-weight: var(--weight-body);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
+/* The reply: plain 13 px text with no bubble, its notes 12 px and softer. */
 .msg-k {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-3);
   max-width: 100%;
+  font-size: var(--text-md);
+  line-height: var(--lh-md);
 }
 
 .msg-k > p {
@@ -84,6 +90,8 @@
 
 .msg-k .muted {
   color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
 }
 
 .msg-k .faint {
@@ -93,13 +101,13 @@
 /* Over another app's reply: who did it, so an app is never taken for Klipolo. */
 .msg-k > .msg-from {
   color: var(--color-ink-faint);
-  font-size: var(--text-xs);
-  line-height: var(--lh-xs);
-  font-weight: var(--weight-medium);
+  font-size: var(--text-2xs);
+  line-height: var(--lh-2xs);
+  font-weight: var(--weight-body);
 }
 
 .msg-k > .msg-from + * {
-  margin-top: calc(-1 * var(--space-3));
+  margin-top: calc(-1 * var(--space-2));
 }
 
 .msg-row {
@@ -124,12 +132,14 @@
 }
 
 .msg-row .chip .ico {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
+/* An outlined chip keeps its hairline edge and takes the hover fill. */
 .chip-outline:not(:disabled):not([aria-disabled="true"]):hover {
-  box-shadow: inset 0 0 0 1px var(--color-ink);
+  background: var(--color-bay-hover);
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
 .chip:disabled,
@@ -145,7 +155,7 @@
 .card.proposal:focus-visible,
 .card.gen:focus-visible,
 .gen-why:focus-visible {
-  outline: 2px solid var(--color-paper);
+  outline: 2px solid var(--color-signal-ink);
   outline-offset: 2px;
 }
 
@@ -158,7 +168,7 @@
 .suggestions .chip {
   height: auto;
   min-height: 32px;
-  padding: 6px 14px;
+  padding: var(--space-3) var(--space-5);
   white-space: normal;
   text-align: left;
   line-height: var(--lh-sm);
@@ -176,32 +186,38 @@
   grid-template-columns: auto 1fr;
   gap: var(--space-4);
   padding: var(--space-5);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   color: var(--color-ink-soft);
-  font-size: var(--text-sm);
-  line-height: var(--lh-sm);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
 }
 
 .chat-empty .note .ico {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   color: var(--color-ink-soft);
 }
 
+/* A card in the chat: raised grey, a hairline edge, 8 px corners. */
 .card {
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
-/* Proposal card */
+/* Proposal card: a red hairline edge, since it waits to cut or change something. */
 .card.proposal {
   display: grid;
-  gap: var(--space-5);
-  padding: var(--space-5) var(--space-5) var(--space-6);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-cut) 32%, transparent);
+  gap: var(--space-4);
+  padding: var(--space-5);
+  box-shadow: inset 0 0 0 1px var(--color-cut);
+  font-size: var(--text-md);
+  line-height: var(--lh-md);
 }
 
+/* The whole video as a strip in a well, its clips in blue and a red tick at each cut. */
 .p-strip {
   position: relative;
   height: 30px;
@@ -213,10 +229,10 @@
 .p-strip .ov-seg {
   top: 4px;
   bottom: 4px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background:
-    repeating-linear-gradient(to right, var(--color-paper-wash) 0 1px, transparent 1px 14px),
-    var(--color-clip-deep);
+    repeating-linear-gradient(to right, color-mix(in srgb, var(--color-clip) 40%, transparent) 0 1px, transparent 1px 14px),
+    var(--color-clip-wash);
 }
 
 .p-strip .ov-tick {
@@ -226,10 +242,9 @@
 }
 
 .p-title {
-  font-size: var(--text-xl);
-  line-height: var(--lh-xl);
-  font-weight: var(--weight-title);
-  font-stretch: var(--wdth-title);
+  font-size: var(--text-md);
+  line-height: var(--lh-md);
+  font-weight: var(--weight-medium);
 }
 
 .p-sub {
@@ -297,13 +312,14 @@
   width: 100%;
   height: 28px;
   padding: 0 var(--space-3);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   color: var(--color-ink);
   font-size: var(--text-sm);
 }
 
+/* A row inside the raised card: its hover fill is one step past the card's grey. */
 .p-cut:hover {
-  background: var(--color-bay-hover);
+  background: var(--color-bay-press);
 }
 
 .p-cut-tag {
@@ -324,11 +340,11 @@
 .p-actions {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 
 .p-actions .btn-primary {
-  padding: 0 var(--space-8);
+  padding: 0 var(--space-5);
 }
 
 .card.applied {
@@ -338,13 +354,13 @@
   gap: var(--space-4);
   padding: var(--space-4) var(--space-5);
   color: var(--color-ink-soft);
-  font-size: var(--text-sm);
-  line-height: var(--lh-sm);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
 }
 
 .card.applied .ico {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   color: var(--color-ink);
 }
 
@@ -358,7 +374,7 @@
   display: grid;
   grid-template-columns: 104px minmax(0, 1fr);
   gap: var(--space-5);
-  padding: var(--space-4);
+  padding: var(--space-5);
 }
 
 .gen-art {
@@ -378,10 +394,10 @@
 
 .checker {
   background: conic-gradient(
-      var(--color-bay-raised) 25%,
-      var(--color-bay-hover) 0 50%,
-      var(--color-bay-raised) 0 75%,
-      var(--color-bay-hover) 0
+      var(--color-checker) 25%,
+      var(--color-checker-alt) 0 50%,
+      var(--color-checker) 0 75%,
+      var(--color-checker-alt) 0
     )
     0 0 / 14px 14px;
 }
@@ -393,7 +409,7 @@
   flex: none;
   border-radius: 50%;
   border: 2px solid var(--color-paper-track);
-  border-top-color: var(--color-paper);
+  border-top-color: var(--color-signal-ink);
   animation: chat-spin 0.9s linear infinite;
 }
 
@@ -438,7 +454,7 @@
 
 .gen-title {
   font-size: var(--text-md);
-  font-weight: var(--weight-strong);
+  font-weight: var(--weight-medium);
 }
 
 .gen-meta {
@@ -458,7 +474,7 @@
   }
 }
 
-/* Moment chips */
+/* Moments: raised rows with a hairline edge and 6 px corners, a small square play button at the start. */
 .moments {
   display: grid;
   gap: var(--space-2);
@@ -470,8 +486,9 @@
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-2) var(--space-4) var(--space-2) var(--space-2);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-md);
   background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   color: var(--color-ink);
   font-size: var(--text-sm);
   text-align: left;
@@ -479,7 +496,7 @@
 }
 
 .moment:hover {
-  background: var(--color-bay-hover);
+  background: var(--color-bay-press);
 }
 
 .moment .mplay {
@@ -487,8 +504,11 @@
   place-items: center;
   width: 28px;
   height: 28px;
-  border-radius: 50%;
-  background: var(--color-bay-press);
+  border-radius: var(--radius-sm);
+  background: var(--color-bay);
+  box-shadow: inset 0 0 0 1px var(--color-line);
+  color: var(--color-ink-soft);
+  transition: color var(--dur-fast) var(--ease-out);
 }
 
 .moment .mplay .ico {
@@ -498,8 +518,8 @@
 }
 
 .moment:hover .mplay {
-  background: var(--color-paper);
-  color: var(--color-on-paper);
+  background: var(--color-bay);
+  color: var(--color-ink);
 }
 
 .moment .when {
@@ -514,12 +534,14 @@
   text-overflow: ellipsis;
 }
 
+/* The status line while a reply is on its way: 12 px, soft. */
 .thinking {
   display: inline-flex;
   align-items: center;
   gap: var(--space-4);
   color: var(--color-ink-soft);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
 }
 
 .thinking i {
@@ -554,26 +576,29 @@
 }
 
 /* Composer */
+
+/* The selection chip: a signal wash with a signal-ink hairline, 6 px corners, 12 px text. */
 .sel-chip {
   display: inline-flex;
   align-items: center;
   gap: var(--space-3);
   justify-self: start;
   max-width: 100%;
-  height: 28px;
-  padding: 0 4px 0 10px;
-  border-radius: var(--radius-pill);
+  height: 24px;
+  padding: 0 var(--space-1) 0 var(--space-4);
+  border-radius: var(--radius-md);
   background: var(--color-paper-wash);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-paper) 45%, transparent);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
+  box-shadow: inset 0 0 0 1px var(--color-signal-ink);
+  color: var(--color-ink);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-body);
   white-space: nowrap;
 }
 
 .sel-chip .ico {
   flex: none;
-  width: 15px;
-  height: 15px;
+  width: 12px;
+  height: 12px;
 }
 
 .sel-chip > span {
@@ -585,9 +610,9 @@
   display: grid;
   flex: none;
   place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-xs);
   color: var(--color-ink-soft);
 }
 
@@ -597,18 +622,24 @@
 }
 
 .sel-chip .x .ico {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
 }
 
+/* The message box: raised grey, a hairline edge, 8 px corners and 8 px inside; a 2 px signal-ink outline while it
+   has the focus. */
 .chat .input-wrap {
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
   background: var(--color-bay-raised);
-  box-shadow: inset 0 0 0 1px var(--color-line-strong);
-  transition: box-shadow var(--dur-fast) var(--ease-out);
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
 .chat .input-wrap:focus-within {
-  box-shadow: inset 0 0 0 2px var(--color-paper);
+  box-shadow: inset 0 0 0 1px var(--color-line);
+  outline: 2px solid var(--color-signal-ink);
+  outline-offset: 0;
 }
 
 .chat .input-wrap.is-off {
@@ -626,14 +657,26 @@
   align-self: center;
 }
 
+/* Send: a 32 px button with 6 px corners at the box's bottom right, signal yellow once there is something to send. */
+.chat .send {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+}
+
+.chat .send .ico {
+  width: 16px;
+  height: 16px;
+}
+
 .chat .send:not(:disabled) {
   background: var(--color-hilite);
   color: var(--color-navy);
-  transition: transform var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+  transition: background-color var(--dur-fast) var(--ease-out);
 }
 
 .chat .send:not(:disabled):hover {
-  transform: scale(var(--hover-scale));
+  background: var(--color-hilite-hover);
 }
 
 .composer-note {

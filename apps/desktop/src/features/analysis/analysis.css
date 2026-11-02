@@ -1,6 +1,7 @@
 /* The analysis banner, at the top of the preview: the offer and its progress, with a row per clip (`.analysis-job`)
    and its step dots (`.analysis-steps`). Values from tokens.css only. Its classes carry the `analysis-` prefix, and the
-   secondary button and spinner are scoped here, until the shared design primitives carry them. */
+   secondary button and spinner are scoped here, until the shared design primitives carry them. It is a card: raised
+   grey, a hairline edge, 8 px corners, 12 px inside. */
 
 .analysis-banner {
   /* Above the preview frame's bay shadow (it masks everything around the native preview's hole). */
@@ -11,18 +12,21 @@
   align-items: center;
   gap: var(--space-5);
   margin-bottom: var(--space-5);
-  padding: var(--space-5) var(--space-5) var(--space-5) var(--space-6);
-  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
   background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
+/* The icon on a small square tile, set into the card. */
 .analysis-ico {
   display: grid;
   place-items: center;
   width: 40px;
   height: 40px;
-  border-radius: 50%;
-  background: var(--color-bay-hover);
+  border-radius: var(--radius-lg);
+  background: var(--color-bay);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   color: var(--color-ink);
 }
 
@@ -44,12 +48,13 @@
 }
 
 .analysis-banner .btn-secondary {
-  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   color: var(--color-ink);
 }
 
 .analysis-banner .btn-secondary:not(:disabled):hover {
-  box-shadow: inset 0 0 0 1px var(--color-ink);
+  background: var(--color-sunken);
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
 .analysis-banner.is-progress {
@@ -69,7 +74,7 @@
   flex: none;
   border-radius: 50%;
   border: 2px solid var(--color-paper-track);
-  border-top-color: var(--color-paper);
+  border-top-color: var(--color-signal-ink);
   animation: analysis-spin 0.9s linear infinite;
 }
 
@@ -103,13 +108,16 @@
   font-size: var(--text-sm);
 }
 
-/* The clip's art: the design system's `.art-clip` frame (the library's), at the row's 56 px. */
+/* The clip's art: the design system's `.art-clip` frame (the library's), at the row's 56 px, on a panel-coloured tile
+   with a hairline edge so it shows on the raised card. */
 .analysis-job .art-clip {
   width: 56px;
+  background: var(--color-bay);
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
 .analysis-job .art-clip.is-sound {
-  background: var(--color-bay-hover);
+  background: var(--color-bay);
   color: var(--color-ink-soft);
 }
 
@@ -146,11 +154,12 @@
   gap: var(--space-2);
 }
 
+/* Each step a short bar: a sunken track, grey once done, the one under way filling with signal yellow. */
 .analysis-steps i {
   width: 18px;
   height: 4px;
   border-radius: var(--radius-pill);
-  background: var(--color-bay-press);
+  background: var(--color-sunken);
 }
 
 .analysis-steps i.done {
@@ -158,7 +167,7 @@
 }
 
 .analysis-steps i.now {
-  background: linear-gradient(to right, var(--color-paper) var(--p), var(--color-bay-press) var(--p));
+  background: linear-gradient(to right, var(--color-paper) var(--p), var(--color-sunken) var(--p));
 }
 
 .analysis-banner .sr-only {
@@ -216,7 +225,7 @@
   flex: none;
   border-radius: 50%;
   border: 2px solid var(--color-paper-track);
-  border-top-color: var(--color-paper);
+  border-top-color: var(--color-signal-ink);
   animation: analysis-spin 0.9s linear infinite;
 }
 

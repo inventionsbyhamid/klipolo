@@ -5,7 +5,10 @@ interface KbdProps {
   className?: string;
 }
 
-/** A keyboard shortcut such as "⌘K" (20 px tall, a 1 px line-strong edge, soft 12 px text). */
+/**
+ * A keyboard shortcut such as "⌘K": 18 px tall, 11 px text in the colour around it, a 1 px edge of that colour at
+ * 30 %.
+ */
 export function Kbd({ children, className }: KbdProps) {
   return <kbd className={cn(className)}>{children}</kbd>;
 }

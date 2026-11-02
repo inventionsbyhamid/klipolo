@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 
 const css = readFileSync(resolve(__dirname, 'tokens.css'), 'utf8');
 
-/** Colours the same in both themes: highlighter yellow, and the navy written on it. */
-const SAME_IN_BOTH = ['hilite', 'hilite-hover', 'hilite-press', 'navy'];
+/** Colours the same in both themes: signal yellow as a fill, and the dark ink written on it. */
+const SAME_IN_BOTH = ['hilite', 'hilite-press', 'navy', 'paper', 'on-paper'];
 /** Drawn by macOS, listed for reference only: the app never draws them. */
 const MAC_ONLY = ['mac-close', 'mac-min', 'mac-zoom'];
 
@@ -52,7 +52,7 @@ describe('colour tokens', () => {
     expect(css).toMatch(/\[data-theme=['"]dark['"]\]\s*\{\s*color-scheme:\s*dark;\s*\}/);
   });
 
-  it('every colour has a light and a dark value, except yellow and the navy on it', () => {
+  it('every colour has a light and a dark value, except yellow and the ink on it', () => {
     const names = [...css.matchAll(/--color-([a-z0-9-]+):/g)].map((m) => m[1]);
     expect(names.length).toBeGreaterThan(30);
     for (const name of names) {
@@ -85,9 +85,9 @@ describe('colour tokens', () => {
   });
 
   it('text on a filled mark reaches AA in both themes', () => {
-    // Selected pills, the play button, your chat bubbles: paper, with its own ink.
-    expectContrast('on-paper', ['paper'], 4.5);
-    // The primary action: navy on highlighter yellow.
+    // A switch that is on, a highlighted menu row, tags: signal yellow, with its own ink.
+    expectContrast('on-paper', ['paper', 'paper-hover'], 4.5);
+    // The primary action: dark ink on signal yellow.
     expectContrast('navy', ['hilite', 'hilite-hover'], 4.5);
     // "Cut" tags.
     expectContrast('on-cut', ['cut'], 4.5);
@@ -102,10 +102,13 @@ describe('colour tokens', () => {
     expectContrast('lane-sfx', ['bay'], 4.5);
     // A clip's name over its own colour.
     expectContrast('ink', ['clip-deep'], 4.5);
+    // A font that isn't on this Mac: warning amber on the panels and cards it shows on.
+    expectContrast('warning', ['bay', 'bay-raised', 'dialog'], 4.5);
   });
 
   it('the focus ring and the borders of controls reach 3:1 in both themes', () => {
-    expectContrast('paper', SURFACES, 3);
+    // Signal yellow drawn as a ring, outline or mark: the focus ring and the selection.
+    expectContrast('signal-ink', SURFACES, 3);
     expectContrast('line-strong', ['night', 'bay', 'bay-raised', 'dialog'], 3);
   });
 });

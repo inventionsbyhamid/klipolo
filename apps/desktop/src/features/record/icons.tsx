@@ -15,7 +15,7 @@ const PATHS = {
       <path d="M3.5 9h17M6.5 6.8h.1M9 6.8h.1" />
     </>
   ),
-  // A ring with a filled dot: in the button's ink, never red.
+  // A ring with a filled dot, in the button's ink.
   record: (
     <>
       <circle cx="12" cy="12" r="8.5" />

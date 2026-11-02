@@ -17,17 +17,17 @@
 }
 
 .swatch.none[aria-checked="true"] {
-  box-shadow: inset 0 0 0 1px var(--color-line-strong), 0 0 0 2px var(--color-bay-raised), 0 0 0 4px var(--color-paper);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong), 0 0 0 2px var(--color-bay-raised), 0 0 0 4px var(--color-signal-ink);
 }
 
 /* "+" holding a custom colour: it shows the colour, ringed as a checked swatch. */
 .swatch.add.custom {
   background: var(--c);
-  box-shadow: 0 0 0 2px var(--color-bay-raised), 0 0 0 4px var(--color-paper);
+  box-shadow: 0 0 0 2px var(--color-bay-raised), 0 0 0 4px var(--color-signal-ink);
 }
 
 .swatch:focus-visible {
-  outline: 2px solid var(--color-paper);
+  outline: 2px solid var(--color-signal-ink);
   outline-offset: 2px;
 }
 
@@ -44,7 +44,7 @@
 .contrast-note-text svg {
   flex: none;
   margin-top: 2px;
-  color: var(--color-paper);
+  color: var(--color-signal-ink);
 }
 
 .color-popover {
@@ -95,12 +95,13 @@
   outline: none;
 }
 
+/* Its gap takes the popover's raised surface. */
 .swatch[aria-selected="true"] {
-  box-shadow: 0 0 0 2px var(--color-dialog), 0 0 0 4px var(--color-paper);
+  box-shadow: 0 0 0 2px var(--color-bay-raised), 0 0 0 4px var(--color-signal-ink);
 }
 
 .swatch-list .swatch:focus-visible {
-  outline: 2px solid var(--color-paper);
+  outline: 2px solid var(--color-signal-ink);
   outline-offset: 4px;
 }
 
@@ -120,22 +121,24 @@
 .color-area {
   position: relative;
   height: 120px;
-  border-radius: var(--radius-sm);
-  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   touch-action: none;
 }
 
 .color-area:has(:focus-visible) {
-  outline: 2px solid var(--color-paper);
+  outline: 2px solid var(--color-signal-ink);
   outline-offset: 2px;
 }
 
+/* A light ring with a soft dark edge, so it shows on any colour: the light theme's panel and ink, in both themes. */
 .color-area-knob {
+  color-scheme: light;
   position: absolute;
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  box-shadow: 0 0 0 2px var(--color-paper), 0 0 0 3px var(--color-night);
+  box-shadow: 0 0 0 2px var(--color-bay), 0 0 0 3px color-mix(in srgb, var(--color-ink) 30%, transparent);
   transform: translate(-50%, 50%);
   pointer-events: none;
 }
@@ -159,10 +162,11 @@
   flex: 1;
 }
 
+/* As tall as the small hex field beside it. */
 .eyedropper {
   display: flex;
   align-items: center;
-  height: 30px;
+  height: 28px;
 }
 
 .eyedropper-status {
@@ -187,7 +191,7 @@
   height: 16px;
   border-radius: 50%;
   background: var(--c, transparent);
-  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  box-shadow: inset 0 0 0 1px var(--color-swatch-edge);
   color: var(--color-ink-soft);
 }
 

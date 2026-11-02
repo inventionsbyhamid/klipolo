@@ -1,102 +1,110 @@
 /* Klipolo desktop tokens
    The design tokens every screen's styles use, as CSS variables.
    Each colour is light-dark(light, dark): the app follows the system's appearance with no script (so no flash), and
-   data-theme="light" or "dark" on <html> forces one (Settings, Appearance). The light theme is a cool light table with
-   navy ink, as on klipolo.com; the dark one is the edit bay. Color has one meaning per hue, in both:
-   yellow = do it, red = will be cut, blue = your footage, paper = you (white in the dark, navy ink in the light).
-   The video and what is drawn over it stay dark in both (`color-scheme: dark` on those boxes). */
+   data-theme="light" or "dark" on <html> forces one (Settings, Appearance). Quiet neutral greys in both themes: a grey
+   canvas, white or near-black panels, hairlines between them. Signal yellow is the one accent: the primary action, the
+   selection and the focus ring (signal-ink when it is drawn as a line or mark). Red is recording, the playhead and what
+   will be cut. The video and what is drawn over it stay dark in both (`color-scheme: dark` on those boxes). */
 
 :root {
   color-scheme: light dark;
 
   /* ---------- Color: surfaces ---------- */
-  --color-night: light-dark(#E1E7EF, #070A14);       /* window canvas, behind the panels */
-  --color-bay: light-dark(#FFFFFF, #0F1528);         /* panels */
-  --color-bay-raised: light-dark(#EDF1F5, #19213D);  /* cards, inputs, other-person surfaces inside a panel */
-  --color-bay-hover: light-dark(#E3E8F0, #222B4D);   /* hover on rows, cards and ghost controls */
-  --color-bay-press: light-dark(#D5DCE8, #2B3660);   /* pressed and selected rows */
-  --color-checker: light-dark(#E3E8F0, #1E2746);     /* the checkerboard behind a picture that may be see-through, */
-  --color-checker-alt: light-dark(#F5F7FA, #27315A); /* and its other squares */
-  --color-dialog: light-dark(#FFFFFF, #141B33);      /* dialogs, menus, popovers, toasts */
-  --color-scrim: light-dark(rgb(18 26 51 / 0.32), rgb(3 5 12 / 0.72));
-  --color-line: light-dark(#C6CFDB, #252E4C);        /* hairlines and dividers (decorative only) */
-  --color-line-strong: light-dark(#717C99, #6772A0); /* borders of controls: 3:1 or more on the window, panels, cards and dialogs */
-  --color-off: light-dark(#D5DCE6, #1E2642);         /* the fill of a disabled button */
-  --color-off-canvas: light-dark(#CBD3DE, #2B3352);  /* a disabled round button on the window canvas (Play) */
+  --color-night: light-dark(#eceef1, #1a1c20);       /* window canvas, behind the panels */
+  --color-bay: light-dark(#ffffff, #212429);         /* panels */
+  --color-bay-raised: light-dark(#f4f5f7, #2a2e34);  /* cards, inputs, other-person surfaces inside a panel */
+  --color-bay-hover: light-dark(#eceef1, #2a2e34);   /* hover on rows, cards and ghost controls */
+  --color-bay-press: light-dark(#e2e5e9, #353a42);   /* pressed and selected rows */
+  --color-sunken: light-dark(#e2e5e9, #16181b);      /* tracks and wells set into a surface (segmented, sliders) */
+  --color-stage: light-dark(#d9dce1, #121316);       /* the well the preview sits in */
+  --color-checker: light-dark(#e2e5e9, #2a2e34);     /* the checkerboard behind a picture that may be see-through, */
+  --color-checker-alt: light-dark(#f4f5f7, #353a42); /* and its other squares */
+  --color-dialog: light-dark(#ffffff, #212429);      /* dialogs, menus, popovers, toasts */
+  --color-scrim: light-dark(rgb(14 15 18 / 0.32), rgb(0 0 0 / 0.5));
+  --color-line: light-dark(#d5d9df, #353a42);        /* hairlines, dividers and the edges of cards and controls */
+  --color-line-strong: light-dark(#80868f, #7b828d); /* edges that must stand out: 3:1 or more on the window, panels, cards and dialogs */
+  --color-off: light-dark(#f4f5f7, #2a2e34);         /* the fill of a disabled button */
+  --color-off-canvas: light-dark(#e2e5e9, #2a2e34);  /* a disabled round button on the window canvas (Play) */
 
   /* ---------- Color: text ---------- */
-  --color-ink: light-dark(#121A33, #E9EDF7);         /* primary text, 12:1 or more on every surface */
-  --color-ink-soft: light-dark(#4A5470, #A3ADC6);    /* secondary text, 5.2:1 or more */
-  --color-ink-faint: light-dark(#56617F, #8E99B8);   /* meta text (times, counts), 4.5:1 or more; not on --color-bay-press */
-  --color-ink-disabled: light-dark(#8E97AD, #5A6690); /* disabled labels only (exempt from contrast rules) */
-  --color-navy: #121A33;         /* text on yellow, in both themes */
+  --color-ink: light-dark(#1c1f24, #eceef1);         /* primary text, 9:1 or more on every surface */
+  --color-ink-soft: light-dark(#4f555f, #a3aab5);    /* secondary text, 4.5:1 or more */
+  --color-ink-faint: light-dark(#5f6570, #8f97a3);   /* meta text (times, counts), 4.5:1 or more; not on --color-bay-press */
+  --color-ink-disabled: light-dark(#a4a5a7, #71747a); /* disabled labels only (exempt from contrast rules) */
+  --color-navy: #1c1f24;         /* text on yellow, in both themes */
 
   /* ---------- Color: roles ---------- */
-  --color-hilite: #FFD02E;       /* highlighter yellow: the primary action, the same in both themes */
-  --color-hilite-hover: #FFDB57;
-  --color-hilite-press: #EDBE16;
+  --color-hilite: #f5c400;       /* signal yellow: the primary action, the same in both themes */
+  --color-hilite-hover: light-dark(#e0b300, #ffd633);
+  --color-hilite-press: #e0b300;
 
-  --color-cut: light-dark(#D02B24, #FF5148);         /* grease pencil red: only ever "this will be cut" */
-  --color-cut-text: light-dark(#C42820, #FF6B63);    /* red used as text on panels */
-  --color-cut-wash: light-dark(rgb(208 43 36 / 0.14), rgb(255 81 72 / 0.22));
-  --color-cut-hatch: light-dark(rgb(208 43 36 / 0.45), rgb(255 81 72 / 0.55));
-  --color-on-cut: light-dark(#FFFFFF, #121A33);      /* text on red ("Cut" tags) */
+  --color-cut: light-dark(#c62828, #ff4d4f);         /* tally red: recording, the playhead, and "this will be cut" */
+  --color-cut-text: light-dark(#c62828, #ff6b63);    /* red used as text on panels */
+  --color-cut-wash: light-dark(rgb(229 56 59 / 0.14), rgb(255 77 79 / 0.2));
+  --color-cut-hatch: light-dark(rgb(229 56 59 / 0.45), rgb(255 77 79 / 0.55));
+  --color-on-cut: light-dark(#ffffff, #16181b);      /* text on red ("Cut" tags) */
 
-  --color-clip: light-dark(#4F65BF, #5E74C9);        /* clip blue: your footage */
-  --color-clip-2: light-dark(#4C61B8, #7F92DA);      /* its lines, waveforms and icons */
-  --color-clip-deep: light-dark(#CBD3F1, #3B4A85);   /* its fill */
-  --color-clip-wash: light-dark(rgb(79 101 191 / 0.14), rgb(94 116 201 / 0.18));
+  --color-warning: light-dark(#a15c00, #f5a742);     /* warning amber: a font that isn't on this Mac, as text and marks */
 
-  --color-paper: light-dark(#121A33, #E9EDF7);       /* you: your bubbles, selection, playhead, focus ring */
-  --color-paper-hover: light-dark(#2A3558, #FFFFFF); /* paper under the pointer (the play button) */
-  --color-paper-wash: light-dark(rgb(18 26 51 / 0.07), rgb(233 237 247 / 0.12));
-  --color-paper-track: light-dark(rgb(18 26 51 / 0.16), rgb(233 237 247 / 0.25)); /* a spinner's track, under its paper head */
-  --color-paper-edge: light-dark(rgb(18 26 51 / 0.8), rgb(233 237 247 / 0.9));
-  --color-on-paper: light-dark(#FFFFFF, #121A33);    /* text, knobs and edges on paper */
+  --color-clip: light-dark(#2f86e8, #4fa3ff);        /* video blue: your footage */
+  --color-clip-2: light-dark(#2f86e8, #4fa3ff);      /* its lines, waveforms and icons */
+  --color-clip-deep: light-dark(#f4f5f7, #2a2e34);   /* its fill */
+  --color-clip-wash: light-dark(rgb(47 134 232 / 0.2), rgb(79 163 255 / 0.2));
 
-  /* Lane colors, used on the timeline and media icons only */
-  --color-lane-overlay: light-dark(#121A33, #E9EDF7); /* text and image overlays (paper) */
-  --color-lane-video: light-dark(#4F65BF, #5E74C9);
-  --color-lane-sfx: light-dark(#17736C, #3FB8AF);    /* sound effects */
-  --color-lane-music: light-dark(#6A53D3, #9A88EC);  /* music */
-  --color-on-lane: light-dark(#FFFFFF, #121A33);     /* text on a lane color (the music's name tag) */
+  /* Signal: the selection, the switched-on control and the focus. As a fill it is yellow with dark text in both themes;
+     drawn as a ring, line or mark on a surface it is signal-ink, dark enough in the light theme to reach 3:1. */
+  --color-paper: #f5c400;
+  --color-paper-hover: light-dark(#e0b300, #ffd633);
+  --color-paper-wash: light-dark(rgb(245 196 0 / 0.15), rgb(245 196 0 / 0.15));
+  --color-paper-track: light-dark(rgb(28 31 36 / 0.16), rgb(236 238 241 / 0.25)); /* a spinner's track, under its head */
+  --color-paper-edge: light-dark(#9a7600, #f5c400);
+  --color-on-paper: #1c1f24;     /* text, knobs and edges on signal yellow */
+  --color-signal-ink: light-dark(#9a7600, #f5c400);  /* the focus ring, selection outlines and marks */
+
+  /* Layer colours, used on the timeline and media icons only */
+  --color-lane-overlay: light-dark(#7c5cf0, #9b82ff); /* text and image overlays */
+  --color-lane-video: light-dark(#2f86e8, #4fa3ff);
+  --color-lane-sfx: light-dark(#0d7a70, #3cc7b5);    /* sound effects */
+  --color-lane-music: light-dark(#2b7a3c, #59c26a);  /* music */
+  --color-on-lane: light-dark(#ffffff, #16181b);     /* text on a lane color (the music's name tag) */
 
   /* Shade and edges that follow the theme */
-  --color-shade: light-dark(rgb(18 26 51 / 0.22), rgb(0 0 0 / 0.5));          /* small drop shadows (knobs, the drop zone's badge) */
-  --color-swatch-edge: light-dark(rgb(18 26 51 / 0.2), rgb(255 255 255 / 0.2)); /* a color swatch's edge, so one like the panel shows */
+  --color-shade: light-dark(rgb(16 18 22 / 0.18), rgb(0 0 0 / 0.45));          /* small drop shadows (knobs, the drop zone's badge) */
+  --color-swatch-edge: light-dark(rgb(16 18 22 / 0.2), rgb(255 255 255 / 0.2)); /* a color swatch's edge, so one like the panel shows */
 
   /* macOS window controls (drawn by the system; listed for reference only) */
   --color-mac-close: #FF5F57;
   --color-mac-min: #FEBC2E;
   --color-mac-zoom: #28C840;
 
-  /* ---------- Type ---------- */
-  --font-sans: "Archivo", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  /* ---------- Type: the system font (SF Pro on a Mac) at 13 px ---------- */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  /* Width axis (font-stretch) */
-  --wdth-display: 68%;
-  --wdth-title: 80%;
-  --wdth-label: 92%;
+  /* Width axis (font-stretch): the system font at its normal width throughout */
+  --wdth-display: 100%;
+  --wdth-title: 100%;
+  --wdth-label: 100%;
   --wdth-body: 100%;
 
   /* Weights */
-  --weight-body: 420;
-  --weight-medium: 560;
-  --weight-strong: 660;
-  --weight-title: 780;
-  --weight-display: 860;
+  --weight-body: 400;
+  --weight-medium: 500;
+  --weight-strong: 600;
+  --weight-title: 600;
+  --weight-display: 600;
 
   /* Size / line height */
   --text-2xs: 11px;  --lh-2xs: 14px;   /* timeline ruler and lane tags only */
   --text-xs: 12px;   --lh-xs: 16px;    /* meta, kbd, chips' secondary text */
   --text-sm: 13px;   --lh-sm: 18px;    /* controls, rows, chips */
-  --text-md: 14px;   --lh-md: 20px;    /* body, chat */
-  --text-lg: 16px;   --lh-lg: 22px;    /* row titles, card titles */
-  --text-xl: 20px;   --lh-xl: 24px;    /* panel titles, proposal title */
-  --text-2xl: 28px;  --lh-2xl: 30px;   /* dialog titles, drill-in titles */
-  --text-3xl: 44px;  --lh-3xl: 44px;   /* empty state display */
+  --text-md: 13px;   --lh-md: 18px;    /* body, chat */
+  --text-lg: 14px;   --lh-lg: 20px;    /* row titles, card titles */
+  --text-xl: 15px;   --lh-xl: 20px;    /* panel titles, proposal title */
+  --text-2xl: 17px;  --lh-2xl: 22px;   /* dialog titles, drill-in titles */
+  --text-3xl: 28px;  --lh-3xl: 34px;   /* empty state display */
 
-  --tracking-display: -0.01em;
+  --tracking-display: 0;
   --tracking-body: 0;
 
   /* ---------- Space (4 px base) ---------- */
@@ -114,25 +122,30 @@
   --space-11: 48px;
   --space-12: 64px;
 
-  /* ---------- Radii: bigger things get bigger corners ---------- */
-  --radius-xs: 4px;      /* timeline items, kbd, tags */
-  --radius-sm: 6px;      /* thumbnails, video frame, inputs inside cards */
-  --radius-md: 10px;     /* cards, inputs, menus */
-  --radius-lg: 14px;     /* panels */
-  --radius-xl: 18px;     /* dialogs */
-  --radius-pill: 999px;  /* buttons, chips, segmented pills */
+  /* ---------- Radii: small and quiet; panels meet at hairlines with no corners ---------- */
+  --radius-xs: 4px;      /* timeline items, kbd, tags, menu rows */
+  --radius-sm: 4px;      /* thumbnails, video frame, inputs inside cards */
+  --radius-md: 6px;      /* buttons, inputs, segmented controls */
+  --radius-lg: 8px;      /* cards, menus, popovers, toasts */
+  --radius-xl: 12px;     /* dialogs */
+  --radius-pill: 999px;  /* switches, dots and badges */
 
-  /* ---------- Elevation: the UI lifts by surface color, shadows only for floating layers ----------
-     The light theme's shadows are navy and fainter; its 1 px edge is a navy hairline, so a menu stands apart from a
-     white panel, where the dark's is a white one. */
+  /* ---------- Elevation: the UI lifts by surface colour and hairlines, shadows only for floating layers ----------
+     light-dark() only takes colours, so each theme's shadow is a layer that is transparent in the other theme. Every
+     floating layer has the same soft shadow and a hairline edge. */
   --shadow-0: none;
-  --shadow-1: 0 6px 18px light-dark(rgb(18 26 51 / 0.16), rgb(0 0 0 / 0.45)),
-    0 0 0 1px light-dark(rgb(18 26 51 / 0.16), rgb(255 255 255 / 0.06));  /* menus, popovers, tooltips */
-  --shadow-2: 0 14px 40px light-dark(rgb(18 26 51 / 0.2), rgb(0 0 0 / 0.55)),
-    0 0 0 1px light-dark(rgb(18 26 51 / 0.16), rgb(255 255 255 / 0.07));  /* toasts, floating inspector */
-  --shadow-3: 0 28px 80px light-dark(rgb(18 26 51 / 0.26), rgb(0 0 0 / 0.65)),
-    0 0 0 1px light-dark(rgb(18 26 51 / 0.16), rgb(255 255 255 / 0.08));  /* dialogs */
-  --shadow-lift: 0 8px 22px light-dark(rgb(18 26 51 / 0.24), rgb(0 0 0 / 0.5)); /* hovered play button on art */
+  --shadow-soft: 0 8px 24px light-dark(rgb(16 18 22 / 0.18), transparent),
+    0 10px 30px light-dark(transparent, rgb(0 0 0 / 0.45));  /* tooltips: the shadow alone */
+  --shadow-1: 0 8px 24px light-dark(rgb(16 18 22 / 0.18), transparent),
+    0 10px 30px light-dark(transparent, rgb(0 0 0 / 0.45)),
+    0 0 0 1px light-dark(#d5d9df, #353a42);  /* menus, popovers, tooltips */
+  --shadow-2: 0 8px 24px light-dark(rgb(16 18 22 / 0.18), transparent),
+    0 10px 30px light-dark(transparent, rgb(0 0 0 / 0.45)),
+    0 0 0 1px light-dark(#d5d9df, #353a42);  /* toasts, floating inspector */
+  --shadow-3: 0 8px 24px light-dark(rgb(16 18 22 / 0.18), transparent),
+    0 10px 30px light-dark(transparent, rgb(0 0 0 / 0.45)),
+    0 0 0 1px light-dark(#d5d9df, #353a42);  /* dialogs */
+  --shadow-lift: 0 8px 24px light-dark(rgb(16 18 22 / 0.18), rgb(0 0 0 / 0.45)); /* hovered play button on art */
 
   /* ---------- Motion ---------- */
   --dur-instant: 80ms;   /* press feedback */
@@ -142,15 +155,15 @@
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
-  --hover-scale: 1.04;   /* pills and the play button grow slightly on hover */
-  --press-scale: 0.97;
+  --hover-scale: 1;      /* controls change colour, never size, on hover and press */
+  --press-scale: 1;
   --stagger: 40ms;       /* between proposal ranges as they draw in */
 
   /* ---------- Layout ---------- */
-  --gutter: 8px;                 /* between panels and around the workspace */
-  --topbar-h: 52px;
-  --stage-head-h: 56px;          /* the preview's head: format pills, Add title, Full screen */
-  --playerbar-h: 76px;
+  --gutter: 1px;                 /* between panels: a hairline */
+  --topbar-h: 44px;
+  --stage-head-h: 44px;          /* the preview's head: format pills, Add title, Full screen */
+  --playerbar-h: 44px;
   --traffic-lights-w: 76px;      /* space kept clear for the macOS window controls */
 
   --library-w: 300px;            /* default; user can drag 256 to 420 */
@@ -171,7 +184,7 @@
   --dialog-w: 560px;
 
   --hit-min: 28px;               /* smallest pointer target (timeline handles get a 12 px invisible pad) */
-  --hit-comfort: 36px;           /* default control height */
+  --hit-comfort: 32px;           /* default control height */
 }
 
 /* Settings' Appearance: Light or Dark forces that theme; System (no data-theme) follows the system's appearance. */
@@ -201,8 +214,7 @@
 @media (max-height: 819px) {
   :root {
     --timeline-h: 196px;
-    --playerbar-h: 68px;
-    --topbar-h: 48px;
+    --topbar-h: 44px;
   }
 }
 

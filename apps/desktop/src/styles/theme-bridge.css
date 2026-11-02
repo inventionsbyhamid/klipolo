@@ -1,19 +1,19 @@
 /* The components' semantic colour names, mapped onto Klipolo's tokens. `inline reference`: each utility uses
-   the token itself and no theme variable is emitted, so nothing here can shadow or loop on a token. Red only means
-   "will be cut"; paper is selection and focus; yellow stays for primary actions, which the buttons choose per
-   file. */
+   the token itself and no theme variable is emitted, so nothing here can shadow or loop on a token. Signal is the
+   yellow accent (a fill with dark text); signal-ink is that accent drawn as a ring, line or mark, and the focus
+   ring. */
 @theme inline reference {
   --color-canvas: var(--color-night);
   --color-panel: var(--color-bay);
   --color-raised: var(--color-bay-raised);
-  --color-sunken: color-mix(in srgb, var(--color-night) 45%, transparent);
+  --color-sunken: var(--color-sunken);
   --color-fg: var(--color-ink);
   --color-fg-muted: var(--color-ink-soft);
   --color-fg-subtle: var(--color-ink-faint);
   --color-signal: var(--color-paper);
-  --color-signal-strong: var(--color-paper-edge);
-  --color-signal-ink: var(--color-paper);
-  --color-focus: var(--color-paper);
+  --color-signal-strong: var(--color-paper-hover);
+  --color-signal-ink: var(--color-signal-ink);
+  --color-focus: var(--color-signal-ink);
   --color-on-signal: var(--color-on-paper);
   --color-tally: var(--color-cut);
   --color-tally-strong: var(--color-cut);

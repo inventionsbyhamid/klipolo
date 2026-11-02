@@ -20,16 +20,19 @@
   gap: var(--space-2);
 }
 
+/* A look is a small tile with 6 px corners, washed under the pointer; the one the text wears takes the signal wash
+   with a signal-ink edge. */
 .text-look {
   display: grid;
   gap: var(--space-2);
   justify-items: stretch;
-  padding: var(--space-1);
-  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
   color: var(--color-ink-soft);
-  font-size: 11px;
+  font-size: var(--text-2xs);
   line-height: 1.15;
   text-align: center;
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
 
 .text-look:hover {
@@ -38,12 +41,13 @@
 }
 
 .text-look[aria-pressed="true"] {
+  background: var(--color-paper-wash);
   color: var(--color-ink);
-  box-shadow: inset 0 0 0 2px var(--color-paper);
+  box-shadow: inset 0 0 0 1px var(--color-signal-ink);
 }
 
 .text-look:focus-visible {
-  outline: 2px solid var(--color-paper);
+  outline: 2px solid var(--color-signal-ink);
   outline-offset: 2px;
 }
 
@@ -54,7 +58,7 @@
   place-items: center;
   height: 32px;
   overflow: hidden;
-  border-radius: var(--radius-xs, 4px);
+  border-radius: var(--radius-xs);
   background: linear-gradient(160deg, var(--color-bay-press), var(--color-clip-deep) 55%, var(--color-night));
 }
 

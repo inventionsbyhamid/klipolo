@@ -61,12 +61,9 @@
 
 .export-dialog .dialog-title {
   margin: 0;
-  word-spacing: 0.08em;
-  letter-spacing: -0.01em;
   font-size: var(--text-2xl);
   line-height: var(--lh-2xl);
-  font-weight: var(--weight-display);
-  font-stretch: var(--wdth-display);
+  font-weight: var(--weight-title);
 }
 
 .export-dialog .dialog-title:focus {
@@ -92,11 +89,13 @@
 .export-dialog .dialog-foot .left {
   margin-right: auto;
   color: var(--color-ink-faint);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
 }
 
+/* An off secondary button keeps its hairline edge, as everywhere else. */
 .export-dialog .btn-secondary[aria-disabled="true"] {
-  box-shadow: none;
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
 /* ---------- Format cards ---------- */
@@ -113,14 +112,17 @@
   gap: var(--space-4);
 }
 
+/* A card: raised, a hairline edge, 8 px corners. A chosen one takes the signal wash and a signal-ink edge, and keeps
+   them under the pointer. */
 .ex-fmt {
   position: relative;
   display: grid;
   justify-items: center;
   gap: var(--space-4);
-  padding: var(--space-6) var(--space-4) var(--space-5);
-  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
   background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   color: var(--color-ink);
   text-align: center;
   transition:
@@ -132,8 +134,11 @@
   background: var(--color-bay-hover);
 }
 
-.ex-fmt[aria-checked="true"] {
-  box-shadow: inset 0 0 0 2px var(--color-paper);
+.ex-fmt[aria-checked="true"],
+.ex-fmt[aria-checked="true"]:hover {
+  background: var(--color-paper-wash);
+  box-shadow: inset 0 0 0 1px var(--color-signal-ink);
+  color: var(--color-ink);
 }
 
 .ex-fmt.is-locked {
@@ -141,22 +146,23 @@
   cursor: default;
 }
 
+/* The card's checkbox: a 16 px box with a 3:1 grey edge; checked, a signal yellow box with a dark tick. */
 .ex-box {
   position: absolute;
-  top: 10px;
-  left: 10px;
+  top: var(--space-4);
+  left: var(--space-4);
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  box-shadow: inset 0 0 0 1.5px var(--color-line-strong);
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-xs);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
   color: transparent;
 }
 
 .ex-box .ico {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   stroke-width: 2.6;
 }
 
@@ -172,13 +178,13 @@
   height: 76px;
 }
 
-/* The frame drawn to scale: clip blue (your footage) with a light edge. */
+/* The frame drawn to scale: a clip blue (your footage) outline over a light blue wash. */
 .ex-shape i,
 .ex-art i {
   display: block;
-  border-radius: 4px;
-  background: linear-gradient(160deg, var(--color-clip), var(--color-clip-deep));
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-paper) 35%, transparent);
+  border-radius: var(--radius-xs);
+  background: var(--color-clip-wash);
+  box-shadow: inset 0 0 0 1.5px var(--color-clip);
 }
 
 .ex-shape .ex-frame-landscape {
@@ -197,19 +203,21 @@
 }
 
 .ex-name {
-  font-size: var(--text-lg);
-  font-weight: var(--weight-title);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--weight-medium);
   font-variant-numeric: tabular-nums;
 }
 
 .ex-meta {
   color: var(--color-ink-soft);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
   font-variant-numeric: tabular-nums;
 }
 
 .ex-fmt .ex-meta {
-  margin-top: -6px;
+  margin-top: calc(-1 * var(--space-3));
   color: var(--color-ink-faint);
   font-size: var(--text-xs);
 }
@@ -255,7 +263,8 @@
 .ex-quality-note {
   margin: 0;
   color: var(--color-ink-soft);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
 }
 
 /* "Also save captions as a file": the switch and its label, then the file type on the right. */
@@ -296,22 +305,24 @@
   color: var(--color-ink-soft);
 }
 
-/* The captions note: raised, an info icon, soft text. */
+/* The captions note: a raised card with a hairline edge, an info icon and 12 px soft text. */
 .ex-note {
   display: flex;
   align-items: flex-start;
   gap: var(--space-4);
   margin: 0;
   padding: var(--space-5);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   color: var(--color-ink-soft);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
 }
 
 .ex-note .ico {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   flex: none;
   margin-top: 1px;
 }
@@ -321,9 +332,10 @@
 .ex-progress {
   display: grid;
   gap: var(--space-4);
-  padding: var(--space-6);
-  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
   background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
 .ex-progress p {
@@ -338,22 +350,24 @@
 }
 
 .ex-title {
-  font-size: var(--text-lg);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
   font-weight: var(--weight-strong);
 }
 
 .ex-pct {
-  font-size: var(--text-xl);
-  font-weight: var(--weight-title);
-  font-stretch: var(--wdth-title);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--weight-medium);
   font-variant-numeric: tabular-nums;
 }
 
+/* A 6 px bar: a sunken track with a signal yellow fill. */
 .ex-bar {
-  height: 8px;
+  height: 6px;
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: var(--color-bay-press);
+  background: var(--color-sunken);
 }
 
 .ex-bar i {
@@ -373,8 +387,8 @@
 }
 
 .ex-failed .ico {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   flex: none;
   margin-top: 1px;
   color: var(--color-ink-soft);
@@ -398,8 +412,8 @@
   height: 16px;
   flex: none;
   border-radius: 50%;
-  border: 2px solid var(--color-paper-wash);
-  border-top-color: var(--color-paper);
+  border: 2px solid var(--color-paper-track);
+  border-top-color: var(--color-signal-ink);
   animation: export-spin 0.9s linear infinite;
 }
 
@@ -411,6 +425,7 @@
 
 /* ---------- Files ---------- */
 
+/* The done mark: a signal-ink tick on a round signal wash. */
 .ex-done-mark {
   display: grid;
   flex: none;
@@ -418,8 +433,8 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: var(--color-paper);
-  color: var(--color-on-paper);
+  background: var(--color-paper-wash);
+  color: var(--color-signal-ink);
 }
 
 .ex-done-mark .ico {
@@ -442,8 +457,9 @@
   align-items: center;
   gap: var(--space-5);
   padding: var(--space-4) var(--space-5);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
 .ex-art {
@@ -514,15 +530,17 @@
   display: grid;
   gap: var(--space-4);
   padding: var(--space-5);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
 .ex-job-text {
   display: grid;
   gap: var(--space-2);
   color: var(--color-ink-soft);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
 }
 
 .ex-job-name {
