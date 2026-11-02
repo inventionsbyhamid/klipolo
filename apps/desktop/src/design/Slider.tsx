@@ -26,7 +26,7 @@ interface SliderProps {
 }
 
 /**
- * A slider: a 4 px sunken track, signal yellow up to the value, a 14 px raised knob with a hairline edge, and the value
+ * A slider: a 4 px sunken track, signal red up to the value, a 14 px raised knob with a hairline edge, and the value
  * to the right in tabular text. Arrow keys step 1, Shift arrow 10. The knob carries the name and spoken value.
  */
 export function Slider({

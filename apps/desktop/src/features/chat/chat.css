@@ -657,7 +657,7 @@
   align-self: center;
 }
 
-/* Send: a 32 px button with 6 px corners at the box's bottom right, signal yellow once there is something to send. */
+/* Send: a 32 px button with 6 px corners at the box's bottom right, signal red once there is something to send. */
 .chat .send {
   width: 32px;
   height: 32px;

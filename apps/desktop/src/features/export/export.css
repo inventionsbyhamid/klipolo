@@ -146,7 +146,7 @@
   cursor: default;
 }
 
-/* The card's checkbox: a 16 px box with a 3:1 grey edge; checked, a signal yellow box with a dark tick. */
+/* The card's checkbox: a 16 px box with a 3:1 grey edge; checked, a signal red box with a white tick. */
 .ex-box {
   position: absolute;
   top: var(--space-4);
@@ -362,7 +362,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* A 6 px bar: a sunken track with a signal yellow fill. */
+/* A 6 px bar: a sunken track with a signal red fill. */
 .ex-bar {
   height: 6px;
   overflow: hidden;

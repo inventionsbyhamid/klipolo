@@ -154,7 +154,7 @@
   gap: var(--space-2);
 }
 
-/* Each step a short bar: a sunken track, grey once done, the one under way filling with signal yellow. */
+/* Each step a short bar: a sunken track, grey once done, the one under way filling with signal red. */
 .analysis-steps i {
   width: 18px;
   height: 4px;

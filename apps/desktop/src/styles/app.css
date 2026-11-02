@@ -988,7 +988,7 @@
   font-size: var(--text-md);
 }
 
-/* Choose files (the one yellow) and Record your screen side by side (one above the other where they don't fit), and
+/* Choose files (the one red) and Record your screen side by side (one above the other where they don't fit), and
    Choose files' key under them. */
 .drop-actions {
   display: flex;
@@ -2332,8 +2332,8 @@
 
 /* ---------- Toggle ---------- */
 
-/* A 36 x 20 track. Off: sunken, a hairline edge and a 16 px ink-soft knob. On: signal yellow with a signal-ink edge
-   and a dark knob. Disabled: an empty track with a faint edge. Styled from aria-checked, not data-state: a tooltip
+/* A 36 x 20 track. Off: sunken, a hairline edge and a 16 px ink-soft knob. On: signal red with a signal-ink edge
+   and a white knob. Disabled: an empty track with a faint edge. Styled from aria-checked, not data-state: a tooltip
    trigger sets its own data-state on the same element. */
 .toggle {
   display: inline-flex;
@@ -3092,7 +3092,7 @@
   will-change: transform;
 }
 
-/* Eight 10 px signal yellow handles with a dark edge, centred on the outline's corners and edges. */
+/* Eight 10 px signal red handles with a white edge, centred on the outline's corners and edges. */
 .gizmo-handle {
   position: absolute;
   width: 10px;
@@ -3123,7 +3123,7 @@
   inset: 0;
 }
 
-/* The rotate knob: a round handle on a signal yellow stem above the top edge's handle. It turns with the layer. */
+/* The rotate knob: a round handle on a signal red stem above the top edge's handle. It turns with the layer. */
 .gizmo-stem {
   position: absolute;
   bottom: calc(100% + 10px);

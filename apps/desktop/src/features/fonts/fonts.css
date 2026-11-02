@@ -93,7 +93,7 @@
   font-weight: var(--weight-medium);
 }
 
-/* Rows as a menu's: 4 px corners; the highlighted one takes the signal fill with dark text, its meta, tag and
+/* Rows as a menu's: 4 px corners; the highlighted one takes the signal fill with white text, its meta, tag and
    download bar in that text's colour. */
 .font-row {
   display: flex;

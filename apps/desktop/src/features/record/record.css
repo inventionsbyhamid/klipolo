@@ -480,7 +480,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The microphone's level: a 6 px round-ended sunken track with a signal yellow fill. It follows the voice under
+/* The microphone's level: a 6 px round-ended sunken track with a signal red fill. It follows the voice under
    reduced motion too (it is content), so its width has no transition. */
 .record-meter {
   justify-self: stretch;

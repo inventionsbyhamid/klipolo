@@ -4,7 +4,7 @@ import { cn } from './cn';
 type Variant = 'primary' | 'secondary' | 'ghost';
 type Size = 'sm' | 'md';
 
-/** Klipolo's buttons: yellow means "do it", so only a primary button is filled. */
+/** Klipolo's buttons: red means "do it", so only a primary button is filled. */
 const variants: Record<Variant, string> = {
   primary: 'btn-primary',
   secondary: 'btn-secondary',

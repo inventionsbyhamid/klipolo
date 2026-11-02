@@ -14,7 +14,7 @@ const LINE_PX = 20;
 
 /**
  * The chat box: Enter sends and Shift Enter adds a line (Enter while an input method composes a word
- * confirms the word). The send button turns yellow when there is text. While Klipolo answers, the box stays usable:
+ * confirms the word). The send button turns red when there is text. While Klipolo answers, the box stays usable:
  * Enter keeps the message and says it waits. It works only while the AI status allows chat (a key, or an access code
  * the relay hasn't turned off): otherwise it is off, and says to add a key or code when there is none. The selection
  * chip above it shows what "this" means. Command K puts the cursor here (the panel's `focusChat`).

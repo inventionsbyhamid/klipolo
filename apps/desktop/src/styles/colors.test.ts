@@ -47,7 +47,7 @@ describe('colours', () => {
     }
   });
 
-  it('navy is only ever text on yellow; text and edges on paper, red and lane colours use their own ink', () => {
+  it('navy is only ever text on the primary red; paper, red and the layer colours have their own ink', () => {
     const navy = ALL.filter(({ body }) => body.includes('--color-navy'));
     expect(navy.length).toBeGreaterThan(0);
     for (const { file, selector, body } of navy) {
