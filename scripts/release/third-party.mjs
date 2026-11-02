@@ -6,7 +6,9 @@
 // in memory, nothing is written), the packages its stylesheets @import, and the bundler's own runtime helpers that end
 // up in the page (Vite's and Rolldown's). Each package takes the first licence in PREFERRED that it offers; a licence
 // needs its text in the texts folder (<SPDX id>.txt) to be taken at all, so a package with no such licence stops the
-// run.
+// run. With the bundled pack's manifest (assets/library/manifest.json) as a fourth argument, the pack's sounds and
+// pictures made by others (its items with an author) are listed too, each under its licence, which needs a text there
+// as well.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,9 +24,9 @@ const PREFERRED = [
 const DENIED = ['GPL-2.0-only', 'GPL-2.0', 'LGPL-2.0-only', 'LGPL-2.0'];
 const RULE = '-'.repeat(100);
 
-const [metadataFile, pageDir, textsDir] = process.argv.slice(2);
+const [metadataFile, pageDir, textsDir, packManifest] = process.argv.slice(2);
 if (!textsDir) {
-  console.error('usage: node third-party.mjs <cargo metadata JSON> <page folder> <licence texts folder>');
+  console.error('usage: node third-party.mjs <cargo metadata JSON> <page folder> <licence texts folder> [pack manifest]');
   process.exit(2);
 }
 const texts = new Map(
@@ -47,6 +49,14 @@ for (const p of all) {
   p.copyright = unique(p.files.filter((f) => !/^notice/i.test(path.basename(f))).flatMap((f) => copyrightLines(read(f))));
   p.notices = p.files.filter((f) => /^notice/i.test(path.basename(f))).map((f) => tidy(read(f)));
 }
+const pack = packManifest
+  ? JSON.parse(read(packManifest)).items.filter((i) => i.author).map((i) => ({ ...i, kind: 'pack' }))
+  : [];
+for (const i of pack) {
+  if (DENIED.includes(i.license) || !texts.has(i.license)) {
+    problems.push(`the pack's ${i.file} is under "${i.license}", which has no text in scripts/release/licenses`);
+  }
+}
 if (problems.length) {
   console.error(problems.map((p) => `refused: ${p}`).join('\n'));
   console.error(
@@ -54,7 +64,7 @@ if (problems.length) {
   );
   process.exit(1);
 }
-process.stdout.write(render(rust, page));
+process.stdout.write(render(rust, page, pack));
 
 // ---------------------------------------------------------------------------------------------------------------------
 
@@ -332,7 +342,7 @@ function copyrightLines(text) {
     .filter((l) => !/Free Software Foundation/.test(l));
 }
 
-function render(rust, page) {
+function render(rust, page, pack) {
   const byLicence = new Map();
   for (const p of [...rust, ...page]) {
     for (const id of p.chosen) {
@@ -351,9 +361,11 @@ function render(rust, page) {
     'packages that use it. The copyright lines are the ones in each package\'s own licence files; a package whose files',
     'have none shows its authors instead. Each package\'s source code is at the address listed with it.',
     '',
-    'Klipolo\'s own licence, and the licences of FFmpeg and the fonts, are in NOTICE.txt and the files it names.',
+    'Klipolo\'s own licence, and the licences of FFmpeg and the fonts, are in NOTICE.txt and the files it names. The',
+    'sounds and pictures of Klipolo\'s bundled pack made by others are listed at the end, each under its licence.',
     '',
-    'This file is written by scripts/release/third-party.sh from Cargo.lock and the page\'s build. Don\'t edit it by hand.',
+    'This file is written by scripts/release/third-party.sh from Cargo.lock, the page\'s build and the pack\'s manifest.',
+    'Don\'t edit it by hand.',
     '',
     `${rust.length} Rust crates and ${page.length} JavaScript packages, under these licences:`,
     ...ids.map((id) => `  ${id.padEnd(24)} ${String(byLicence.get(id).length).padStart(4)}`),
@@ -373,6 +385,25 @@ function render(rust, page) {
       }
     }
     lines.push('', `The ${id} licence:`, '', texts.get(id));
+  }
+  if (pack.length) {
+    const licences = unique(pack.map((i) => i.license)).sort();
+    lines.push(
+      '',
+      RULE,
+      `The bundled pack's sounds and pictures made by others (${pack.length})`,
+      RULE,
+      '',
+      'Klipolo.app/Contents/Resources/library holds Klipolo\'s pack. These files of it were made by others: each is used',
+      'under the licence it is listed under, and the pack\'s own LICENSE.txt credits each one and says how it was changed.',
+    );
+    for (const id of licences) {
+      lines.push('', `${id} (${pack.filter((i) => i.license === id).length})`);
+      for (const i of pack.filter((i) => i.license === id)) lines.push(`  ${i.file}  by ${i.author}  ${i.source}`);
+    }
+    for (const id of licences.filter((id) => !byLicence.has(id))) lines.push('', `The ${id} licence:`, '', texts.get(id));
+    const given = licences.filter((id) => byLicence.has(id));
+    if (given.length) lines.push('', `The ${given.join(' and ')} licence texts are given above.`);
   }
   const noticed = [...rust, ...page].filter((p) => p.notices.length).sort(order);
   if (noticed.length) {
