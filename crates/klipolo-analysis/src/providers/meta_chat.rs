@@ -31,10 +31,11 @@ use super::meta::RELAY_BUSY;
 
 /// The model chat runs on.
 pub const CHAT_MODEL: &str = "muse-spark-1.3";
-/// The most output tokens a chat answer may take, reasoning included. Meta bills only what an answer uses (a first
-/// trial of the planner took at most 1,291); this is room for long reasoning, so an answer is rarely cut off. The
-/// relay takes at most 16,384 and reserves the whole cap while the call runs.
-pub const CHAT_MAX_OUTPUT_TOKENS: u32 = 8192;
+/// The most output tokens a chat answer may take, reasoning included: the relay's own cap. Meta bills only what an
+/// answer uses; a short's whole plan in one answer took 6,016 in one paid run and reached 8,192 (cut off) in the next.
+/// The relay reserves the whole cap while the call runs: about $0.07 of output, with the input about $0.15 a call, far
+/// under a device's $2 cap.
+pub const CHAT_MAX_OUTPUT_TOKENS: u32 = 16_384;
 /// Chat calls at once: one of the device's four relay calls.
 pub const CHAT_CALLS: usize = 1;
 /// Times a busy answer is asked again.
