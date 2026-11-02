@@ -46,7 +46,10 @@ function soundUrl(key: string, from: SoundFrom): Promise<string> {
     return kept;
   }
   const asked = library.sound(from).then((bytes) => URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' })));
-  asked.catch(() => sounds.delete(key));
+  // One that couldn't be had goes, unless a newer ask took its place.
+  asked.catch(() => {
+    if (sounds.get(key) === asked) sounds.delete(key);
+  });
   sounds.set(key, asked);
   for (const [old, url] of sounds) {
     if (sounds.size <= KEPT) break;
