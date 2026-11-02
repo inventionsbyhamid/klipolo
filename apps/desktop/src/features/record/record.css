@@ -255,6 +255,16 @@
   transform: scaleX(-1);
 }
 
+/* "Record yourself": the camera over the whole box, fitted over its black, mirrored in the picture only. */
+.record-camera {
+  position: absolute;
+  inset: 0;
+}
+
+.record-camera[data-mirror] .live-pic {
+  transform: scaleX(-1);
+}
+
 /* ---------- Cards ---------- */
 
 .record-section .seg {
