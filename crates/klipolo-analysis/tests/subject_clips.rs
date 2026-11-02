@@ -5,10 +5,10 @@ use std::collections::BTreeMap;
 
 use klipolo_analysis::providers::{Heard, TrackedBox, TrackedFrame};
 use klipolo_analysis::subject::clips::{
-    Speech, clip_path, clip_people, cropped_formats, follow_op, follow_op_keeping,
+    Speech, camera_voice, clip_path, clip_people, cropped_formats, follow_op, follow_op_keeping,
     followable_formats, footage, speaker_path, voice_windows,
 };
-use klipolo_analysis::subject::voices::VoiceTurn;
+use klipolo_analysis::subject::voices::{SoundBeside, VoiceTurn, turns_beside};
 use klipolo_analysis::subject::{FPS, PERSON, SubjectTrack};
 use klipolo_model::crop::Crop;
 use klipolo_model::fill_focus::{FillFocus, FocusKey, FocusPath, Keep, Person, Voice};
@@ -201,6 +201,55 @@ fn a_camera_take_whose_camera_starts_a_frame_late_still_has_footage() {
     // A clip that ends before the camera's first frame has none.
     p.timeline.main[1].source_out_us = 20_000;
     assert!(footage(&p, &p.timeline.main[1]).is_none());
+}
+
+/// A camera take's camera has no sound of its own: the voice beside it is its mic's, lined up on the take's clock. The
+/// camera starts 2 s into the take and 1 s into its file, the mic at the take's start: the mic's 2 s is the camera's
+/// 1 s, so the mic's turns move 1 s earlier on the camera's file.
+#[test]
+fn a_camera_take_s_voice_is_its_mic_lined_up_beside_the_camera() {
+    let mut p = project();
+    let mut mic = video("mic", 0, 0);
+    mic.kind = AssetKind::Audio;
+    p.assets.push(mic);
+    p.recordings[0]
+        .sources
+        .push(source("mic", SourceRole::Mic, 0, 0));
+    let beside = camera_voice(&p, "cam");
+    assert_eq!(
+        beside,
+        [SoundBeside {
+            asset_id: "mic".into(),
+            path: "/media/mic.mp4".into(),
+            span: RangeUs {
+                start: s(1.0),
+                end: s(299.0)
+            },
+            lead_us: -s(1.0),
+        }]
+    );
+    let turn = |from: f64, to: f64| VoiceTurn {
+        start_us: s(from),
+        end_us: s(to),
+        voice: Voice {
+            part: 0,
+            label: "A".into(),
+        },
+    };
+    let turns = turns_beside(&beside, |id| {
+        assert_eq!(id, "mic");
+        vec![turn(1.0, 5.0), turn(10.0, 20.0), turn(299.5, 302.0)]
+    });
+    // Cut to where the camera's file and the mic both play: from the camera's first frame to the mic's end.
+    assert_eq!(
+        turns,
+        [turn(1.0, 4.0), turn(9.0, 19.0), turn(298.5, 299.0)]
+    );
+    // An imported video, a screen take and a camera take without a mic have none.
+    for file in ["talk", "screen"] {
+        assert!(camera_voice(&p, file).is_empty(), "{file}");
+    }
+    assert!(camera_voice(&project(), "cam").is_empty());
 }
 
 #[test]
