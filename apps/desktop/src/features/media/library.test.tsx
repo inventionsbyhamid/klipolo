@@ -49,6 +49,7 @@ const { useProject } = await import('../../state/project');
 const { usePlayback } = await import('../../state/playback');
 const { useUi } = await import('../../state/ui');
 const { useSelection } = await import('../../state/selection');
+const { useLibraryPanel } = await import('../../state/libraryPanel');
 const { useAnnouncer } = await import('../timeline/announce');
 const { usePack, loadPack, forgetPictures } = await import('./shelves');
 const { useMarks, markUsed } = await import('./marks');
@@ -87,6 +88,9 @@ beforeEach(() => {
   useProject.setState({ snapshot, pending: 0 });
   usePlayback.setState({ playheadUs: 2_000_000, playing: false });
   useUi.setState({ libraryTab: 'clips' });
+  // Nothing selected: a selection's card would cover the library.
+  useSelection.setState({ selectedId: null, selectedIds: [] });
+  useLibraryPanel.setState({ collapsed: false, aside: null });
   usePack.setState({ items: [], asked: false });
   useMarks.setState({ marks: {}, asked: false });
   useToasts.setState({ toasts: [] });
@@ -421,6 +425,8 @@ describe('the Library', () => {
   it('typing in the search runs none of the editor’s keys', async () => {
     useUi.setState({ libraryTab: 'sounds' });
     useSelection.setState({ selectedId: 'title' });
+    // Its card stepped aside (Back to library), so the search shows.
+    useLibraryPanel.getState().stepAside();
     function WithKeys() {
       useEditorShortcuts();
       return <Library />;
