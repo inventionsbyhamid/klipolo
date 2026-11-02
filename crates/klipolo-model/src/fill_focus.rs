@@ -2,9 +2,10 @@
 //! in the centre, or on the speaker along a path made from where they are in each shot. No entry keeps the framing's
 //! `focus_x` and `focus_y` (Fixed), as every project saved before this did.
 //!
-//! A path's keys are in the clip's source time, so a cut, a trim, a split or a speed change keeps it on the footage. The
-//! crop's centre moves straight from one key to the next, except at a key that starts a new shot (`FocusKey::cut`):
-//! there it holds the shot's last key up to the cut and then jumps, so it never pans across a cut.
+//! A path's keys are in the clip's source time, so a cut, a trim, a split or a speed change keeps it on the footage, and
+//! Reverse turns it with the footage (`FillFocus::turned`). The crop's centre moves straight from one key to the next,
+//! except at a key that starts a new shot (`FocusKey::cut`): there it holds the shot's last key up to the cut and then
+//! jumps, so it never pans across a cut.
 //!
 //! Where two or more people are in a shot, the speaker's focus also keeps who its path frames (`Keep`: whoever is
 //! speaking, one person, everyone, or who when as chat set it) and the people it chose between (`Person`, left to
@@ -118,6 +119,31 @@ impl Keep {
         }
     }
 
+    /// Who it keeps over the same footage played from a copy of it written backward that ends at source time `to_us`
+    /// (`FocusPath::turned`): each range `[a, b)` becomes `[to_us - b, to_us - a)`, in the other order, cut at 0 where
+    /// it would start before it. With none left, whoever speaks. O(ranges).
+    pub fn turned(&self, to_us: Us) -> Keep {
+        let Self::Ranges { ranges } = self else {
+            return self.clone();
+        };
+        let ranges: Vec<KeepRange> = (ranges.iter().rev())
+            .filter_map(|r| {
+                let start_us = to_us.saturating_sub(r.end_us).max(0);
+                let end_us = to_us.saturating_sub(r.start_us);
+                (start_us < end_us).then_some(KeepRange {
+                    start_us,
+                    end_us,
+                    who: r.who,
+                })
+            })
+            .collect();
+        if ranges.is_empty() {
+            Self::Speaker
+        } else {
+            Self::Ranges { ranges }
+        }
+    }
+
     /// Whether it may be saved: people from 1 to [`MAX_PEOPLE`], and ranges that aren't empty, in order and apart.
     pub fn is_valid(&self) -> bool {
         match self {
@@ -227,6 +253,55 @@ impl FocusPath {
         FocusPath { keys }
     }
 
+    /// The same path over the footage played from a copy of it written backward that ends at source time `to_us` (or
+    /// the copy's path over its file played forward again): the copy's time `t` is the source's `to_us - t`, so each
+    /// key goes to `to_us - at_us`, in the other order. Before a cut the crop held the earlier shot's last key up to the
+    /// new shot; turned, the new shot comes first, so the crop jumps to that last key 1 µs after the new shot's first
+    /// key, a key of its own (or on the next key, when that is 1 µs on, or the path has no room for another). Keys past
+    /// `to_us`, before the turned path's start, give way to one at 0 where the crop was at `to_us`. Never more than
+    /// [`Self::MAX_KEYS`] keys. O(keys).
+    pub fn turned(&self, to_us: Us) -> FocusPath {
+        let n = self.keys.partition_point(|k| k.at_us <= to_us);
+        let mut keys = Vec::with_capacity(n + 1);
+        let at_end = n.checked_sub(1).and_then(|i| self.keys.get(i));
+        if n < self.keys.len() && at_end.is_none_or(|k| k.at_us < to_us) {
+            if let Some((x, y)) = self.centre_at(to_us) {
+                keys.push(FocusKey {
+                    at_us: 0,
+                    x,
+                    y,
+                    cut: false,
+                });
+            }
+        }
+        let mut room = Self::MAX_KEYS.saturating_sub(n + 1);
+        let mut cut_next = false;
+        for j in (0..n).rev() {
+            let k = self.keys[j];
+            let at_us = to_us.saturating_sub(k.at_us);
+            keys.push(FocusKey {
+                at_us,
+                cut: std::mem::take(&mut cut_next),
+                ..k
+            });
+            let Some(before) = j.checked_sub(1).map(|i| self.keys[i]).filter(|_| k.cut) else {
+                continue;
+            };
+            let jump = at_us.saturating_add(1);
+            if jump < to_us.saturating_sub(before.at_us) && room > 0 {
+                room -= 1;
+                keys.push(FocusKey {
+                    at_us: jump,
+                    cut: true,
+                    ..before
+                });
+            } else {
+                cut_next = true;
+            }
+        }
+        FocusPath { keys }
+    }
+
     /// Whether it may be saved: at most [`Self::MAX_KEYS`] keys, each later than the one before, inside the picture.
     pub fn is_valid(&self) -> bool {
         let inside = |v: f64| v.is_finite() && (0.0..=1.0).contains(&v);
@@ -270,6 +345,19 @@ impl FillFocus {
             path,
             keep: Keep::Speaker,
             people: Vec::new(),
+        }
+    }
+
+    /// The same focus over the footage played from a copy of it written backward that ends at source time `to_us` (or
+    /// forward again): a speaker's path and who it keeps turned with it ([`FocusPath::turned`], [`Keep::turned`]).
+    pub fn turned(&self, to_us: Us) -> FillFocus {
+        match self {
+            Self::Center => Self::Center,
+            Self::Speaker { path, keep, people } => Self::Speaker {
+                path: path.turned(to_us),
+                keep: keep.turned(to_us),
+                people: people.clone(),
+            },
         }
     }
 

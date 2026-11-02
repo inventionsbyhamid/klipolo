@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { deleteKeysAt, deleteVolumeKey, levelNow, type Leveled } from './keyEdits';
+import { deleteKeysAt, deleteVolumeKey, type Leveled } from './keyEdits';
 import { useSelection } from './selection';
 import { itemNow } from './latest';
 
@@ -27,22 +27,16 @@ export function isPicked(picked: PickedKey | null, owner: string, tUs: number): 
   return picked.kind === 'motion' ? picked.itemId === owner : picked.target.id === owner;
 }
 
-/** Whether the picked key is still there: a key at its time on its layer, or a point at its time on its line. */
-function stillThere(picked: PickedKey): boolean {
-  if (picked.kind === 'volume') return levelNow(picked.target).keys.some((k) => k.tUs === picked.tUs);
-  const keys = itemNow(picked.itemId)?.layout.motion?.keys;
-  return !!keys && Object.values(keys).some((list) => list.some((k) => k.tUs === picked.tUs));
-}
-
 /**
- * Delete on the picked key: it goes (one undo step) and is let go. False when no key is picked, or the one picked is
- * gone (deleted by its own Delete, or by an edit): Delete then acts on the selection.
+ * Delete on the picked key: it goes (one undo step, at its turn, so after a move of it still on its way) and is let go.
+ * A key that is gone by then stays gone and nothing else changes: the Delete is spent on the pick all the same, so a
+ * clip or layer never goes in a key's place. False only when no key is picked (its own Delete lets it go): Delete then
+ * acts on the selection.
  */
 export function deletePickedKey(): boolean {
   const { picked, clear } = useKeyPick.getState();
   if (!picked) return false;
   clear();
-  if (!stillThere(picked)) return false;
   if (picked.kind === 'volume') {
     void deleteVolumeKey(picked.target, picked.tUs);
   } else {
@@ -50,6 +44,19 @@ export function deletePickedKey(): boolean {
     if (item) void deleteKeysAt(item, picked.tUs);
   }
   return true;
+}
+
+/**
+ * A key dragged to `key.tUs` from `fromUs`: the pick goes with it at once (a key is a new button at its new time, so
+ * its own Delete is gone with the old one), and once the move lands, to where it went, or back to `fromUs` when it
+ * didn't go. A pick made or let go meanwhile is kept.
+ */
+export function pickMoved(key: PickedKey, fromUs: number, landed: Promise<number | null>) {
+  useKeyPick.getState().pick(key);
+  void landed.then((at) => {
+    const tUs = at ?? fromUs;
+    if (useKeyPick.getState().picked === key && tUs !== key.tUs) useKeyPick.getState().pick({ ...key, tUs });
+  });
 }
 
 // Another selection (a click, the keys, chat) lets a picked key go.

@@ -63,21 +63,29 @@ export type MoveRefusal = 'locked' | 'kind' | 'start';
 /**
  * Its layers `dtUs` later (earlier when negative) and `rows` tracks up (down when negative), offsets kept: each layer
  * goes to the track `rows` away in the project's order. Refused when one is on a locked track, when a track it would
- * go to is missing, locked or of another kind, or when one would start before 0:00. A move later goes latest first,
- * so no layer passes through a neighbour of the group on its way. Clips stay: the main track is magnetic.
+ * go to is missing, locked or of another kind, or when one would start before 0:00. Across tracks, the layers on the
+ * top track go first when going up and those on the bottom one first when going down, so each lands on a track the
+ * group's layers there have already left (the model bumps a layer that lands on another to a free track). On a track,
+ * a move later goes latest first, so no layer passes through a neighbour of the group on its way. Clips stay: the
+ * main track is magnetic.
  */
 export function groupMoveOps(project: Project, m: Members, dtUs: number, rows = 0): Op[] | MoveRefusal {
   const tracks = project.timeline.tracks;
-  const moves: { item: Item; to: Track }[] = [];
+  const moves: { item: Item; from: number; to: Track }[] = [];
   for (const { item, track } of m.layers) {
     if (track.locked) return 'locked';
     if (item.startUs + dtUs < 0) return 'start';
-    const to = tracks[tracks.indexOf(track) + rows];
+    const from = tracks.indexOf(track);
+    const to = tracks[from + rows];
     if (!to || to.locked || to.kind !== track.kind) return to?.locked ? 'locked' : 'kind';
-    moves.push({ item, to });
+    moves.push({ item, from, to });
   }
   if (dtUs === 0 && rows === 0) return [];
-  moves.sort((a, b) => (dtUs > 0 ? b.item.startUs - a.item.startUs : a.item.startUs - b.item.startUs));
+  moves.sort(
+    (a, b) =>
+      Math.sign(rows) * (b.from - a.from) ||
+      (dtUs > 0 ? b.item.startUs - a.item.startUs : a.item.startUs - b.item.startUs),
+  );
   return moves.map(({ item, to }) => ({
     type: 'moveItem',
     id: item.id,
