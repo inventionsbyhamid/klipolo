@@ -3,7 +3,7 @@
 # ad hoc; it works on a Developer ID signed app too):
 #   scripts/release/check-bundle.sh <Klipolo.app> <x86_64|arm64> [<page build folder>]
 # Fails unless the licences (the third-party notices and Cap's MIT licence too, none of them empty), the fonts and the
-# bundled pack (its library/manifest.json) are in Resources, every Mach-O is built for <arch> only and for macOS 15.0 or
+# bundled pack (its library/manifest.json, and its LICENSE.txt with the Apache licence's text) are in Resources, every Mach-O is built for <arch> only and for macOS 15.0 or
 # older, every load path is @rpath/, @executable_path/, @loader_path/, /usr/lib/ or /System/Library/, and every LC_RPATH
 # is relative (@executable_path/ or @loader_path/), never a machine path such as the dev FFmpeg prefix's.
 # The recorder's needs: Info.plist gives the screen, microphone and camera usage strings, and the app's signature grants
@@ -52,6 +52,14 @@ fi
 # chat can't add its music.
 [ -f "$app/Contents/Resources/library/manifest.json" ] \
   || fail "the bundled pack isn't in the app: no Resources/library/manifest.json"
+# Its LICENSE.txt credits the sounds and pictures made by others, with the Apache licence's text that the Noto Emoji
+# stickers' licence asks to go with them (scripts/gen-library.py writes it).
+pack_licence=$app/Contents/Resources/library/LICENSE.txt
+if [ ! -f "$pack_licence" ]; then
+  fail "the bundled pack's licence isn't in the app: no Resources/library/LICENSE.txt"
+elif ! grep -qF 'Apache License' "$pack_licence"; then
+  fail "Resources/library/LICENSE.txt has no Apache License text (scripts/gen-library.py writes it)"
+fi
 # NOTICE.txt gives the public address of the source code and the commit built (the AGPL's source offer for this
 # version). build-mac.sh fills its {{SOURCE_URL}} and {{SOURCE_COMMIT}} placeholders from KLIPOLO_SOURCE_URL and the
 # checkout; a bundle that still has either can't ship.

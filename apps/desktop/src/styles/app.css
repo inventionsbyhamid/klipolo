@@ -2836,6 +2836,76 @@
   height: 22px;
 }
 
+/* A sound or music row's art is its play button: its own icon at rest, play on hover or focus, stop while it plays. */
+.preview-play {
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.preview-play .preview-icon {
+  display: none;
+  width: 18px;
+  height: 18px;
+}
+
+.lib-row:hover .preview-play .preview-art,
+.lib-row:focus-within .preview-play .preview-art,
+.lib-row.is-previewing .preview-play .preview-art {
+  display: none;
+}
+
+.lib-row:hover .preview-play .preview-icon,
+.lib-row:focus-within .preview-play .preview-icon,
+.lib-row.is-previewing .preview-play .preview-icon {
+  display: block;
+}
+
+.preview-play.is-music:hover,
+.lib-row.is-previewing .preview-play.is-music {
+  background: color-mix(in srgb, var(--color-lane-music) 30%, transparent);
+}
+
+.preview-play.is-sound:hover,
+.lib-row.is-previewing .preview-play.is-sound {
+  background: color-mix(in srgb, var(--color-lane-sfx) 28%, transparent);
+}
+
+/* How far a preview has played: a thin bar along the row's foot, in its lane's colour, over the sound's length. */
+.preview-progress {
+  position: absolute;
+  left: var(--space-4);
+  right: var(--space-4);
+  bottom: 2px;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  color: var(--color-lane-sfx);
+  transform-origin: left center;
+  pointer-events: none;
+  animation: preview-progress linear both;
+}
+
+.art-tile.is-music ~ .preview-progress {
+  color: var(--color-lane-music);
+}
+
+@keyframes preview-progress {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* No moving bar: a steady one says it plays. */
+@media (prefers-reduced-motion: reduce) {
+  .preview-progress {
+    animation: none;
+  }
+}
+
 .lib-foot {
   padding: var(--space-5) var(--space-4) 0;
   color: var(--color-ink-faint);

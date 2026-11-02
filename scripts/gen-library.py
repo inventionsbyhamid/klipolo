@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
-"""Klipolo's bundled pack: sound effects, music beds, stickers and backgrounds, all made here from code and dedicated to
-the public domain (CC0 1.0). No recordings, samples or outside media go in.
+"""Klipolo's bundled pack: sound effects, music beds, stickers and backgrounds. The music beds, the backgrounds and the
+pack's own stickers (arrows, circles, bubbles, numbers and the like) are made here from code and dedicated to the
+public domain (CC0 1.0). The sound effects and the emoji stickers come from others, each under its own licence
+(CC0 1.0 or Apache 2.0): scripts/library-sources.json lists each one's source, author, licence and SHA-256, and
+scripts/library-media.py makes their files in assets/library from the downloads. This script takes those files as
+they are there, after checking each one's SHA-256, and credits each in LICENSE.txt.
 
 Python 3 standard library only, and deterministic: fixed seeds, no clocks, and nothing but IEEE arithmetic and square
 roots (sines and exponentials are computed here, never by the platform's maths library), so every machine works out
 the same samples and pixels. The PNGs are deflated by the zlib Python is built with, which can differ between builds
 (zlib-ng, Apple's), so regenerate the pack in the klipolo-ci image (ci/linux.Dockerfile), where its check runs.
 It writes, into assets/library or --out DIR:
-  sounds/<id>.wav     48 kHz 16-bit mono, each under 3 s, starting and ending at silence
+  sounds/<id>.wav     48 kHz 16-bit mono, each under 3 s, starting and ending at silence (from others, copied)
   music/<id>.wav      24 kHz 16-bit mono beds of 16 s, drawn exactly periodic so they loop without a click
-  stickers/<id>.png   1024 x 1024 RGBA, the shape with a border on a transparent canvas
+  stickers/<id>.png   1024 x 1024 RGBA, the shape with a border on a transparent canvas (the emoji from others, copied)
   backgrounds/<id>.png  1920 x 1080 or 1080 x 1920 RGB, sized for a 16:9 or 9:16 frame (listed as stickers: pictures)
-  manifest.json       each item's id, name, category, file, length or size, tags, sha256 and licence
-  LICENSE.txt         the CC0 dedication
+  manifest.json       each item's id, name, category, file, length or size, tags, sha256 and licence, and for an item
+                      from others its author and source
+  LICENSE.txt         the CC0 dedication of the pack's own items, each item from others credited, and the licence texts
 Usage: python3 scripts/gen-library.py [--out DIR] [--workers N]
 scripts/gen-library.test.sh checks that two runs write the same bytes as the committed assets/library.
 """
@@ -26,8 +31,14 @@ import math
 import os
 import pathlib
 import struct
+import textwrap
 import wave
 import zlib
+
+HERE = pathlib.Path(__file__).resolve().parent
+LIBRARY = HERE.parent / "assets" / "library"
+SOURCES = HERE / "library-sources.json"
+LICENCE_TEXTS = HERE / "release" / "licenses"
 
 PI = 3.141592653589793
 TAU = 2 * PI
@@ -109,15 +120,6 @@ class Svf:
         return self.low, self.band, high
 
 
-def swell(t, peak):
-    """0 at t = 0, 1 at `peak`, 0 again at t = 1, smooth at both ends."""
-    if t < peak:
-        s = sin(PI / 2 * t / peak)
-    else:
-        s = cos(PI / 2 * (t - peak) / (1 - peak))
-    return s * s
-
-
 def note(name):
     """A note's frequency in Hz (A4 = 440, equal temperament): "C4", "F#3"."""
     steps = {"C": -9, "D": -7, "E": -5, "F": -4, "G": -2, "A": 0, "B": 2}[name[0]]
@@ -129,17 +131,6 @@ def note(name):
 # ---------------------------------------------------------------------------------------------------------- audio
 
 SR = 48000
-
-
-def edges(samples, fade_in, fade_out, rate=SR):
-    """Linear fades over the first and last seconds given, so the first and last samples are silence."""
-    n = len(samples)
-    a, b = max(1, int(fade_in * rate)), max(1, int(fade_out * rate))
-    for i in range(min(a, n)):
-        samples[i] *= i / a
-    for i in range(min(b, n)):
-        samples[n - 1 - i] *= i / b
-    return samples
 
 
 def normalised(samples, peak):
@@ -164,415 +155,9 @@ def decay(tau, rate=SR):
     return exp(-1.0 / (tau * rate))
 
 
-def whoosh(seconds=0.9, peak=0.45, low=250.0, high=2650.0, damping=0.5, seed=11):
-    """Air rushing past: noise through two band passes in a row, which sweep up and back down together as the sound
-    swells and fades, over a little of its low rumble."""
-    n = int(seconds * SR)
-    noise, first, second, out = Noise(seed), Svf(SR), Svf(SR), []
-    for i in range(n):
-        env = swell(i / n, peak)
-        cutoff = low + (high - low) * env
-        lo, band, _ = first(noise(), cutoff, damping)
-        _, band, _ = second(band, cutoff, damping)
-        out.append((band + lo * 0.15) * env)
-    return out
-
-
-def pop():
-    """A soft pop: a sine whose pitch drops fast, with a short decay."""
-    n, out = int(0.16 * SR), []
-    phase, sweep, level = 0.0, 1.0, 1.0
-    sweep_k, level_k = decay(0.012), decay(0.045)
-    for i in range(n):
-        phase += (180.0 + 720.0 * sweep) / SR
-        out.append(osc(phase) * level * min(1.0, i / (0.0015 * SR)))
-        sweep *= sweep_k
-        level *= level_k
-    return out
-
-
-def click():
-    """A small tick: a short 2.6 kHz ping and a breath of bright noise."""
-    n, out, noise = int(0.05 * SR), [], Noise(5)
-    tone, hiss, previous = 1.0, 1.0, 0.0
-    tone_k, hiss_k = decay(0.0035), decay(0.0015)
-    for i in range(n):
-        x = noise()
-        out.append((osc(2600.0 * i / SR) * tone + (x - previous) * 0.35 * hiss) * min(1.0, i / (0.0003 * SR)))
-        previous = x
-        tone *= tone_k
-        hiss *= hiss_k
-    return out
-
-
-def bell(out, start, freq, partials, level=1.0, attack=0.002, detune=0.0):
-    """Adds a struck bell at `start` seconds: `partials` are (ratio, amplitude, decay seconds); `detune` adds a quiet
-    copy that many Hz higher, which shimmers against it."""
-    begin = int(start * SR)
-    for ratio, amp, tau in partials:
-        k = decay(tau)
-        for f, a in [(freq * ratio, amp)] + ([(freq * ratio + detune, amp * 0.5)] if detune else []):
-            env = level * a
-            for j in range(len(out) - begin):
-                out[begin + j] += osc(f * j / SR) * env * min(1.0, j / (attack * SR))
-                env *= k
-                if env < 1e-5:
-                    break
-
-
-def ding():
-    """A clear notification bell on D6 with inharmonic partials."""
-    out = [0.0] * int(1.6 * SR)
-    bell(out, 0.0, note("D6"), [(1.0, 1.0, 0.7), (2.0, 0.32, 0.35), (2.76, 0.22, 0.25), (4.07, 0.08, 0.12)])
-    return out
-
-
-def chime():
-    """Three soft bells rising through C major, each with a slow shimmer."""
-    out = [0.0] * int(2.4 * SR)
-    for k, name in enumerate(["C6", "E6", "G6"]):
-        bell(out, 0.12 * k, note(name), [(1.0, 1.0, 0.8), (2.0, 0.18, 0.4), (3.0, 0.06, 0.2)], 0.8, 0.004, 1.2)
-    return out
-
-
-def rise():
-    """A riser: a bright tone gliding up two octaves under noise that opens up, both growing to the end."""
-    n, out, noise, svf = int(1.8 * SR), [], Noise(23), Svf(SR)
-    phase = 0.0
-    for i in range(n):
-        t = i / n
-        phase += 110.0 * exp(2 * t * LN2) / SR
-        tone = sum(osc(phase * h) / h for h in range(1, 7)) * 0.5
-        lo, _, _ = svf(noise(), 300.0 + 5700.0 * t * t, 0.7)
-        out.append(tone * t * t + lo * 0.7 * t * t * t)
-    return out
-
-
-def sparkle():
-    """A trail of tiny high bells on a pentatonic scale, scattered over the first second and dying away."""
-    out, noise = [0.0] * int(1.4 * SR), Noise(42)
-    scale = [note(n) for n in ["C7", "D7", "E7", "G7", "A7", "C8"]]
-    times = sorted(0.85 * (noise() + 1) / 2 for _ in range(16))
-    for k, start in enumerate(times):
-        freq = scale[int((noise() + 1) / 2 * len(scale)) % len(scale)]
-        level = (1.0 - 0.55 * k / len(times)) * (0.7 + 0.3 * (noise() + 1) / 2)
-        tau = 0.09 + 0.11 * (noise() + 1) / 2
-        bell(out, start, freq, [(1.0, 1.0, tau), (2.0, 0.25, tau / 2)], level, 0.001)
-    return out
-
-
-# ------------------------------------------------------------------------------------------- more sound effects
-
-
-def finished(samples, fade_in, fade_out, rate=SR):
-    """A sound as the pack ships it: its DC offset taken out (a 10 Hz high pass), the near silence before and after it
-    (under a thousandth of its peak) trimmed, and short fades so it starts and ends at silence."""
-    k = 1.0 - TAU * 10.0 / rate
-    out, x1, y1 = [], 0.0, 0.0
-    for x in samples:
-        y1 = x - x1 + k * y1
-        x1 = x
-        out.append(y1)
-    top = max(abs(v) for v in out)
-    heard = [i for i, v in enumerate(out) if abs(v) * 1000 >= top]
-    return edges(out[heard[0]:heard[-1] + 1], fade_in, fade_out, rate)
-
-
-def soft(x):
-    """A soft clip: about x when small, never past 1 either way (a rational tanh)."""
-    if x >= 3.0:
-        return 1.0
-    if x <= -3.0:
-        return -1.0
-    return x * (27.0 + x * x) / (27.0 + 9.0 * x * x)
-
-
 def unit(noise):
     """The next of `noise`'s numbers as a share in [0, 1)."""
     return (noise() + 1) / 2
-
-
-def impact():
-    """A heavy hit: a sine thump whose pitch falls from 110 Hz to 38 Hz, a burst of noise closing from bright to dull,
-    and a low rumble after it, pushed a little into a soft clip for weight."""
-    n, noise, deep = int(1.6 * SR), Noise(101), Noise(163)
-    burst, rumble = Svf(SR), Svf(SR)
-    out, phase = [], 0.0
-    glide, body, level, tail = 1.0, 1.0, 1.0, 1.0
-    glide_k, body_k, level_k, tail_k = decay(0.07), decay(0.45), decay(0.16), decay(0.6)
-    for i in range(n):
-        phase += (38.0 + 72.0 * glide) / SR
-        lo, _, _ = burst(noise(), 180.0 + 3800.0 * glide, 0.9)
-        low, _, _ = rumble(deep(), 90.0, 0.8)
-        x = 1.1 * osc(phase) * body + 0.9 * lo * level + 6.0 * low * tail
-        out.append(soft(1.6 * x) * min(1.0, i / (0.001 * SR)))
-        glide *= glide_k
-        body *= body_k
-        level *= level_k
-        tail *= tail_k
-    return finished(out, 0.0005, 0.08)
-
-
-def bass_drop():
-    """A deep drop: a sine gliding from 160 Hz down to 34 Hz over two seconds, warmed by a soft clip so small speakers
-    carry it too, with a click of noise as it starts."""
-    n, noise, out, phase = int(2.3 * SR), Noise(107), [], 0.0
-    glide, click = 1.0, 1.0
-    glide_k, click_k = decay(0.55), decay(0.004)
-    for i in range(n):
-        t = i / SR
-        phase += (34.0 + 126.0 * glide) / SR
-        fall = 1.0 if t < 1.6 else cos(PI / 2 * (t - 1.6) / 0.7)
-        env = min(1.0, i / (0.004 * SR)) * fall * fall
-        out.append(0.8 * soft(2.2 * osc(phase)) * env + 0.5 * noise() * click)
-        glide *= glide_k
-        click *= click_k
-    return finished(out, 0.0005, 0.05)
-
-
-def long_riser():
-    """A long build to a moment: noise through a band pass sweeping from 200 Hz to 7 kHz, and two detuned buzzy tones
-    gliding up an octave and a half, both growing to the end under a tremolo that speeds up."""
-    n, noise, svf, out = int(2.9 * SR), Noise(109), Svf(SR), []
-    glide, glide_k = 1.0, exp(1.5 * LN2 / n)
-    cutoff, cutoff_k = 200.0, exp(3.5553480614894135 / n)  # 200 Hz times 35
-    phases, wobble = [0.0, 0.0], 0.0
-    for i in range(n):
-        t = i / n
-        tone = 0.0
-        for k, detune in enumerate((1.0, 1.007)):
-            phases[k] += 130.0 * detune * glide / SR
-            tone += sum(osc(phases[k] * h) / h for h in range(1, 6))
-        wobble += (4.0 + 14.0 * t * t) / SR
-        _, band, _ = svf(noise(), cutoff, 0.6)
-        tremolo = 1.0 - 0.3 * t * (0.5 + 0.5 * osc(wobble))
-        out.append((0.25 * tone + 1.2 * band) * t * t * tremolo)
-        glide *= glide_k
-        cutoff *= cutoff_k
-    return finished(out, 0.001, 0.03)
-
-
-def swipe(up, seed):
-    """A quick swipe: a third of a second of noise through a band pass sweeping from 600 Hz to 4.2 kHz, or back down,
-    as it swells and fades."""
-    n, noise, svf, out = int(0.32 * SR), Noise(seed), Svf(SR), []
-    for i in range(n):
-        t = i / n
-        _, band, _ = svf(noise(), 600.0 * exp((t if up else 1 - t) * 1.9459101090932196), 0.35)  # up to 7 times
-        out.append(band * swell(t, 0.45))
-    return finished(out, 0.001, 0.01)
-
-
-def glitch():
-    """A digital glitch: 14 cuts of 15 to 55 ms, each a buzzing square tone, a burst of crushed noise, a gap, or the
-    cut before it again."""
-    noise, out, last = Noise(149), [], []
-    for _ in range(14):
-        length = int((0.015 + 0.04 * unit(noise)) * SR)
-        kind = int(unit(noise) * 4)
-        if kind == 3 and last:
-            cut = last[:]
-        elif kind in (0, 3):
-            r = unit(noise)
-            f = 180.0 + 1400.0 * r * r
-            cut = [0.5 if osc(f * j / SR) >= 0 else -0.5 for j in range(length)]
-        elif kind == 1:
-            hold, step, cut = 0.0, 1 + int(unit(noise) * 12), []
-            for j in range(length):
-                if j % step == 0:
-                    hold = round(noise() * 4) / 4
-                cut.append(0.7 * hold)
-        else:
-            cut = [0.0] * (length // 2)
-        cut = edges(cut, 0.0005, 0.0005)
-        out.extend(cut)
-        last = cut
-    return finished(out, 0.0005, 0.005)
-
-
-def record_scratch():
-    """A record scratched back and forth and then stopped: a buzzy tone and grainy noise, as if cut in the groove,
-    played at the hand's speed, backwards and forwards, louder and brighter the faster it moves."""
-    grain, groove, smooth = Noise(113), [], 0.0
-    for _ in range(SR):
-        smooth += 0.35 * (grain() - smooth)
-        groove.append(smooth)
-    strokes = [(0.0, 0.11, -6.0), (0.11, 0.2, 5.0), (0.2, 0.3, -6.5), (0.3, 0.62, 3.0)]
-    n, svf, out, at = int(0.62 * SR), Svf(SR), [], 0.3
-    for i in range(n):
-        t = i / SR
-        speed = next(v * sin(PI * (t - a) / (b - a)) for a, b, v in strokes if t < b)
-        at += speed / SR
-        tone = sum(osc(180.0 * h * at) / h for h in range(1, 6))
-        where = at * SR % SR
-        j = int(where)
-        g = groove[j] + (groove[(j + 1) % SR] - groove[j]) * (where - j)
-        lo, _, _ = svf(0.5 * tone + 2.0 * g, 300.0 + 2500.0 * min(abs(speed), 2.0), 0.6)
-        out.append(lo * min(1.0, abs(speed)))
-    return finished(out, 0.001, 0.02)
-
-
-def shutter():
-    """A camera's shutter: two quick mechanical clacks 70 ms apart, each a snap of filtered noise over a small thud,
-    with a faint ring of metal."""
-    out = [0.0] * int(0.26 * SR)
-    for start, level, seed in ((0.0, 1.0, 127), (0.07, 0.75, 129)):
-        noise, svf, begin = Noise(seed), Svf(SR), int(start * SR)
-        snap, thud, ring = 1.0, 1.0, 1.0
-        snap_k, thud_k, ring_k = decay(0.006), decay(0.018), decay(0.012)
-        for j in range(len(out) - begin):
-            _, band, _ = svf(noise(), 3200.0, 0.5)
-            x = 1.2 * band * snap + 0.5 * osc(170.0 * j / SR) * thud + 0.12 * osc(4300.0 * j / SR) * ring
-            out[begin + j] += x * level * min(1.0, j / (0.0003 * SR))
-            snap *= snap_k
-            thud *= thud_k
-            ring *= ring_k
-    return finished(out, 0.0003, 0.01)
-
-
-def key_press(out, start, level, centre, body, noise):
-    """Adds one key at `start` seconds: a click of noise around `centre` Hz over a short thock at `body` Hz."""
-    svf, begin = Svf(SR), int(start * SR)
-    click, thock = 1.0, 1.0
-    click_k, thock_k = decay(0.004), decay(0.012)
-    for j in range(min(int(0.06 * SR), len(out) - begin)):
-        _, band, _ = svf(noise(), centre, 0.6)
-        out[begin + j] += level * (band * click + 0.45 * osc(body * j / SR) * thock) * min(1.0, j / 12)
-        click *= click_k
-        thock *= thock_k
-
-
-def typing():
-    """Typing on a keyboard: 13 keys at an uneven pace, each a click over a small thock and a softer click as it comes
-    back up; the tenth is a deeper space bar."""
-    noise, times, t = Noise(131), [], 0.0
-    for k in range(13):
-        times.append(t)
-        t += 0.085 + 0.09 * unit(noise) + (0.12 if k == 6 else 0.0)
-    out = [0.0] * int((times[-1] + 0.2) * SR)
-    for k, start in enumerate(times):
-        level = 0.75 + 0.25 * unit(noise)
-        centre = 1800.0 + 1600.0 * unit(noise)
-        body = 150.0 if k == 9 else 260.0 + 120.0 * unit(noise)
-        key_press(out, start, level, centre, body, noise)
-        key_press(out, start + 0.05 + 0.03 * unit(noise), 0.35 * level, 1.2 * centre, 1.3 * body, noise)
-    return finished(out, 0.0003, 0.02)
-
-
-def notification():
-    """A friendly two-note alert, E6 then B6, each a soft marimba-like strike."""
-    out = [0.0] * int(1.0 * SR)
-    for start, name in ((0.0, "E6"), (0.11, "B6")):
-        bell(out, start, note(name), [(1.0, 1.0, 0.22), (3.93, 0.12, 0.03), (2.0, 0.08, 0.08)], 1.0, 0.0015)
-    return finished(out, 0.0005, 0.05)
-
-
-def success():
-    """A level-up flourish: C5, E5, G5 and C6 played quickly upwards as bright square-ish plucks, the last held a
-    moment longer."""
-    out = [0.0] * int(1.3 * SR)
-    for k, name in enumerate(["C5", "E5", "G5", "C6"]):
-        f, begin = note(name), int(0.075 * k * SR)
-        level, level_k = 1.0, decay(0.09 if k < 3 else 0.45)
-        for j in range(len(out) - begin):
-            t = j / SR
-            x = osc(f * t) + 0.25 * osc(2 * f * t) + 0.2 * osc(3 * f * t) + 0.08 * osc(5 * f * t)
-            out[begin + j] += 0.6 * x * level * min(1.0, j / (0.002 * SR))
-            level *= level_k
-            if level < 1e-5:
-                break
-    return finished(out, 0.0005, 0.06)
-
-
-def error_buzz():
-    """A wrong-answer buzz: two short low buzzes, each two square-ish tones (110 Hz and 117 Hz, odd harmonics to the
-    ninth) beating against each other."""
-    out = []
-    for seconds in (0.2, 0.32):
-        buzz = []
-        for j in range(int(seconds * SR)):
-            t = j / SR
-            buzz.append(0.35 * sum(osc(h * f * t) / h for f in (110.0, 117.0) for h in (1, 3, 5, 7, 9)))
-        out.extend(edges(buzz, 0.004, 0.012))
-        out.extend([0.0] * int(0.07 * SR))
-    return finished(out, 0.0005, 0.01)
-
-
-def popped(out, start, low, rise, level, sweep_tau, level_tau, seconds):
-    """Adds a pop at `start` seconds: a sine whose pitch drops fast from `low` + `rise` Hz to `low`."""
-    begin, phase, sweep, env = int(start * SR), 0.0, 1.0, level
-    sweep_k, level_k = decay(sweep_tau), decay(level_tau)
-    for j in range(min(int(seconds * SR), len(out) - begin)):
-        phase += (low + rise * sweep) / SR
-        out[begin + j] += osc(phase) * env * min(1.0, j / (0.001 * SR))
-        sweep *= sweep_k
-        env *= level_k
-
-
-def pop_high():
-    """A small bright pop, higher and quicker than Pop."""
-    out = [0.0] * int(0.1 * SR)
-    popped(out, 0.0, 520.0, 1500.0, 1.0, 0.008, 0.025, 0.1)
-    return finished(out, 0.0003, 0.005)
-
-
-def bubbles():
-    """Four quick pops of bubbles, at uneven moments and pitches."""
-    out = [0.0] * int(0.42 * SR)
-    for start, low, level in ((0.0, 300.0, 1.0), (0.09, 420.0, 0.8), (0.15, 360.0, 0.9), (0.27, 560.0, 0.75)):
-        popped(out, start, low, 3.2 * low, level, 0.01, 0.035, 0.14)
-    return finished(out, 0.0003, 0.01)
-
-
-def boing():
-    """A cartoon spring: a tone wobbling fast around a pitch that bends up from 150 Hz to 260 Hz, the wobble and the
-    tone dying away together."""
-    n, out, phase, wobble = int(0.95 * SR), [], 0.0, 0.0
-    depth, level, bend = 1.0, 1.0, 1.0
-    depth_k, level_k, bend_k = decay(0.3), decay(0.32), decay(0.12)
-    for i in range(n):
-        wobble += 13.0 / SR
-        phase += (260.0 - 110.0 * bend) * (1.0 + 0.22 * depth * osc(wobble)) / SR
-        x = osc(phase) + 0.35 * osc(2 * phase) + 0.15 * osc(3 * phase)
-        out.append(x * level * min(1.0, i / (0.004 * SR)))
-        depth *= depth_k
-        level *= level_k
-        bend *= bend_k
-    return finished(out, 0.0005, 0.04)
-
-
-def drum_hit():
-    """One big drum hit: a kick's thump falling from 150 Hz to 55 Hz under a snare's crack of filtered noise and its
-    shell's ring at 190 Hz."""
-    n, noise, svf, out, phase = int(0.7 * SR), Noise(151), Svf(SR), [], 0.0
-    glide, kick, snare, shell = 1.0, 1.0, 1.0, 1.0
-    glide_k, kick_k, snare_k, shell_k = decay(0.03), decay(0.2), decay(0.13), decay(0.07)
-    for i in range(n):
-        phase += (55.0 + 95.0 * glide) / SR
-        _, band, high = svf(noise(), 1900.0, 0.8)
-        x = 0.9 * osc(phase) * kick + (0.6 * band + 0.25 * high) * snare + 0.3 * osc(190.0 * i / SR) * shell
-        out.append(soft(1.3 * x) * min(1.0, i / (0.0008 * SR)))
-        glide *= glide_k
-        kick *= kick_k
-        snare *= snare_k
-        shell *= shell_k
-    return finished(out, 0.0003, 0.05)
-
-
-def tick_tock():
-    """A clock: tick, tock, tick, tock, half a second apart, each a woodblock knock (a short ping over a click), the
-    tock lower."""
-    out, noise = [0.0] * int(1.68 * SR), Noise(157)
-    for k in range(4):
-        f, begin, svf = 2350.0 if k % 2 == 0 else 1650.0, int(0.5 * k * SR), Svf(SR)
-        ping, click = 1.0, 1.0
-        ping_k, click_k = decay(0.018), decay(0.002)
-        for j in range(int(0.15 * SR)):
-            _, band, _ = svf(noise(), 1.4 * f, 0.7)
-            out[begin + j] += (0.8 * osc(f * j / SR) * ping + 0.5 * band * click) * min(1.0, j / 10)
-            ping *= ping_k
-            click *= click_k
-    return finished(out, 0.0003, 0.02)
 
 
 # ---------------------------------------------------------------------------------------------------------- music
@@ -907,13 +492,6 @@ def length(x, y):
     return math.sqrt(x * x + y * y)
 
 
-def segment(px, py, ax, ay, bx, by):
-    """Distance from p to the segment a-b."""
-    ex, ey, wx, wy = bx - ax, by - ay, px - ax, py - ay
-    h = clamp((wx * ex + wy * ey) / (ex * ex + ey * ey), 0.0, 1.0)
-    return length(wx - ex * h, wy - ey * h)
-
-
 def polygon(px, py, points):
     """Signed distance from p to a closed polygon: negative inside."""
     dx, dy = px - points[0][0], py - points[0][1]
@@ -933,32 +511,6 @@ def polygon(px, py, points):
     return s * math.sqrt(d)
 
 
-def heart(x, y):
-    """A heart 773 px wide, as two arcs and a point (y up from its tip)."""
-    scale = 640.0
-    px, py = abs(x) / scale, (353.0 - y) / scale
-    if py + px > 1.0:
-        return (length(px - 0.25, py - 0.75) - SQRT2 / 4) * scale
-    m = 0.5 * max(px + py, 0.0)
-    d = math.sqrt(min(px * px + (py - 1.0) * (py - 1.0), (px - m) * (px - m) + (py - m) * (py - m)))
-    return d * scale * ((px > py) - (px < py))
-
-
-def star(x, y):
-    """A five-point star pointing up, its corners rounded by 36 px."""
-    r, rounding, inner = 380.0, 36.0, 0.5
-    k1x, k1y = 0.809016994375, -0.587785252292
-    px, py = abs(x), -y + 0.0955 * r
-    for kx, ky in ((k1x, k1y), (-k1x, k1y)):
-        dot = max(kx * px + ky * py, 0.0)
-        px, py = px - 2 * dot * kx, py - 2 * dot * ky
-    px, py = abs(px), py - (r - rounding)
-    bax, bay = inner * -k1y, inner * k1x - 1.0
-    h = clamp((px * bax + py * bay) / (bax * bax + bay * bay), 0.0, r - rounding)
-    side = py * bax - px * bay
-    return length(px - bax * h, py - bay * h) * ((side > 0) - (side < 0)) - rounding
-
-
 ARROW = [(-375, -95), (35, -95), (35, -260), (385, 0), (35, 260), (35, 95), (-375, 95)]
 
 
@@ -970,12 +522,6 @@ def arrow(x, y):
 def ring(x, y):
     """A ring 70 px thick, 660 px across its middle."""
     return abs(length(x, y) - 330.0) - 35.0
-
-
-def check(x, y):
-    """A tick 120 px thick with round ends."""
-    x += 10
-    return min(segment(x, y, -250, 20, -80, 190), segment(x, y, -80, 190, 270, -190)) - 60.0
 
 
 TAIL = [(-170, 150), (-40, 150), (-230, 330)]
@@ -1062,9 +608,6 @@ RED = hex_rgb("#FF3B30")
 BLUE = hex_rgb("#4C8DFF")
 GOLD = hex_rgb("#FFC21A")
 HILITE = hex_rgb("#FFD02E")
-ORANGE = hex_rgb("#FF6A1F")
-PURPLE = hex_rgb("#8B5CF6")
-GREY = hex_rgb("#9AA5B8")
 OUTLINE = 18.0  # the navy outline inside a white shape's border, in pixels
 
 
@@ -1383,13 +926,6 @@ def arrow_head(tip_x, tip_y, dx, dy, length_, width_):
     return [(tip_x, tip_y), (bx + uy * width_ / 2, by - ux * width_ / 2), (bx - uy * width_ / 2, by + ux * width_ / 2)]
 
 
-def sparkle_star(cx, cy, r):
-    """A four-point sparkle: all but the four circles round a square's corners, grown 14 px, then cut to a circle with
-    the cut's corners rounded, so each point ends round."""
-    corners = [Outside(Circle(cx + sx * r, cy + sy * r, r)) for sx in (-1, 1) for sy in (-1, 1)]
-    return Within(Grown(Within(*corners), 14.0), Circle(cx, cy, r + 4.0), k=28.0)
-
-
 def curved_arrow():
     """A thick blue arrow arcing over from the bottom left to point down at the right."""
     line = screen(arc(-10.0, -120.0, 320.0, 320.0, 200, 32))
@@ -1421,11 +957,6 @@ def underline():
     return bordered(Strokes([swash], 76.0), GOLD)
 
 
-def x_mark():
-    """A red cross."""
-    return bordered(Strokes([[(-250.0, -250.0), (250.0, 250.0)], [(250.0, -250.0), (-250.0, 250.0)]], 130.0), RED)
-
-
 def number(n):
     """A yellow badge with a navy number."""
     return bordered(Circle(0.0, 0.0, 400.0), HILITE) + [(text(n, 0.0, 0.0, 440.0, 96.0), 0.0, NAVY)]
@@ -1446,43 +977,6 @@ def shout_bubble():
         r = (440.0 if k % 4 == 0 else 405.0) if k % 2 == 0 else 290.0
         burst.append((r * cos(a), 0.82 * r * sin(a)))
     return outlined(Polygon(burst, 8.0), GOLD)
-
-
-def thumbs_up():
-    """A gold fist with its thumb up, in a navy outline, from a blue cuff."""
-    hand = Smooth(Box(70.0, 140.0, 190.0, 195.0, 80.0), Taper(-60.0, -10.0, 80.0, -10.0, -360.0, 62.0), 50.0)
-    cuff = Box(-250.0, 140.0, 90.0, 225.0, 28.0)
-    fingers = Strokes([[(120.0, y), (245.0, y)] for y in (40.0, 135.0, 230.0)], 16.0)
-    return ([(Union(hand, cuff), BORDER, WHITE)] + outlined(cuff, BLUE)[1:] + outlined(hand, GOLD)[1:]
-            + [(fingers, 0.0, NAVY)])
-
-
-def fire():
-    """An orange flame of three tongues round a gold core."""
-    flame = Union(Circle(0.0, 170.0, 260.0), Taper(0.0, 170.0, 240.0, 40.0, -440.0, 10.0),
-                  Taper(-60.0, 120.0, 190.0, -270.0, -210.0, 10.0), Taper(60.0, 120.0, 190.0, 260.0, -130.0, 10.0),
-                  k=60.0)
-    core = Union(Circle(0.0, 240.0, 150.0), Taper(0.0, 240.0, 140.0, 20.0, -110.0, 6.0), k=40.0)
-    return bordered(flame, ORANGE) + [(core, 0.0, GOLD)]
-
-
-def sparkles():
-    """Three gold four-point sparkles, one large and two small."""
-    stars = Union(sparkle_star(-80.0, 70.0, 330.0), sparkle_star(250.0, -250.0, 160.0),
-                  sparkle_star(270.0, 260.0, 110.0))
-    return bordered(stars, GOLD)
-
-
-def lightbulb():
-    """A gold bulb in a navy outline on a grey screw base, with five short rays above it."""
-    rays = Strokes([[(290.0 * cos(a * PI / 180), -60.0 - 290.0 * sin(a * PI / 180)),
-                     (360.0 * cos(a * PI / 180), -60.0 - 360.0 * sin(a * PI / 180))] for a in (10, 50, 90, 130, 170)],
-                   46.0)
-    glass = Smooth(Circle(0.0, -60.0, 230.0), Taper(0.0, 20.0, 180.0, 0.0, 250.0, 120.0), 40.0)
-    base = Box(0.0, 320.0, 125.0, 80.0, 30.0)
-    threads = Strokes([[(-110.0, y), (110.0, y)] for y in (295.0, 345.0)], 14.0)
-    return (bordered(rays, GOLD) + [(Union(glass, base), BORDER, WHITE)] + outlined(glass, GOLD)[1:]
-            + outlined(base, GREY)[1:] + [(threads, 0.0, NAVY)])
 
 
 def new_tag():
@@ -1686,38 +1180,6 @@ BACKGROUNDS = [
 
 # ---------------------------------------------------------------------------------------------------------- the pack
 
-SOUNDS = [
-    ("whoosh", "Whoosh", ["transition", "topic change", "fast", "air", "swipe"],
-     lambda: edges(whoosh(), 0.002, 0.01), 0.5),
-    ("swoosh", "Swoosh", ["transition", "quick", "swipe", "air", "reveal"],
-     lambda: edges(whoosh(0.5, 0.3, 900.0, 5100.0, 0.45, 29), 0.002, 0.01), 0.45),
-    ("pop", "Pop", ["pop", "appear", "bubble", "short", "fun"], lambda: edges(pop(), 0.0005, 0.005), 0.55),
-    ("click", "Click", ["click", "tap", "button", "short", "ui"], lambda: edges(click(), 0.0002, 0.004), 0.45),
-    ("ding", "Ding", ["bell", "notification", "correct", "bright", "alert"], lambda: edges(ding(), 0.001, 0.03), 0.5),
-    ("chime", "Chime", ["chime", "bells", "soft", "magic", "success"], lambda: edges(chime(), 0.001, 0.3), 0.45),
-    ("rise", "Rise", ["riser", "build up", "tension", "transition", "intro"], lambda: edges(rise(), 0.01, 0.06), 0.5),
-    ("sparkle", "Sparkle", ["sparkle", "magic", "shine", "twinkle", "reveal"],
-     lambda: edges(sparkle(), 0.001, 0.3), 0.45),
-    ("impact", "Impact", ["impact", "boom", "hit", "cinematic", "transition"], impact, 0.4),
-    ("bass-drop", "Bass drop", ["bass drop", "drop", "bass", "boom", "transition"], bass_drop, 0.35),
-    ("long-riser", "Long riser", ["riser", "build up", "tension", "suspense", "intro"], long_riser, 0.5),
-    ("swipe-left", "Swipe left", ["swipe", "left", "slide", "transition", "quick"], lambda: swipe(False, 139), 0.5),
-    ("swipe-right", "Swipe right", ["swipe", "right", "slide", "transition", "quick"], lambda: swipe(True, 137), 0.5),
-    ("glitch", "Glitch", ["glitch", "digital", "error", "tech", "transition"], glitch, 0.35),
-    ("record-scratch", "Record scratch", ["record scratch", "scratch", "stop", "rewind", "funny"],
-     record_scratch, 0.6),
-    ("shutter", "Camera shutter", ["camera", "shutter", "photo", "snap", "picture"], shutter, 0.68),
-    ("typing", "Keyboard typing", ["typing", "keyboard", "keys", "text", "computer"], typing, 0.68),
-    ("notification", "Notification", ["notification", "message", "alert", "phone", "ping"], notification, 0.5),
-    ("success", "Success", ["success", "win", "level up", "correct", "game"], success, 0.5),
-    ("error", "Error buzz", ["error", "wrong", "buzz", "fail", "no"], error_buzz, 0.33),
-    ("pop-high", "High pop", ["pop", "high", "appear", "cute", "short"], pop_high, 0.55),
-    ("bubbles", "Bubble pops", ["bubbles", "pop", "popping", "appear", "fun"], bubbles, 0.55),
-    ("boing", "Cartoon boing", ["boing", "bounce", "spring", "cartoon", "funny"], boing, 0.42),
-    ("drum-hit", "Drum hit", ["drum", "hit", "punch", "snare", "kick"], drum_hit, 0.45),
-    ("tick-tock", "Tick tock", ["clock", "tick tock", "timer", "countdown", "waiting"], tick_tock, 0.55),
-]
-
 MUSIC = [
     ("soft-ambient", "Soft ambient", ["calm", "ambient", "soft", "chill", "loop"], soft_ambient),
     ("upbeat-loop", "Upbeat loop", ["upbeat", "happy", "energetic", "pop", "loop"], upbeat_loop),
@@ -1726,11 +1188,8 @@ MUSIC = [
 ]
 
 STICKERS = [
-    ("heart", "Heart", ["heart", "love", "like", "pink"], heart, "#FF4D6D"),
-    ("star", "Star", ["star", "favourite", "best", "gold"], star, "#FFC21A"),
     ("arrow", "Arrow", ["arrow", "point", "look", "right", "blue"], arrow, "#4C8DFF"),
     ("circle", "Circle", ["circle", "ring", "highlight", "look here", "orange"], ring, "#FF6A3D"),
-    ("check", "Check", ["check", "tick", "done", "yes", "green"], check, "#22C55E"),
 ]
 
 DRAWN = [  # drawn as layers (`painted`), after the speech bubble
@@ -1738,11 +1197,6 @@ DRAWN = [  # drawn as layers (`painted`), after the speech bubble
     ("arrow-pointer", "Pointer arrow", ["arrow", "pointer", "point", "look here", "red"], pointer_arrow),
     ("circle-drawn", "Drawn circle", ["circle", "highlight", "look here", "marker", "red"], drawn_circle),
     ("underline", "Underline", ["underline", "highlight", "marker", "emphasis", "gold"], underline),
-    ("x-mark", "X mark", ["x", "cross", "wrong", "no", "red"], x_mark),
-    ("question", "Question mark", ["question", "question mark", "why", "quiz", "purple"],
-     lambda: bordered(text("?", 0.0, 0.0, 760.0, 130.0), PURPLE)),
-    ("exclamation", "Exclamation mark", ["exclamation", "exclamation mark", "wow", "alert", "important", "red"],
-     lambda: bordered(text("!", 0.0, 0.0, 760.0, 140.0), RED)),
     ("number-1", "Number 1", ["number", "1", "one", "step", "first"], lambda: number("1")),
     ("number-2", "Number 2", ["number", "2", "two", "step", "second"], lambda: number("2")),
     ("number-3", "Number 3", ["number", "3", "three", "step", "third"], lambda: number("3")),
@@ -1750,10 +1204,6 @@ DRAWN = [  # drawn as layers (`painted`), after the speech bubble
     ("number-5", "Number 5", ["number", "5", "five", "step", "fifth"], lambda: number("5")),
     ("thought-bubble", "Thought bubble", ["thought", "think", "idea", "cloud", "white"], thought_bubble),
     ("shout-bubble", "Shout bubble", ["shout", "burst", "wow", "loud", "comic"], shout_bubble),
-    ("thumbs-up", "Thumbs up", ["thumbs up", "like", "yes", "good", "approve"], thumbs_up),
-    ("fire", "Fire", ["fire", "flame", "hot", "trending", "lit"], fire),
-    ("sparkles", "Sparkles", ["sparkles", "shine", "magic", "new", "gold"], sparkles),
-    ("lightbulb", "Lightbulb", ["lightbulb", "idea", "tip", "think", "smart"], lightbulb),
     ("new-tag", "New tag", ["new", "tag", "label", "launch", "red"], new_tag),
     ("subscribe", "Subscribe button", ["subscribe", "button", "follow", "channel", "call to action"], subscribe),
     ("cursor-hand", "Cursor hand", ["cursor", "hand", "click", "pointer", "tap"], cursor_hand),
@@ -1762,18 +1212,54 @@ DRAWN = [  # drawn as layers (`painted`), after the speech bubble
 CC0 = ("To the extent possible under law, Klipolo has waived all copyright and related or neighbouring rights to these "
        "files.\nThey are dedicated to the public domain under CC0 1.0 Universal:\n"
        "https://creativecommons.org/publicdomain/zero/1.0/\n")
+# How LICENSE.txt credits the items from others, by licence: what the files are and what was done to them. An item under
+# any other licence stops the script, so a new licence is read before it ships.
+FROM_OTHERS = {
+    "CC0-1.0": (
+        "The sound effects come from Freesound (freesound.org) and Kenney (kenney.nl). Each one's author dedicated it "
+        "to the public domain under CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/). Klipolo "
+        "cut each one, trimmed its silence, faded it in and out, matched its loudness to the others and saved it as "
+        "48 kHz mono WAV (scripts/library-media.py). Each file, the sound it was made from, its author and where it "
+        "is:"),
+    "Apache-2.0": (
+        "The emoji stickers are Noto Emoji images by Google Inc. (https://github.com/googlefonts/noto-emoji, at commit "
+        "{noto}), used under the Apache License, Version 2.0, whose text is below. Klipolo drew each image 896 pixels "
+        "square in the middle of a 1024 x 1024 transparent canvas and saved it as PNG (scripts/library-media.py). Each "
+        "file, the image it was made from and where it is:"),
+}
 
 
 SHAPES = ((1920, 1080, "16:9", "wide"), (1080, 1920, "9:16", "vertical"))
 SPEECH_TAGS = ["speech", "talk", "say", "quote", "white"]
 
 
+def from_others():
+    """The items from others, as scripts/library-sources.json lists them."""
+    return json.loads(SOURCES.read_text())["items"]
+
+
+def taken(k):
+    """Item k from others: its file as scripts/library-media.py left it in assets/library, checked against the SHA-256
+    the table records, and its length or size."""
+    item = from_others()[k]
+    path = LIBRARY / f"{item['category']}s" / f"{item['id']}.{'wav' if item['category'] == 'sound' else 'png'}"
+    if not path.is_file():
+        raise SystemExit(f"no {path}: run scripts/library-media.py with the downloads")
+    data = path.read_bytes()
+    if hashlib.sha256(data).hexdigest() != item["sha256"]:
+        raise SystemExit(f"{path} isn't the file scripts/library-sources.json records: run scripts/library-media.py")
+    if item["category"] == "sound":
+        with wave.open(io.BytesIO(data), "rb") as w:
+            return data, dict(duration_ms=round(w.getnframes() * 1000 / w.getframerate()))
+    width, height = struct.unpack("!2I", data[16:24])
+    return data, dict(width=width, height=height)
+
+
 def made(key):
     """One item's file, and its length or size. Each item is made on its own, so several are made at once."""
     kind, k = key
-    if kind == "sound":
-        samples = normalised(SOUNDS[k][3](), SOUNDS[k][4])
-        return wav_bytes(samples, SR), dict(duration_ms=round(len(samples) * 1000 / SR))
+    if kind == "taken":
+        return taken(k)
     if kind == "music":
         samples = MUSIC[k][3]()
         return wav_bytes(samples, MUSIC_RATE), dict(duration_ms=round(len(samples) * 1000 / MUSIC_RATE))
@@ -1791,10 +1277,13 @@ def made(key):
 def build(workers=None):
     """Every file of the pack, by path, and the manifest's items. The items are made by `workers` processes at once
     (default: one a CPU, at most 8), the longest first; the bytes are the same however many."""
-    listed = [(id_, name, "sound", f"sounds/{id_}.wav", tags, ("sound", k))
-              for k, (id_, name, tags, _, _) in enumerate(SOUNDS)]
+    others = from_others()
+    listed = [(i["id"], i["name"], "sound", f"sounds/{i['id']}.wav", i["tags"], ("taken", k))
+              for k, i in enumerate(others) if i["category"] == "sound"]
     listed += [(id_, name, "music", f"music/{id_}.wav", tags, ("music", k))
                for k, (id_, name, tags, _) in enumerate(MUSIC)]
+    listed += [(i["id"], i["name"], "sticker", f"stickers/{i['id']}.png", i["tags"], ("taken", k))
+               for k, i in enumerate(others) if i["category"] == "sticker"]
     listed += [(id_, name, "sticker", f"stickers/{id_}.png", tags, ("sticker", k))
                for k, (id_, name, tags, _, _) in enumerate(STICKERS)]
     listed.append(("bubble", "Speech bubble", "sticker", "stickers/bubble.png", SPEECH_TAGS, ("speech", 0)))
@@ -1812,19 +1301,50 @@ def build(workers=None):
         results = [made_by[entry[-1]].result() for entry in listed]
 
     files, items = {}, []
-    for (id_, name, category, path, tags, _), (data, size) in zip(listed, results):
+    for (id_, name, category, path, tags, key), (data, size) in zip(listed, results):
         files[path] = data
+        credit = {}
+        if key[0] == "taken":
+            other = others[key[1]]
+            credit = dict(license=other["license"], author=other["author"], source=other["source"])
         items.append(dict(id=id_, name=name, category=category, file=path, **size, tags=tags,
-                          sha256=hashlib.sha256(data).hexdigest(), license="CC0-1.0"))
-    manifest = dict(version=1, id="klipolo-pack", name="Klipolo pack", license="CC0-1.0", creator="Klipolo",
-                    items=items)
+                          sha256=hashlib.sha256(data).hexdigest(), **({"license": "CC0-1.0"} | credit)))
+    licences = sorted({i["license"] for i in items})
+    manifest = dict(version=1, id="klipolo-pack", name="Klipolo pack", license=" AND ".join(licences),
+                    creator="Klipolo", items=items)
     files["manifest.json"] = (json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode()
-    stickers = len(STICKERS) + 1 + len(DRAWN)  # with the speech bubble
-    holds = (f"{len(SOUNDS)} sound effects, {len(MUSIC)} music beds, {stickers} stickers and "
-             f"{len(BACKGROUNDS) * len(SHAPES)} backgrounds")
-    files["LICENSE.txt"] = (f"Klipolo pack: {holds},\nmade from code by scripts/gen-library.py. No recordings, "
-                            f"samples or outside media were used.\n\n{CC0}").encode()
+    files["LICENSE.txt"] = licence_file(listed, others).encode()
     return files
+
+
+def licence_file(listed, others):
+    """LICENSE.txt: what the pack holds, the CC0 dedication of Klipolo's own items, and each item from others credited
+    under its licence, with the texts of the licences that ask for theirs to go with the files."""
+    count = {c: sum(e[2] == c for e in listed) for c in ("sound", "music", "sticker")}
+    backgrounds = sum(e[3].startswith("backgrounds/") for e in listed)
+    own = [e[0] for e in listed if e[-1][0] in ("sticker", "speech", "drawn")]
+    text = (f"Klipolo pack: {count['sound']} sound effects, {count['music']} music beds, "
+            f"{count['sticker'] - backgrounds} stickers and {backgrounds} backgrounds.\n\n"
+            + textwrap.fill("Klipolo made the music beds, the backgrounds and these stickers from code "
+                            "(scripts/gen-library.py), with no recordings, samples or outside media: "
+                            f"{', '.join(own)}.", 120, break_on_hyphens=False)
+            + f"\n{CC0}")
+    noto = json.loads(SOURCES.read_text())["noto_commit"]
+    files = {e[-1][1]: e[3] for e in listed if e[-1][0] == "taken"}
+    texts = []
+    for licence in sorted({i["license"] for i in others}, reverse=True):
+        if licence not in FROM_OTHERS:
+            raise SystemExit(f"{licence}: no credit for it in gen-library.py's FROM_OTHERS; check it can ship first")
+        text += "\n" + textwrap.fill(FROM_OTHERS[licence].format(noto=noto), 120, break_on_hyphens=False) + "\n"
+        for k, i in enumerate(others):
+            if i["license"] == licence:
+                by = f" by {i['author']}" if licence == "CC0-1.0" else ""
+                text += f"  {files[k]}: \"{i['title']}\"{by}, {i['source']}\n"
+        if licence != "CC0-1.0":
+            texts.append(licence)
+    for licence in texts:
+        text += "\n" + "-" * 100 + "\n" + (LICENCE_TEXTS / f"{licence}.txt").read_text()
+    return text
 
 
 def main():
