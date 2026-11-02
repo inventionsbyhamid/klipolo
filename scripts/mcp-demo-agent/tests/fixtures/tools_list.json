@@ -383,13 +383,42 @@
       "annotations": {
         "readOnlyHint": false
       },
-      "description": "Turn captions on or off, or change their style.",
+      "description": "Turn captions on or off, or change their style. set goes over it: font, size (1 is the style's; 0.5 to 2), position (top, middle, bottom or y 0.05 to 0.95), color (#hex words), highlight (#hex lit words), upper (true or false); none is the style's own.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
           "on": {
             "description": "True shows captions, false hides them.",
             "type": "boolean"
+          },
+          "set": {
+            "description": "Look keys.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "description": "A key.",
+                  "type": "string"
+                },
+                "value": {
+                  "description": "Its value.",
+                  "type": [
+                    "number",
+                    "string",
+                    "boolean"
+                  ]
+                }
+              },
+              "required": [
+                "key",
+                "value"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "style": {
             "description": "clean: calm subtitles, a sentence at a time. bold: up to three big uppercase words that pop in one by one; no word lights up. karaoke: a line of words where each word lights up as it is said, word by word. highlight: up to four big uppercase words where a coloured box lights up each word as it is said, word by word. boxed: sentences on rounded boxes. word-pop: for shorts: words pop in as said, the said one coloured. bold-box: for shorts: heavy words on a rounded box. Null keeps the current style.",
@@ -411,7 +440,8 @@
         },
         "required": [
           "on",
-          "style"
+          "style",
+          "set"
         ],
         "type": "object"
       },
