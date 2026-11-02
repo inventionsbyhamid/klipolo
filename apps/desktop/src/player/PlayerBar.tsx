@@ -1,6 +1,6 @@
 import { select, t } from '@lingui/core/macro';
 import { FastForward, Magnet, Rewind } from 'lucide-react';
-import type { CSSProperties, KeyboardEvent, PointerEvent, ReactNode } from 'react';
+import { memo, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { IconButton } from '../design/IconButton';
 import { Tooltip } from '../design/Tooltip';
 import { useCommands } from '../features/command-palette/useCommands';
@@ -9,6 +9,7 @@ import { useZoomTarget, zoomRange, zoomTo, zoomViewUs } from '../features/timeli
 import { useIntlLocale, useLocale } from '../i18n/react';
 import { Icon } from '../layout/Icon';
 import { formatNumber } from '../lib/format';
+import { useStableCallback } from '../lib/useStableCallback';
 import { useEngine } from '../state/engine';
 import { useLoop } from '../state/loop';
 import { usePlayback } from '../state/playback';
@@ -157,6 +158,28 @@ function BarButton({
   );
 }
 
+/** Play or Pause: the one control on the bar that follows playing. */
+function PlayButton({ ready }: { ready: boolean }) {
+  const playing = usePlayback((s) => s.playing);
+  return (
+    <span className="play-wrap">
+      <Tooltip label={playing ? 'Pause' : 'Play'} shortcut="Space" side="top">
+        <button
+          type="button"
+          tabIndex={0}
+          className="play"
+          aria-label={playing ? 'Pause' : 'Play'}
+          disabled={!ready}
+          onClick={() => usePlayback.getState().toggle()}
+        >
+          {playing ? <Icon name="pause" /> : <Icon name="play" className="is-play" />}
+        </button>
+      </Tooltip>
+      <RateBadge />
+    </span>
+  );
+}
+
 /**
  * The player bar: Split and Delete on the left, the transport (with Loop) centred on the window, the timeline's
  * snapping switch, zoom, Fit and the preview's volume on the right. Split, Delete, Loop, snapping, the
@@ -164,22 +187,53 @@ function BarButton({
  * looks live and does nothing. While J or L plays backward or faster, the play button shows which way and how fast.
  */
 export function PlayerBar() {
+  const commands = useCommands();
+  const command = (id: string) => commands.find((c) => c.id === id);
+  const run = useStableCallback((id: string) => {
+    const c = command(id);
+    if (c?.enabled) c.run();
+  });
+  const remove = command('delete');
+  const loop = command('loop');
+  return (
+    <Bar
+      split={!!command('split')?.enabled}
+      remove={!!remove?.enabled}
+      removeLabel={remove?.label ?? ''}
+      loop={!!loop?.enabled}
+      loopLabel={loop?.label}
+      zoomOut={!!command('zoom-out')?.enabled}
+      zoomIn={!!command('zoom-in')?.enabled}
+      fit={!!command('zoom-fit')?.enabled}
+      run={run}
+    />
+  );
+}
+
+/** What the bar's commands allow now (`PlayerBar`), and how to run one. */
+interface BarProps {
+  split: boolean;
+  remove: boolean;
+  removeLabel: string;
+  loop: boolean;
+  loopLabel?: string;
+  zoomOut: boolean;
+  zoomIn: boolean;
+  fit: boolean;
+  run: (id: string) => void;
+}
+
+/**
+ * The bar itself, drawn again only when what it shows changes: its commands follow the project, the selection and
+ * playback, which mostly leave them as they are.
+ */
+const Bar = memo(function Bar({ split, remove, removeLabel, loop, loopLabel, zoomOut, zoomIn, fit, run }: BarProps) {
   // The Snapping switch's name comes from the core `t`: a language switch re-renders the bar.
   useLocale();
   const duration = useDurationUs();
-  const playing = usePlayback((s) => s.playing);
   const snapping = useUi((s) => s.snapping);
   const ready = useEngine((s) => !!s.info && s.status !== 'unavailable') && duration > 0;
-  const commands = useCommands();
-  const command = (id: string) => commands.find((c) => c.id === id);
-  const split = command('split');
-  const remove = command('delete');
-  const loop = command('loop');
   const looping = useLoop((s) => s.on);
-  const run = (id: string) => {
-    const c = command(id);
-    if (c?.enabled) c.run();
-  };
   return (
     <footer className="playerbar">
       <div className="pb-left">
@@ -190,8 +244,8 @@ export function PlayerBar() {
               Split<kbd>S</kbd>
             </>
           }
-          tip={split?.enabled ? 'Split at the playhead' : 'Move the playhead over a clip to split it'}
-          enabled={!!split?.enabled}
+          tip={split ? 'Split at the playhead' : 'Move the playhead over a clip to split it'}
+          enabled={split}
           onClick={() => run('split')}
         />
         <BarButton
@@ -201,8 +255,8 @@ export function PlayerBar() {
               Delete<kbd>&#9003;</kbd>
             </>
           }
-          tip={remove?.enabled ? remove.label : 'Select something first'}
-          enabled={!!remove?.enabled}
+          tip={remove ? removeLabel : 'Select something first'}
+          enabled={remove}
           onClick={() => run('delete')}
         />
       </div>
@@ -221,21 +275,7 @@ export function PlayerBar() {
           disabled={!ready}
           onClick={() => skip(-5_000_000, duration)}
         />
-        <span className="play-wrap">
-          <Tooltip label={playing ? 'Pause' : 'Play'} shortcut="Space" side="top">
-            <button
-              type="button"
-              tabIndex={0}
-              className="play"
-              aria-label={playing ? 'Pause' : 'Play'}
-              disabled={!ready}
-              onClick={() => usePlayback.getState().toggle()}
-            >
-              {playing ? <Icon name="pause" /> : <Icon name="play" className="is-play" />}
-            </button>
-          </Tooltip>
-          <RateBadge />
-        </span>
+        <PlayButton ready={ready} />
         <IconButton
           icon={<Icon name="fwd" />}
           label="Forward 5 seconds"
@@ -245,11 +285,11 @@ export function PlayerBar() {
         <IconButton
           icon={<Icon name="loop" />}
           label="Loop"
-          tooltip={loop?.label}
+          tooltip={loopLabel}
           shortcut="⌘L"
           active={looping}
           // A way of playing, not playback itself: it can be set before the preview is ready.
-          disabled={!loop?.enabled}
+          disabled={!loop}
           onClick={() => run('loop')}
         />
         <span className="time time-total">{formatTime(duration)}</span>
@@ -269,7 +309,7 @@ export function PlayerBar() {
             label="Zoom out"
             shortcut="⌘−"
             className="icon-btn-sm"
-            disabled={!command('zoom-out')?.enabled}
+            disabled={!zoomOut}
             onClick={() => run('zoom-out')}
           />
           <ZoomSlider />
@@ -278,7 +318,7 @@ export function PlayerBar() {
             label="Zoom in"
             shortcut="⌘="
             className="icon-btn-sm"
-            disabled={!command('zoom-in')?.enabled}
+            disabled={!zoomIn}
             onClick={() => run('zoom-in')}
           />
         </div>
@@ -287,7 +327,7 @@ export function PlayerBar() {
             type="button"
             tabIndex={0}
             className="btn btn-ghost btn-sm"
-            disabled={!command('zoom-fit')?.enabled}
+            disabled={!fit}
             onClick={() => run('zoom-fit')}
           >
             Fit
@@ -297,4 +337,4 @@ export function PlayerBar() {
       </div>
     </footer>
   );
-}
+});
