@@ -230,9 +230,10 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
   const marks = useMarks((s) => s.marks);
   const order = useSettledMarks(`${tab}\n${query}`);
   const previewOf = usePreviewOf();
-  // A preview stops as the tab changes, the panel folds, or the list goes (another view, the window).
+  // A preview stops as the tab or the search changes (its row may go), the panel folds, or the list goes (another view,
+  // the window).
   const collapsed = useLibraryPanel((s) => s.collapsed);
-  useEffect(() => stopPreview, [tab, collapsed]);
+  useEffect(() => stopPreview, [tab, query, collapsed]);
   // A tab of hundreds of files draws its first rows, then more each frame (its files are at most the project's).
   const budget = useRowBudget(`${tab}\n${query}`, (project?.assets.length ?? 0) + (project?.recordings.length ?? 0));
   useEffect(loadPack, []);
