@@ -30,7 +30,7 @@ use super::destination::Day;
 use super::env::Done;
 use super::import::{Landing, land};
 use super::setup::Files;
-use super::test_support::{Lands, options_screen};
+use super::test_support::{Lands, options_screen, options_yourself};
 use super::types::{ArmOptions, TakeImport};
 use crate::project::{
     PROJECT_EXTENSION, ProjectSessionState, create_in, snapshot_now, step, with_open,
@@ -183,6 +183,8 @@ pub(super) struct Recorded {
     pub(super) cursor: bool,
     /// How long it ran.
     pub(super) length_us: i64,
+    /// "Record yourself": the camera (`camera`, else mirrored) and the mic alone, no screen.
+    pub(super) yourself: bool,
 }
 
 impl Default for Recorded {
@@ -192,6 +194,7 @@ impl Default for Recorded {
             picture: true,
             cursor: false,
             length_us: TAKE_US,
+            yourself: false,
         }
     }
 }
@@ -211,6 +214,10 @@ impl TakeFixture {
         if let Some(mirror) = recorded.camera {
             options.camera = Some("camera-1".into());
             options.mirror_camera = mirror;
+        }
+        if recorded.yourself {
+            options = options_yourself();
+            options.mirror_camera = recorded.camera.unwrap_or(true);
         }
         let choices = TakeChoices {
             preset: PresetId::default(),

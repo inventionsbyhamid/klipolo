@@ -22,6 +22,17 @@ pub enum WhatToRecord {
     Screen { display: String },
     /// One app's windows on one display.
     App { app_id: String, display: String },
+    /// "Record yourself": the camera alone (`ArmOptions::camera`), with the mic. No screen or window is captured, so
+    /// Screen Recording is never needed or asked for.
+    Camera,
+}
+
+impl WhatToRecord {
+    /// Whether a take of this records a screen (and so needs macOS's Screen Recording): every choice but the camera
+    /// alone.
+    pub fn records_the_screen(&self) -> bool {
+        !matches!(self, Self::Camera)
+    }
 }
 
 /// One take as the person set it up in the Record dialog. Arming launches the take's worker and captures nothing: only
@@ -34,7 +45,7 @@ pub struct ArmOptions {
     pub what: WhatToRecord,
     /// A microphone id; None: "No microphone".
     pub mic: Option<String>,
-    /// A camera id; None: "No camera".
+    /// A camera id; None: "No camera". "Record yourself" needs one.
     pub camera: Option<String>,
     /// "Show my camera while recording": a small round live picture of the camera on the recorded screen, never in the
     /// video. Only with a camera.

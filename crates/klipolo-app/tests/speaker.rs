@@ -15,9 +15,12 @@ use klipolo_app::speaker::{NO_ONE, Speaker, SpeakerProgress, Trackers};
 use klipolo_model::apply_ops;
 use klipolo_model::fill_focus::FillFocus;
 use klipolo_model::project::FormatKind::{Landscape, Portrait, Square};
-use klipolo_model::project::{Asset, AssetKind, Project};
+use klipolo_model::project::{
+    Asset, AssetKind, Project, Recording, RecordingKind, RecordingSource, SourceMix, SourceRole,
+    SourceRun,
+};
 use klipolo_model::time::{RangeUs, Us};
-use klipolo_model::timeline::{Clip, ClipSource, FramingMode};
+use klipolo_model::timeline::{CameraLayout, Clip, ClipSource, FramingMode};
 
 fn s(seconds: f64) -> Us {
     (seconds * 1e6) as Us
@@ -231,6 +234,74 @@ async fn the_price_comes_first_and_footage_tracked_before_is_free() {
         .unwrap();
     assert_eq!(followed.paid_usd, 0.0);
     assert_eq!(setup.sam.calls.load(Ordering::SeqCst), 1);
+}
+
+/// "Record yourself": the talk's file as a camera take's camera (its first frame a frame after the take's start), with
+/// the take's one clip from 0 to 60 s, mirrored as it lands. It is priced, tracked over the camera's own file and
+/// followed in the vertical version as imported camera footage is.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_camera_take_follows_as_imported_camera_footage() {
+    let mut setup = setup(Some(0.3));
+    let run = |asset: &str, offset_us| SourceRun {
+        asset_id: asset.into(),
+        offset_us,
+        duration_us: s(600.0),
+        drift_ppm: 0.0,
+        file_in_us: 0,
+    };
+    let source = |id: &str, role, run| RecordingSource {
+        id: id.into(),
+        role,
+        label: format!("capture.source.{id}"),
+        runs: vec![run],
+        nudge_us: 0,
+        mix: SourceMix::default(),
+        synced: None,
+    };
+    let mut mic = setup.project.assets[0].clone();
+    (mic.id, mic.kind, mic.width, mic.height) = ("mic".into(), AssetKind::Audio, 0, 0);
+    mic.path = "/media/mic.caf".into();
+    setup.project.assets.push(mic);
+    setup.project.recordings = vec![Recording {
+        id: "take".into(),
+        kind: RecordingKind::Camera,
+        sources: vec![
+            source("camera", SourceRole::Camera, run("talk", 33_000)),
+            source("mic", SourceRole::Mic, run("mic", 0)),
+        ],
+        primary: "camera".into(),
+        cursor: None,
+        markers: vec![],
+        game: None,
+    }];
+    let mut clip = Clip::new(ClipSource::Recording { id: "take".into() }, 0, s(60.0));
+    clip.id = "c1".into();
+    clip.camera = Some(CameraLayout::for_primary(Portrait));
+    setup.project.timeline.main = vec![clip];
+    let speaker = speaker(&setup, None, true);
+    let p = &setup.project;
+    let ids = vec!["c1".to_owned()];
+    let estimate = speaker.estimate(p, &ids, &[Portrait], "person").await;
+    assert_eq!(estimate.clips, ids);
+    let followed = speaker
+        .follow(p, &ids, &[Landscape, Portrait], "person")
+        .await
+        .unwrap();
+    // The camera's own file, from its first frame to the clip's end.
+    assert_eq!(
+        *setup.copy.made.lock().unwrap(),
+        [RangeUs {
+            start: 0,
+            end: s(60.0) - 33_000
+        }]
+    );
+    let next = apply_ops(p, &followed.ops(p)).unwrap();
+    let clip = &next.timeline.main[0];
+    assert_eq!(clip.framing[&Portrait].mode, FramingMode::Fill);
+    let Some(FillFocus::Speaker { path, .. }) = clip.fill_focus.get(&Portrait) else {
+        panic!("{:?}", clip.fill_focus)
+    };
+    assert!((path.centre_at(s(30.0)).unwrap().0 - 0.3).abs() < 0.02);
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Project } from '../bindings/Project';
 import { fixtureProject } from '../test/fixtures';
-import { analysable, recordingOf, voiceOf } from './analysed';
+import { analysable, cameraFootage, recordingOf, takeOf, takes, voiceOf, wordsOnly } from './analysed';
 
 const S = 1_000_000;
 
@@ -90,6 +90,28 @@ describe('what analysis offers', () => {
     const project = fixtureProject();
     expect(analysable(project)).toBe(analysable({ ...project }));
     expect(analysable({ ...project, recordings: [...project.recordings] })).not.toBe(analysable(project));
+  });
+
+  it('offers a camera take’s camera to be watched beside its mic, the take’s voice', () => {
+    // "Record yourself": the camera is the take's footage, its mic the voice.
+    const project = withSources(['camera', 'mic']);
+    project.recordings[0] = { ...project.recordings[0], kind: 'camera', primary: 'camera' };
+    expect(ids(project)).toEqual(['camera', 'mic', 'broll']);
+    expect(voiceOf(project, 'mic')).toBe('rec');
+    expect(voiceOf(project, 'camera')).toBeNull();
+    expect(cameraFootage(project, 'camera')).toBe(true);
+    expect(wordsOnly(project, 'camera')).toBe(false);
+    expect(wordsOnly(project, 'mic')).toBe(true);
+    // Its words and its scene log are one take's: one clip, one row, named as its clip.
+    expect([...takes(project)]).toEqual([
+      ['mic', 'rec'],
+      ['camera', 'rec'],
+    ]);
+    expect(takeOf(project, 'camera')).toBe('rec');
+    expect(takeOf(project, 'broll')).toBeNull();
+    // A screen take's camera is a bubble: heard for words only, never offered alone.
+    expect(cameraFootage(fixtureProject(), 'camera')).toBe(false);
+    expect(wordsOnly(fixtureProject(), 'camera')).toBe(true);
   });
 
   it('knows every file of a recording, and the same file imported again, analysed for its words only', () => {

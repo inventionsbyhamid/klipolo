@@ -19,7 +19,7 @@ import {
   stopPreviews,
   useRecorderPreviews,
 } from '../../state/recorderPreviews';
-import { CameraBubble } from './CameraBubble';
+import { CameraBubble, CameraView } from './CameraBubble';
 import { DeviceSelect } from './DeviceSelect';
 import { RecordIcon } from './icons';
 import { Countdown, CountdownNumber, startsIn } from './Countdown';
@@ -35,6 +35,12 @@ import './record.css';
 const FOCUSABLE = 'button:not(:disabled):not([tabindex="-1"]), [tabindex="0"]';
 
 const STATUS = 'Saved in Movies / Klipolo / Recordings. Stop with Option Command R or from the menu bar.';
+
+/** What the dialog says it records, under its title: a screen take's, or "Record yourself"'s. */
+const SUBTITLE = {
+  screen: 'Your screen and your voice. Add your camera if you like.',
+  camera: 'You on camera, with your voice.',
+} as const;
 
 /** The keyboard is in an open select's menu, which the dialog's own keys leave alone (it is drawn outside it). */
 const inMenu = (target: EventTarget | null) => target instanceof Element && target.closest('[role="menu"]') !== null;
@@ -122,6 +128,7 @@ function Dialog({ phase }: { phase: Exclude<RecorderPhase, 'recording' | 'saving
   const asking = useRecorder((s) => (s.gate?.length ?? 0) > 0);
   const gateKey = useRecorder((s) => s.gate?.join() ?? '');
   const macosAsks = useRecorder((s) => s.systemAlert);
+  const yourself = useRecorder((s) => s.picks.kind === 'camera');
   /** What the countdown announced: its first number, once per countdown. */
   const [announced, setAnnounced] = useState('');
   const was = useRef(phase);
@@ -205,7 +212,7 @@ function Dialog({ phase }: { phase: Exclude<RecorderPhase, 'recording' | 'saving
             <h2 className="dialog-title" id="record-title" tabIndex={-1} ref={title}>
               Record
             </h2>
-            <p className="dialog-sub">Your screen and your voice. Add your camera if you like.</p>
+            <p className="dialog-sub">{yourself ? SUBTITLE.camera : SUBTITLE.screen}</p>
           </div>
           <button
             type="button"
@@ -297,21 +304,28 @@ function chosenName(setup: RecorderSetup | null, picks: Picks): string {
 
 /**
  * The preview box: 16:9 over the full width, black behind. The live picture of what is chosen, made for the box's own
- * pixels so it is as sharp as the box (`useLivePixels`), with the camera's bubble over its bottom right; the clip art
- * until a picture comes. What is said in it (the Screen Recording step, why a press didn't go, the countdown) sits
- * over both.
+ * pixels so it is as sharp as the box (`useLivePixels`), with the camera's bubble over its bottom right; for "Record
+ * yourself", the camera over the whole box; the clip art until a picture comes. What is said in it (the Screen
+ * Recording step, why a press didn't go, the countdown) sits over both.
  */
 function Preview({ children }: { children?: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const name = useRecorder((s) => chosenName(s.setup, s.picks));
+  const yourself = useRecorder((s) => s.picks.kind === 'camera');
   useLivePixels(box);
   return (
     <div className="record-preview" ref={box}>
       <span className="record-art" aria-hidden>
-        <Icon name="film" />
+        <Icon name={yourself ? 'camera' : 'film'} />
       </span>
-      <LivePreview name={name} />
-      <CameraBubble />
+      {yourself ? (
+        <CameraView />
+      ) : (
+        <>
+          <LivePreview name={name} />
+          <CameraBubble />
+        </>
+      )}
       {children}
     </div>
   );
@@ -395,12 +409,15 @@ function Devices({ setup }: { setup: RecorderSetup }) {
         )}
         {picks.camera !== null && (
           <>
-            <ToggleRow
-              id="record-show-camera"
-              label="Show me on screen while recording"
-              checked={picks.showCamera}
-              onChange={(showCamera) => pick({ showCamera })}
-            />
+            {/* The bubble shows over a recorded screen: "Record yourself" has none. */}
+            {picks.kind !== 'camera' && (
+              <ToggleRow
+                id="record-show-camera"
+                label="Show me on screen while recording"
+                checked={picks.showCamera}
+                onChange={(showCamera) => pick({ showCamera })}
+              />
+            )}
             <ToggleRow
               id="record-mirror"
               label="Mirror my camera"
@@ -526,6 +543,9 @@ function Foot({ phase }: { phase: Exclude<RecorderPhase, 'recording' | 'saving'>
   );
 }
 
+/** The camera's select, where a press on Record goes when "Record yourself" has no camera. */
+const CAMERA_SELECT = '.record-devices button.select[aria-label^="Camera:"]';
+
 /** Every take's countdown, in seconds: the app fixes it (a take's `ArmedTake.countdownS` says it again). */
 const COUNTDOWN_S = 3;
 
@@ -535,7 +555,8 @@ const READY = `Recording starts after a ${COUNTDOWN_S} s countdown.`;
 /**
  * Record, and a failed take's Try again: the only controls that start a take. Off while Record can't (a take runs, the
  * setup blocks it, Screen Recording isn't allowed yet, nothing is chosen), still focusable so its tooltip says why, and
- * a press puts the keyboard where that can be met: the Screen Recording step's button, or the cards to choose from.
+ * a press puts the keyboard where that can be met: the Screen Recording step's button, the cards to choose from, or
+ * the camera's select.
  * Always the same element, so the keyboard stays on it as it turns on and off.
  */
 function RecordPress({ variant, children }: { variant: 'primary' | 'secondary'; children: ReactNode }) {
@@ -551,6 +572,7 @@ function RecordPress({ variant, children }: { variant: 'primary' | 'secondary'; 
     if (waiting === null) void useRecorder.getState().record();
     else if (waiting.why === 'screen') document.getElementById(STEP_BUTTON_ID)?.focus();
     else if (waiting.why === 'choose') document.querySelector<HTMLElement>(`#${CARDS_ID} [tabindex="0"]`)?.focus();
+    else if (waiting.why === 'camera') document.querySelector<HTMLElement>(CAMERA_SELECT)?.focus();
   };
   return (
     <Tooltip label={waiting?.text ?? READY} side="top" describes={waiting !== null}>

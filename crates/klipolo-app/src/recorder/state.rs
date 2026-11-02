@@ -248,7 +248,7 @@ impl RecorderState {
         on.previews.setup_read(&shown.setup.devices);
         let setup = shown.setup.clone();
         *lock(&on.last_setup) = Some(shown);
-        // The dialog shows its Screen Recording step while it isn't allowed: every take records the screen.
+        // The dialog shows its Screen Recording step while it isn't allowed, for every take but "Record yourself".
         on.note_screen(setup.permissions.screen != Permission::Granted);
         Ok(setup)
     }
@@ -256,13 +256,14 @@ impl RecorderState {
     /// Arms a take from the person's options: its worker waits for their Record, and nothing is captured. It lands in
     /// the open project, or in a new one when none is open. `capture.busy` while a take is the recorder's or Klipolo
     /// reopens; `capture.error.permission` until Screen Recording is allowed (Record would make macOS ask, and only the
-    /// person's Allow press may).
+    /// person's Allow press may), unless the take records no screen ("Record yourself": the camera and the mic only).
     pub(super) fn arm(&self, options: &ArmOptions) -> Result<ArmedTake, CodedError> {
         let on = self.on()?;
         on.recorder.refuse_while_busy()?;
         let files = on.files.as_ref().ok_or_else(words::no_settings_folder)?;
         let backend = on.backend.get();
-        if backend.permissions().screen != Permission::Granted {
+        if options.what.records_the_screen() && backend.permissions().screen != Permission::Granted
+        {
             on.note_screen(true);
             return Err(words::not_allowed());
         }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import parity from './analysed-parity.json';
 import voicesParity from './voices-parity.json';
-import { analysable, analysedAssets, recordingOf, voiceOf, type AnalysedScope } from './analysed';
+import { analysable, analysedAssets, voiceOf, wordsOnly, type AnalysedScope } from './analysed';
 
 interface Fixture {
   cases: { name: string; project: AnalysedScope; analysed: string[] }[];
@@ -34,7 +34,7 @@ describe('what analysis is for, as the model says', () => {
 
 describe('a take’s voice, as the captions read it', () => {
   it('is the files of each take the page offers, as Rust’s runs find them', () => {
-    expect(voices.cases.length).toBe(9);
+    expect(voices.cases.length).toBe(10);
     for (const c of voices.cases) {
       const heard = new Set<string>();
       for (const take of c.takes) {
@@ -50,8 +50,8 @@ describe('a take’s voice, as the captions read it', () => {
 
   it('knows the files heard for their words only, as Rust does', () => {
     for (const c of voices.cases) {
-      const wordsOnly = c.project.assets.filter((a) => recordingOf(c.project, a.id) !== null);
-      expect(wordsOnly.map((a) => a.id), c.name).toEqual(c.wordsOnly);
+      const heard = c.project.assets.filter((a) => wordsOnly(c.project, a.id));
+      expect(heard.map((a) => a.id), c.name).toEqual(c.wordsOnly);
     }
   });
 });

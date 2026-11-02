@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { creditMoved } from '../../ai/aiStatus';
 import type { FormatKind } from '../../bindings/FormatKind';
 import type { Keep } from '../../bindings/Keep';
 import { speakerBridge } from '../../bridge/speaker';
@@ -47,8 +48,8 @@ const setKeeping = (key: string, on: boolean) =>
 
 /**
  * Follows the speaker in clip `clipId` in `format`: its progress shown while Rust tracks, and its change (one undo step,
- * already in Rust's history) taken into the project once it lands. A failure is said in a toast. Resolves with whether
- * it landed. A second ask while one runs for the same clip and format does nothing.
+ * already in Rust's history) taken into the project once it lands. A failure is said in a toast. Either way the credit
+ * is asked for again (`creditMoved`). Resolves with whether it landed. A second ask while one runs for the same clip and format does nothing.
  */
 export async function followSpeaker(clipId: string, format: FormatKind): Promise<boolean> {
   const key = runKey(clipId, format);
@@ -71,6 +72,8 @@ export async function followSpeaker(clipId: string, format: FormatKind): Promise
   } finally {
     stop();
     setRun(key, null);
+    // The footage tracked and the voices matched were paid for, landed or not.
+    creditMoved();
   }
 }
 

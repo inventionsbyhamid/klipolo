@@ -12,7 +12,8 @@
 //!   front (`refuse_folder`).
 //! - **Screen Recording still refused after Reopen Klipolo** (`screen_reopen`) is said, so the step explains.
 //! - **A take's plan** (`plan`): the quality marked best for the display and camera, the encoders the probe chose for
-//!   it with their fallbacks, and the camera only where that quality has room for it.
+//!   it with their fallbacks, and the camera only where that quality has room for it. "Record yourself" (the camera
+//!   alone) records the camera at its own best (`probe::camera_alone`), with no screen.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,7 +22,9 @@ use std::sync::{Mutex, PoisonError};
 use klipolo_capture::backend::{Backend, PresetId, ProbeReport};
 use klipolo_capture::encoder_pick::FALLBACK_NOTE;
 use klipolo_capture::preflight::{Fitted, RecorderSetup, check_folder, setup_with};
-use klipolo_capture::probe::{CameraChoice, ScreenChoice, camera_encoders_for, encoders_for};
+use klipolo_capture::probe::{
+    CameraChoice, ScreenChoice, camera_alone, camera_encoders_for, encoders_for,
+};
 use klipolo_capture::session::{ImportTarget, SessionConfig};
 use klipolo_model::coded::CodedError;
 use klipolo_platform::durable::free_space;
@@ -233,6 +236,7 @@ pub(super) fn plan(
     let setup = &shown.setup;
     let display = match &options.what {
         WhatToRecord::Screen { display } | WhatToRecord::App { display, .. } => display.as_str(),
+        WhatToRecord::Camera => return plan_camera(shown, options, id, target, created_ms),
     };
     let fit = |camera_on: bool| {
         (setup.displays.iter())
@@ -320,6 +324,43 @@ pub(super) fn plan(
     Ok((session_config(&options, id, &choices), notes))
 }
 
+/// Plans a take of the camera alone ("Record yourself"): the camera at its own best on this computer
+/// (`probe::camera_alone`: 1080p30 where an encoder holds it, else 720p30) with the probe's encoder and its fallbacks,
+/// and the mic. Without a report, 720p30 on the backend's own pick. No camera chosen: `capture.error.noDevice`.
+fn plan_camera(
+    shown: &Shown,
+    options: &ArmOptions,
+    id: &str,
+    target: ImportTarget,
+    created_ms: u64,
+) -> Result<(SessionConfig, Vec<CodedError>), CodedError> {
+    if options.camera.is_none() {
+        return Err(words::no_device());
+    }
+    let choice = shown
+        .report
+        .as_ref()
+        .and_then(|r| Some((r, camera_alone(r)?)));
+    let camera_preset = choice
+        .as_ref()
+        .map_or(PresetId::Camera720, |(_, c)| c.preset);
+    let camera_encoders = (choice.as_ref())
+        .map(|(report, c)| camera_encoders_for(report, c, None, None))
+        .unwrap_or_default();
+    let os = klipolo_platform::caps::current().os;
+    let choices = TakeChoices {
+        preset: PresetId::default(),
+        camera_preset,
+        cursor_caps: shown.setup.caps.cursor,
+        created_ms,
+        os: format!("{:?} {}", os.family, os.version),
+        target,
+        encoders: Vec::new(),
+        camera_encoders,
+    };
+    Ok((session_config(options, id, &choices), Vec::new()))
+}
+
 /// An id the OS gave: bounded, without control characters.
 pub(super) fn is_os_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 1_024 && !id.chars().any(char::is_control)
@@ -329,6 +370,7 @@ pub(super) fn is_os_id(id: &str) -> bool {
 fn check_ids(o: &ArmOptions) -> Result<(), CodedError> {
     let what: [Option<&String>; 2] = match &o.what {
         WhatToRecord::Screen { display } => [Some(display), None],
+        WhatToRecord::Camera => [None, None],
         WhatToRecord::App { app_id, display } => [Some(app_id), Some(display)],
     };
     let mut ids = (o.camera.iter().chain(&o.mic)).chain(what.into_iter().flatten());

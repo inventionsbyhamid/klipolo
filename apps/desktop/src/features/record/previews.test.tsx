@@ -234,6 +234,52 @@ describe('the previews in the Record dialog', () => {
     expect(fake.previewed.at(-1)).toEqual(want());
   });
 
+  it('record_yourself_shows_the_camera_over_the_whole_preview_mirrored_in_the_picture_only', async () => {
+    await openOn(recorderSetup({ cameras: [device('FaceTime HD Camera')] }));
+    expect(fake.previewed).toEqual([want()]);
+    await userEvent.click(screen.getByRole('radio', { name: 'Record yourself' }));
+    await flush();
+    // No screen's stills or live picture: the camera and the mic only.
+    expect(fake.previewed.at(-1)).toEqual(want({ thumbs: false, live: null, camera: 'FaceTime HD Camera' }));
+    await sendFrame(fake, 'camera', 'FaceTime HD Camera', 'face 1');
+    const view = screen.getByRole('img', { name: 'Your camera' });
+    expect(view).toHaveClass('record-camera');
+    expect(view.closest('.record-preview')).not.toBeNull();
+    expect(document.querySelector('.record-bubble')).toBeNull();
+    expect(live()).toBeNull();
+    expect(await frameIn(view)).toBe('face 1');
+    expect(view).toHaveAttribute('data-mirror');
+    await userEvent.click(screen.getByRole('switch', { name: 'Mirror my camera' }));
+    expect(view).not.toHaveAttribute('data-mirror');
+    const css = readFileSync(resolve(__dirname, 'record.css'), 'utf8');
+    expect(css).toMatch(/\.record-camera\[data-mirror\] \.live-pic \{[^}]*transform: scaleX\(-1\)/);
+  });
+
+  it('record_yourself_asks_only_for_the_camera_and_the_mic', async () => {
+    await openOn(
+      recorderSetup({
+        cameras: [device('FaceTime HD Camera')],
+        permissions: { screen: 'notAsked', camera: 'notAsked', mic: 'notAsked' },
+      }),
+    );
+    await userEvent.click(screen.getByRole('radio', { name: 'Record yourself' }));
+    await flush();
+    expect(screen.queryByRole('button', { name: 'Allow screen recording' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Allow camera' }));
+    await flush();
+    expect(fake.previewed.at(-1)).toEqual(
+      want({ thumbs: false, live: null, camera: 'FaceTime HD Camera', ask: 'camera' }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Allow microphone' }));
+    await flush();
+    expect(fake.previewed.at(-1)).toEqual(
+      want({ thumbs: false, live: null, camera: 'FaceTime HD Camera', ask: 'mic' }),
+    );
+    // Screen Recording is never needed: no screen's stills or live picture were ever asked for.
+    expect(calls().every((w) => !w.thumbs && w.live === null)).toBe(true);
+    expect(fake.calls).not.toContain('allowScreen');
+  });
+
   it('meter_width_follows_dbfs', async () => {
     await openOn();
     // Its place is kept from the start: empty until the first level.

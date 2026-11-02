@@ -5,7 +5,7 @@ vi.mock('../bridge/ai', () => ({
   aiBridge: { status: vi.fn(), setKey: vi.fn(), setCode: vi.fn(), clear: vi.fn(), onStatus: vi.fn() },
 }));
 const { aiBridge } = await import('../bridge/ai');
-const { followAiStatus, refreshAiStatus, setAiStatus, useAi } = await import('./aiStatus');
+const { creditMoved, followAiStatus, refreshAiStatus, setAiStatus, useAi } = await import('./aiStatus');
 
 const relay: AiStatus = { mode: 'relay', code: 'KLIP-TEST-0001', budgetUsd: 2, spentUsd: 0.06, active: true };
 const key: AiStatus = { mode: 'key', keyHint: '6789' };
@@ -54,5 +54,55 @@ describe('the AI status', () => {
     answer(relay);
     await following;
     expect(useAi.getState().status).toEqual({ mode: 'none' });
+  });
+});
+
+describe('when a paid job ends', () => {
+  const spent: AiStatus = { ...relay, spentUsd: 0.088 };
+  /** Lets the asks in flight answer. */
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it('asks again, so the top bar and Settings show the credit left after it', async () => {
+    setAiStatus(relay);
+    vi.mocked(aiBridge.status).mockResolvedValue(spent);
+    creditMoved();
+    await settle();
+    expect(aiBridge.status).toHaveBeenCalledTimes(1);
+    expect(useAi.getState().status).toEqual(spent);
+  });
+
+  it("asks with a key too: Settings shows the session's spend", async () => {
+    setAiStatus(key);
+    const withSpend: AiStatus = {
+      ...key,
+      session: { analysisUsd: 0.03, chatUsd: 0, chatMessages: 0, picturesUsd: 0, pictures: 0 },
+    };
+    vi.mocked(aiBridge.status).mockResolvedValue(withSpend);
+    creditMoved();
+    await settle();
+    expect(useAi.getState().status).toEqual(withSpend);
+  });
+
+  it('asks once at a time: jobs that end while it asks make one more ask after it, not one each', async () => {
+    setAiStatus(relay);
+    const answer = heldAnswer();
+    creditMoved();
+    creditMoved();
+    creditMoved();
+    expect(aiBridge.status).toHaveBeenCalledTimes(1);
+    vi.mocked(aiBridge.status).mockResolvedValue(spent);
+    answer(relay);
+    await settle();
+    expect(aiBridge.status).toHaveBeenCalledTimes(2);
+    expect(useAi.getState().status).toEqual(spent);
+    await settle();
+    expect(aiBridge.status).toHaveBeenCalledTimes(2);
+  });
+
+  it('asks nothing with nothing to pay with', async () => {
+    setAiStatus({ mode: 'none' });
+    creditMoved();
+    await settle();
+    expect(aiBridge.status).not.toHaveBeenCalled();
   });
 });

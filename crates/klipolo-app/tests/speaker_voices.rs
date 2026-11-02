@@ -3,7 +3,7 @@
 //! both) made from the cache at no charge. Fakes for SAM, Muse Spark and the small copy: nothing here reaches Meta.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -12,15 +12,18 @@ use klipolo_analysis::providers::{
     BoxFuture, Heard, ProviderError, ProviderErrorKind, ScreenBox, SubjectTracker, TrackedBox,
     TrackedFrame, Tracking, VoiceAnswer, VoiceMatcher,
 };
-use klipolo_analysis::subject::voices::VoiceTurn;
+use klipolo_analysis::subject::voices::{SoundBeside, VoiceTurn};
 use klipolo_analysis::subject::{SubjectCopy, frames_for};
 use klipolo_app::speaker::{LOW_CREDIT_VOICES, NOT_TRACKED, Speaker, Trackers, UNMATCHED, Voices};
 use klipolo_model::apply_ops;
 use klipolo_model::fill_focus::{FillFocus, FocusPath, Keep, Person, Voice};
 use klipolo_model::project::FormatKind::{Landscape, Portrait};
-use klipolo_model::project::{Asset, AssetKind, Project};
+use klipolo_model::project::{
+    Asset, AssetKind, Project, Recording, RecordingKind, RecordingSource, SourceMix, SourceRole,
+    SourceRun,
+};
 use klipolo_model::time::{RangeUs, Us};
-use klipolo_model::timeline::{Clip, ClipSource};
+use klipolo_model::timeline::{CameraLayout, Clip, ClipSource};
 
 const SPARK: f64 = 0.003;
 const ONE_MINUTE: f64 = 0.024;
@@ -625,4 +628,175 @@ async fn a_voice_label_the_project_cant_keep_is_left_off_the_people() {
     let (_, _, people) = focus(&next);
     assert_eq!(people.len(), 2);
     assert!(people.iter().all(|p| p.voices.is_empty()), "{people:?}");
+}
+
+/// The copy with sound, where it starts; and each copy made with another file's sound, by that file and its lead.
+#[derive(Default)]
+struct BesideCopy {
+    beside: Mutex<Vec<(PathBuf, Us)>>,
+    own_sound: AtomicUsize,
+}
+
+impl SubjectCopy for BesideCopy {
+    fn copy(
+        &self,
+        src: &Path,
+        range: RangeUs,
+        fps: f64,
+        out: &Path,
+        cancel: &AtomicBool,
+    ) -> Result<Vec<Us>, VideoError> {
+        FakeCopy.copy(src, range, fps, out, cancel)
+    }
+
+    fn copy_with_sound(
+        &self,
+        _src: &Path,
+        range: RangeUs,
+        _fps: f64,
+        out: &Path,
+        _cancel: &AtomicBool,
+    ) -> Result<(), VideoError> {
+        self.own_sound.fetch_add(1, Ordering::SeqCst);
+        std::fs::write(out, range.start.to_string()).unwrap();
+        Ok(())
+    }
+
+    fn copy_with_sound_beside(
+        &self,
+        _src: &Path,
+        sound: &SoundBeside,
+        range: RangeUs,
+        _fps: f64,
+        out: &Path,
+        _cancel: &AtomicBool,
+    ) -> Result<(), VideoError> {
+        let made = (sound.path.clone(), sound.lead_us);
+        self.beside.lock().unwrap().push(made);
+        std::fs::write(out, range.start.to_string()).unwrap();
+        Ok(())
+    }
+}
+
+/// A camera take's mic transcript: A to 80 s and from 100 s, B in between, in the mic's sound time. The camera's own
+/// file has no sound, so no transcript.
+#[derive(Default)]
+struct MicTranscript {
+    asked: Mutex<Vec<String>>,
+}
+
+impl Voices for MicTranscript {
+    fn turns(&self, asset_id: &str) -> Vec<VoiceTurn> {
+        self.asked.lock().unwrap().push(asset_id.to_owned());
+        if asset_id != "mic" {
+            return Vec::new();
+        }
+        Heard2 {
+            asked: Mutex::new(Vec::new()),
+            labels: ("A".into(), "B".into()),
+        }
+        .turns(asset_id)
+    }
+}
+
+/// A recorded interview ("Record yourself"): the talk's file as the take's camera, two people and no sound, its first
+/// frame half a second into the take, and a mic from the take's start that heard them. The take's one clip plays 60.5
+/// to 120.5 s of the take (the camera's 60 to 120 s). Each window is asked about with the mic's sound lined up with the
+/// camera on the take's clock, so the vertical crop keeps whoever is speaking.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_camera_take_follows_whoever_speaks_with_its_mic_s_sound() {
+    let setup = setup(usize::MAX);
+    let mut p = setup.project.clone();
+    p.assets[0].has_audio = false;
+    let mut mic = p.assets[0].clone();
+    (mic.id, mic.kind, mic.path) = ("mic".into(), AssetKind::Audio, "/media/mic.caf".into());
+    (mic.width, mic.height, mic.has_audio) = (0, 0, true);
+    p.assets.push(mic);
+    let run = |asset: &str, offset_us| SourceRun {
+        asset_id: asset.into(),
+        offset_us,
+        duration_us: s(600.0),
+        drift_ppm: 0.0,
+        file_in_us: 0,
+    };
+    let source = |id: &str, role, run| RecordingSource {
+        id: id.into(),
+        role,
+        label: format!("capture.source.{id}"),
+        runs: vec![run],
+        nudge_us: 0,
+        mix: SourceMix::default(),
+        synced: None,
+    };
+    p.recordings = vec![Recording {
+        id: "take".into(),
+        kind: RecordingKind::Camera,
+        sources: vec![
+            source("camera", SourceRole::Camera, run("talk", s(0.5))),
+            source("mic", SourceRole::Mic, run("mic", 0)),
+        ],
+        primary: "camera".into(),
+        cursor: None,
+        markers: vec![],
+        game: None,
+    }];
+    let mut clip = Clip::new(
+        ClipSource::Recording { id: "take".into() },
+        s(60.5),
+        s(120.5),
+    );
+    clip.id = "c1".into();
+    clip.camera = Some(CameraLayout {
+        mirror: false,
+        ..CameraLayout::for_primary(Portrait)
+    });
+    p.timeline.main = vec![clip];
+    let copy = Arc::new(BesideCopy::default());
+    let heard = Arc::new(MicTranscript::default());
+    let root = setup._dir.path();
+    let speaker = Speaker::new(
+        Arc::new(FakeTrackers {
+            sam: setup.sam.clone(),
+            spark: Some(setup.spark.clone()),
+            credit_left: None,
+        }),
+        copy.clone(),
+        root.join("analysis"),
+        root.join("work"),
+        Arc::new(|_| {}),
+    )
+    .with_voices(heard.clone());
+    let followed = speaker
+        .follow(&p, &ids(), &[Portrait], "person")
+        .await
+        .unwrap();
+    assert!(heard.asked.lock().unwrap().contains(&"mic".to_owned()));
+    // Three windows, each copied with the mic's sound: its 0.5 s is the camera's 0.
+    assert_eq!(setup.spark.asked.load(Ordering::SeqCst), 3);
+    let beside = copy.beside.lock().unwrap().clone();
+    assert_eq!(beside.len(), 3, "{beside:?}");
+    for (path, lead) in &beside {
+        assert_eq!(
+            (path.as_path(), *lead),
+            (Path::new("/media/mic.caf"), -s(0.5))
+        );
+    }
+    assert_eq!(
+        copy.own_sound.load(Ordering::SeqCst),
+        0,
+        "never the camera's silence"
+    );
+    let next = apply_ops(&p, &followed.ops(&p)).unwrap();
+    let (path, keep, people) = focus(&next);
+    // A speaks to 80 s of the mic (79.5 s of the camera, 80 s of the take), B to 100 s, then A again.
+    assert!((x(&path, 70.5) - 0.25).abs() < 0.03, "{path:?}");
+    assert!((x(&path, 90.5) - 0.75).abs() < 0.03, "{path:?}");
+    assert!((x(&path, 110.5) - 0.25).abs() < 0.03, "{path:?}");
+    assert_eq!(keep, Keep::Speaker);
+    let voices: Vec<Vec<Voice>> = people.into_iter().map(|p| p.voices).collect();
+    let voice = |label: &str| Voice {
+        part: 0,
+        label: label.into(),
+    };
+    assert_eq!(voices, [vec![voice("A")], vec![voice("B")]]);
 }
