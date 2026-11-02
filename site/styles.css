@@ -1527,39 +1527,3 @@ ol {
     transition: none;
   }
 }
-
-/* ---------- First build placeholder ---------- */
-
-.build {
-  background: var(--band);
-}
-
-.build-inner {
-  display: grid;
-  justify-items: start;
-  gap: 1.25rem;
-}
-
-.build h2 {
-  font-size: clamp(2.5rem, 1.4rem + 4.6vw, 5rem);
-  line-height: 0.98;
-  max-width: 14em;
-}
-
-.build-date {
-  padding: 0 0.08em;
-  border-radius: 0.08em;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-  transition: background-color 0.3s ease, color 0.3s ease;
-}
-
-/* Arriving from a download button highlights the date, caption style */
-.build:target .build-date {
-  background: var(--hilite);
-  color: var(--on-hilite);
-}
-
-.build .btn {
-  margin-top: 0.5rem;
-}
