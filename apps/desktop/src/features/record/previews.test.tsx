@@ -717,14 +717,10 @@ describe('the previews and Screen Recording', () => {
     expect(calls().at(-1)).toEqual(want());
   });
 
-  it('the_preview_states_have_red_only_on_record_and_no_em_or_en_dash', async () => {
+  it('the_preview_states_have_no_cut_red_and_no_em_or_en_dash', async () => {
     const css = readFileSync(resolve(__dirname, 'record.css'), 'utf8');
-    // Red only on Record itself, the dialog foot's primary button that starts a take.
-    const red = css.replace(/\/\*[\s\S]*?\*\//g, '').match(/[^{}]+\{[^{}]*--color-cut[^{}]*\}/g) ?? [];
-    expect(red.length).toBeGreaterThan(0);
-    for (const rule of red) {
-      expect(rule.trim()).toMatch(/^\.record-dialog \.dialog-foot \.btn-primary:not\(:disabled\)/);
-    }
+    // Record is red as every primary button is; the cut red stays on the timeline.
+    expect(css).not.toMatch(/--color-cut/);
     expect(css).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
     const dialog = await openOn(
       recorderSetup({ cameras: [device('FaceTime HD Camera')], permissions: { camera: 'notAsked', mic: 'notAsked' } }),

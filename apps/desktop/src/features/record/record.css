@@ -1,6 +1,6 @@
 /* The Record dialog: the one wide dialog. Values from tokens.css only. Generic pieces the shared design
    primitives will carry (dialog head and foot, spinner, notes) are scoped to the dialog here, so they can't clash with
-   those when they land. Red only on Record itself, the button that starts a take. */
+   those when they land. Record, the button that starts a take, is the primary red as everywhere; no cut red here. */
 
 .record-scrim {
   position: fixed;
@@ -80,17 +80,6 @@
   color: var(--color-ink-faint);
   font-size: var(--text-xs);
   line-height: var(--lh-xs);
-}
-
-/* Record, the only red control: tally red with its own text colour, and a soft red ring under the pointer (the label
-   keeps its contrast). While it can't record it keeps the shared off look. */
-.record-dialog .dialog-foot .btn-primary:not(:disabled):not([aria-disabled="true"]) {
-  background: var(--color-cut);
-  color: var(--color-on-cut);
-}
-
-.record-dialog .dialog-foot .btn-primary:not(:disabled):not([aria-disabled="true"]):hover {
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-cut) 25%, transparent);
 }
 
 /* The body scrolls; its own padding keeps focus rings inside the scrolled box. Each row is as tall as what is in it:
