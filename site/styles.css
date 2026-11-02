@@ -792,21 +792,6 @@ ol {
   }
 }
 
-/* ---------- Coming soon tag ---------- */
-
-/* Dashed outline: planned, not shipped */
-.tag-soon {
-  display: inline-block;
-  padding: 0.1rem 0.55rem;
-  border: 1.5px dashed currentColor;
-  border-radius: 999px;
-  font-size: 0.8125rem;
-  font-weight: 650;
-  line-height: 1.4;
-  white-space: nowrap;
-  vertical-align: 0.1em;
-}
-
 /* ---------- The problem ---------- */
 
 .problem {
@@ -847,10 +832,6 @@ ol {
 .answer-note {
   color: var(--ink-soft);
   font-size: 0.9375rem;
-}
-
-.answer-note .tag-soon {
-  margin-right: 0.4rem;
 }
 
 @media (min-width: 900px) {
