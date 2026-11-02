@@ -535,6 +535,13 @@ async fn a_cut_off_answer_keeps_its_finished_calls_and_is_asked_again_once() {
     let mut cut = function_call("call_2", "setFormat", json!({}));
     cut["arguments"] = json!("{\"format\": \"squ");
     cut["status"] = json!("incomplete");
+    // Marked incomplete though its arguments read: left out too.
+    let mut marked = function_call(
+        "call_3",
+        "setFormat",
+        json!({"format": "square", "keepOthers": true}),
+    );
+    marked["status"] = json!("incomplete");
     answer_once(
         &server,
         ok(ended(
@@ -547,6 +554,7 @@ async fn a_cut_off_answer_keeps_its_finished_calls_and_is_asked_again_once() {
                     "setFormat",
                     json!({"format": "portrait", "keepOthers": true}),
                 ),
+                marked,
                 cut,
             ],
         )),
@@ -567,7 +575,9 @@ async fn a_cut_off_answer_keeps_its_finished_calls_and_is_asked_again_once() {
     assert_eq!(sent.len(), 2);
     let again = sent[1]["input"].to_string();
     assert!(
-        again.contains("\"call_1\"") && !again.contains("\"call_2\""),
+        again.contains("\"call_1\"")
+            && !again.contains("\"call_2\"")
+            && !again.contains("\"call_3\""),
         "{again}"
     );
     assert!(again.contains(klipolo_chat::CUT_OFF), "{again}");

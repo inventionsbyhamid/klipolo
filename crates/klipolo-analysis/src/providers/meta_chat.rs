@@ -42,9 +42,11 @@ pub const CHAT_CALLS: usize = 1;
 pub const CHAT_BUSY_RETRIES: u32 = 2;
 /// The longest wait before asking again, whatever `Retry-After` says.
 pub const CHAT_BUSY_WAIT_MAX: Duration = Duration::from_secs(5);
-/// The longest one model call of a message may take, from asking for chat's slot to the answer: the planner's longest
-/// answers took about 30 s, and the person is waiting. Past it the call is dropped (its request with it).
-pub const CHAT_ANSWER_TIMEOUT: Duration = Duration::from_secs(90);
+/// The longest one model call of a message may take, from asking for chat's slot to the answer. A short's whole plan
+/// cut off at 8,192 output tokens took about 48 s in a paid run, so a full `CHAT_MAX_OUTPUT_TOKENS` answer takes about
+/// 96 s: this leaves room for it under the relay's own 300 s read limit. Past it the call is dropped (its request with
+/// it), billed all the same.
+pub const CHAT_ANSWER_TIMEOUT: Duration = Duration::from_secs(180);
 
 /// Muse Spark as chat's language model, within chat's own slot. Its clones share the client and the slot.
 #[derive(Clone, Debug)]
@@ -174,7 +176,7 @@ fn item(item: &Item) -> Value {
 }
 
 /// Meta's answer in chat's terms, priced from its usage. An answer cut off at its output cap is `ModelError::CutOff`
-/// with its words and the calls it finished (arguments that read as a JSON object; one cut part-way doesn't), for the
+/// with its words and the calls it finished (not marked `incomplete`, and arguments that read as a JSON object), for the
 /// planner to keep and ask again. One that came back `failed`, or `incomplete` for another reason, is an error, none of
 /// its calls used. Either is still billed, so the error carries its cost.
 fn answer(out: ResponseOut) -> Result<ModelResponse, ModelError> {
@@ -193,6 +195,13 @@ fn answer(out: ResponseOut) -> Result<ModelResponse, ModelError> {
     };
     let cut_off = out.status.as_deref() == Some("incomplete")
         && code("/incomplete_details/reason") == "max_output_tokens";
+    // In a cut-off answer, the calls Meta marks as cut part-way.
+    let unfinished: Vec<String> = (out.raw.pointer("/output").and_then(Value::as_array))
+        .into_iter()
+        .flatten()
+        .filter(|item| item["type"] == "function_call" && item["status"] == "incomplete")
+        .filter_map(|item| item["call_id"].as_str().map(str::to_owned))
+        .collect();
     let detail = match out.status.as_deref() {
         _ if cut_off => None,
         Some("failed") => Some(format!("answer failed: {}", code("/error/code"))),
@@ -206,7 +215,9 @@ fn answer(out: ResponseOut) -> Result<ModelResponse, ModelError> {
         text: out.output_text.unwrap_or_default(),
         calls: (out.function_calls.into_iter())
             .filter(|c| {
-                !cut_off || serde_json::from_str::<Value>(&c.arguments).is_ok_and(|v| v.is_object())
+                !cut_off
+                    || (!unfinished.contains(&c.call_id)
+                        && serde_json::from_str::<Value>(&c.arguments).is_ok_and(|v| v.is_object()))
             })
             .map(|c| FunctionCall {
                 name: c.name,
