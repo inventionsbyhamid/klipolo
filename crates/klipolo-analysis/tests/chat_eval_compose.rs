@@ -84,8 +84,11 @@ fn ideal(message: &str) -> Vec<(&'static str, Value)> {
                    pair("opacity", json!(0)), pair("ease", json!("spring 0.4")), pair("stagger", json!(0.15))]}),
         )],
         "slowly zoom into the speaker over five seconds" => vec![(
-            "cannotDo",
-            json!({"reason": "Klipolo can't zoom slowly into the main video yet."}),
+            "setMotion",
+            json!({"layer": "c1", "keys": [
+                key("scale", 0.0, 1.0, Value::Null), key("scale", 5.0, 1.3, json!("inOut")),
+                key("x", 0.0, 0.5, Value::Null), key("y", 0.0, 0.4, Value::Null)
+            ], "presets": null}),
         )],
         "fade the music down while I'm talking" => vec![(
             "setLayer",
