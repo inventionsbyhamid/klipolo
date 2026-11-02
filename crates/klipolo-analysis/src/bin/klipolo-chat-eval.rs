@@ -789,7 +789,7 @@ fn look_json(look: &CaptionChange) -> Option<Value> {
         look.highlight.clone().map(|c| or_none(c.map(Value::from))),
     );
     put("upper", look.upper.map(|u| or_none(u.map(Value::from))));
-    (!set.is_empty()).then(|| Value::Array(set))
+    (!set.is_empty()).then_some(Value::Array(set))
 }
 
 /// A compiled call as the model would have written it: its name and its arguments in seconds and words.
