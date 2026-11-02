@@ -10,6 +10,7 @@ import {
   VolumeX,
   type LucideIcon,
 } from 'lucide-react';
+import { memo } from 'react';
 import type { ErrorParam } from '../../../bindings/ErrorParam';
 import type { RecordingSource } from '../../../bindings/RecordingSource';
 import type { SourceRole } from '../../../bindings/SourceRole';
@@ -54,7 +55,7 @@ interface SourceLaneHeaderProps {
  * clip (`setKindMuted`, `kindVolumeOpsNow`), each one undo step. Muted shows when every recording's is; the volume
  * shown is the first's. The Mute button's name says what it does, so it has no pressed state as well.
  */
-export function SourceLaneHeader({ role, nth, sources, name, param, separated }: SourceLaneHeaderProps) {
+function SourceLaneHeaderView({ role, nth, sources, name, param, separated }: SourceLaneHeaderProps) {
   const { t } = useLingui();
   const first = sources[0];
   const muted = sources.every((s) => s.mix.muted);
@@ -111,3 +112,19 @@ export function SourceLaneHeader({ role, nth, sources, name, param, separated }:
     </div>
   );
 }
+
+/** The same header: its sources are rebuilt on each draw of the lanes, so they are compared one by one. */
+function sameHeader(a: SourceLaneHeaderProps, b: SourceLaneHeaderProps): boolean {
+  return (
+    a.role === b.role &&
+    a.nth === b.nth &&
+    a.name === b.name &&
+    a.separated === b.separated &&
+    a.sources.length === b.sources.length &&
+    a.sources.every((source, i) => source === b.sources[i]) &&
+    JSON.stringify(a.param) === JSON.stringify(b.param)
+  );
+}
+
+/** Drawn again only when its sources change, not for a zoom, a scroll or a selection. */
+export const SourceLaneHeader = memo(SourceLaneHeaderView, sameHeader);
