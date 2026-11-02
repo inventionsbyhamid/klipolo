@@ -2067,12 +2067,15 @@
   pointer-events: auto;
 }
 
-/* A waiting proposal's removed layers, outlined in red on their lanes (dashed: only shortened). */
+/* A waiting proposal's removed layers, outlined in red on their rows (dashed: only shortened) and striped as its cuts
+   are, so they never read as a selected layer's solid red ring. */
 .tl-ghost {
   position: absolute;
   border: 2px solid var(--color-cut);
   border-radius: var(--radius-xs);
-  background: var(--color-cut-wash);
+  background:
+    repeating-linear-gradient(135deg, var(--color-cut-hatch) 0 2px, transparent 2px 7px),
+    var(--color-cut-wash);
 }
 
 .tl-ghost.is-shortened {

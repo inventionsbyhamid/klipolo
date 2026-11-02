@@ -55,6 +55,13 @@ describe('colours', () => {
     }
   });
 
+  it('what a proposal takes away is striped red, and the time range you chose is a plain wash', () => {
+    const striped = /repeating-linear-gradient\(135deg, var\(--color-cut-hatch\)/;
+    expect(rule('.tl-cut'), '.tl-cut').toMatch(striped);
+    expect(rule('.tl-ghost'), '.tl-ghost').toMatch(striped);
+    expect(rule('.tl-range'), '.tl-range').not.toMatch(/repeating-linear-gradient|--color-cut/);
+  });
+
   it('the video and what is drawn over it stay dark in both themes', () => {
     // The layers' outlines, handles, snap guides and safe area over the preview; a caption style's sample and the
     // backdrop it is shown on (the frame's own ring, when the style is chosen, follows the panel); the Record dialog's
