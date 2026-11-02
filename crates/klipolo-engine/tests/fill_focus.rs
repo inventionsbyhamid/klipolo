@@ -4,12 +4,14 @@
 mod support;
 
 use klipolo_engine::plan::{VideoRole, frame_plan};
+use klipolo_model::apply_ops;
 use klipolo_model::crop::Crop;
 use klipolo_model::fill_focus::{FillFocus, FocusKey, FocusPath};
 use klipolo_model::layout::BoxN;
+use klipolo_model::ops::Op;
 use klipolo_model::project::FormatKind::{self, Landscape, Portrait, Square};
 use klipolo_model::project::{Project, RecordingKind};
-use klipolo_model::timeline::{Framing, FramingMode};
+use klipolo_model::timeline::{Framing, FramingMode, ReverseCopy};
 use support::{bx, close, ctx, project, secs, videos};
 
 /// A 16:9 picture filling 9:16 shows this share of its width.
@@ -158,4 +160,51 @@ fn a_cropped_clip_keeps_its_focus_inside_what_the_crop_leaves() {
     close(drawn(&p, 20.0, Portrait), in_kept(0.3));
     close(drawn(&p, 25.0, Portrait), in_kept(0.7));
     assert!(drawn(&p, 28.0, Portrait).x >= 0.2 - 1e-9);
+}
+
+/// `p` with clip b (the b-roll's 0 to 10 s) played backward from a copy of that stretch written backward.
+fn reversed(p: &Project) -> Project {
+    let mut copy = p.asset("broll").unwrap().clone();
+    copy.id = "broll-rev".into();
+    copy.path = "/media/broll reversed.mov".into();
+    let turn = Op::ReverseClip {
+        clip_id: p.timeline.main[1].id.clone(),
+        copy: Some(ReverseCopy {
+            asset_id: copy.id.clone(),
+            from_us: 0,
+            to_us: secs(10.0),
+        }),
+    };
+    apply_ops(p, &[Op::AddAssets { assets: vec![copy] }, turn]).unwrap()
+}
+
+#[test]
+fn a_reversed_clip_follows_the_speaker_on_the_footage_it_shows() {
+    let forward = with_focus(Portrait, speaker());
+    let back = reversed(&forward);
+    assert!(back.timeline.main[1].reversed.is_some());
+    // At 20 + t s on the timeline the reversed clip shows the b-roll's 10 - t s: the crop is where it was then.
+    for t in [0.5, 1.0, 1.9, 2.1, 3.0, 4.5, 5.0, 7.5, 9.9] {
+        close(
+            drawn(&back, 20.0 + t, Portrait),
+            drawn(&forward, 30.0 - t, Portrait),
+        );
+    }
+    // The later shot plays first: the speaker on the left, then the crop jumps right as the earlier shot comes.
+    close(drawn(&back, 21.0, Portrait), portrait_at(0.2));
+    close(drawn(&back, 22.5, Portrait), portrait_at(0.7));
+    // Forward again, it follows as it did.
+    let again = reversed_back(&back);
+    for t in [20.0, 22.5, 25.0, 27.9, 28.0, 29.5] {
+        close(drawn(&again, t, Portrait), drawn(&forward, t, Portrait));
+    }
+}
+
+/// `p` with its reversed clip b played forward again.
+fn reversed_back(p: &Project) -> Project {
+    let turn = Op::ReverseClip {
+        clip_id: p.timeline.main[1].id.clone(),
+        copy: None,
+    };
+    apply_ops(p, &[turn]).unwrap()
 }

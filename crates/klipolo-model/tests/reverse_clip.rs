@@ -2,10 +2,11 @@
 //! its own file.
 mod common;
 use common::*;
+use klipolo_model::fill_focus::{FillFocus, FocusKey, FocusPath, Keep, KeepRange, Who};
 use klipolo_model::history::Document;
 use klipolo_model::motion::Key;
 use klipolo_model::ops::{op_risk, Op, OpRisk};
-use klipolo_model::project::{Asset, AssetKind, Project};
+use klipolo_model::project::{Asset, AssetKind, FormatKind, Project};
 use klipolo_model::query::anchor_at;
 use klipolo_model::timeline::{ClipSource, ReverseCopy, Reversed};
 use klipolo_model::{apply_ops, Transaction};
@@ -191,6 +192,126 @@ fn playing_forward_fits_fades_and_volume_keys_to_the_shorter_clip() {
     assert_eq!((b.fade_in_us, b.fade_out_us), (0, secs(10.0)));
     assert_eq!(b.volume_keys.first().map(|k| k.t_us), Some(secs(2.0)));
     assert!(b.volume_keys.iter().all(|k| k.t_us <= secs(10.0)));
+}
+
+fn focus_key(at_s: f64, x: f64, cut: bool) -> FocusKey {
+    FocusKey {
+        at_us: secs(at_s),
+        x,
+        y: 0.5,
+        cut,
+    }
+}
+
+fn keep_range(from_s: f64, to_s: f64, who: Who) -> KeepRange {
+    KeepRange {
+        start_us: secs(from_s),
+        end_us: secs(to_s),
+        who,
+    }
+}
+
+/// The b-roll's speaker moving right over its first 5 s, then a new shot at 8 s with them on the left; the first
+/// person kept from 1 to 3 s and both from 6 to 9 s.
+fn followed() -> FillFocus {
+    FillFocus::Speaker {
+        path: FocusPath {
+            keys: vec![
+                focus_key(0.0, 0.3, false),
+                focus_key(5.0, 0.7, false),
+                focus_key(8.0, 0.2, true),
+            ],
+        },
+        keep: Keep::Ranges {
+            ranges: vec![
+                keep_range(1.0, 3.0, Who::Person { person: 1 }),
+                keep_range(6.0, 9.0, Who::Both),
+            ],
+        },
+        people: Vec::new(),
+    }
+}
+
+/// "b" playing the b-roll's `from` to `to` s, following its speaker in portrait.
+fn with_follow(from: f64, to: f64) -> Project {
+    let mut p = with_copy();
+    let b = &mut p.timeline.main[1];
+    (b.source_in_us, b.source_out_us) = (secs(from), secs(to));
+    b.fill_focus.insert(FormatKind::Portrait, followed());
+    apply_ops(&p, &[]).unwrap()
+}
+
+/// Whether the crop's centres `a` and `b` are the same, to rounding.
+fn same(a: Option<(f64, f64)>, b: Option<(f64, f64)>) -> bool {
+    a.zip(b)
+        .is_some_and(|(a, b)| (a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9)
+}
+
+fn focus_of(p: &Project) -> (&FocusPath, &Keep) {
+    match p.timeline.main[1].fill_focus.get(&FormatKind::Portrait) {
+        Some(FillFocus::Speaker { path, keep, .. }) => (path, keep),
+        other => panic!("not following the speaker: {other:?}"),
+    }
+}
+
+/// Reversed, the clip plays the copy's `t`, the b-roll's `10 - t`: the crop and who it keeps are where they were at
+/// that moment of the b-roll, cut included. Forward again, they are as they were.
+#[test]
+fn a_reversed_clip_follows_its_speaker_on_the_same_footage() {
+    let before = with_follow(0.0, 10.0);
+    let (path, keep) = focus_of(&before);
+    let back = apply_ops(&before, &[reverse("b", Some((0.0, 10.0)))]).unwrap();
+    let (turned, turned_keep) = focus_of(&back);
+    for t in [
+        0.0, 0.5, 1.5, 1.99, 2.01, 2.5, 3.5, 5.0, 6.5, 7.5, 8.5, 9.5, 10.0,
+    ] {
+        let (now, then) = (secs(t), secs(10.0 - t));
+        let (a, b) = (turned.centre_at(now), path.centre_at(then));
+        assert!(same(a, b), "at {t} s: {a:?}, was {b:?}");
+        assert_eq!(turned_keep.who_at(now), keep.who_at(then), "who at {t} s");
+    }
+    // The new shot comes first now: it holds up to where it ended, then the crop jumps back to the earlier shot.
+    assert_eq!(turned.centre_at(secs(2.0)), Some((0.2, 0.5)));
+    assert_eq!(turned.centre_at(secs(2.0) + 1), Some((0.7, 0.5)));
+    assert_eq!(
+        *turned_keep,
+        Keep::Ranges {
+            ranges: vec![
+                keep_range(1.0, 4.0, Who::Both),
+                keep_range(7.0, 9.0, Who::Person { person: 1 }),
+            ]
+        }
+    );
+    let forward = apply_ops(&back, &[reverse("b", None)]).unwrap();
+    let (again, again_keep) = focus_of(&forward);
+    assert_eq!(again_keep, keep);
+    for t in [0.0, 1.0, 2.5, 4.99, 5.0, 6.0, 7.99, 8.0, 8.5, 10.0] {
+        assert_eq!(
+            again.centre_at(secs(t)),
+            path.centre_at(secs(t)),
+            "at {t} s"
+        );
+    }
+}
+
+/// A copy of only the b-roll's 1 to 7 s: the path and the ranges past 7 s (before the copy's start once turned) give
+/// way to where the crop was at 7 s and who was kept then, and the turned clip is one the model takes.
+#[test]
+fn a_reversed_part_of_the_file_keeps_only_the_follow_it_can_turn() {
+    let before = with_follow(3.0, 5.0);
+    let (path, keep) = focus_of(&before);
+    let back = apply_ops(&before, &[reverse("b", Some((1.0, 7.0)))]).unwrap();
+    let (turned, turned_keep) = focus_of(&back);
+    assert!(turned.is_valid() && turned_keep.is_valid());
+    assert!(turned.keys.iter().all(|k| k.at_us >= 0));
+    for t in [0.0, 0.5, 2.0, 3.0, 4.5, 6.5] {
+        let (now, then) = (secs(t), secs(7.0 - t));
+        assert!(
+            same(turned.centre_at(now), path.centre_at(then)),
+            "at {t} s"
+        );
+        assert_eq!(turned_keep.who_at(now), keep.who_at(then), "who at {t} s");
+    }
 }
 
 /// A clip whose sound plays in its own layer (Separate sound) is not reversed: the layer would keep playing forward.
