@@ -3,7 +3,7 @@
 # signed, nothing reaches the network, and it takes seconds):
 #   scripts/release/release.test.sh
 # The bundle is an executable that loads one dylib through @rpath, with the licences, a fonts folder, the bundled pack's
-# manifest, the app's own Info.plist keys and, through a stand-in for codesign, the app's own entitlements:
+# manifest and licence, the app's own Info.plist keys and, through a stand-in for codesign, the app's own entitlements:
 # check-bundle.sh must pass it. Then each broken copy must fail with its own message. check-bundle.sh runs from a copy
 # of this folder in a checkout-shaped tree, so the test owns the page's build output and the source files it also
 # searches.
@@ -83,6 +83,7 @@ make_app() {
     > "$c/Resources/licenses/NOTICE.txt"
   echo 'OFL' > "$c/Resources/fonts/OFL.txt"
   echo '{"items": []}' > "$c/Resources/library/manifest.json"
+  printf 'Klipolo pack\n\nApache License\nVersion 2.0, January 2004\n' > "$c/Resources/library/LICENSE.txt"
 }
 
 passed=0 failed=0
@@ -129,6 +130,14 @@ expect "1-byte third-party notices fail" fail "doesn't start 'Klipolo: third-par
 app=$(case_app no-pack)
 rm -r "$app/Contents/Resources/library"
 expect "no bundled pack fails" fail "the bundled pack isn't in the app" "$check" "$app" "$arch"
+
+app=$(case_app no-pack-licence)
+rm "$app/Contents/Resources/library/LICENSE.txt"
+expect "no pack licence fails" fail "no Resources/library/LICENSE.txt" "$check" "$app" "$arch"
+
+app=$(case_app pack-licence-without-apache)
+echo 'Klipolo pack' > "$app/Contents/Resources/library/LICENSE.txt"
+expect "a pack licence without the Apache text fails" fail "has no Apache License text" "$check" "$app" "$arch"
 
 app=$(case_app no-archivo)
 rm "$app/Contents/Resources/licenses/Archivo-OFL.txt"
