@@ -14,6 +14,8 @@ export function AiChip() {
   return (
     <button
       type="button"
+      // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+      tabIndex={0}
       className={view.missing ? 'ai-chip is-missing' : 'ai-chip'}
       title="Settings (Command ,)"
       onClick={openSettings}

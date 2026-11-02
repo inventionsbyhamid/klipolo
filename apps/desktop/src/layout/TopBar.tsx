@@ -224,6 +224,8 @@ export function TopBar() {
           </span>
           <span className="topbar-divider" aria-hidden />
           <button
+            // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+            tabIndex={0}
             className="icon-btn"
             aria-label={undo}
             title={`${undo} (Command Z)`}
@@ -233,6 +235,7 @@ export function TopBar() {
             <Icon name="undo" />
           </button>
           <button
+            tabIndex={0}
             className="icon-btn"
             aria-label={redo}
             title={`${redo} (Shift Command Z)`}
@@ -249,6 +252,7 @@ export function TopBar() {
         <AiChip />
         <button
           ref={settings}
+          tabIndex={0}
           className="icon-btn"
           aria-label="Settings"
           title="Settings (Command ,)"
