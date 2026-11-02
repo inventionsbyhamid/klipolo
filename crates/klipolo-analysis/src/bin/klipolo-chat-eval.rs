@@ -1419,11 +1419,18 @@ mod tests {
                 "addMusic",
                 json!({"file": "lofi", "volume": null, "duck": true, "atSec": 0.0}),
             ),
-            ("addSound", json!({"name": "whoosh", "atSec": [12.8, 23.0]})),
+            (
+                "addSound",
+                json!({"name": "whoosh", "atWords": null, "atSec": [12.8, 23.0]}),
+            ),
+            (
+                "addSound",
+                json!({"name": "pop", "atWords": ["went flying", "today"], "atSec": null}),
+            ),
             (
                 "addText",
-                json!({"text": "Day 1", "preset": "title", "atSec": 0.0, "durationSec": 3.0, "animation": "pop",
-                       "font": "Poppins"}),
+                json!({"text": "Day 1", "preset": "title", "atSec": 0.0, "atWords": null, "durationSec": 3.0,
+                       "animation": "pop", "font": "Poppins"}),
             ),
             (
                 "animate",
@@ -1432,11 +1439,12 @@ mod tests {
             ("autoZoom", json!({"on": true, "scale": 1.5})),
             (
                 "addImage",
-                json!({"file": "logo", "size": "small", "position": "top-right", "atSec": null, "durationSec": null}),
+                json!({"file": "logo", "size": "small", "position": "top-right", "atSec": null,
+                       "atWords": "the new module", "durationSec": null}),
             ),
             (
                 "makeSticker",
-                json!({"prompt": "paper plane", "position": null, "atSec": 67.0, "durationSec": 5.0}),
+                json!({"prompt": "paper plane", "position": null, "atSec": 67.0, "atWords": null, "durationSec": 5.0}),
             ),
             (
                 "makeTitleCard",
