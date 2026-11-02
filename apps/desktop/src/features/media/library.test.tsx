@@ -646,7 +646,9 @@ describe('a library of hundreds of clips', () => {
     const broll = snapshot.project.assets.find((a) => a.id === 'broll')!;
     for (let i = 0; i < 200; i++) snapshot.project.assets.push({ ...broll, id: `take${i}`, name: `take${i}.mp4` });
     renderWithProviders(<Library />);
-    expect(screen.getByText('take199.mp4')).toBeInTheDocument();
+    // The first rows at once, the rest a few a frame.
+    expect(screen.queryByText('take199.mp4')).toBeNull();
+    expect(await screen.findByText('take199.mp4', undefined, { timeout: 5000 })).toBeInTheDocument();
     renderCounts.clear();
     // The title moves: no row shows anything else.
     act(() => {

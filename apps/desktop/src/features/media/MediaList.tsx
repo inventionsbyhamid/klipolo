@@ -204,8 +204,8 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
   const pack = usePack((s) => s.items);
   const marks = useMarks((s) => s.marks);
   const order = useSettledMarks(`${tab}\n${query}`);
-  // A tab of hundreds of files draws its first rows, then the rest in the background.
-  const budget = useRowBudget(`${tab}\n${query}`);
+  // A tab of hundreds of files draws its first rows, then more each frame (its files are at most the project's).
+  const budget = useRowBudget(`${tab}\n${query}`, (project?.assets.length ?? 0) + (project?.recordings.length ?? 0));
   useEffect(loadPack, []);
   useEffect(loadMarks, []);
   if (!project) return null;
