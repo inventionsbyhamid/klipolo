@@ -93,14 +93,15 @@ def load_romanizer() -> uroman.Uroman:
 
 
 def romanize(word: str) -> str:
-    """`word` in Latin letters, or the word itself if uroman fails on it."""
-    romanizer = load_romanizer()
+    """`word` in Latin letters, or the word itself if uroman fails on it (its
+    letters in other scripts are then dropped and it gets interpolated times)."""
     try:
+        romanizer = load_romanizer()
         with _romanizer_lock:
             return romanizer.romanize_string(word)
-    except Exception:
-        # The text is never logged.
-        logger.exception("could not romanize a word of %d characters", len(word))
+    except Exception as exc:
+        # The text is never logged, not even in the error's message.
+        logger.error("could not romanize a word of %d characters: %s", len(word), type(exc).__name__)
         return word
 
 

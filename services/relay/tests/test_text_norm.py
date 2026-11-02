@@ -207,13 +207,23 @@ def test_latin_words_never_reach_the_romanizer(monkeypatch, text):
     assert normalize(text) == expected
 
 
-def test_a_word_the_romanizer_fails_on_is_kept_with_nothing_alignable(monkeypatch):
+def test_a_word_the_romanizer_fails_on_is_kept_with_nothing_alignable(monkeypatch, caplog):
     class Broken:
         def romanize_string(self, word):
-            raise ValueError("no")
+            raise ValueError(f"cannot romanize {word}")
 
     monkeypatch.setattr(text_norm, "load_romanizer", lambda: Broken())
     assert normalize("ok नमस्ते") == [("ok", "ok"), ("नमस्ते", "")]
+    assert "नमस्ते" not in caplog.text
+    assert "could not romanize a word of 6 characters: ValueError" in caplog.text
+
+
+def test_a_romanizer_that_cannot_load_never_fails_the_turn(monkeypatch):
+    def fail():
+        raise OSError("tables missing")
+
+    monkeypatch.setattr(text_norm, "load_romanizer", fail)
+    assert normalize("ok مرحبا") == [("ok", "ok"), ("مرحبا", "")]
 
 
 def test_chinese_and_japanese_sent_one_character_per_word_romanize_each_alone():
