@@ -1517,7 +1517,7 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "Medium at a top corner, 2 s, at most one per 8 s",
         "animate last with pop or bounce",
         "at most one per 5 s: rise under the hook, the only sound over the opening words",
-        "whoosh or swoosh on a cut (the first words after it) or text sliding in",
+        "whoosh or swoosh on a cut except the opening (the first words after it) or text sliding in",
         "pop on a sticker or text popping in, as animate's sound, never also addSound there",
         "ding or chime on a number, a key point or a reveal",
         "impact or bass drop on a punchline or a big claim",
@@ -1610,7 +1610,7 @@ fn the_prompt_is_one_fixed_text_and_small() {
     // The caps every lane's prompt lines and tools share: 914 prompt tokens measured with the clip tools' line and the
     // recordings' line, 1,126 with autoZoom's line and the short's recipe, about 335 more with the composing tools' lines
     // and the catalogues they name (presets, effects, looks, fonts), about 180 more with the short's stickers and sound
-    // effects placed on the words said (1,787 in all); 4,555 tools tokens with the clip tools (setClip,
+    // effects placed on the words said (1,792 in all); 4,555 tools tokens with the clip tools (setClip,
     // setTransition), setBackground (about 210), freezeFrame (about 105), addText's font (about 25), the recording tools
     // (about 1,010) and followSubject's focus (about 117), about 390 more with animate, the words' entrance, autoZoom
     // and the shorts' two caption styles, about 1,030 more with the tools that compose any edit (setMotion,
