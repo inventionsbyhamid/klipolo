@@ -40,7 +40,7 @@ export function sameLook(a: TextLook, b: TextLook): boolean {
   );
 }
 
-/** The box behind the words: the design's navy at 86 %, as behind a title. */
+/** The box behind the words: the design's navy at 86 %, as chat's looks use it (`tools::style`). */
 export const BOX_COLOR = '#121A33DB';
 
 /**
