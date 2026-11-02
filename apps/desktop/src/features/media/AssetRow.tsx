@@ -1,11 +1,12 @@
 import { useLingui } from '@lingui/react/macro';
-import { isValidElement, memo, type PointerEvent, type ReactNode } from 'react';
+import { isValidElement, memo, useRef, type MouseEvent, type PointerEvent, type ReactNode } from 'react';
 import type { Asset } from '../../bindings/Asset';
 import { cn } from '../../design/cn';
 import { Icon } from '../../layout/Icon';
 import { countRender } from '../../lib/renderCount';
 import { formatRowLength } from '../../lib/time';
 import { beginMediaDrag } from '../timeline/drag/mediaDrag';
+import { DRAG_SLOP_PX } from '../timeline/drag/session';
 import type { DropTarget } from '../timeline/drops';
 import { FavoriteButton, type Favorite } from './FavoriteButton';
 import { PREVIEW_MAX_US } from './preview';
@@ -113,13 +114,27 @@ export const AssetRow = memo(function AssetRow({
 }: AssetRowProps) {
   countRender(`row:${recording ?? asset.id}`);
   const { t } = useLingui();
+  /** Where a press on the play button began: one that became a drag doesn't play as it is let go. */
+  const pressedAt = useRef<{ x: number; y: number } | null>(null);
   const onPointerDown = (e: PointerEvent<HTMLLIElement>) => {
-    // The buttons are their own controls.
-    if (e.button !== 0 || (MAC && e.ctrlKey) || (e.target as Element).closest('button')) return;
-    // No text selection and no native image drag; the row keeps the pointer wherever it goes.
+    if (e.button !== 0 || (MAC && e.ctrlKey)) return;
+    // The buttons are their own controls, but the play button is the row's art: pressed and moved, it drags the row.
+    const control = (e.target as Element).closest('button');
+    const art = !!control?.classList.contains('preview-play');
+    if (control && !art) return;
+    // No text selection and no native image drag.
     e.preventDefault();
-    e.currentTarget.setPointerCapture?.(e.pointerId);
+    // The row keeps the pointer wherever it goes; from the play button it doesn't, so a click still lands there.
+    if (art) pressedAt.current = { x: e.clientX, y: e.clientY };
+    else e.currentTarget.setPointerCapture?.(e.pointerId);
     beginMediaDrag(e, asset, onDrop, recording ? 'main' : 'any');
+  };
+  /** The play button's click: plays or stops, unless it ends a drag (a key's click has no pointer). */
+  const onPlay = (e: MouseEvent<HTMLButtonElement>) => {
+    const at = pressedAt.current;
+    pressedAt.current = null;
+    if (at && e.detail > 0 && Math.hypot(e.clientX - at.x, e.clientY - at.y) >= DRAG_SLOP_PX) return;
+    preview?.toggle();
   };
   return (
     <li
@@ -144,7 +159,7 @@ export const AssetRow = memo(function AssetRow({
               ? t({ id: 'library.preview.stop.tip', message: 'Stop' })
               : t({ id: 'library.preview.play.tip', message: 'Play' })
           }
-          onClick={preview.toggle}
+          onClick={onPlay}
         >
           <Icon name={TILE_ICON[art]} className="preview-art" />
           <Icon name={preview.on ? 'stop' : 'play'} className="preview-icon" />
