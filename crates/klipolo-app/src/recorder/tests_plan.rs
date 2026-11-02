@@ -103,7 +103,17 @@ fn two_setups_at_once_run_one_probe() {
         let one = s.spawn(|| rec.state.setup().unwrap());
         let two = s.spawn(|| rec.state.setup().unwrap());
         let (one, two) = (one.join().unwrap(), two.join().unwrap());
-        assert_eq!(one.offers, two.offers, "both read the one report");
+        // Minutes left come from the free space at each read, which other work on the disk can move between the two.
+        let report = |offers: &[klipolo_capture::preflight::PresetOffer]| {
+            let mut offers = offers.to_vec();
+            offers.iter_mut().for_each(|o| o.minutes_left = None);
+            offers
+        };
+        assert_eq!(
+            report(&one.offers),
+            report(&two.offers),
+            "both read the one report"
+        );
     });
     assert_eq!(rec.probes.load(Ordering::SeqCst), 1);
 }
