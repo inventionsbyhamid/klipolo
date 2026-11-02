@@ -7,8 +7,8 @@
 //! - **Auto zooms** over cursor data are camera runs (`camera`): planned ahead of time from the
 //!   takes' facts and raw cursor, with the Rect zooms inside them as fixed shots. Elsewhere (an imported clip, a take
 //!   not loaded yet) an Auto zoom looks at the centre on the springs.
-//! - **Push zooms** are a slow push over their ramp, eased in and out, then held (`push_window`): worked out for each
-//!   frame from the item alone, never through the springs.
+//! - **Push zooms** are a slow push over their ramp, eased in and out, then held to the end of the clip they start on
+//!   (`to_clip_ends`, `push_window`): worked out for each frame from the item alone, never through the springs.
 //!
 //! `window` checks the pushes first, then the camera runs, then the springs: binary searches, no allocation. A rebuild bigger than
 //! `INLINE_STEPS` (spring steps, or 125 a second of camera run) is finished off the actor (`ZoomBuild`).
@@ -46,7 +46,8 @@ pub struct ZoomFor {
     pub items: Vec<ZoomItem>,
     pub cameras: Vec<CameraKey>,
     pub duration_us: Us,
-    /// The push zooms (`ZoomTarget::Push`), sorted by start: drawn as they are, never through the springs.
+    /// The push zooms (`ZoomTarget::Push`), sorted by start, each ending where its clip does: drawn as they are, never
+    /// through the springs.
     pub pushes: Vec<ZoomItem>,
 }
 
@@ -93,6 +94,20 @@ fn visible(p: &Project) -> (Vec<ZoomItem>, Vec<ZoomItem>) {
         .partition(|i| matches!(i.3, ZoomTarget::Push { .. }))
 }
 
+/// `pushes` (sorted by start) each held to the end of the main clip its start lands on (`starts`: `clip_starts`), so a
+/// speed change or a trim after it was made never carries it into the next clip or ends it mid-shot; one that starts past
+/// the main track goes. Still sorted. O(pushes × log clips).
+fn to_clip_ends(pushes: Vec<ZoomItem>, p: &Project, starts: &[Us]) -> Vec<ZoomItem> {
+    let main = &p.timeline.main;
+    (pushes.into_iter())
+        .filter_map(|(start, _, scale, target)| {
+            let i = starts.partition_point(|&s| s <= start).checked_sub(1)?;
+            let end = starts[i].saturating_add(main.get(i)?.duration_us());
+            (start < end).then_some((start, end, scale, target))
+        })
+        .collect()
+}
+
 /// The springs' items of `p` with the takes the plan follows in `cursors`: the Rect zooms outside camera runs, and
 /// the Auto zooms over no cursor data, centred.
 pub fn zoom_items(p: &Project, cursors: &CursorTracks) -> Vec<ZoomItem> {
@@ -116,6 +131,7 @@ impl ZoomBuild {
         previous: Option<&ZoomTrack>,
     ) -> (ZoomFor, Self) {
         let (pushes, zooms) = visible(&p);
+        let pushes = to_clip_ends(pushes, &p, &starts);
         let (items, autos) = camera::split(zooms, &p, &starts, &takes);
         let inputs = camera::Inputs { p, starts, takes };
         let target = ZoomFor {
