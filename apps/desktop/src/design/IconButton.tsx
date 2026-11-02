@@ -18,7 +18,7 @@ interface IconButtonProps extends Omit<
   ref?: Ref<HTMLButtonElement>;
 }
 
-/** A 32 px icon button with 6 px corners, named by its label, with a tooltip that shows its shortcut. */
+/** A 32 px round icon button, named by its label, with a tooltip that shows its shortcut. */
 export function IconButton({
   icon: Icon,
   label,
