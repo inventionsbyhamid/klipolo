@@ -77,7 +77,7 @@ interface StartScreenProps {
 }
 
 /**
- * Where Klipolo opens: your projects, last opened first, with New project (the one red) and Record your
+ * Where Klipolo opens: your projects, last opened first, with New project (the one yellow) and Record your
  * screen. A card opens its project (and the list is read again when it can't be opened: it may have moved); New project
  * makes "Untitled project" in all three formats and opens it. Shown while no project is open.
  */
