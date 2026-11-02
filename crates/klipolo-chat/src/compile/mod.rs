@@ -1065,6 +1065,7 @@ impl Compiler<'_> {
                     if let (Job::MakeSticker(sticker), Some(a)) = (&mut job, animated.remove(&i)) {
                         sticker.motion = a.motion.map(Box::new);
                         sticker.sound = a.sound.map(Box::new);
+                        media::sticker_sound(self, &with_additions, sticker);
                     }
                     jobs.push((i, job));
                 }

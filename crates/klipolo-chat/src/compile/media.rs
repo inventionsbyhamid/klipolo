@@ -7,7 +7,7 @@
 //!   volume with no fades, attached to the clip under it, cut where the video ends); where each quote is said (the
 //!   times given beside quotes only pick among places), else at each time; two moments within
 //!   `evidence::TOLERANCE_US` of each other are one sound, at the first, and none goes on top of the same sound there
-//!   already (`sound_near`: a sticker's `animate` sound on the same word).
+//!   already from this answer (`sound_near`: a sticker's `animate` sound on the same word).
 //! - `addText`: the person's own words (`persons_words`; words of the model's own are refused back, for it to ask), or
 //!   another app's as it gave them (`apps_words`), in one of the four text presets, placed by the model's
 //!   `media::text::add_text_ops` exactly as the canvas's Add title and the library's presets place it: each format's
@@ -199,8 +199,13 @@ pub(super) fn start(
         }
     };
     if matches!(at, At::Playhead | At::Sec(_)) && in_cut(&c.cut, said) {
+        // The tools without atWords are asked for a time.
+        let instead = match tool {
+            "makeTitleCard" | "addMusic" => "Give a time in the parts you keep.",
+            _ => "Quote words in the parts you keep.",
+        };
         return Err(to_model(format!(
-            "{tool}: {} is in a part this answer cuts. Quote words in the parts you keep.",
+            "{tool}: {} is in a part this answer cuts. {instead}",
             at.said(field, said)
         )));
     }
@@ -389,14 +394,18 @@ pub(super) fn add_music(
     })
 }
 
-/// Whether `p` already plays the sound file `asset_id` within `TOLERANCE_US` of `at`: one more there would play on top
-/// of it (an `addSound` and a sticker's `animate` sound on one word), so it is left out.
-pub(super) fn sound_near(p: &Project, asset_id: &str, at: Us) -> bool {
-    (p.timeline.tracks.iter())
+/// Whether an earlier call of this answer put the sound file `asset_id` within `TOLERANCE_US` of `at` in `work`: one
+/// more there would play on top of it (an `addSound` and a sticker's `animate` sound on one word), so it is left out.
+/// A sound the project had before the message doesn't count: "another ding there" adds one.
+pub(super) fn sound_near(c: &Compiler, work: &Project, asset_id: &str, at: Us) -> bool {
+    let had =
+        |id: &Id| (c.snapshot.timeline.tracks.iter()).any(|t| t.items.iter().any(|i| &i.id == id));
+    (work.timeline.tracks.iter())
         .flat_map(|t| &t.items)
         .any(|item| {
             matches!(&item.content, ItemContent::Audio { asset_id: a, .. } if a == asset_id)
                 && item.start_us.abs_diff(at) <= TOLERANCE_US.unsigned_abs()
+                && !had(&item.id)
         })
 }
 
@@ -433,7 +442,7 @@ pub(super) fn add_sound(
         if !starts
             .iter()
             .any(|&s| s.abs_diff(at) <= TOLERANCE_US.unsigned_abs())
-            && !sound_near(work, &asset.id, at)
+            && !sound_near(c, work, &asset.id, at)
         {
             starts.push(at);
         }
@@ -680,26 +689,37 @@ pub fn sticker_ops(p: &Project, job: &MakeSticker, asset: &Asset) -> Option<Vec<
         }
     }
     let mut ops = lasting(ops, duration);
-    // Its sound where its animation starts, as `animate` places one (left out where it no longer fits, or where the
-    // same sound plays already).
+    // Its sound where its animation starts, as `animate` places one (left out where it no longer fits).
     if let Some(sound) = &job.sound {
         let m = (ops.iter()).find_map(|op| match op {
             Op::AddItem { item, .. } => item.layout.motion.clone(),
             _ => None,
         });
-        let exit_only = m
-            .as_ref()
-            .is_some_and(|m| m.enter.is_none() && m.looping.is_none());
-        let at = animate::sound_start(exit_only, start, duration, m.as_ref());
+        let at = animate::sound_start(exit_only(m.as_ref()), start, duration, m.as_ref());
         let with_picture = apply_ops(p, &ops).ok()?;
-        // Not on top of the same sound placed there already (the answer's `addSound` on the same word).
-        if !sound_near(p, &sound.id, at)
-            && let Ok(more) = add_sound_ops(&with_picture, sound, at)
-        {
+        if let Ok(more) = add_sound_ops(&with_picture, sound, at) {
             ops.extend(more);
         }
     }
     Some(ops)
+}
+
+/// Whether a picture moving as `m` has only an exit, so its sound plays as it goes out.
+fn exit_only(m: Option<&Motion>) -> bool {
+    m.is_some_and(|m| m.enter.is_none() && m.looping.is_none())
+}
+
+/// `job`'s sound, unless an earlier call of this answer put the same sound where it would play in `with_additions`
+/// (`sound_near`): left out of the job then, as `animate` leaves it out on a layer.
+pub(super) fn sticker_sound(c: &Compiler, with_additions: &Project, job: &mut MakeSticker) {
+    let Some(sound) = &job.sound else {
+        return;
+    };
+    let m = job.motion.as_deref();
+    let at = animate::sound_start(exit_only(m), job.at_us, job.duration_us, m);
+    if sound_near(c, with_additions, &sound.id, at) {
+        job.sound = None;
+    }
 }
 
 /// `makeSticker`'s job, on the project as the message's additions leave it (`with_additions`), whatever came before it

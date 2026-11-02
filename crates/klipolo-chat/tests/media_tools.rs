@@ -2436,6 +2436,15 @@ fn a_time_in_a_part_the_answer_cuts_is_refused_and_snaps_only_to_what_is_kept() 
         refused_to_model(&compile(&p, &i, &[keep.clone(), inside]), 1),
         "addSound: atSec[0] 5.0 is in a part this answer cuts. Quote words in the parts you keep."
     );
+    // The tools without atWords are asked for a time.
+    let music = call(
+        "addMusic",
+        json!({"file": "lofi", "volume": null, "duck": null, "atSec": 5.0}),
+    );
+    assert_eq!(
+        refused_to_model(&compile(&p, &i, &[keep.clone(), music]), 1),
+        "addMusic: atSec 5.0 is in a part this answer cuts. Give a time in the parts you keep."
+    );
     let title = call(
         "addText",
         json!({"text": "we went flying", "preset": "title", "atSec": null, "atWords": null, "durationSec": null}),
@@ -2489,15 +2498,55 @@ fn the_same_sound_twice_on_one_word_plays_once() {
         json!({"prompt": "paper plane", "position": "top-right", "atSec": null, "atWords": "flying",
                "durationSec": 2.0}),
     );
-    let out = compile(&p, &i, &[sticker, animate, whoosh]);
+    let out = compile(&p, &i, &[sticker, animate, whoosh.clone()]);
     let after = applied(&p, &out);
     let [Job::MakeSticker(job)] = &out.jobs[..] else {
         panic!("{:?}", out.jobs)
     };
-    assert!(job.sound.is_some());
+    assert!(job.sound.is_none() && job.motion.is_some(), "{job:?}");
     let ops = sticker_ops(&after, job, &heart()).expect("placed");
     let with_sticker = apply_ops(&after, &ops).unwrap();
     assert_eq!(sound_starts(&with_sticker), [secs(12.0)]);
+    // A sound the project had before the message doesn't count: another whoosh there plays too.
+    let again = compile(&after, &inputs(&after, "another whoosh there"), &[whoosh]);
+    assert_eq!(
+        sound_starts(&applied(&after, &again)),
+        [secs(12.0), secs(12.0)]
+    );
+}
+
+#[test]
+fn an_animate_that_leaves_its_sound_out_does_not_name_it() {
+    let p = project();
+    let i = inputs(
+        &p,
+        "a heart that whooshes in when we go flying, and a whoosh there",
+    );
+    let out = compile(
+        &p,
+        &i,
+        &[
+            call(
+                "addSound",
+                json!({"name": "whoosh", "atWords": ["flying"], "atSec": null}),
+            ),
+            call(
+                "addImage",
+                json!({"file": "Heart", "size": null, "position": "top-right", "atSec": null, "atWords": "flying",
+                       "durationSec": 2.0}),
+            ),
+            call(
+                "animate",
+                json!({"layer": "last", "enter": "pop", "exit": null, "emphasis": null, "sound": "Whoosh"}),
+            ),
+        ],
+    );
+    let animate = out
+        .changes
+        .iter()
+        .find(|c| c.code == "chat.animate")
+        .expect("animated");
+    assert!(!animate.params.contains_key("sound"), "{animate:?}");
 }
 
 #[test]
