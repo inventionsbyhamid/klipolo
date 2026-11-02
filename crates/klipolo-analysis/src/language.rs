@@ -11,6 +11,7 @@
 //! the caption faces (`klipolo_model::text_language`) read it. O(characters).
 
 use klipolo_model::speech::is_mark;
+use klipolo_speech_wire::timing::fillers;
 
 /// A transcript with no letters at all (no speech, only digits) is tagged this.
 pub const DEFAULT: &str = "en";
@@ -134,7 +135,11 @@ pub fn of_words<'a>(words: impl IntoIterator<Item = &'a str>) -> &'static str {
             has_devanagari |= s == Script::Devanagari;
         }
         if has_latin {
-            latin.push(bare(word));
+            let bare = bare(word);
+            // A hum says nothing of the language: "um" is a Portuguese word too.
+            if !is_hum(&bare) {
+                latin.push(bare);
+            }
         }
         if has_devanagari {
             devanagari.push(word);
@@ -188,25 +193,39 @@ pub fn of_words<'a>(words: impl IntoIterator<Item = &'a str>) -> &'static str {
     }
 }
 
-/// A word's letters alone, lowercased ("Today," → "today").
+/// A word's letters alone, lowercased, any apostrophe a straight one ("It’s," → "it's").
 fn bare(word: &str) -> String {
     word.chars()
-        .filter(|c| c.is_alphabetic() || matches!(c, '\'' | '’'))
+        .filter_map(|c| match c {
+            '\'' | '’' | '‘' | 'ʼ' => Some('\''),
+            c if c.is_alphabetic() => Some(c),
+            _ => None,
+        })
         .flat_map(char::to_lowercase)
         .collect()
 }
 
-/// The commonest short words of the Latin-script languages Voice Transcribe hears, space separated. A word may stand in
-/// more than one list ("de", "la"): each language it is in counts it.
+/// The languages whose hums (`klipolo_speech_wire::timing::fillers`) are left out of the common-word count; Hindi's
+/// list holds the wordless hums every other language has.
+const HUM_LANGUAGES: [&str; 8] = ["en", "de", "nl", "fr", "es", "it", "pt", "hi"];
+
+/// Whether `bare` is a hum in any language: never counted as a common word.
+fn is_hum(bare: &str) -> bool {
+    HUM_LANGUAGES.iter().any(|l| fillers(l).contains(&bare))
+}
+
+/// The commonest short words of the Latin-script languages Voice Transcribe hears, space separated, none of one letter
+/// ("a", "o", "e" and "i" are words in many of them) and no hum ("um"). A word may stand in more than one list ("de",
+/// "la"): each language it is in counts it.
 const LATIN_WORDS: [(&str, &str); 12] = [
     (
         "en",
-        "the and is you to of it that this in i what with for are my we have be so just how your was on \
+        "the and is you to of it that this in what with for are my we have be so just how your was on \
          can will i'm it's don't",
     ),
     (
         "es",
-        "el la los las de que y en un una es por con para como del se lo muy pero hoy más les voy cómo \
+        "el la los las de que en un una es por con para como del se lo muy pero hoy más les voy cómo \
          menos yo está qué",
     ),
     (
@@ -221,11 +240,11 @@ const LATIN_WORDS: [(&str, &str); 12] = [
     ),
     (
         "it",
-        "il la di che e un una per non sono è con mi ti questo come della oggi vi meno gli anche ma",
+        "il la di che un una per non sono con mi ti questo come della oggi vi meno gli anche ma",
     ),
     (
         "pt",
-        "o a os as de que e um uma não é para com você do da em no na hoje vou como menos mais eu",
+        "os as de que uma não para com você do da em no na hoje vou como menos mais eu",
     ),
     (
         "nl",
@@ -233,7 +252,7 @@ const LATIN_WORDS: [(&str, &str); 12] = [
     ),
     (
         "pl",
-        "nie się to jest w na i z że do co jak ale tak mnie dzisiaj wam pokażę",
+        "nie się to jest na że do co jak ale tak mnie dzisiaj wam pokażę",
     ),
     (
         "tr",
@@ -253,15 +272,16 @@ const LATIN_WORDS: [(&str, &str); 12] = [
     ),
 ];
 
-/// The Latin-script language whose common words `words` (bare, lowercased) hold most of. English unless another
-/// language has at least `LATIN_MIN` of its words, and more than English: so one "um" (a Portuguese word, and an
-/// English hum) in "one two three, um, four" leaves it English.
+/// The Latin-script language whose common words `words` (bare, lowercased, hums left out) hold most of. English unless
+/// another language clearly wins: at least `LATIN_MIN` of its words, twice English's count, and `LATIN_SHARE_PCT` of
+/// all the words. A close call stays English.
 fn latin_language(words: &[String]) -> &'static str {
     let mut best = ("en", 0usize);
     let english = count(words, LATIN_WORDS[0].1);
     for (language, list) in &LATIN_WORDS[1..] {
         let n = count(words, list);
-        if n >= LATIN_MIN && n > english && n > best.1 {
+        let clear = n >= LATIN_MIN && n >= 2 * english && n * 100 >= LATIN_SHARE_PCT * words.len();
+        if clear && n > english && n > best.1 {
             best = (language, n);
         }
     }
@@ -270,6 +290,8 @@ fn latin_language(words: &[String]) -> &'static str {
 
 /// The fewest common words that make Latin letters another language than English.
 const LATIN_MIN: usize = 2;
+/// The share of a transcript's Latin words, in percent, another language's common words must reach.
+const LATIN_SHARE_PCT: usize = 8;
 
 fn count(words: &[String], list: &str) -> usize {
     words
@@ -350,6 +372,20 @@ mod tests {
             of("So today hum log ek video edit karenge and captions add karenge"),
             "en"
         );
+    }
+
+    /// A take full of hums, a stray "a" and a curly apostrophe is still English, so its hums are cut as fillers.
+    #[test]
+    fn a_filler_heavy_english_take_stays_english() {
+        assert_eq!(
+            of("Um, uh, um, hi, um, I'm testing, um, a filler cut."),
+            "en"
+        );
+        assert_eq!(
+            of("So, um, it’s a, uh, you know, um, a test. O wow, a dog, a cat, e mail."),
+            "en"
+        );
+        assert_eq!(of("Umm uh hmm er ah um"), "en");
     }
 
     #[test]
