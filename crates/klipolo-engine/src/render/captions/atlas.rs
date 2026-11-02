@@ -24,6 +24,7 @@ use super::blur::{Uniform, blurs};
 use super::cells::blur_sigmas;
 use super::layout::{PageLayout, WordBox, lay_out_page};
 use super::pipes::{FORMAT, Pipes, pass};
+use super::shaping::joins_letters;
 use crate::render::fonts::{self, family_for};
 use crate::vendor::cap::rendering::layers::text::TextLayer as GlyphLayer;
 use crate::vendor::cap::rendering::text::{PreparedText, TextAlign, TextBackgroundStyle};
@@ -285,7 +286,12 @@ fn word_text(
         stretch: face.stretch,
         opacity: 1.0,
         align: TextAlign::Center,
-        letter_spacing: style.letter_spacing_em as f32 * px,
+        // None in a script that joins its letters, as the word was measured (`joins_letters`).
+        letter_spacing: if joins_letters(layout.word_text(w)) {
+            0.0
+        } else {
+            style.letter_spacing_em as f32 * px
+        },
         // The line is the cell, so the glyphs sit centred in it as they were measured (the box is centred there too).
         line_height: ch.max(1.0) / px,
         shadow: 0.0,

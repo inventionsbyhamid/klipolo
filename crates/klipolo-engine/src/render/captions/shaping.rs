@@ -111,6 +111,7 @@ pub(super) fn measure_words(
             .map(|r| runs_within(r, range, &primary.family))
             .unwrap_or_default();
         let px = font_px * words.scales[k];
+        let spacing = if joins_letters(text) { 0.0 } else { spacing };
         let (w, h) = measure(fs, &faces[which as usize], text, px, spacing, &word_runs);
         runs_out.extend(word_runs.into_iter().map(|(r, f)| (k as u8, r, f)));
         words.widths.push(w);
@@ -212,6 +213,30 @@ fn right_to_left_language(language: &str) -> bool {
     )
 }
 
+/// Whether `text` holds letters of a script that joins them (Arabic's cursive, the Indic scripts' headline and
+/// conjuncts): letter spacing would pull them apart, so such a word is drawn and measured with none.
+pub(super) fn joins_letters(text: &str) -> bool {
+    text.chars().any(|c| {
+        matches!(
+            c.script(),
+            Script::Arabic
+                | Script::Syriac
+                | Script::Nko
+                | Script::Mongolian
+                | Script::Devanagari
+                | Script::Bengali
+                | Script::Gurmukhi
+                | Script::Gujarati
+                | Script::Oriya
+                | Script::Tamil
+                | Script::Telugu
+                | Script::Kannada
+                | Script::Malayalam
+                | Script::Sinhala
+        )
+    })
+}
+
 /// Most of the word's letters are Cyrillic.
 fn cyrillic(text: &str) -> bool {
     let (cyrillic, letters) = text
@@ -272,7 +297,7 @@ fn runs_within(
 
 #[cfg(test)]
 mod tests {
-    use super::word_levels;
+    use super::{joins_letters, word_levels};
 
     /// Each word's level for `text` split on spaces, in captions of `language`.
     fn levels(text: &str, language: &str) -> Vec<u8> {
@@ -303,5 +328,11 @@ mod tests {
     fn a_number_between_arabic_words_stays_in_their_run() {
         assert_eq!(levels("Hello مرحبا 5 بكم world", "en"), [0, 1, 1, 1, 0]);
         assert_eq!(levels("Hello مرحبا 5 world", "en"), [0, 1, 0, 0]);
+    }
+
+    #[test]
+    fn arabic_and_indic_words_join_their_letters() {
+        assert!(joins_letters("مرحبا") && joins_letters("नमस्ते") && joins_letters("வணக்கம்"));
+        assert!(!joins_letters("Hello") && !joins_letters("שלום") && !joins_letters("สวัสดี"));
     }
 }
