@@ -1,10 +1,10 @@
-import { act, fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, renderHook, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fixtureSnapshot } from '../test/fixtures';
-import { renderWithProviders } from '../test/render';
+import { renderWithProviders, TestProviders } from '../test/render';
 
 /*
  * The inspector card in the left column: while something is selected the column shows its card over the library,
@@ -39,6 +39,7 @@ vi.mock('../bridge/appWindow', () => ({
 }));
 const { usePreview } = await import('../features/media/preview');
 const { useEditorShortcuts } = await import('../features/command-palette/useEditorShortcuts');
+const { usePanelCommands } = await import('../features/command-palette/usePanelCommands');
 const { useCaptionsView } = await import('../state/captionsView');
 const { usePlayback } = await import('../state/playback');
 const { useFullScreen } = await import('../state/fullScreen');
@@ -335,6 +336,33 @@ describe('a folded library', () => {
     const rules = [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)];
     const byCard = rules.filter(([, selector, body]) => selector.includes('data-card') && /grid-template|--library-w\s*:/.test(body));
     expect(byCard.map(([, selector]) => selector.trim())).toEqual([]);
+  });
+
+  it('the card over the preview starts under its head, so the format pills stay in reach', () => {
+    const css = readFileSync(resolve(__dirname, '../styles/app.css'), 'utf8');
+    const rules = [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)];
+    const body = (selector: string) => rules.find(([, s]) => s.trim().endsWith(selector))?.[2] ?? '';
+    expect(body('.library[data-collapsed="true"] > .inspector')).toMatch(/top: var\(--stage-head-h\)/);
+    expect(body('.stage-head')).toMatch(/min-height: var\(--stage-head-h\)/);
+  });
+
+  it('Command B says what a press does: Hide settings while folded with the card over the preview', () => {
+    const label = () => {
+      const { result, unmount } = renderHook(() => usePanelCommands(), { wrapper: TestProviders });
+      const found = result.current.find((c) => c.id === 'toggle-side-panel')!.label;
+      unmount();
+      return found;
+    };
+    useLibraryPanel.setState({ collapsed: true });
+    expect(label()).toBe('Open library');
+    select('b');
+    expect(label()).toBe('Hide settings');
+    act(() => useLibraryPanel.getState().toggle(cardWanted()));
+    expect(useLibraryPanel.getState().collapsed).toBe(true);
+    expect(label()).toBe('Open library');
+    act(() => useLibraryPanel.setState({ collapsed: false }));
+    select('b');
+    expect(label()).toBe('Collapse library');
   });
 
   it('under the card the library stays laid out, so its scroll is kept, but isn’t drawn', () => {
