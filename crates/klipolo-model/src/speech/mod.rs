@@ -130,8 +130,7 @@ pub fn is_wide(c: char) -> bool {
 /// A combining mark that belongs to the letter before it: a vowel sign, virama, nukta or tone mark of the Indic, Thai,
 /// Lao, Myanmar and Khmer scripts, Hebrew points, Arabic vowel marks, or a combining accent. Many are not alphabetic to
 /// Rust (Tamil's pulli in "வணக்கம்", Thai's tone mark in "นี้", Hindi's nukta in "साफ़"), but trimming one off a word's
-/// edge changes the word, and none takes a column of its own. The scripts' own punctuation (the danda "।", Arabic's
-/// comma) is no mark.
+/// edge changes the word. The scripts' own punctuation (the danda "।", Arabic's comma) is no mark.
 pub fn is_mark(c: char) -> bool {
     match c as u32 {
         0x0300..=0x036F | 0x0483..=0x0489 | 0x1AB0..=0x1AFF | 0x1DC0..=0x1DFF | 0x20D0..=0x20FF => {
@@ -141,9 +140,7 @@ pub fn is_mark(c: char) -> bool {
         0x0591..=0x05C7 => !matches!(c as u32, 0x05BE | 0x05C0 | 0x05C3 | 0x05C6),
         0x0610..=0x061A | 0x064B..=0x065F | 0x0670 | 0x06D6..=0x06DC | 0x06DF..=0x06E4 => true,
         0x06E7..=0x06E8 | 0x06EA..=0x06ED | 0x08D3..=0x08FF => true,
-        // Devanagari to Malayalam: the vowel signs (alphabetic to Rust) at the same places in each script's block.
-        0x0900..=0x0D7F if indic_sign((c as u32 - 0x0900) % 0x80) => true,
-        // Devanagari to Sinhala: everything else not a letter or digit, less the dandas and the abbreviation sign.
+        // Devanagari to Sinhala: everything not a letter or digit, less the dandas and the abbreviation sign.
         0x0900..=0x0DFF => {
             !c.is_alphanumeric() && !matches!(c as u32, 0x0964 | 0x0965 | 0x0970 | 0x0DF4)
         }
@@ -158,16 +155,6 @@ pub fn is_mark(c: char) -> bool {
         0x17B4..=0x17D3 | 0x17DD => true,
         _ => false,
     }
-}
-
-/// Whether the place `offset` in an Indic script's block (Devanagari to Malayalam share one layout) holds a sign that
-/// joins the letter before it: the candrabindu, anusvara and visarga, the nukta, the vowel signs and virama, the length
-/// marks and the vocalic vowel signs.
-fn indic_sign(offset: u32) -> bool {
-    matches!(
-        offset,
-        0x00..=0x03 | 0x3A..=0x3C | 0x3E..=0x4F | 0x55..=0x57 | 0x62..=0x63
-    )
 }
 
 /// Characters of scripts written without spaces between words (Han, kana and their punctuation and full-width forms:

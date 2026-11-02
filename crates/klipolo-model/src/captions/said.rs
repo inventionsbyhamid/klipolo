@@ -10,25 +10,27 @@
 use std::collections::HashMap;
 
 use crate::project::Project;
+use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
+
 use crate::speech::{
-    is_mark, is_wide, joins_unspaced, Speech, Spoken, SpokenWord, Transcript, Word, WordFix,
-    WordKind,
+    is_wide, joins_unspaced, Speech, Spoken, SpokenWord, Transcript, Word, WordFix, WordKind,
 };
 use crate::time::Us;
 
 /// A fix's later piece this far or further from the word it continues doesn't carry it on.
 pub const BREAK_GAP_US: Us = 500_000;
 
-/// A word's width in columns: wide characters (Han, kana, Hangul, full-width forms) take two, and a letter's combining
-/// marks none ("दिखाऊंगी" is four, not eight).
+/// A word's width in columns: wide characters (Han, kana, Hangul, full-width forms) take two, and a non-spacing mark
+/// (a virama, a nukta, a vowel sign above or below its letter, a Thai tone mark) none, so "साफ़" is three. A spacing
+/// vowel sign ("ा", Tamil's "ா") takes one, as it is drawn beside its letter.
 pub(crate) fn columns(s: &str) -> usize {
     if s.is_ascii() {
         return s.len();
     }
     s.chars()
-        .map(|c| match c {
+        .map(|c| match c.general_category() {
             _ if is_wide(c) => 2,
-            _ if is_mark(c) => 0,
+            GeneralCategory::NonspacingMark | GeneralCategory::EnclosingMark => 0,
             _ => 1,
         })
         .sum()
@@ -273,10 +275,13 @@ pub(crate) fn walk(spoken: &Spoken, p: &Project, speech: &Speech, sink: &mut imp
 mod tests {
     use super::columns;
 
+    /// Non-spacing marks take no column; spacing vowel signs take one.
     #[test]
-    fn a_letters_marks_take_no_column() {
-        assert_eq!(columns("दिखाऊंगी"), 4);
+    fn a_letters_non_spacing_marks_take_no_column() {
+        assert_eq!(columns("साफ़"), 3);
+        assert_eq!(columns("दिखाऊंगी"), 7);
         assert_eq!(columns("வணக்கம்"), 5);
+        assert_eq!(columns("தமிழா"), 5);
         assert_eq!(columns("นี้"), 1);
         assert_eq!(columns("今日"), 4);
         assert_eq!(columns("café"), 4);
