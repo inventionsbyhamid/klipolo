@@ -1479,10 +1479,10 @@ ol {
     0.04em 0.08em 0 #0D1222;
 }
 
+/* The word being said, a little bigger and in colour */
 .cap-wordpop b {
-  display: inline-block;
+  font-size: 1.1em;
   color: #39E508;
-  transform: scale(1.1);
 }
 
 .cap-boldbox {
