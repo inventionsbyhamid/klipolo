@@ -56,7 +56,7 @@ const { useCaptionsView } = await import('../../state/captionsView');
 const { useToasts } = await import('../../state/toasts');
 const { usePack } = await import('./shelves');
 const { useMarks } = await import('./marks');
-const { stopPreview, usePreview } = await import('./preview');
+const { stopPreview, togglePreview, usePreview } = await import('./preview');
 const { beginMediaDrag } = await import('../timeline/drag/mediaDrag');
 const { Library } = await import('../../layout/Library');
 
@@ -75,6 +75,11 @@ class FakeAudio {
   pause = vi.fn(() => {
     this.paused = true;
   });
+  /** Its sound let go: no source, loaded again. */
+  removeAttribute = vi.fn((name: string) => {
+    if (name === 'src') this.src = '';
+  });
+  load = vi.fn();
   addEventListener(type: string, listener: () => void) {
     this.heard.set(type, [...(this.heard.get(type) ?? []), listener]);
   }
@@ -135,6 +140,9 @@ describe('a sound’s play button', () => {
     expect(whoosh.querySelector<HTMLElement>('.preview-progress')!.style.animationDuration).toBe('900ms');
     await userEvent.click(stop);
     expect(lastAudio().paused).toBe(true);
+    // Its sound is let go at once.
+    expect(lastAudio().src).toBe('');
+    expect(lastAudio().load).toHaveBeenCalledTimes(1);
     expect(within(whoosh).getByRole('button', { name: 'Play Whoosh' })).toBeInTheDocument();
     expect(whoosh).not.toHaveClass('is-previewing');
     expect(whoosh.querySelector('.preview-progress')).toBeNull();
@@ -268,7 +276,7 @@ describe('a sound’s play button', () => {
     expect(useToasts.getState().toasts).toHaveLength(2);
   });
 
-  it('leaves Space to the timeline: Space on a row plays the timeline, not the sound', async () => {
+  it('leaves Space to the timeline: Space on the play button plays the sound, on the row the timeline', async () => {
     const { useEditorShortcuts } = await import('../command-palette/useEditorShortcuts');
     function Editor() {
       useEditorShortcuts();
@@ -276,8 +284,76 @@ describe('a sound’s play button', () => {
     }
     renderWithProviders(<Editor />);
     const whoosh = await rowOf('Whoosh');
-    fireEvent.keyDown(whoosh, { key: ' ' });
-    expect(library.sound).not.toHaveBeenCalled();
+    within(whoosh).getByRole('button', { name: 'Play Whoosh' }).focus();
+    await userEvent.keyboard(' ');
+    await waitFor(() => expect(FakeAudio.made.at(-1)?.paused).toBe(false));
+    expect(usePreview.getState().key).toBe('pack:whoosh');
+    expect(engine.play).not.toHaveBeenCalled();
+    // Pressed again, the same button stops it.
+    expect(within(whoosh).getByRole('button', { name: 'Stop Whoosh' })).toHaveFocus();
+    await userEvent.keyboard(' ');
     expect(usePreview.getState().key).toBeNull();
+    expect(engine.play).not.toHaveBeenCalled();
+    // Space on the row itself plays the timeline.
+    fireEvent.keyDown(whoosh, { key: ' ' });
+    expect(engine.play).toHaveBeenCalledTimes(1);
+    expect(usePlayback.getState().playing).toBe(true);
+    expect(library.sound).toHaveBeenCalledTimes(1);
+  });
+
+  it('the art drags the row as the rest of it does; its click plays, and a drag that ends on it doesn’t', async () => {
+    renderWithProviders(<Library />);
+    const whoosh = await rowOf('Whoosh');
+    const art = within(whoosh).getByRole('button', { name: 'Play Whoosh' });
+    fireEvent.pointerDown(art, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+    expect(beginMediaDrag).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(beginMediaDrag).mock.calls[0][1]).toMatchObject({ id: 'klipolo-pack-whoosh', name: 'Whoosh' });
+    // Let go far from where it was pressed: a drag, so it doesn't play.
+    fireEvent.click(art, { detail: 1, clientX: 140, clientY: 300 });
+    expect(usePreview.getState().key).toBeNull();
+    // A click where it was pressed plays.
+    fireEvent.pointerDown(art, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.click(art, { detail: 1, clientX: 11, clientY: 10 });
+    expect(usePreview.getState().key).toBe('pack:whoosh');
+    await waitFor(() => expect(FakeAudio.made).toHaveLength(1));
+  });
+
+  it('stops when the search changes, as its row may go', async () => {
+    renderWithProviders(<Library />);
+    const whoosh = await rowOf('Whoosh');
+    await userEvent.click(within(whoosh).getByRole('button', { name: 'Play Whoosh' }));
+    await waitFor(() => expect(FakeAudio.made).toHaveLength(1));
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search sounds' }), 'imp');
+    expect(lastAudio().paused).toBe(true);
+    expect(usePreview.getState().key).toBeNull();
+    expect(screen.queryByText('Whoosh')).toBeNull();
+  });
+
+  it('keeps the last 8 sounds, lets the oldest go, and lets them all go as another project opens', async () => {
+    const made = vi.spyOn(URL, 'createObjectURL');
+    const revoked = vi.spyOn(URL, 'revokeObjectURL');
+    const play = (n: number) => act(() => togglePreview(`pack:s${n}`, { packId: `s${n}` }));
+    for (let n = 0; n < 8; n++) await play(n);
+    expect(library.sound).toHaveBeenCalledTimes(8);
+    expect(revoked).not.toHaveBeenCalled();
+    const urls = made.mock.results.map((r) => r.value as string);
+    // A ninth lets the oldest go.
+    await play(8);
+    await waitFor(() => expect(revoked.mock.calls).toEqual([[urls[0]]]));
+    // One kept plays without asking again; the one let go is asked for again (and the next oldest goes).
+    await play(5);
+    expect(library.sound).toHaveBeenCalledTimes(9);
+    await play(0);
+    expect(library.sound).toHaveBeenCalledTimes(10);
+    expect(library.sound).toHaveBeenLastCalledWith({ packId: 's0' });
+    await waitFor(() => expect(revoked.mock.calls).toEqual([[urls[0]], [urls[1]]]));
+    // Another project: every kept sound goes.
+    act(() => useProject.setState({ snapshot: { ...fixtureSnapshot(), opening: 3 } }));
+    await waitFor(() => expect(revoked).toHaveBeenCalledTimes(10));
+    expect(new Set(revoked.mock.calls.map(([url]) => url)).size).toBe(10);
+    await play(5);
+    expect(library.sound).toHaveBeenCalledTimes(11);
+    made.mockRestore();
+    revoked.mockRestore();
   });
 });
