@@ -44,7 +44,7 @@ use klipolo_model::ops::Op;
 use klipolo_model::params::{ParamKind, ParamValue};
 use klipolo_model::project::{Asset, AssetKind};
 use klipolo_model::query::{anchor_at, main_track_duration, resolve_attach, video_duration};
-use klipolo_model::speech::WordKind;
+use klipolo_model::speech::{WordKind, is_mark, joins_unspaced, word_ranges};
 use klipolo_model::text_safety::clean_shown;
 use klipolo_model::time::{MIN_DURATION_US, Us};
 use klipolo_model::timeline::ItemContent;
@@ -198,18 +198,20 @@ struct Said {
     end: usize,
 }
 
+/// `text`'s words as captions show them (`word_ranges`: a Chinese or Japanese character is a word, as the transcript
+/// holds it), each with its letters and digits lowercased.
 fn said(text: &str) -> Vec<Said> {
     let mut out = Vec::new();
-    let mut at = 0;
-    for piece in text.split_whitespace() {
-        let start = at + text[at..].find(piece).unwrap_or(0);
-        let end = start + piece.len();
-        at = end;
-        let bare: String = piece
-            .trim_matches(|c: char| !c.is_alphanumeric())
+    for range in word_ranges(text) {
+        let bare: String = text[range.clone()]
+            .trim_matches(|c: char| !c.is_alphanumeric() && !is_mark(c))
             .to_lowercase();
         if !bare.is_empty() {
-            out.push(Said { bare, start, end });
+            out.push(Said {
+                bare,
+                start: range.start,
+                end: range.end,
+            });
         }
     }
     out
@@ -231,7 +233,12 @@ pub(crate) fn persons_words(message: &str, text: &str) -> Option<String> {
     let span = span
         .trim_start_matches(|c: char| QUOTES.contains(&c) || c.is_whitespace())
         .trim_end_matches(|c: char| {
-            QUOTES.contains(&c) || matches!(c, ',' | '.' | ';' | ':') || c.is_whitespace()
+            QUOTES.contains(&c)
+                || matches!(
+                    c,
+                    ',' | '.' | ';' | ':' | '，' | '。' | '、' | '；' | '：' | '।' | '،' | '؛'
+                )
+                || c.is_whitespace()
         });
     (!span.is_empty()).then(|| span.to_owned())
 }
@@ -396,11 +403,16 @@ fn said_in_video(c: &Compiler, text: &str) -> Option<String> {
     (c.snapshot.assets.iter())
         .filter_map(|asset| transcripts.get(&asset.id))
         .find_map(|t| {
-            let said: Vec<&str> = (t.words.iter())
-                .filter(|w| w.kind != WordKind::Pause)
-                .map(|w| w.text.as_str())
-                .collect();
-            persons_words(&said.join(" "), text)
+            // As captions show them: two Chinese or Japanese words meet without a space.
+            let mut said = String::new();
+            for w in (t.words.iter()).filter(|w| w.kind != WordKind::Pause) {
+                let joins = said.ends_with(joins_unspaced) && w.text.starts_with(joins_unspaced);
+                if !said.is_empty() && !joins {
+                    said.push(' ');
+                }
+                said.push_str(&w.text);
+            }
+            persons_words(&said, text)
         })
 }
 
@@ -734,5 +746,23 @@ mod tests {
         assert_eq!(persons_words(m, "Day 2 in Lisbon"), None);
         assert_eq!(persons_words(m, ""), None);
         assert_eq!(persons_words("Lisbon", "Day 1 in Lisbon"), None);
+    }
+
+    /// Hindi, Tamil and Chinese words are found as written, their own marks kept and the sentence's mark left out.
+    #[test]
+    fn the_persons_words_are_found_in_any_script() {
+        assert_eq!(
+            persons_words("आज हम वीडियो एडिटिंग सीखेंगे।", "वीडियो एडिटिंग सीखेंगे").as_deref(),
+            Some("वीडियो एडिटिंग सीखेंगे")
+        );
+        assert_eq!(
+            persons_words("வணக்கம் நண்பர்களே, இன்று", "வணக்கம் நண்பர்களே").as_deref(),
+            Some("வணக்கம் நண்பர்களே")
+        );
+        assert_eq!(
+            persons_words("大家好，今天我来教大家。", "今天我来").as_deref(),
+            Some("今天我来")
+        );
+        assert_eq!(persons_words("大家好，今天我来教大家。", "明天"), None);
     }
 }
