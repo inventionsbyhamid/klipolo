@@ -1282,7 +1282,7 @@ fn a_short_is_a_look_then_one_batch_then_words() {
         "Here is your vertical short. Review the cut below."
     );
     // A short whose model goes one call a step still has room: the steps are a safety net, not the plan.
-    assert_eq!(MAX_STEPS, 8);
+    assert_eq!(MAX_STEPS, 10);
 }
 
 #[test]

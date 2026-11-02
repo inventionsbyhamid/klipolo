@@ -52,8 +52,9 @@ use crate::tools::{FunctionCall, ToolCall, tools};
 pub const KEPT_TURNS: usize = 6;
 /// The most model calls one message makes: each answer with calls gets what came of them and is asked again, until
 /// one answers in words alone. A safety net: the prompt asks for calls that don't depend on each other in one answer,
-/// and the spend cap still bounds what a message costs.
-pub const MAX_STEPS: usize = 8;
+/// and the spend cap still bounds what a message costs (a paid short took 8 steps, about $0.19; an answer cut off at
+/// its output cap takes one more).
+pub const MAX_STEPS: usize = 10;
 /// Sent back when an answer says what it will do but calls no tool.
 pub const GO_ON: &str = "Go on: make the calls now.";
 /// Sent back after an answer cut off at its output cap: its finished calls are kept, and it is asked once more.
