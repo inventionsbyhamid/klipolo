@@ -2,9 +2,11 @@
    The design tokens every screen's styles use, as CSS variables.
    Each colour is light-dark(light, dark): the app follows the system's appearance with no script (so no flash), and
    data-theme="light" or "dark" on <html> forces one (Settings, Appearance). Quiet neutral greys in both themes: a grey
-   canvas, white or near-black panels, hairlines between them. Signal yellow is the one accent: the primary action, the
-   selection and the focus ring (signal-ink when it is drawn as a line or mark). Red is recording, the playhead and what
-   will be cut. The video and what is drawn over it stay dark in both (`color-scheme: dark` on those boxes). */
+   canvas, white or near-black panels, hairlines between them. Signal red, the brand red, is the one accent: the
+   primary action, the selection and the focus ring (signal-ink when it is drawn as a line or mark). Red also means
+   recording, the playhead and what will be cut, and its shape tells them apart: solid red is what you chose or are
+   doing, the playhead is the one red line with a head on the ruler, and what a proposal takes away is striped red with
+   a tag that names it. The video and what is drawn over it stay dark in both (`color-scheme: dark` on those boxes). */
 
 :root {
   color-scheme: light dark;
@@ -31,12 +33,12 @@
   --color-ink-soft: light-dark(#4f555f, #a3aab5);    /* secondary text, 4.5:1 or more */
   --color-ink-faint: light-dark(#5f6570, #8f97a3);   /* meta text (times, counts), 4.5:1 or more; not on --color-bay-press */
   --color-ink-disabled: light-dark(#a4a5a7, #71747a); /* disabled labels only (exempt from contrast rules) */
-  --color-navy: #1c1f24;         /* text on yellow, in both themes */
+  --color-navy: #ffffff;         /* text on the primary red, in both themes */
 
   /* ---------- Color: roles ---------- */
-  --color-hilite: #f5c400;       /* signal yellow: the primary action, the same in both themes */
-  --color-hilite-hover: light-dark(#e0b300, #ffd633);
-  --color-hilite-press: #e0b300;
+  --color-hilite: #e0301a;       /* signal red: the primary action, the same in both themes */
+  --color-hilite-hover: #c8281a; /* deeper under the pointer, so the white text keeps its contrast */
+  --color-hilite-press: #b8241a;
 
   --color-cut: light-dark(#c62828, #ff4d4f);         /* tally red: recording, the playhead, and "this will be cut" */
   --color-cut-text: light-dark(#c62828, #ff6b63);    /* red used as text on panels */
@@ -51,15 +53,15 @@
   --color-clip-deep: light-dark(#f4f5f7, #2a2e34);   /* its fill */
   --color-clip-wash: light-dark(rgb(47 134 232 / 0.2), rgb(79 163 255 / 0.2));
 
-  /* Signal: the selection, the switched-on control and the focus. As a fill it is yellow with dark text in both themes;
-     drawn as a ring, line or mark on a surface it is signal-ink, dark enough in the light theme to reach 3:1. */
-  --color-paper: #f5c400;
-  --color-paper-hover: light-dark(#e0b300, #ffd633);
-  --color-paper-wash: light-dark(rgb(245 196 0 / 0.15), rgb(245 196 0 / 0.15));
+  /* Signal: the selection, the switched-on control and the focus. As a fill it is the brand red with white text in both
+     themes; drawn as a ring, line or mark on a surface it is signal-ink, lifted in the dark theme to reach 3:1. */
+  --color-paper: #e0301a;
+  --color-paper-hover: #c8281a;
+  --color-paper-wash: light-dark(rgb(224 48 26 / 0.1), rgb(255 90 69 / 0.14));
   --color-paper-track: light-dark(rgb(28 31 36 / 0.16), rgb(236 238 241 / 0.25)); /* a spinner's track, under its head */
-  --color-paper-edge: light-dark(#9a7600, #f5c400);
-  --color-on-paper: #1c1f24;     /* text, knobs and edges on signal yellow */
-  --color-signal-ink: light-dark(#9a7600, #f5c400);  /* the focus ring, selection outlines and marks */
+  --color-paper-edge: light-dark(#e0301a, #ff5a45);
+  --color-on-paper: #ffffff;     /* text, knobs and edges on signal red */
+  --color-signal-ink: light-dark(#e0301a, #ff5a45);  /* the focus ring, selection outlines and marks */
 
   /* Layer colours, used on the timeline and media icons only */
   --color-lane-overlay: light-dark(#7c5cf0, #9b82ff); /* text and image overlays */

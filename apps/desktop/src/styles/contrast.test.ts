@@ -4,8 +4,10 @@ import { describe, expect, it } from 'vitest';
 
 const css = readFileSync(resolve(__dirname, 'tokens.css'), 'utf8');
 
-/** Colours the same in both themes: signal yellow as a fill, and the dark ink written on it. */
-const SAME_IN_BOTH = ['hilite', 'hilite-press', 'navy', 'paper', 'on-paper'];
+/** Colours the same in both themes: signal red as a fill, deeper under the pointer, and the white written on it. */
+const SAME_IN_BOTH = ['hilite', 'hilite-hover', 'hilite-press', 'navy', 'paper', 'paper-hover', 'on-paper'];
+/** The brand red: the site's caret and the logo's red. */
+const BRAND_RED = '#e0301a';
 /** Drawn by macOS, listed for reference only: the app never draws them. */
 const MAC_ONLY = ['mac-close', 'mac-min', 'mac-zoom'];
 
@@ -52,7 +54,7 @@ describe('colour tokens', () => {
     expect(css).toMatch(/\[data-theme=['"]dark['"]\]\s*\{\s*color-scheme:\s*dark;\s*\}/);
   });
 
-  it('every colour has a light and a dark value, except yellow and the ink on it', () => {
+  it('every colour has a light and a dark value, except the red fill and the white on it', () => {
     const names = [...css.matchAll(/--color-([a-z0-9-]+):/g)].map((m) => m[1]);
     expect(names.length).toBeGreaterThan(30);
     for (const name of names) {
@@ -85,10 +87,10 @@ describe('colour tokens', () => {
   });
 
   it('text on a filled mark reaches AA in both themes', () => {
-    // A switch that is on, a highlighted menu row, tags: signal yellow, with its own ink.
+    // A switch that is on, a highlighted menu row, tags: signal red, with white on it.
     expectContrast('on-paper', ['paper', 'paper-hover'], 4.5);
-    // The primary action: dark ink on signal yellow.
-    expectContrast('navy', ['hilite', 'hilite-hover'], 4.5);
+    // The primary action: white on signal red, under the pointer and pressed too.
+    expectContrast('navy', ['hilite', 'hilite-hover', 'hilite-press'], 4.5);
     // "Cut" tags.
     expectContrast('on-cut', ['cut'], 4.5);
     // The music's name tag.
@@ -107,8 +109,16 @@ describe('colour tokens', () => {
   });
 
   it('the focus ring and the borders of controls reach 3:1 in both themes', () => {
-    // Signal yellow drawn as a ring, outline or mark: the focus ring and the selection.
+    // Signal red drawn as a ring, outline or mark: the focus ring and the selection.
     expectContrast('signal-ink', SURFACES, 3);
+    // The time range's edges.
+    expectContrast('paper-edge', SURFACES, 3);
     expectContrast('line-strong', ['night', 'bay', 'bay-raised', 'dialog'], 3);
+  });
+
+  it('the accent is the brand red, as a fill and as the ring and marks in the light theme', () => {
+    expect(token('hilite')).toEqual([BRAND_RED, BRAND_RED]);
+    expect(token('paper')).toEqual([BRAND_RED, BRAND_RED]);
+    expect(token('signal-ink')[0]).toBe(BRAND_RED);
   });
 });
