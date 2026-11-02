@@ -227,7 +227,7 @@ describe('Record your screen', () => {
     expect(choose).toHaveClass('btn-primary', 'btn-lg');
     expect(record).toHaveClass('btn-secondary', 'btn-lg');
     expect(choose.nextElementSibling).toBe(record);
-    // Still one yellow.
+    // Still one red button.
     expect(container.querySelectorAll('.btn-primary')).toHaveLength(1);
     await userEvent.click(record);
     expect(openRecorder).toHaveBeenCalledTimes(1);

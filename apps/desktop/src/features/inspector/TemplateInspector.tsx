@@ -20,7 +20,7 @@ export function templateParams(content: GeneratorContent): ParamSpec[] {
   return BUILTINS.find((def) => def.id === content.source)?.params ?? [];
 }
 
-/** The accent colours offered: the brand yellow first (the templates' own), then the lane colours and white. */
+/** The accent colours offered: yellow first (the templates' own), then the timeline's layer colours and white. */
 function accents(t: (d: { id: string; message: string }) => string): Swatch[] {
   return [
     { value: '#FFD02E', name: t({ id: 'color.yellow', message: 'Yellow' }) },

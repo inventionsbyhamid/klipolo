@@ -47,12 +47,28 @@ describe('colours', () => {
     }
   });
 
-  it('navy is only ever text on yellow; text and edges on paper, red and lane colours use their own ink', () => {
+  it('navy is only ever text on the primary red; paper, red and the layer colours have their own ink', () => {
     const navy = ALL.filter(({ body }) => body.includes('--color-navy'));
     expect(navy.length).toBeGreaterThan(0);
     for (const { file, selector, body } of navy) {
       expect(body, `${file} ${selector}`).toMatch(/--color-hilite/);
     }
+  });
+
+  it('what a proposal takes away is striped red, and the time range you chose is a plain wash', () => {
+    const striped = /repeating-linear-gradient\(135deg, var\(--color-cut-hatch\)/;
+    expect(rule('.tl-cut'), '.tl-cut').toMatch(striped);
+    expect(rule('.tl-ghost'), '.tl-ghost').toMatch(striped);
+    expect(rule('.tl-range'), '.tl-range').not.toMatch(/repeating-linear-gradient|--color-cut/);
+  });
+
+  it('a recording marker is grey, and red only while a proposal removes it', () => {
+    for (const selector of ['.tl-marker-flag', '.tl-marker-line']) {
+      expect(rule(selector), selector).toMatch(/--color-ink-soft/);
+      expect(rule(selector), selector).not.toMatch(/--color-(signal-ink|paper|cut)/);
+    }
+    const going = ALL.find(({ selector }) => selector.includes('.tl-marker[data-ghost] .tl-marker-flag'));
+    expect(going?.body).toMatch(/--color-cut/);
   });
 
   it('the video and what is drawn over it stay dark in both themes', () => {

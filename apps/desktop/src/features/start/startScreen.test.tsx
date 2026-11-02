@@ -594,10 +594,10 @@ describe('StartScreen', () => {
     await waitFor(() => expect(card('Studio tour')).toHaveFocus());
   });
 
-  it('one_yellow_and_no_red_or_dash', async () => {
-    const check = (state: string, yellows: number) => {
+  it('one_red_button_and_no_cut_red_or_dash', async () => {
+    const check = (state: string, primaries: number) => {
       const main = screen.getByRole('main', { name: 'Your projects' });
-      expect(main.querySelectorAll('.btn-primary'), state).toHaveLength(yellows);
+      expect(main.querySelectorAll('.btn-primary'), state).toHaveLength(primaries);
       expect(main.querySelector('[class*="cut"]'), state).toBeNull();
       expect(main.textContent, state).not.toMatch(/[\u2013\u2014]/);
       for (const button of within(main).queryAllByRole('button')) {

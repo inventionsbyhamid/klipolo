@@ -1,7 +1,6 @@
 /* The components' semantic colour names, mapped onto Klipolo's tokens. `inline reference`: each utility uses
    the token itself and no theme variable is emitted, so nothing here can shadow or loop on a token. Signal is the
-   yellow accent (a fill with dark text); signal-ink is that accent drawn as a ring, line or mark, and the focus
-   ring. */
+   red accent (a fill with white text); signal-ink is that accent drawn as a ring, line or mark, and the focus ring. */
 @theme inline reference {
   --color-canvas: var(--color-night);
   --color-panel: var(--color-bay);

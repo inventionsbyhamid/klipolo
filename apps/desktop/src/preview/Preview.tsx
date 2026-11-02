@@ -19,7 +19,7 @@ import { recordYourScreen } from '../state/recorder';
 export { useShownFormat };
 
 /**
- * An empty project's drop zone: drop videos anywhere on the window, or choose them (the one yellow), or
+ * An empty project's drop zone: drop videos anywhere on the window, or choose them (the one red), or
  * record your screen (the Record dialog, as from the start screen). It turns paper while files are held over the
  * window.
  */

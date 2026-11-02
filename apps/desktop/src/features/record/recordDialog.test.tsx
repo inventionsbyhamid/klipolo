@@ -61,8 +61,8 @@ function emit(take: string, event: CaptureEvent) {
 }
 
 const recordButton = () => screen.getByRole('button', { name: 'Record' });
-/** The yellow buttons that can be pressed now: a disabled one is drawn grey. */
-const yellows = (root: HTMLElement) =>
+/** The red primary buttons that can be pressed now: a disabled one is drawn grey. */
+const primaries = (root: HTMLElement) =>
   [...root.querySelectorAll<HTMLElement>('.btn-primary')].filter(
     (b) => b.getAttribute('aria-disabled') !== 'true' && !b.hasAttribute('disabled'),
   );
@@ -98,11 +98,11 @@ describe('the dialog and its choices', () => {
     expect(within(dialog).queryByText('Getting ready')).toBeNull();
   });
 
-  it('record_is_the_only_yellow_button', async () => {
+  it('record_is_the_only_red_button', async () => {
     const dialog = await openOn();
     expect(dialog).toHaveTextContent(SUBTITLE);
     expect(dialog).toHaveTextContent(STATUS);
-    expect(yellows(dialog)).toEqual([recordButton()]);
+    expect(primaries(dialog)).toEqual([recordButton()]);
     expect(recordButton()).not.toHaveAttribute('aria-disabled');
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveClass('btn-secondary');
     // Opening asked nothing and armed nothing: only the Record press does.
@@ -171,7 +171,7 @@ describe('the dialog and its choices', () => {
     expect(within(group).getByRole('radio', { name: 'Safari' })).toHaveAttribute('tabindex', '0');
     expect(recordButton()).toHaveAttribute('aria-disabled', 'true');
     expect(recordButton()).toHaveAccessibleDescription('Choose an app first');
-    expect(yellows(dialog)).toEqual([]);
+    expect(primaries(dialog)).toEqual([]);
     await userEvent.click(recordButton());
     expect(fake.calls).toEqual(['setup']);
     await userEvent.click(within(group).getByRole('radio', { name: 'Notes' }));
@@ -247,7 +247,7 @@ describe('the dialog and its choices', () => {
     // No bubble over a screen; the mirror is for the picture only.
     expect(screen.queryByRole('switch', { name: 'Show me on screen while recording' })).toBeNull();
     expect(screen.getByRole('switch', { name: 'Mirror my camera' })).toHaveAttribute('aria-checked', 'true');
-    expect(yellows(dialog)).toEqual([recordButton()]);
+    expect(primaries(dialog)).toEqual([recordButton()]);
     await userEvent.click(recordButton());
     expect(fake.calls).toEqual(['setup', 'arm', 'send:start']);
     expect(fake.armed[0]).toEqual({
@@ -358,7 +358,7 @@ describe('the dialog and its choices', () => {
     const dialog = await openOn(refusal('capture.error.testRun'));
     expect(within(dialog).getByRole('alert')).toHaveTextContent('Recording is off in this test run.');
     expect(screen.queryByRole('button', { name: 'Record' })).toBeNull();
-    expect(yellows(dialog)).toEqual([]);
+    expect(primaries(dialog)).toEqual([]);
     const again = screen.getByRole('button', { name: 'Try again' });
     expect(again).toHaveClass('btn-secondary');
     fake.script.setup = () => recorderSetup();
@@ -538,14 +538,10 @@ describe('the dialog and its choices', () => {
     expect(screen.getByRole('dialog', { name: 'Record' })).toBeInTheDocument();
   });
 
-  it('red_only_on_record_and_no_em_or_en_dash', async () => {
+  it('no_cut_red_and_no_em_or_en_dash', async () => {
     const css = readFileSync(resolve(__dirname, 'record.css'), 'utf8');
-    // Red only on Record itself, the dialog foot's primary button that starts a take.
-    const red = css.replace(/\/\*[\s\S]*?\*\//g, '').match(/[^{}]+\{[^{}]*--color-cut[^{}]*\}/g) ?? [];
-    expect(red.length).toBeGreaterThan(0);
-    for (const rule of red) {
-      expect(rule.trim()).toMatch(/^\.record-dialog \.dialog-foot \.btn-primary:not\(:disabled\)/);
-    }
+    // Record is red as every primary button is; the cut red stays on the timeline.
+    expect(css).not.toMatch(/--color-cut/);
     // Tokens only: no raw colours.
     expect(css).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
     const dialog = await openOn(
@@ -570,10 +566,10 @@ describe('the dialog and its choices', () => {
 describe('permission steps', () => {
   it('permission_step_replaces_record_until_allowed', async () => {
     const dialog = await openOn(recorderSetup({ permissions: { screen: 'notAsked' } }));
-    // Ask: the step's button is the one yellow, and Record waits for it.
+    // Ask: the step's button is the one red button, and Record waits for it.
     expect(dialog).toHaveTextContent('Klipolo needs your permission to record your screen.');
     const step = screen.getByRole('button', { name: 'Allow screen recording' });
-    expect(yellows(dialog)).toEqual([step]);
+    expect(primaries(dialog)).toEqual([step]);
     expect(recordButton()).toHaveAttribute('aria-disabled', 'true');
     expect(recordButton()).toHaveAccessibleDescription('Allow screen recording first');
     expect(screen.queryByRole('button', { name: 'Open privacy settings' })).toBeNull();
@@ -587,7 +583,7 @@ describe('permission steps', () => {
     expect(dialog).toHaveTextContent('Turn on Klipolo in the list that opened, then reopen Klipolo.');
     expect(step).toHaveAccessibleName('Reopen Klipolo');
     expect(step).toHaveFocus();
-    expect(yellows(dialog)).toEqual([step]);
+    expect(primaries(dialog)).toEqual([step]);
     const settings = screen.getByRole('button', { name: 'Open privacy settings' });
     expect(settings).toHaveClass('btn-secondary');
     await userEvent.click(settings);
@@ -612,7 +608,7 @@ describe('permission steps', () => {
     const settings = screen.getByRole('button', { name: 'Open privacy settings' });
     const allow = screen.getByRole('button', { name: 'Allow screen recording' });
     expect(settings).toHaveClass('btn-secondary');
-    expect(yellows(dialog)).toEqual([allow]);
+    expect(primaries(dialog)).toEqual([allow]);
     // The primary is last.
     expect(settings.compareDocumentPosition(allow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(recordButton()).toHaveAccessibleDescription('Allow screen recording first');
@@ -749,7 +745,7 @@ describe('countdown, saving and failure', () => {
     emit('take-1', meter('mic', -80));
     expect(level).toHaveAttribute('aria-valuenow', '0');
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveClass('btn-secondary');
-    expect(yellows(dialog)).toEqual([]);
+    expect(primaries(dialog)).toEqual([]);
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(fake.calls).toEqual(['setup', 'arm', 'send:start', 'send:cancel']);
     expect(recordButton()).toBeInTheDocument();
@@ -818,7 +814,7 @@ describe('countdown, saving and failure', () => {
     expect(dialog.querySelector('.record-count')).toBeNull();
     // Nothing to press but Cancel, which keeps the keyboard.
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
-    expect(yellows(dialog)).toEqual([]);
+    expect(primaries(dialog)).toEqual([]);
     // Answered: the countdown starts again from the top (the worker says its number first), and is said again.
     emit('take-1', countdown(3));
     emit('take-1', systemAlert(false));
@@ -880,7 +876,7 @@ describe('countdown, saving and failure', () => {
     expect(screen.getByRole('heading', { name: 'Record' })).toHaveFocus();
     const again = screen.getByRole('button', { name: 'Try again' });
     expect(again).toHaveClass('btn-secondary');
-    expect(yellows(dialog)).toEqual([recordButton()]);
+    expect(primaries(dialog)).toEqual([recordButton()]);
     fake.script.arm = undefined;
     await userEvent.click(again);
     expect(fake.calls).toEqual(['setup', 'arm', 'arm', 'send:start']);

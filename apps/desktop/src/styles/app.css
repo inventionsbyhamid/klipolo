@@ -988,7 +988,7 @@
   font-size: var(--text-md);
 }
 
-/* Choose files (the one yellow) and Record your screen side by side (one above the other where they don't fit), and
+/* Choose files (the one red) and Record your screen side by side (one above the other where they don't fit), and
    Choose files' key under them. */
 .drop-actions {
   display: flex;
@@ -1284,9 +1284,9 @@
   pointer-events: none;
 }
 
-/* A recording's markers along the top of the Video row: a signal-ink flag (you put it there) with a line down
-   through the clips that takes no presses; red while a proposal removes it. Over the clips, under the playhead and the
-   marks. */
+/* A recording's markers along the top of the Video row: a grey flag (you put it there) with a line down through the
+   clips that takes no presses; red while a proposal removes it. Grey, not the accent red, so a marker's line never
+   passes for the playhead and the red of one going stays clear. Over the clips, under the playhead and the marks. */
 .tl-markers {
   position: absolute;
   inset: 0;
@@ -1315,7 +1315,7 @@
 .tl-marker-flag {
   position: absolute;
   inset: 0;
-  background: var(--color-signal-ink);
+  background: var(--color-ink-soft);
   clip-path: polygon(0 0, 100% 25%, 0 55%);
 }
 
@@ -1325,7 +1325,7 @@
   left: 0;
   width: 1px;
   height: 400px;
-  background: var(--color-signal-ink);
+  background: var(--color-ink-soft);
   opacity: 0.7;
   pointer-events: none;
 }
@@ -2067,12 +2067,15 @@
   pointer-events: auto;
 }
 
-/* A waiting proposal's removed layers, outlined in red on their lanes (dashed: only shortened). */
+/* A waiting proposal's removed layers, outlined in red on their rows (dashed: only shortened) and striped as its cuts
+   are, so they never read as a selected layer's solid red ring. */
 .tl-ghost {
   position: absolute;
   border: 2px solid var(--color-cut);
   border-radius: var(--radius-xs);
-  background: var(--color-cut-wash);
+  background:
+    repeating-linear-gradient(135deg, var(--color-cut-hatch) 0 2px, transparent 2px 7px),
+    var(--color-cut-wash);
 }
 
 .tl-ghost.is-shortened {
@@ -2329,8 +2332,8 @@
 
 /* ---------- Toggle ---------- */
 
-/* A 36 x 20 track. Off: sunken, a hairline edge and a 16 px ink-soft knob. On: signal yellow with a signal-ink edge
-   and a dark knob. Disabled: an empty track with a faint edge. Styled from aria-checked, not data-state: a tooltip
+/* A 36 x 20 track. Off: sunken, a hairline edge and a 16 px ink-soft knob. On: signal red with a signal-ink edge
+   and a white knob. Disabled: an empty track with a faint edge. Styled from aria-checked, not data-state: a tooltip
    trigger sets its own data-state on the same element. */
 .toggle {
   display: inline-flex;
@@ -3089,7 +3092,7 @@
   will-change: transform;
 }
 
-/* Eight 10 px signal yellow handles with a dark edge, centred on the outline's corners and edges. */
+/* Eight 10 px signal red handles with a white edge, centred on the outline's corners and edges. */
 .gizmo-handle {
   position: absolute;
   width: 10px;
@@ -3120,7 +3123,7 @@
   inset: 0;
 }
 
-/* The rotate knob: a round handle on a signal yellow stem above the top edge's handle. It turns with the layer. */
+/* The rotate knob: a round handle on a signal red stem above the top edge's handle. It turns with the layer. */
 .gizmo-stem {
   position: absolute;
   bottom: calc(100% + 10px);

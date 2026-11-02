@@ -369,7 +369,7 @@
   font-weight: var(--weight-medium);
 }
 
-/* A 6 px bar: a sunken track with a signal yellow fill. */
+/* A 6 px bar: a sunken track with a signal red fill. */
 .settings-dialog .progress {
   height: 6px;
   overflow: hidden;
@@ -488,7 +488,7 @@
 }
 
 /* The toggle, scoped here until the shared one lands: a 36 x 20 track. Off: sunken, a hairline edge (a 3:1 grey under
-   the pointer) and a 16 px ink-soft knob. On: signal yellow with a signal-ink edge and a dark knob. The knob slides in
+   the pointer) and a 16 px ink-soft knob. On: signal red with a signal-ink edge and a white knob. The knob slides in
    140 ms, and not at all with reduced motion. */
 .settings-dialog .settings-switch {
   position: relative;

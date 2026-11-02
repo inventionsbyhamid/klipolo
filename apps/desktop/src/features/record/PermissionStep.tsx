@@ -23,8 +23,8 @@ const REMOVE_OLD =
  * macOS's Screen Recording step, in the preview's place while the take needs the screen and Klipolo
  * may not record it yet. "Allow screen recording" asks macOS (on this press alone) and opens its settings page; then
  * "Reopen Klipolo", as macOS applies the grant only to a Klipolo started after it. When macOS still says no after that,
- * the step says how to remove the older copy's entry instead of asking in a loop. Its button is the one yellow, and
- * the same element through every stage, so the keyboard stays on it as Allow turns into Reopen. A refused press is
+ * the step says how to remove the older copy's entry instead of asking in a loop. Its button is the one red button,
+ * and the same element through every stage, so the keyboard stays on it as Allow turns into Reopen. A refused press is
  * said in the step.
  */
 export function ScreenStep({ setup }: { setup: RecorderSetup }) {
