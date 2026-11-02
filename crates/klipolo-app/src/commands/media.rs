@@ -435,9 +435,9 @@ const SOUND_UNREADABLE: &str = "That sound couldn't be played.";
 
 /// A sound for the library to play before it is added, as a WAV of its first 30 s at most (16-bit, 48 kHz): a pack sound
 /// or music bed by its id, or a sound the open project uses (its path), never any other file. Only decoded sound goes
-/// back, never a file's bytes, so a path that leads elsewhere gives nothing away.
-#[tauri::command(async)]
-pub fn media_sound(
+/// back, never a file's bytes, so a path that leads elsewhere gives nothing away. The decode runs on a blocking thread.
+#[tauri::command]
+pub async fn media_sound(
     state: State<'_, ProjectSessionState>,
     pack_id: Option<String>,
     path: Option<String>,
@@ -447,7 +447,13 @@ pub fn media_sound(
         (None, Some(path)) => sound_file(&state, &path)?,
         (None, None) => return Err(NOT_IN_PROJECT.into()),
     };
-    sound_preview(&file).map(tauri::ipc::Response::new)
+    let wav = tauri::async_runtime::spawn_blocking(move || sound_preview(&file))
+        .await
+        .map_err(|error| {
+            tracing::warn!(%error, "a library sound's decode stopped");
+            SOUND_UNREADABLE.to_string()
+        })??;
+    Ok(tauri::ipc::Response::new(wav))
 }
 
 /// Pack item `id`'s file, when it is a sound or a music bed.
