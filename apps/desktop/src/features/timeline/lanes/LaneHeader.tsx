@@ -1,6 +1,6 @@
 import { useLingui } from '@lingui/react/macro';
 import { Eye, EyeOff, Headphones, Lock, Volume2, VolumeX, type LucideIcon } from 'lucide-react';
-import { useId } from 'react';
+import { memo, useId } from 'react';
 import type { Track } from '../../../bindings/Track';
 import { IconButton } from '../../../design/IconButton';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '../../../design/Menu';
@@ -45,7 +45,7 @@ interface LaneHeaderProps {
  * no pressed state as well. At rest a small badge on the icon shows a soloed or locked lane, and the options button
  * says what the lane is.
  */
-export function LaneHeader({ lane, name, icon: iconName, tracks }: LaneHeaderProps) {
+function LaneHeaderView({ lane, name, icon: iconName, tracks }: LaneHeaderProps) {
   const { t } = useLingui();
   const stateId = useId();
   const on = laneTracks(tracks, lane);
@@ -100,6 +100,9 @@ export function LaneHeader({ lane, name, icon: iconName, tracks }: LaneHeaderPro
     </div>
   );
 }
+
+/** Drawn again only when its lane's tracks change, not for a zoom, a scroll or a selection. */
+export const LaneHeader = memo(LaneHeaderView);
 
 /**
  * The lane's options: its toggles, worded for what a press does, Turn off solo while any track is soloed, and Show all

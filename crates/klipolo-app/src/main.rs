@@ -65,6 +65,8 @@ fn main() {
     let warm = Warmup::start(RenderMode::Interactive);
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // `KLIPOLO_PAGE_PERF=1`: the page's perf readout, into the log (off otherwise).
+        .plugin(commands::page_perf::plugin())
         // A page that loads again (reloaded, or after its process ended) leaves no preview running.
         .on_page_load(|webview, page| {
             if webview.label() == "main" && page.event() == PageLoadEvent::Started {
@@ -296,6 +298,7 @@ fn main() {
             commands::captions::captions_pages,
             commands::captions::captions_find,
             commands::captions::dev_fixture_speech,
+            commands::page_perf::page_perf_log,
             commands::export::export_plan,
             commands::export::export_start,
             commands::export::export_cancel,

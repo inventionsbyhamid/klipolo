@@ -810,7 +810,7 @@ fn zoom_eases_to_its_target_in_source_space() {
 }
 
 /// A push zoom: the footage whole at its start, then a slow push toward its area's centre over its ramp, eased in and
-/// out, held to its end, and whole again after it. The preview and an export draw from this one plan.
+/// out, held to its clip's end, and whole again after it. The preview and an export draw from this one plan.
 #[test]
 fn a_push_zoom_moves_in_slowly_over_its_ramp_and_holds() {
     let mut p = project();
@@ -834,13 +834,54 @@ fn a_push_zoom_moves_in_slowly_over_its_ramp_and_holds() {
     assert!(quarter.w < 1.0 && quarter.w > 1.0 / 1.25, "{quarter:?}");
     assert!((half.w - 1.0 / 1.5).abs() < 1e-6, "{half:?}");
     assert!(quarter.w > half.w && half.w > there.w);
-    // At its scale, centred on the area's centre, and held there.
+    // At its scale, centred on the area's centre, and held there to its clip's end (20 s), whole again on the next.
     close(there, bx(0.3, 0.2, 0.5, 0.5));
     close(main(6.9), there);
-    close(main(7.5), FULL);
+    close(main(19.9), there);
+    close(main(20.5), FULL);
     // The same part of the picture in every format.
     let portrait = videos(&frame_plan(&c, secs(5.0), Portrait))[0].crop;
     assert!(portrait.w <= there.w + 1e-9);
+}
+
+/// A push holds to the end of the clip it starts on, however that clip's length changes after it was made: sped up, it
+/// never zooms the next clip; slowed down or trimmed longer, it holds to the clip's new end, never snapping back
+/// mid-shot.
+#[test]
+fn a_push_holds_to_its_clips_end_through_speed_and_trims() {
+    // Clip a (0 to 20 s) pushed in from 1 s, made to its end; clip b follows.
+    let pushed = |edit: &dyn Fn(&mut Project)| {
+        let mut p = project();
+        let target = ZoomTarget::Push {
+            rect: bx(0.25, 0.25, 0.5, 0.5),
+            ramp_us: secs(4.0),
+        };
+        p.timeline.tracks = vec![zoom_track(vec![item(
+            "z",
+            1.0,
+            19.0,
+            bx(0.0, 0.0, 1.0, 1.0),
+            ItemContent::Zoom { target, scale: 2.0 },
+        )])];
+        edit(&mut p);
+        ctx(p)
+    };
+    let main = |c: &PlanContext, s: f64| videos(&frame_plan(c, secs(s), Landscape))[0].crop;
+    let held = bx(0.25, 0.25, 0.5, 0.5);
+    // Twice as fast: a ends at 10 s, and b after it is never zoomed.
+    let fast = pushed(&|p| p.timeline.main[0].speed = 2.0);
+    close(main(&fast, 9.9), held);
+    close(main(&fast, 10.5), FULL);
+    close(main(&fast, 15.0), FULL);
+    // Half as fast: a ends at 40 s, and the push holds to there.
+    let slow = pushed(&|p| p.timeline.main[0].speed = 0.5);
+    close(main(&slow, 30.0), held);
+    close(main(&slow, 39.9), held);
+    close(main(&slow, 40.5), FULL);
+    // Trimmed longer: a plays 0 to 30 s of its take, and the push holds to 30 s.
+    let longer = pushed(&|p| p.timeline.main[0].source_out_us = secs(30.0));
+    close(main(&longer, 25.0), held);
+    close(main(&longer, 30.5), FULL);
 }
 
 #[test]

@@ -1,8 +1,10 @@
 import { useLingui } from '@lingui/react/macro';
+import { useShallow } from 'zustand/react/shallow';
 import type { FormatKind } from '../../bindings/FormatKind';
 import type { Item } from '../../bindings/Item';
 import { layoutPatchFor, scaleAbout } from '../../lib/geometry';
 import { resolveRect } from '../../lib/layout';
+import { countRender } from '../../lib/renderCount';
 import { AnimationField, PositionField, TimingField } from './common';
 import { MotionField } from './MotionField';
 import { EffectsButton } from './EffectsButton';
@@ -40,13 +42,20 @@ export function ImageInspector({ item, format, primary }: { item: Item; format: 
  * commits one change on release.
  */
 export function PictureFields({ item, format, primary }: { item: Item; format: FormatKind; primary: FormatKind }) {
+  countRender(`picture:${item.id}`);
   const { t } = useLingui();
-  // With motion keys, Size and Opacity show the layer as drawn at the playhead and set its key there.
+  // With motion keys, Size and Opacity show the layer as drawn at the playhead and set its key there: the card draws
+  // again only when what they show changes, not on every frame of playback between keys.
   const keyed = !!item.layout.motion?.keys;
-  const tUs = usePlayback((s) => (keyed ? s.playheadUs : item.startUs)) - item.startUs;
+  const [width, shownAlpha] = usePlayback(
+    useShallow((s) => {
+      const tUs = (keyed ? s.playheadUs : item.startUs) - item.startUs;
+      const { w } = shownPlace(item.layout, tUs, item.durationUs, primary, format).rect;
+      return [Math.round(w * 100) / 100, Math.round(shownOpacity(item.layout, tUs, item.durationUs) * 100) / 100];
+    }),
+  );
   // The playhead in the layer's time, within it: a key never goes outside the layer.
   const at = () => Math.min(item.durationUs, Math.max(0, usePlayback.getState().playheadUs - item.startUs));
-  const rect = shownPlace(item.layout, tUs, item.durationUs, primary, format).rect;
   const size = t({ id: 'image.size', message: 'Size' });
   const opacity = t({ id: 'media.opacity', message: 'Opacity' });
   const corners = t({ id: 'media.corners', message: 'Corner radius', comment: 'How round the corners are' });
@@ -60,7 +69,7 @@ export function PictureFields({ item, format, primary }: { item: Item; format: F
             id: 'gizmo.resize.undo',
             params: { layer: item.content.type === 'video' ? 'video' : 'image' },
           }}
-          value={Math.round(rect.w * 100) / 100}
+          value={width}
           min={0.05}
           max={1}
           step={0.01}
@@ -88,7 +97,7 @@ export function PictureFields({ item, format, primary }: { item: Item; format: F
         <ToolSlider
           label={opacity}
           commitLabel="media.opacity.undo"
-          value={Math.round(shownOpacity(item.layout, tUs, item.durationUs) * 100) / 100}
+          value={shownAlpha}
           min={0}
           max={1}
           step={0.01}

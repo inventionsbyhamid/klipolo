@@ -184,6 +184,10 @@ impl Default for Background {
     }
 }
 
+/// The project feature (`Project::requires`) the person's caption size, words' colour or case needs: a build without
+/// them would draw the style's own and drop them on save, so it opens such a project read-only.
+pub const CAPTIONS_LOOK_FEATURE: &str = "captions-look@1";
+
 /// The project's captions: on or off, in a style (`captions::styles`), with the person's look, colour,
 /// font and place per format over it. Everything but the switch is left out of the JSON until set.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS, schemars::JsonSchema)]

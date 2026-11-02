@@ -1,5 +1,6 @@
 import { useLingui } from '@lingui/react/macro';
 import { FoldVertical, UnfoldVertical } from 'lucide-react';
+import { memo } from 'react';
 import { IconButton } from '../../design/IconButton';
 import { useUi } from '../../state/ui';
 
@@ -14,9 +15,9 @@ export function useTrackViewLabel(): string {
 
 /**
  * The track view's switch, in the corner above the lanes' gutter: Show all tracks (every track in a row of its own,
- * with its header) or Show fewer tracks (the four lanes).
+ * with its header) or Show fewer tracks (the four lanes). Drawn again only as the track view changes.
  */
-export function TrackViewToggle() {
+export const TrackViewToggle = memo(function TrackViewToggle() {
   const expanded = useUi((s) => s.timelineExpanded);
   const label = useTrackViewLabel();
   const Glyph = expanded ? FoldVertical : UnfoldVertical;
@@ -28,4 +29,4 @@ export function TrackViewToggle() {
       onClick={() => useUi.getState().setTimelineExpanded(!expanded)}
     />
   );
-}
+});

@@ -180,3 +180,42 @@ fn a_look_picked_while_captions_are_off_pins_its_style() {
     assert_eq!(p.captions.style, Some(ContribId::from(FALLBACK_STYLE)));
     assert_eq!(p.captions.variant.as_deref(), Some("plate"));
 }
+
+/// A build without the person's caption size, words' colour and case would draw the style's and drop them on save: the
+/// project needs `captions-look@1` exactly while any of them is set.
+#[test]
+fn the_project_needs_the_caption_look_while_it_has_one() {
+    use klipolo_model::ops::Op;
+    let p = klipolo_model::Project::new("talk");
+    let set = |p: &klipolo_model::Project, captions: CaptionSettings| {
+        klipolo_model::apply_ops(p, &[Op::SetCaptions { captions }]).unwrap()
+    };
+    for looked in [
+        CaptionSettings {
+            size: Some(1.3),
+            ..CaptionSettings::default()
+        },
+        CaptionSettings {
+            color: Some("#FFD02E".into()),
+            ..CaptionSettings::default()
+        },
+        CaptionSettings {
+            upper: Some(false),
+            ..CaptionSettings::default()
+        },
+    ] {
+        let looked = set(&p, looked);
+        assert!(looked.requires.contains("captions-look@1"));
+        let plain = set(&looked, CaptionSettings::default());
+        assert!(!plain.requires.contains("captions-look@1"));
+    }
+    // The style's own colour, font and place need nothing new.
+    let accent = set(
+        &p,
+        CaptionSettings {
+            accent: Some("#FFD02E".into()),
+            ..CaptionSettings::default()
+        },
+    );
+    assert!(accent.requires.is_empty());
+}

@@ -45,16 +45,15 @@ export function Tooltip({ label, shortcut, side = 'bottom', describes = false, c
           {label}
         </span>
       )}
-      <T.Portal>
-        <T.Content
-          side={side}
-          sideOffset={4}
-          className="tooltip"
-        >
-          {label}
-          {shortcut && <Kbd>{shortcut}</Kbd>}
-        </T.Content>
-      </T.Portal>
+      {/* Only while open: a closed tooltip's portal draws nothing, and every button has a tooltip. */}
+      {open && (
+        <T.Portal>
+          <T.Content side={side} sideOffset={4} className="tooltip">
+            {label}
+            {shortcut && <Kbd>{shortcut}</Kbd>}
+          </T.Content>
+        </T.Portal>
+      )}
     </T.Root>
   );
 }
