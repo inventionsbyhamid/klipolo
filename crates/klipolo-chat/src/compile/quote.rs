@@ -45,7 +45,15 @@ fn bare(text: &str) -> String {
         .collect()
 }
 
-/// A quote's words, bare: a note in brackets (`[pause 1.5 s]`) left out, and a word with no letter or digit.
+/// Whether `token` is a speaker label as Transcript writes one before a line's words (`A:`).
+fn speaker_label(token: &str) -> bool {
+    token.strip_suffix(':').is_some_and(|label| {
+        (1..=2).contains(&label.chars().count()) && label.chars().all(|c| c.is_ascii_uppercase())
+    })
+}
+
+/// A quote's words, bare: a note in brackets (`[pause 1.5 s]`) left out, a speaker label copied before them (`A:`), and
+/// a word with no letter or digit.
 fn quoted(quote: &str) -> Vec<String> {
     let mut text = String::with_capacity(quote.len());
     let mut depth = 0usize;
@@ -57,10 +65,9 @@ fn quoted(quote: &str) -> Vec<String> {
             _ => {}
         }
     }
-    (text.split_whitespace())
-        .map(bare)
-        .filter(|w| !w.is_empty())
-        .collect()
+    let mut tokens = text.split_whitespace().peekable();
+    tokens.next_if(|t| speaker_label(t));
+    tokens.map(bare).filter(|w| !w.is_empty()).collect()
 }
 
 /// How alike two bare words are, for the places said most like a quote: the same word, one the start of the other, the
@@ -271,8 +278,9 @@ mod tests {
         assert_eq!(found(&s, "went flying"), Ok(10_600_000));
         assert_eq!(found(&s, "Flying, TODAY"), Ok(12_000_000));
         assert_eq!(found(&s, "flying today."), Ok(12_000_000));
-        // A pause mark copied with the words doesn't count.
+        // A pause mark or a speaker label copied with the words doesn't count.
         assert_eq!(found(&s, "flying [pause 1.5 s] today"), Ok(12_000_000));
+        assert_eq!(found(&s, "B: went flying"), Ok(10_600_000));
         assert_eq!(found(&s, "home"), Ok(14_500_000));
     }
 
