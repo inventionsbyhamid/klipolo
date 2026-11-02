@@ -28,8 +28,8 @@ interface SegmentedProps<T extends string> {
 }
 
 /**
- * A segmented control: a sunken track with 2 px padding, small options in ink-soft, the checked one a signal wash
- * with a signal-ink ring. A radio group: the arrow keys move. An option with an icon shows it alone, named by its label.
+ * A segmented control: a sunken track with 2 px padding, small options in ink-soft, the checked one a signal wash with
+ * a signal-ink ring. A radio group: the arrow keys move. An option with an icon shows it alone, named by its label.
  */
 export function Segmented<T extends string>({
   label,

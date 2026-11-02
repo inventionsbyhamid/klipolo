@@ -722,7 +722,9 @@ describe('the previews and Screen Recording', () => {
     // Red only on Record itself, the dialog foot's primary button that starts a take.
     const red = css.replace(/\/\*[\s\S]*?\*\//g, '').match(/[^{}]+\{[^{}]*--color-cut[^{}]*\}/g) ?? [];
     expect(red.length).toBeGreaterThan(0);
-    for (const rule of red) expect(rule.trim()).toMatch(/^\.record-dialog \.dialog-foot \.btn-primary:not\(:disabled\)/);
+    for (const rule of red) {
+      expect(rule.trim()).toMatch(/^\.record-dialog \.dialog-foot \.btn-primary:not\(:disabled\)/);
+    }
     expect(css).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
     const dialog = await openOn(
       recorderSetup({ cameras: [device('FaceTime HD Camera')], permissions: { camera: 'notAsked', mic: 'notAsked' } }),

@@ -1246,8 +1246,8 @@
   background: color-mix(in srgb, var(--color-night) 45%, transparent);
 }
 
-/* A file held over a lane that takes it: a signal wash and a dashed signal-ink edge, drawn over the lane's blocks (they are
-   z-index 1 to 3) so a full lane still shows it. */
+/* A file held over a timeline row that takes it: a signal wash and a dashed signal-ink edge, drawn over the row's
+   blocks (they are z-index 1 to 3) so a full row still shows it. */
 .tl-lane.is-drop {
   background-image: linear-gradient(var(--color-paper-wash), var(--color-paper-wash));
 }
@@ -1284,8 +1284,9 @@
   pointer-events: none;
 }
 
-/* A recording's markers along the top of the Video lane: a signal-ink flag (you put it there) with a line down through the
-   clips that takes no presses; red while a proposal removes it. Over the clips, under the playhead and the marks. */
+/* A recording's markers along the top of the Video row: a signal-ink flag (you put it there) with a line down
+   through the clips that takes no presses; red while a proposal removes it. Over the clips, under the playhead and the
+   marks. */
 .tl-markers {
   position: absolute;
   inset: 0;
@@ -1406,7 +1407,8 @@
   pointer-events: none;
 }
 
-/* Trim handles: a 12 px pad on each edge; a selected clip shows 8 x 22 signal-ink grips, a selected overlay thin ones. */
+/* Trim handles: a 12 px pad on each edge; a selected clip shows 8 x 22 signal-ink grips, a selected overlay thin
+   ones. */
 .tl-trim {
   position: absolute;
   top: 0;
