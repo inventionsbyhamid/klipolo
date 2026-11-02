@@ -23,9 +23,9 @@
 //!   the additions leave it. No title of theirs: refused back, for the model to ask.
 //!
 //! A moment from the model is where the words it quotes are said (`atWords`, `quote`), or its time snapped to a word's
-//! start or a cut near it (`Evidence::place`), and is then mapped into the working copy. Nothing is placed at the video's end or past it, and a layer that would
-//! play past the end is cut there, so no media call makes the video longer. A file from the pack comes in with the ops
-//! that first place it.
+//! start or a cut near it (`Evidence::place`), and is then mapped into the working copy. Nothing is placed at the
+//! video's end or past it, and a layer that would play past the end is cut there, so no media call makes the video
+//! longer. A file from the pack comes in with the ops that first place it.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -393,7 +393,7 @@ pub(super) fn add_sound(
     let timed = (times.iter().enumerate()).map(|(k, &t)| (format!("atSec[{k}]"), At::Sec(t)));
     for (field, at) in quoted.chain(timed) {
         let at = start(c, work, "addSound", &field, at)?;
-        // Two times within the evidence's tolerance are one moment: one sound, at the first.
+        // Two moments within the evidence's tolerance are one: one sound, at the first.
         if !starts
             .iter()
             .any(|&s| s.abs_diff(at) <= TOLERANCE_US.unsigned_abs())
