@@ -305,6 +305,36 @@ fn clip_refs_are_stable_and_short() {
     );
     assert_eq!(edited.refs, ctx.refs);
     assert!(section(&edited.text, "Project").contains("Captions: off\n"));
+    // The look set over the style, so "bigger" or "back to white" builds on it.
+    let looked = apply_ops(
+        &inputs.project,
+        &[Op::SetCaptions {
+            captions: CaptionSettings {
+                font: Some(klipolo_model::font::FontRef::bundled("Anton")),
+                size: Some(1.3),
+                color: Some("#FFD02E".into()),
+                accent: Some("#FF2E5B".into()),
+                upper: Some(true),
+                ..inputs.project.captions.clone()
+            },
+        }],
+    )
+    .unwrap();
+    let text = build_context(
+        &looked,
+        &inputs.speech,
+        &inputs.turns,
+        &inputs.scenes,
+        &view_at(0.0),
+        &Library::default(),
+    )
+    .text;
+    assert!(
+        section(&text, "Project").contains(
+            "Captions: on, style karaoke, font Anton, size 1.3, color #FFD02E, highlight #FF2E5B, upper\n"
+        ),
+        "{text}"
+    );
 }
 
 #[test]

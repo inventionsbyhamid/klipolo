@@ -3,7 +3,7 @@
 //! language tag.
 
 use super::style::hex_ok;
-use super::styles::{default_style, CaptionStyles};
+use super::styles::{default_style, CaptionStyles, CAPTION_SIZES};
 use crate::contrib::{ContribId, ContribKind};
 use crate::error::{invalid, Result};
 use crate::font::font_ok;
@@ -44,8 +44,12 @@ pub(crate) fn validate_settings(p: &Project) -> Result<()> {
         }
     }
     check(
-        c.accent.as_deref().is_none_or(hex_ok),
+        c.accent.as_deref().is_none_or(hex_ok) && c.color.as_deref().is_none_or(hex_ok),
         code!("model.captions.color"),
+    )?;
+    check(
+        c.size.is_none_or(|k| CAPTION_SIZES.contains(&k)),
+        code!("model.captions.size"),
     )?;
     check(
         c.font.as_ref().is_none_or(font_ok),

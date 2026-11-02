@@ -809,6 +809,40 @@ fn zoom_eases_to_its_target_in_source_space() {
     close(main(6.0, Landscape), FULL);
 }
 
+/// A push zoom: the footage whole at its start, then a slow push toward its area's centre over its ramp, eased in and
+/// out, held to its end, and whole again after it. The preview and an export draw from this one plan.
+#[test]
+fn a_push_zoom_moves_in_slowly_over_its_ramp_and_holds() {
+    let mut p = project();
+    let target = ZoomTarget::Push {
+        rect: bx(0.3, 0.2, 0.5, 0.5),
+        ramp_us: secs(4.0),
+    };
+    p.timeline.tracks = vec![zoom_track(vec![item(
+        "z",
+        1.0,
+        6.0,
+        bx(0.0, 0.0, 1.0, 1.0),
+        ItemContent::Zoom { target, scale: 2.0 },
+    )])];
+    let c = ctx(p);
+    let main = |s: f64| videos(&frame_plan(&c, secs(s), Landscape))[0].crop;
+    close(main(0.5), FULL);
+    close(main(1.0), FULL);
+    // Eased in: a quarter of the way through it has moved less than a quarter of the way.
+    let (quarter, half, there) = (main(2.0), main(3.0), main(5.0));
+    assert!(quarter.w < 1.0 && quarter.w > 1.0 / 1.25, "{quarter:?}");
+    assert!((half.w - 1.0 / 1.5).abs() < 1e-6, "{half:?}");
+    assert!(quarter.w > half.w && half.w > there.w);
+    // At its scale, centred on the area's centre, and held there.
+    close(there, bx(0.3, 0.2, 0.5, 0.5));
+    close(main(6.9), there);
+    close(main(7.5), FULL);
+    // The same part of the picture in every format.
+    let portrait = videos(&frame_plan(&c, secs(5.0), Portrait))[0].crop;
+    assert!(portrait.w <= there.w + 1e-9);
+}
+
 #[test]
 fn footage_appended_after_a_late_zoom_is_not_zoomed() {
     let mut p = project();

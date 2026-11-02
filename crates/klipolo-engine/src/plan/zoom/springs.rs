@@ -79,7 +79,9 @@ fn simulate(key: &[ZoomItem]) -> Arc<ZoomTransformTimeline> {
     segments.extend(key.iter().map(|(start, end, scale, target)| {
         let (cx, cy) = match target {
             ZoomTarget::Auto { .. } => (0.5, 0.5),
-            ZoomTarget::Rect { rect } => (rect.x + rect.w / 2.0, rect.y + rect.h / 2.0),
+            ZoomTarget::Rect { rect } | ZoomTarget::Push { rect, .. } => {
+                (rect.x + rect.w / 2.0, rect.y + rect.h / 2.0)
+            }
         };
         ZoomSegment {
             start: us_to_secs(*start),

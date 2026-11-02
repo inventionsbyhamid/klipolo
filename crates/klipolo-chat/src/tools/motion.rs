@@ -1,6 +1,7 @@
 //! The motion tool: keys on a layer's position, scale, rotation and opacity, and its enter, exit and loop presets with
 //! their settings, length and ease (`setMotion`), for any motion a person describes. `animate`'s words are the quick
 //! shortcuts; this is what they are made of. The ease words (`EASE_FORMS`) are `animateText`'s too.
+//! On a clip, keys move a recording's camera bubble; on a clip with none, scale keys push in slowly on its footage.
 //!
 //! Values are the model's own (`motion::LIMITS`): x and y move the layer by fractions of the frame (1 is a frame's width
 //! right or height down), scale 1 is its size, rotation is degrees clockwise, opacity 0 to 1. A value outside them is
@@ -399,7 +400,8 @@ pub(super) fn layer_field() -> (&'static str, Value) {
 pub(super) const SET_MOTION: Tool = Tool {
     name: "setMotion",
     description: "Keyframes, or enter, exit and loop presets, for a layer; a recording's clip (c1) keys its camera \
-                  bubble (x, y, scale). Null keeps.",
+                  bubble (x, y, scale); on a clip without one, scale keys (1, then the size) push in slowly on \
+                  its footage, toward x, y (0 to 1). Null keeps.",
     parameters: || {
         vec![
             layer_field(),

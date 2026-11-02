@@ -45,6 +45,7 @@ describe('undo labels as message ids', () => {
       'setClip',
       'setClip.note',
       'setTransition',
+      'reverseClip',
       'setFormat',
       'setCaptions',
       'setBackground',
@@ -67,6 +68,11 @@ describe('undo labels as message ids', () => {
     expect(historyAction('undo', 'chat.setBackground', { kind: 'same', padding: 0.1 })).toBe(
       'Undo change the background',
     );
+  });
+
+  it("words chat's slow push-in and a clip played forward again", () => {
+    expect(historyAction('undo', 'chat.setMotion', { layer: 'zoom' })).toBe('Undo zoom in slowly');
+    expect(historyAction('undo', 'chat.reverseClip', { clip: 'c2' })).toBe('Undo play forward');
   });
 
   it("words chat's clip and transition changes as the cards' own entries, with a speed's note", () => {

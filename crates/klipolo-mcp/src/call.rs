@@ -509,7 +509,7 @@ fn reason(r: &Refusal) -> String {
     }
 }
 
-/// Whether `call` makes a job for a runner or an image maker.
+/// Whether `call` makes a job for a runner or an image maker, or a reversed copy.
 fn makes_jobs(call: &ToolCall) -> bool {
     matches!(
         call,
@@ -517,6 +517,7 @@ fn makes_jobs(call: &ToolCall) -> bool {
             | ToolCall::MakeTitleCard { .. }
             | ToolCall::FollowSubject { .. }
             | ToolCall::BlurObjects { .. }
+            | ToolCall::ReverseClip { backward: true, .. }
     )
 }
 

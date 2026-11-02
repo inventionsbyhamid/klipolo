@@ -28,11 +28,17 @@ export function columnsOf(cards: readonly (HTMLElement | null)[]): number {
   return n;
 }
 
-/** A new style starts from its own look and color, and shows captions (as chat's `setCaptions` style does). */
+/**
+ * A new style starts from its own look, colors, size and case (those chat's `setCaptions` set over the last one), and
+ * shows captions.
+ */
 const pick = (style: string): Partial<CaptionSettings> => ({
   style,
   variant: undefined,
   accent: undefined,
+  size: undefined,
+  color: undefined,
+  upper: undefined,
   enabled: true,
 });
 

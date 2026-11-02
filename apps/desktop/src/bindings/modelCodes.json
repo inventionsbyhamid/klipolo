@@ -153,6 +153,11 @@
     "params": []
   },
   {
+    "code": "model.captions.size",
+    "message": "Captions can be from half to twice their style's size.",
+    "params": []
+  },
+  {
     "code": "model.captions.place",
     "message": "Captions must sit between 5 % and 95 % of the video's height.",
     "params": []
@@ -961,6 +966,11 @@
   {
     "code": "model.layer.zoomArea",
     "message": "The zoom area is invalid.",
+    "params": []
+  },
+  {
+    "code": "model.layer.zoomRamp",
+    "message": "A slow zoom must reach its size within the zoom.",
     "params": []
   },
   {

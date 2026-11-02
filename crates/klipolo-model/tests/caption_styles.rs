@@ -6,7 +6,7 @@ mod common;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use klipolo_model::captions::style::{CaptionStyleDef, Paint};
+use klipolo_model::captions::style::{CaptionStyleDef, Paint, TextCase};
 use klipolo_model::captions::styles::{
     BuiltinCaptionStyle, CaptionStyles, BUILTIN_FILES, DEFAULT_STYLE, FALLBACK_STYLE,
 };
@@ -86,6 +86,45 @@ fn an_unknown_style_draws_in_clean_and_says_so() {
     let (style, missing) = CaptionStyles::builtin().for_settings(&s, &[FormatKind::Portrait]);
     assert!(missing);
     assert_eq!(style.id.as_str(), FALLBACK_STYLE);
+}
+
+/// The person's size, words' colour and case go over the style and its look: the size as a factor of the style's own in
+/// every format, the colour on the words and on the words over a line's box, the case as asked. Unset, the style's.
+#[test]
+fn the_persons_size_colour_and_case_apply_over_the_style() {
+    let formats = [FormatKind::Portrait];
+    let style = |s: &CaptionSettings| CaptionStyles::builtin().for_settings(s, &formats).0;
+    let plain = CaptionSettings {
+        style: Some(ContribId::builtin("caption.boxed")),
+        ..CaptionSettings::default()
+    };
+    let own = style(&plain);
+    let set = style(&CaptionSettings {
+        size: Some(1.5),
+        color: Some("#FFD02E".into()),
+        upper: Some(true),
+        ..plain.clone()
+    });
+    assert_eq!(set.size.portrait, own.size.portrait * 1.5);
+    assert_eq!(set.size.landscape, own.size.landscape * 1.5);
+    assert_eq!(
+        set.size.size(FormatKind::Square),
+        own.size.size(FormatKind::Square) * 1.5
+    );
+    assert_eq!(set.fill, Paint("#FFD02E".into()));
+    assert_eq!(
+        set.boxes.as_ref().unwrap().text,
+        Some(Paint("#FFD02E".into())),
+        "the words on a line's box too"
+    );
+    assert_eq!(set.case, TextCase::Upper);
+    let bold = CaptionSettings {
+        style: Some(ContribId::builtin("caption.bold")),
+        upper: Some(false),
+        ..CaptionSettings::default()
+    };
+    assert_eq!(style(&bold).case, TextCase::AsSaid);
+    assert_eq!(*style(&plain), *own, "unset: the style's own");
 }
 
 #[test]

@@ -18,13 +18,15 @@
 //! Adding a tool is one `ToolCall` variant and one entry in `TOOLS`, where its name, description, parameters and reader
 //! sit together; the tests check every schema is strict and every reader reads the fields its schema lists. Splitting
 //! by concern: `schema` (the pieces of a schema, and the words a tool takes), `args` (a call's arguments read field by
-//! field), `error` (why a call couldn't be read), `media` (the media tools and their words), `clips` (the clip and
-//! transition tools and their words), `background` (the background tool and its words), `recorded` (a recording's
-//! camera and recorded sounds, and their words), `animate` (a layer's animation and its words).
+//! field), `error` (why a call couldn't be read), `media` (the media tools and their words), `clips` (the clip,
+//! transition and reverse tools and their words), `captions` (the captions' look `setCaptions` sets), `background` (the
+//! background tool and its words), `recorded` (a recording's camera and recorded sounds, and their words), `animate` (a
+//! layer's animation and its words).
 
 pub mod animate;
 mod args;
 pub mod background;
+pub mod captions;
 pub mod clips;
 pub mod effects;
 mod error;
@@ -51,6 +53,7 @@ use serde_json::{Map, Value, json};
 pub use animate::{Emphasis, Entrance, Exit, LayerRef};
 use args::{Args, kind};
 pub use background::BackgroundChoice;
+pub use captions::{CaptionChange, CaptionPlace};
 pub use clips::{ClipRef, TransitionKind};
 pub use effects::{EffectChange, SettingValue};
 pub use error::{Problem, ToolError};
@@ -179,6 +182,9 @@ pub enum ToolCall {
         kind: Option<TransitionKind>,
         duration_us: Option<Us>,
     },
+    /// Play the clip `clip` names (a ref from the context, not yet resolved) backward from a reversed copy written first,
+    /// as the clip menu's Reverse does, or forward again (`backward` false).
+    ReverseClip { clip: String, backward: bool },
     /// Set what shows behind the video where it doesn't fill the frame (`kind`, its colours), and the inset round it
     /// (`padding`, a share of the frame's shorter side); None leaves each as the project has it, and at least one is
     /// set. The background card's fields, but for a picture.
@@ -193,10 +199,12 @@ pub enum ToolCall {
         format: FormatKind,
         keep_others: bool,
     },
-    /// Show or hide captions; `style` None keeps the current style (or the formats' default when there is none).
+    /// Show or hide captions; `style` None keeps the current style (or the formats' default when there is none), and
+    /// `look` goes over it.
     SetCaptions {
         on: bool,
         style: Option<BuiltinCaptionStyle>,
+        look: Box<CaptionChange>,
     },
     /// Make every shown word matching `find` read `replace` in captions and the transcript.
     FixCaptionWords { find: String, replace: String },
@@ -403,6 +411,7 @@ impl ToolCall {
             ToolCall::FreezeFrame { .. } => "freezeFrame",
             ToolCall::SetClip { .. } => "setClip",
             ToolCall::SetTransition { .. } => "setTransition",
+            ToolCall::ReverseClip { .. } => "reverseClip",
             ToolCall::SetBackground { .. } => "setBackground",
             ToolCall::SetFormat { .. } => "setFormat",
             ToolCall::SetCaptions { .. } => "setCaptions",
@@ -466,6 +475,7 @@ impl ToolCall {
             | ToolCall::TrimClip { .. }
             | ToolCall::SplitAt { .. }
             | ToolCall::FindMoments { .. }
+            | ToolCall::ReverseClip { .. }
             | ToolCall::AddSound { .. } => true,
             ToolCall::SetClip { clip: target, .. }
             | ToolCall::SetTransition { after: target, .. } => *target != ClipRef::All,
@@ -712,6 +722,7 @@ const TOOLS: &[Tool] = &[
     },
     clips::SET_CLIP,
     clips::SET_TRANSITION,
+    clips::REVERSE_CLIP,
     background::SET_BACKGROUND,
     Tool {
         name: "setFormat",
@@ -743,7 +754,9 @@ const TOOLS: &[Tool] = &[
     },
     Tool {
         name: "setCaptions",
-        description: "Turn captions on or off, or change their style.",
+        description: "Turn captions on or off, or change their style. set goes over it: font, size (1 is the \
+                      style's; 0.5 to 2), position (top, middle, bottom or y 0.05 to 0.95), color (#hex words), \
+                      highlight (#hex lit words), upper (true or false); none is the style's own.",
         parameters: || {
             vec![
                 ("on", boolean("True shows captions, false hides them.")),
@@ -751,12 +764,14 @@ const TOOLS: &[Tool] = &[
                     "style",
                     nullable_words(&chat_styles(), &style_description()),
                 ),
+                ("set", sets::nullable_schema("Look keys.")),
             ]
         },
         read: |a| {
             Ok(ToolCall::SetCaptions {
                 on: a.flag("on")?,
                 style: a.nullable_word("style", &chat_styles())?,
+                look: Box::new(captions::read_look(a)?),
             })
         },
     },

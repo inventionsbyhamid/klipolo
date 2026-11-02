@@ -50,6 +50,7 @@ pub const MESSAGES: Messages = &[
     ("model.captions.look", "That caption look isn't part of this style."),
     ("model.captions.color", "A caption colour must be a colour like #FFD400."),
     ("model.captions.font", "That font can't be used for captions."),
+    ("model.captions.size", "Captions can be from half to twice their style's size."),
     ("model.captions.place", "Captions must sit between 5 % and 95 % of the video's height."),
     ("model.captions.language", "The captions' language must be a language tag, like ja or zh-Hans."),
     // Contributions, by kind: `id` is the id as written, `name` the contribution's id (worded as its name).
@@ -220,6 +221,7 @@ pub const MESSAGES: Messages = &[
     ("model.image.notImage", "That file isn't a picture."),
     ("model.layer.zoom", "Zoom must be between 1× and 5×."),
     ("model.layer.zoomArea", "The zoom area is invalid."),
+    ("model.layer.zoomRamp", "A slow zoom must reach its size within the zoom."),
     // params.rs: `label` is the setting's label (English). Also sent, outside the sentence: `contribution` and `key`,
     // so the UI words the label in the language shown.
     ("model.param.range", "{label} must be between {min} and {max}."),

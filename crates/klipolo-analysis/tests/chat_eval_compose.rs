@@ -84,8 +84,11 @@ fn ideal(message: &str) -> Vec<(&'static str, Value)> {
                    pair("opacity", json!(0)), pair("ease", json!("spring 0.4")), pair("stagger", json!(0.15))]}),
         )],
         "slowly zoom into the speaker over five seconds" => vec![(
-            "cannotDo",
-            json!({"reason": "Klipolo can't zoom slowly into the main video yet."}),
+            "setMotion",
+            json!({"layer": "c1", "keys": [
+                key("scale", 0.0, 1.0, Value::Null), key("scale", 5.0, 1.3, json!("inOut")),
+                key("x", 0.0, 0.5, Value::Null), key("y", 0.0, 0.4, Value::Null)
+            ], "presets": null}),
         )],
         "fade the music down while I'm talking" => vec![(
             "setLayer",
@@ -115,11 +118,17 @@ fn ideal(message: &str) -> Vec<(&'static str, Value)> {
             "setEffects",
             json!({"target": "c1", "name": "vignette", "set": [pair("softness", json!(0.8))]}),
         )],
+        "play the video backward" => vec![("reverseClip", json!({"clip": "c1", "backward": true}))],
+        "make the captions bigger and yellow, and move them to the top" => vec![(
+            "setCaptions",
+            json!({"on": true, "style": null, "set": [pair("size", json!(1.3)), pair("color", json!("#FFD02E")),
+                   pair("position", json!("top"))]}),
+        )],
         other => panic!("no ideal answer for {other:?}"),
     }
 }
 
-const MESSAGES: [&str; 10] = [
+const MESSAGES: [&str; 12] = [
     "slide the title in from the left with a little overshoot",
     "make the logo spin in and bounce",
     "make each word pop in one by one",
@@ -130,6 +139,8 @@ const MESSAGES: [&str; 10] = [
     "put the logo in the top right corner and make it a bit see-through",
     "add a soft vignette to the video",
     "duck the music between 0:10 and 0:20",
+    "make the captions bigger and yellow, and move them to the top",
+    "play the video backward",
 ];
 
 async fn meta(answer: impl Fn(&str) -> Vec<(&'static str, Value)>) -> MockServer {
@@ -163,7 +174,7 @@ async fn every_composed_edit_answered_as_it_should_be_passes() {
     let out = run(&env(&server), &["--cases", CASES]).await;
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stdout.contains("11/11 passed"), "{stdout}{stderr}");
+    assert!(stdout.contains("13/13 passed"), "{stdout}{stderr}");
     assert_eq!(out.status.code(), Some(0));
     assert!(!stdout.contains(KEY) && !stderr.contains(KEY));
 }

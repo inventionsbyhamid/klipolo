@@ -893,7 +893,27 @@ fn project_section<'p>(
         let id = (p.captions.style.as_ref())
             .map_or_else(|| default_style(&p.settings.formats), |s| s.as_str());
         let style = id.strip_prefix("klipolo.builtin/caption.").unwrap_or(id);
-        let _ = writeln!(out, "Captions: on, style {}", one_line(style));
+        let _ = write!(out, "Captions: on, style {}", one_line(style));
+        // The look set over it (`setCaptions`' set keys), so a change builds on it.
+        let c = &p.captions;
+        if let Some(font) = &c.font {
+            let _ = write!(out, ", font {}", one_line(&font.family));
+        }
+        if let Some(size) = c.size {
+            let _ = write!(out, ", size {size}");
+        }
+        if let Some(color) = &c.color {
+            let _ = write!(out, ", color {}", one_line(color));
+        }
+        if let Some(accent) = &c.accent {
+            let _ = write!(out, ", highlight {}", one_line(accent));
+        }
+        match c.upper {
+            Some(true) => out.push_str(", upper"),
+            Some(false) => out.push_str(", as said"),
+            None => {}
+        }
+        out.push('\n');
     } else {
         out.push_str("Captions: off\n");
     }
