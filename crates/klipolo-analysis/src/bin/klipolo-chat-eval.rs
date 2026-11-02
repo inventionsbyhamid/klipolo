@@ -28,26 +28,28 @@ use std::sync::Arc;
 use klipolo_analysis::providers::meta_chat::MetaChat;
 use klipolo_chat::tools::{CaptionChange, CaptionPlace, LayerRef};
 use klipolo_chat::{
-    AnalysisState, Audience, ChatError, CursorTakes, Inputs, Library, LibraryItem, MediaKind,
-    PlanOut, SceneLog, SpeakerTurn, ToolCall, Turn, View, build_context, plan,
+    AnalysisState, Audience, ChatError, CursorTakes, Inputs, Job, Library, LibraryItem, MediaKind,
+    PlanOut, SceneLog, SpeakerTurn, ToolCall, Turn, View, build_context, plan, sticker_placement,
 };
 use klipolo_cursor::Press;
 use klipolo_cursor::timeline::TakeFacts;
 use klipolo_meta::{MetaClient, SecretString};
 use klipolo_model::Project;
 use klipolo_model::load_project;
+use klipolo_model::media::music::is_music;
 use klipolo_model::project::{Asset, Recording};
 use klipolo_model::query::video_duration;
 use klipolo_model::speech::{LEVEL_WINDOW_US, Levels, Speech, Transcript, WordKind};
 use klipolo_model::time::{RangeUs, Us};
+use klipolo_model::timeline::ItemContent;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 const KEY_ENV: &str = "MODEL_API_KEY";
 const USAGE: &str =
     "usage: klipolo-chat-eval [--cases <cases.json>] [--only <id>]... [--min-pass <n>]";
-/// The planner's target: at least this many of the 38 cases.
-const MIN_PASS: usize = 36;
+/// The planner's target: at least this many of the 39 cases.
+const MIN_PASS: usize = 37;
 /// Loudness of a window with a word said in it, and of one without, in dBFS.
 const SPEECH_DB: f32 = -20.0;
 const QUIET_DB: f32 = -70.0;
@@ -194,6 +196,12 @@ struct Outcome {
     /// How long the video is once the proposal is applied, in seconds: `{min, max}`.
     #[serde(default, rename = "keptSec")]
     kept_sec: Option<Value>,
+    /// Where a sound effect starts once the plan is applied (its proposal too), in seconds: `{min, max}`, met by any.
+    #[serde(default, rename = "soundAt")]
+    sound_at: Option<Value>,
+    /// Where a picture starts once the plan is applied, a sticker still to draw where it will be placed, in seconds.
+    #[serde(default, rename = "stickerAt")]
+    sticker_at: Option<Value>,
 }
 
 struct Args {
@@ -612,6 +620,39 @@ fn kept_us(project: &Project, out: &PlanOut) -> Us {
     }
 }
 
+/// `project` with the plan applied: its additions, then its proposal.
+fn applied(project: &Project, out: &PlanOut) -> Project {
+    let c = &out.compiled;
+    match (&c.proposal, &c.additions) {
+        (Some(p), _) => p.review.after.clone(),
+        (None, Some(tx)) => {
+            klipolo_model::apply_ops(project, &tx.ops).unwrap_or_else(|_| project.clone())
+        }
+        (None, None) => project.clone(),
+    }
+}
+
+/// Where each sound effect (not music) and each picture starts once the plan is applied, in seconds; a sticker still to
+/// draw where it will be placed.
+fn placed(project: &Project, out: &PlanOut) -> (Vec<f64>, Vec<f64>) {
+    let after = applied(project, out);
+    let items = || after.timeline.tracks.iter().flat_map(|t| &t.items);
+    let sounds = (items())
+        .filter(|i| matches!(i.content, ItemContent::Audio { .. }) && !is_music(i))
+        .map(|i| s(i.start_us))
+        .collect();
+    let drawn = (out.compiled.jobs.iter()).filter_map(|j| match j {
+        Job::MakeSticker(job) => sticker_placement(&after, job).map(|(start, _)| s(start)),
+        _ => None,
+    });
+    let pictures = (items())
+        .filter(|i| matches!(i.content, ItemContent::Image { .. }))
+        .map(|i| s(i.start_us))
+        .chain(drawn)
+        .collect();
+    (sounds, pictures)
+}
+
 /// The first outcome flag `out` doesn't meet.
 fn outcome_fails(o: &Outcome, out: &PlanOut, project: &Project) -> Option<String> {
     let c = &out.compiled;
@@ -619,6 +660,19 @@ fn outcome_fails(o: &Outcome, out: &PlanOut, project: &Project) -> Option<String
         let kept = s(kept_us(project, out));
         if !value_matches(rule, &json!(kept)) {
             return Some(format!("the video is {kept:.1} s once applied, not {rule}"));
+        }
+    }
+    if o.sound_at.is_some() || o.sticker_at.is_some() {
+        let (sounds, pictures) = placed(project, out);
+        for (rule, what, starts) in [
+            (&o.sound_at, "sound", sounds),
+            (&o.sticker_at, "picture", pictures),
+        ] {
+            if let Some(rule) = rule
+                && !starts.iter().any(|&t| value_matches(rule, &json!(t)))
+            {
+                return Some(format!("no {what} starts within {rule}: {starts:?}"));
+            }
         }
     }
     let flags = [
