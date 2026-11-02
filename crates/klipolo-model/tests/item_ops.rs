@@ -842,3 +842,12 @@ fn a_push_layer_shorter_than_its_ramp_still_edits() {
     .unwrap();
     assert!(find(&quieter, "push").1.duration_us < secs(5.0));
 }
+
+/// A build without push zooms can't read one: the project needs `push@1` exactly while it has one.
+#[test]
+fn the_project_needs_push_zooms_while_it_has_one() {
+    let p = pushed_six_seconds();
+    assert!(p.requires.contains("push@1"));
+    let p = apply_ops(&p, &[Op::RemoveItem { id: "push".into() }]).unwrap();
+    assert!(!p.requires.contains("push@1"));
+}

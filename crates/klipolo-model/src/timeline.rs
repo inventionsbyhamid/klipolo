@@ -466,6 +466,10 @@ pub struct Attach {
     pub source_us: Us,
 }
 
+/// The project feature (`Project::requires`) a push zoom (`ZoomTarget::Push`) needs: a build without them can't read
+/// one, so it opens such a project read-only and says it was made with a newer Klipolo.
+pub const PUSH_FEATURE: &str = "push@1";
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS, schemars::JsonSchema)]
 #[serde(tag = "type", rename_all = "camelCase")]
 #[ts(export)]
