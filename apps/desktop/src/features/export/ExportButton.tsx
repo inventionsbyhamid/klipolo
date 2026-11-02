@@ -43,6 +43,8 @@ export function ExportButton() {
   return (
     <button
       type="button"
+      // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+      tabIndex={0}
       className={paused ? 'btn btn-secondary export-btn' : 'btn btn-primary export-btn'}
       // Off but not `disabled`: WebKit shows no tooltip on a disabled button, and this one says why.
       aria-disabled={off || undefined}

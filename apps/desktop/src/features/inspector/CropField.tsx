@@ -90,6 +90,8 @@ export function CropField({
       <Field label={label}>
         <button
           type="button"
+          // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+          tabIndex={0}
           className="select crop-toggle"
           aria-expanded={open}
           aria-controls={edges}

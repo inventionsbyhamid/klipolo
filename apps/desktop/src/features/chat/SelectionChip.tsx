@@ -20,6 +20,8 @@ export function SelectionChip() {
       <span>{t({ id: 'chatPanel.selection.range', message: `Selection ${from} to ${to}` })}</span>
       <button
         type="button"
+        // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+        tabIndex={0}
         className="x"
         aria-label={t({ id: 'chatPanel.selection.clear', message: 'Clear selection' })}
         onClick={() => useRange.getState().clear()}

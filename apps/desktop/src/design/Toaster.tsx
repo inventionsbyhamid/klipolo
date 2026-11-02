@@ -89,7 +89,13 @@ function ToastItem({ toast: t, onDismiss }: { toast: ToastMessage; onDismiss: (i
       {t.actions?.map((action) => (
         // Its own words for screen readers too; the toast closes as it runs (Radix's Action is a Close).
         <Toast.Action key={action.label} altText={action.label} asChild>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={action.run}>
+          <button
+            type="button"
+            // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+            tabIndex={0}
+            className="btn btn-ghost btn-sm"
+            onClick={action.run}
+          >
             {action.label}
           </button>
         </Toast.Action>

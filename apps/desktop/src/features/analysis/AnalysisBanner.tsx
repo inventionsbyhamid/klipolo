@@ -169,7 +169,13 @@ function JobRow({ files }: { files: Asset[] }) {
           <span className="analysis-job-reason" role="alert">
             {state.reason}
           </span>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={again}>
+          <button
+            type="button"
+            // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+            tabIndex={0}
+            className="btn btn-ghost btn-sm"
+            onClick={again}
+          >
             <BannerIcon name="retry" />
             Retry
           </button>
@@ -224,7 +230,7 @@ export function AnalysisBanner() {
           {progressTitle(running.length, failed.length)}
         </p>
         {running.length > 0 && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={cancelAnalysis}>
+          <button type="button" tabIndex={0} className="btn btn-ghost btn-sm" onClick={cancelAnalysis}>
             Cancel
           </button>
         )}
@@ -254,7 +260,7 @@ export function AnalysisBanner() {
     return (
       <section className="analysis-banner is-progress" aria-label="Analysis">
         <p className="analysis-title">{missingTitle(gone.length)}</p>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={notNow}>
+        <button type="button" tabIndex={0} className="btn btn-ghost btn-sm" onClick={notNow}>
           Not now
         </button>
         {missing}
@@ -274,10 +280,10 @@ export function AnalysisBanner() {
           </p>
         </div>
         <div className="analysis-actions">
-          <button type="button" className="btn btn-ghost" onClick={notNow}>
+          <button type="button" tabIndex={0} className="btn btn-ghost" onClick={notNow}>
             Not now
           </button>
-          <button type="button" className="btn btn-secondary" onClick={openSettings}>
+          <button type="button" tabIndex={0} className="btn btn-secondary" onClick={openSettings}>
             Open Settings
           </button>
         </div>
@@ -305,10 +311,10 @@ export function AnalysisBanner() {
           <p className="analysis-title">{estimate.problem}</p>
         </div>
         <div className="analysis-actions">
-          <button type="button" className="btn btn-ghost" onClick={notNow}>
+          <button type="button" tabIndex={0} className="btn btn-ghost" onClick={notNow}>
             Not now
           </button>
-          <button type="button" className="btn btn-secondary" disabled={busy} onClick={again}>
+          <button type="button" tabIndex={0} className="btn btn-secondary" disabled={busy} onClick={again}>
             <BannerIcon name="retry" />
             Retry
           </button>
@@ -327,17 +333,18 @@ export function AnalysisBanner() {
         <p className="analysis-text">{error ?? offerText(counted(estimate, takes), videos)}</p>
       </div>
       <div className="analysis-actions">
-        <button type="button" className="btn btn-ghost" onClick={notNow}>
+        <button type="button" tabIndex={0} className="btn btn-ghost" onClick={notNow}>
           Not now
         </button>
         {error ? (
-          <button type="button" className="btn btn-secondary" disabled={busy} onClick={again}>
+          <button type="button" tabIndex={0} className="btn btn-secondary" disabled={busy} onClick={again}>
             <BannerIcon name="retry" />
             Retry
           </button>
         ) : (
           <button
             type="button"
+            tabIndex={0}
             className="btn btn-primary"
             disabled={busy || refused}
             onClick={() => void analyze()}

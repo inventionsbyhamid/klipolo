@@ -154,6 +154,8 @@ export function SeparatedCamera({ layer, label }: { layer: Item; label: string }
         </p>
         <button
           type="button"
+          // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+          tabIndex={0}
           className="btn btn-secondary btn-sm"
           onClick={() => useSelection.getState().select(layer.id)}
         >

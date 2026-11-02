@@ -92,6 +92,8 @@ function Picture({
       </span>
       <button
         type="button"
+        // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+        tabIndex={0}
         className="icon-btn row-action"
         aria-label={t({
           id: 'library.add',

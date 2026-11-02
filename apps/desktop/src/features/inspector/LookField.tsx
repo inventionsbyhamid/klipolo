@@ -15,6 +15,8 @@ export function LookField({ clip }: { clip: Clip }) {
       <Tooltip label={t({ id: 'clip.look.tip', message: 'Choose a look in the Looks panel' })}>
         <button
           type="button"
+          // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+          tabIndex={0}
           className="select"
           aria-label={`${label}: ${name}`}
           onClick={() => useCaptionsView.getState().setView('looks')}

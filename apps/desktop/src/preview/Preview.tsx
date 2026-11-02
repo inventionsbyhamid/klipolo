@@ -109,6 +109,7 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
         <SafeAreaMenu />
         {/* Off until there is a video to watch (focusable, so its tooltip says why). */}
         <button
+          tabIndex={0}
           className="icon-btn"
           aria-label={
             full

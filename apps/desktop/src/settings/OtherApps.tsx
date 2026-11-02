@@ -129,6 +129,7 @@ export function OtherApps() {
       <div className="input-row">
         <button
           type="button"
+          tabIndex={0}
           className="btn btn-secondary"
           disabled={!status || status.needsMove}
           onClick={() => void copy()}

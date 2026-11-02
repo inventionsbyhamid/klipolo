@@ -80,6 +80,8 @@ export function Composer() {
         {!disabled && !focused && text === '' && <kbd aria-hidden>⌘K</kbd>}
         <button
           type="button"
+          // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+          tabIndex={0}
           className="send"
           aria-label={t({ id: 'chatPanel.send', message: 'Send' })}
           disabled={!canSend}
