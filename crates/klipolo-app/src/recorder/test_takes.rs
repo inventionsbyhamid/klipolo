@@ -129,6 +129,18 @@ impl Sessions {
         with_open(&self.state, |open| step(open, false)).unwrap();
     }
 
+    /// The library takes no new project (a file stands where its folder was), or takes them again.
+    pub(super) fn library_refuses(&self, refuses: bool) {
+        let path = self.library.path();
+        if refuses {
+            std::fs::remove_dir_all(path).unwrap();
+            std::fs::write(path, b"").unwrap();
+        } else {
+            std::fs::remove_file(path).unwrap();
+            std::fs::create_dir(path).unwrap();
+        }
+    }
+
     /// The library's project files, by name.
     pub(super) fn library_files(&self) -> Vec<String> {
         let mut names: Vec<String> = std::fs::read_dir(self.library.path())
@@ -168,7 +180,8 @@ pub(super) fn landing_into(
 ) -> Lands {
     Box::new(move |done: &Done| {
         let result = sessions.land(done, None);
-        landed.lock().unwrap().push(result);
+        landed.lock().unwrap().push(result.clone());
+        result.map(|_| ())
     })
 }
 

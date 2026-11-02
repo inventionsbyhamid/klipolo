@@ -213,7 +213,10 @@ impl Recorder {
                     }
                 }
                 Effect::Hide => self.env.window.hide(),
-                Effect::Finish(done) => self.env.sink.finished(&done),
+                // What didn't land was said on `recorder-event` already.
+                Effect::Finish(done) => {
+                    let _ = self.env.sink.finished(&done);
+                }
             }
         }
     }

@@ -20,7 +20,7 @@ use super::env::{Done, Sink};
 use super::setup::Files;
 use super::state::{Opened, Parts, RecorderState};
 use super::take::Recorder;
-use super::types::{ArmOptions, ArmedTake, WhatToRecord};
+use super::types::{ArmOptions, ArmedTake, LeftOutcome, WhatToRecord};
 use super::window::Window;
 
 pub(super) use super::test_launch::FakeLaunch;
@@ -35,8 +35,8 @@ impl Clock for FakeClock {
     }
 }
 
-/// What lands a take in a test: a real landing into a test's project session (`test_takes`).
-pub(super) type Lands = Box<dyn Fn(&Done) + Send + Sync>;
+/// What lands a take in a test: a real landing into a test's project session (`test_takes`), and what came of it.
+pub(super) type Lands = Box<dyn Fn(&Done) -> Result<(), CodedError> + Send + Sync>;
 
 impl FakeClock {
     /// The clock moves `ms` milliseconds.
@@ -55,6 +55,8 @@ pub(super) struct FakeSink {
     pub(super) holds: Mutex<Vec<bool>>,
     /// Lands each finished take, when the test says how.
     pub(super) lands: Mutex<Option<Lands>>,
+    /// What the person was told about takes an earlier run left behind, each with its take's id.
+    pub(super) left: Mutex<Vec<(String, LeftOutcome)>>,
 }
 
 impl Sink for FakeSink {
@@ -62,11 +64,16 @@ impl Sink for FakeSink {
         let mut events = self.events.lock().unwrap();
         events.push((take.to_owned(), ev.clone()));
     }
-    fn finished(&self, done: &Done) {
-        if let Some(land) = self.lands.lock().unwrap().as_ref() {
-            land(done);
-        }
+    fn finished(&self, done: &Done) -> Result<(), CodedError> {
+        let landed = match self.lands.lock().unwrap().as_ref() {
+            Some(land) => land(done),
+            None => Ok(()),
+        };
         self.finished.lock().unwrap().push(done.clone());
+        landed
+    }
+    fn left(&self, take: &str, outcome: LeftOutcome) {
+        self.left.lock().unwrap().push((take.to_owned(), outcome));
     }
     fn hold_media(&self, held: bool) {
         self.holds.lock().unwrap().push(held);

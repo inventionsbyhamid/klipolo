@@ -77,13 +77,16 @@ export function saidOnReturn(code: string): boolean {
 /**
  * Klipolo's window leaves macOS full screen before a take: it hides while the take records, and hidden from full screen
  * it would leave its own black Space showing, which the screen would record. The countdown covers the animation. A
- * window that can't say stays as it is, and the take goes ahead.
+ * window that can't say stays as it is, and the take goes ahead. True when it left.
  */
-async function leaveFullScreen(): Promise<void> {
+async function leaveFullScreen(): Promise<boolean> {
   try {
-    if (await appWindow.isFullScreen()) await appWindow.fullScreen(false);
+    if (!(await appWindow.isFullScreen())) return false;
+    await appWindow.fullScreen(false);
+    return true;
   } catch {
     // The take records all the same.
+    return false;
   }
 }
 
@@ -152,6 +155,18 @@ export function takeSlice(set: Set, get: Get, went: () => void): TakeSlice {
   let presses = 0;
   /** Takes whose worker said it has gone (`state: idle`): nothing of them runs any more. */
   const departed = new Set<string>();
+  /**
+   * This press took the window out of macOS full screen (`leaveFullScreen`): it goes back if the take ends before it
+   * records (Cancel, a refusal, a failure in its countdown). Once the take records, the window stays out.
+   */
+  let fullScreenBefore = false;
+
+  /** The window goes back to macOS full screen, when this press took it out and the take ended before recording. */
+  function backToFullScreen() {
+    if (!fullScreenBefore) return;
+    fullScreenBefore = false;
+    void appWindow.fullScreen(true).catch(() => undefined);
+  }
 
   function leave(id: string) {
     leaving?.gone();
@@ -258,6 +273,7 @@ export function takeSlice(set: Set, get: Get, went: () => void): TakeSlice {
     set(NO_TAKE);
     sayNote();
     if (saved) get().close();
+    else backToFullScreen();
   }
 
   function countdown(left: number) {
@@ -278,6 +294,7 @@ export function takeSlice(set: Set, get: Get, went: () => void): TakeSlice {
         if (ev.state === 'idle') return end(id, true);
         if (ev.state === 'recording' || ev.state === 'paused') {
           recorded = id;
+          fullScreenBefore = false;
           return set({ worker: ev.state, countdown: null, gate: null, systemAlert: false, meterDbfs: null });
         }
         return set({ worker: ev.state });
@@ -363,8 +380,8 @@ export function takeSlice(set: Set, get: Get, went: () => void): TakeSlice {
     set({ ...NO_TAKE, ...NO_ERROR, worker: 'starting', note: null });
     await lastTakeGone();
     if (mine.cancelled) return;
-    await leaveFullScreen();
-    if (mine.cancelled) return;
+    fullScreenBefore = await leaveFullScreen();
+    if (mine.cancelled) return backToFullScreen();
     let id: string;
     try {
       ({ id } = await recorder.arm(options));
@@ -373,7 +390,7 @@ export function takeSlice(set: Set, get: Get, went: () => void): TakeSlice {
       press = null;
       held.length = 0;
       set({ ...NO_TAKE, ...refused(error, 'take') });
-      return;
+      return backToFullScreen();
     }
     if (mine.cancelled) {
       // Cancelled while its worker was launched: it goes at once and never starts.
@@ -391,6 +408,7 @@ export function takeSlice(set: Set, get: Get, went: () => void): TakeSlice {
       if (press === mine) press = null;
       if (mine.cancelled || isCode(error, STALE)) return;
       set({ ...NO_TAKE, ...refused(error, 'take') });
+      backToFullScreen();
       return letGo(id, 'disarm');
     }
     if (press === mine) press = null;
@@ -408,8 +426,9 @@ export function takeSlice(set: Set, get: Get, went: () => void): TakeSlice {
       press = null;
     }
     held.length = 0;
-    // What a press in the countdown couldn't do goes with it: the choices come back as they were.
+    // What a press in the countdown couldn't do goes with it: the choices come back as they were, and the window too.
     set({ ...NO_TAKE, ...NO_ERROR });
+    backToFullScreen();
     if (s.take !== null) await letGo(s.take, started === s.take ? 'cancel' : 'disarm');
   }
 
@@ -452,6 +471,7 @@ export function takeSlice(set: Set, get: Get, went: () => void): TakeSlice {
       noteCritical = false;
       noteAdded = false;
       landing = null;
+      fullScreenBefore = false;
     },
   };
 }

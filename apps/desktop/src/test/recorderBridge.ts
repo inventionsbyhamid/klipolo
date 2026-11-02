@@ -7,6 +7,7 @@ import type { CaptureEvent } from '../bindings/CaptureEvent';
 import type { CodedError } from '../bindings/CodedError';
 import type { DeviceInfo } from '../bindings/DeviceInfo';
 import type { DisplayInfo } from '../bindings/DisplayInfo';
+import type { LeftTake } from '../bindings/LeftTake';
 import type { Permissions } from '../bindings/Permissions';
 import type { PreviewKind } from '../bindings/PreviewKind';
 import type { Previews } from '../bindings/Previews';
@@ -173,6 +174,8 @@ export type FakeRecorder = RecorderBridge & {
   emit: (take: string, event: CaptureEvent) => void;
   /** A take went into a project. */
   land: (landed: TakeImport) => void;
+  /** What became of a take an earlier run left behind that didn't land. */
+  tellLeft: (left: LeftTake) => void;
 };
 
 async function answer<T>(given: Answer<T> | undefined, fallback: () => T): Promise<T> {
@@ -185,6 +188,7 @@ async function answer<T>(given: Answer<T> | undefined, fallback: () => T): Promi
 export function fakeRecorder(script: FakeRecorderScript = {}): FakeRecorder {
   const events = new Set<(event: RecorderEvent) => void>();
   const landings = new Set<(landed: TakeImport) => void>();
+  const lefts = new Set<(left: LeftTake) => void>();
   let takes = 0;
   const listen = <T>(handlers: Set<(value: T) => void>, handler: (value: T) => void) => {
     handlers.add(handler);
@@ -263,11 +267,15 @@ export function fakeRecorder(script: FakeRecorderScript = {}): FakeRecorder {
     },
     onEvent: (handler) => listen(events, handler),
     onImported: (handler) => listen(landings, handler),
+    onLeft: (handler) => listen(lefts, handler),
     emit: (take, event) => {
       for (const handler of [...events]) handler({ take, event });
     },
     land: (landed) => {
       for (const handler of [...landings]) handler(landed);
+    },
+    tellLeft: (left) => {
+      for (const handler of [...lefts]) handler(left);
     },
   };
   return fake;

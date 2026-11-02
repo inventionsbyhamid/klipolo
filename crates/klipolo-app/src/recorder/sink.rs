@@ -7,20 +7,22 @@
 //!   second (`zooms` items; none and no step without clicks). Its snapshot is that project, open now, zooms and all.
 //!   When the take didn't land, the page hears a critical `Health` note on `recorder-event` instead (a `capture.*`
 //!   code); the take's files stay in its folder either way.
+//! - `recorder-left` (`LeftTake`): what became of a take an earlier run left behind (`left`) when it didn't land as a
+//!   `recorder-imported`: it couldn't be added, its new project couldn't be opened, or its worker records it still.
 
 use std::path::Path;
-use std::sync::{Mutex, PoisonError};
 
 use klipolo_app::analysis::holds::Holds;
 use klipolo_capture::protocol::Event;
 use klipolo_capture::shell::Level;
+use klipolo_model::coded::CodedError;
 use tauri::{AppHandle, Emitter, Manager};
 
 use super::destination::today;
 use super::env::{Done, Sink};
 use super::import::{Landing, land};
 use super::setup::Files;
-use super::types::RecorderEvent;
+use super::types::{LeftOutcome, LeftTake, RecorderEvent};
 use crate::commands::analysis::AnalysisHandle;
 use crate::media_jobs::MediaJobs;
 use crate::project::{ProjectSessionState, library_dir};
@@ -30,17 +32,11 @@ pub(super) struct AppSink {
     app: AppHandle,
     /// The recorder's own files (`<app data>/recorder`).
     files: Option<Files>,
-    /// One take lands at a time: this run's, or one an earlier run left behind (`left`), each opening its project.
-    landing: Mutex<()>,
 }
 
 impl AppSink {
     pub(super) fn new(app: AppHandle, files: Option<Files>) -> Self {
-        Self {
-            app,
-            files,
-            landing: Mutex::new(()),
-        }
+        Self { app, files }
     }
 }
 
@@ -55,15 +51,14 @@ impl Sink for AppSink {
         }
     }
 
-    fn finished(&self, done: &Done) {
+    fn finished(&self, done: &Done) -> Result<(), CodedError> {
         let Some(sessions) = self.app.try_state::<ProjectSessionState>() else {
             tracing::error!(
                 take = done.id,
                 "recorder: no project session to land the take in"
             );
-            return;
+            return Err(CodedError::new("capture.import.notAdded"));
         };
-        let _one_at_a_time = self.landing.lock().unwrap_or_else(PoisonError::into_inner);
         let mut probe = |path: &Path, _key: &str| crate::media::probe_asset(path);
         let landing = Landing {
             library: &library_dir,
@@ -76,15 +71,29 @@ impl Sink for AppSink {
                 if let Err(error) = self.app.emit("recorder-imported", import) {
                     tracing::warn!(%error, "recorder: the landed take didn't reach the page");
                 }
+                Ok(())
             }
+            // A take an earlier run left behind: `left` says what became of it.
+            Err(note) if done.earlier_run => Err(note),
             Err(note) => {
                 let said = Event::Health {
-                    note,
+                    note: note.clone(),
                     level: Level::Critical,
                     source: None,
                 };
                 self.event(&done.id, &said);
+                Err(note)
             }
+        }
+    }
+
+    fn left(&self, take: &str, outcome: LeftOutcome) {
+        let payload = LeftTake {
+            take: take.to_owned(),
+            outcome,
+        };
+        if let Err(error) = self.app.emit("recorder-left", payload) {
+            tracing::warn!(%error, "recorder: a take left behind didn't reach the page");
         }
     }
 

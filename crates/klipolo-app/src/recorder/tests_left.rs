@@ -1,7 +1,8 @@
-//! Takes an earlier run left behind land as Klipolo opens again: one saved, one cut off (finished from its files), one
-//! still recording once its worker lets it go; each in a new project, told as from the last session, and never twice.
-//! One added already, one of this run, an old one and a damaged one are left alone, the damaged one with a log line.
-//! Real fixture media through the app's own probe; nothing captures.
+//! Takes an earlier run left behind land as Klipolo opens again: one saved, one cut off (finished from its files before
+//! it is handed on), one still recording once its worker lets it go (the person told it is still going); each in a new
+//! project, told as from the last session, and never twice. One added already, one of this run and an old one are left
+//! alone. One that can't land is told once: a damaged one is never tried again, with a log line; one refused for now
+//! is tried again at the next launch. Real fixture media through the app's own probe; nothing captures.
 
 use std::io::{self, Write};
 use std::path::Path;
@@ -9,14 +10,16 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use klipolo_capture::journal::Entry;
+use klipolo_capture::recover;
 use klipolo_capture::session::{ImportTarget, SessionDir, SessionLock};
 use klipolo_model::coded::CodedError;
 use klipolo_model::timeline::ClipSource;
 
+use super::env::Done;
 use super::left::{self, AT_MOST, NOT_RECOVERED, WITHIN_MS};
 use super::test_support::*;
 use super::test_takes::*;
-use super::types::TakeImport;
+use super::types::{LeftOutcome, TakeImport};
 
 /// When this run began, in the tests' own time.
 const LAUNCHED_MS: u64 = 1_800_000_000_000;
@@ -30,6 +33,8 @@ struct Launch {
     sessions: Arc<Sessions>,
     sink: FakeSink,
     landed: Arc<Mutex<Vec<Result<TakeImport, CodedError>>>>,
+    /// Whether each take handed on to land was finished from its files already (its journal's `Recovered`).
+    repaired: Arc<Mutex<Vec<bool>>>,
     root: tempfile::TempDir,
 }
 
@@ -37,12 +42,21 @@ impl Launch {
     fn new() -> Self {
         let sessions = Arc::new(Sessions::start_screen());
         let landed = Arc::new(Mutex::new(Vec::new()));
+        let repaired = Arc::new(Mutex::new(Vec::new()));
         let sink = FakeSink::default();
-        *sink.lands.lock().unwrap() = Some(landing_into(sessions.clone(), landed.clone()));
+        let land = landing_into(sessions.clone(), landed.clone());
+        let seen = repaired.clone();
+        *sink.lands.lock().unwrap() = Some(Box::new(move |done: &Done| {
+            seen.lock()
+                .unwrap()
+                .push(recover::ending(&done.dir).recovered);
+            land(done)
+        }));
         Self {
             sessions,
             sink,
             landed,
+            repaired,
             root: tempfile::tempdir().unwrap(),
         }
     }
@@ -92,6 +106,15 @@ impl Launch {
         let landed = self.landed.lock().unwrap();
         landed.iter().filter_map(|l| l.clone().ok()).collect()
     }
+
+    /// What the person was told about takes that didn't land as `recorder-imported`, by take.
+    fn told(&self) -> Vec<(String, LeftOutcome)> {
+        self.sink.left.lock().unwrap().clone()
+    }
+}
+
+fn told(take: &str, outcome: LeftOutcome) -> (String, LeftOutcome) {
+    (take.to_owned(), outcome)
 }
 
 /// What `run` logs, as the app's log says it.
@@ -147,6 +170,7 @@ fn a_take_left_saved_lands_in_a_new_project_from_the_last_session() {
         }
     );
     assert!(dir.imported_mark().is_file());
+    assert!(launch.told().is_empty(), "the landing says it all");
     // Never twice: the next launch finds it added.
     assert_eq!(launch.recover(), 0);
     assert_eq!(launch.handed(), ["left-1"]);
@@ -159,6 +183,8 @@ fn a_take_left_cut_off_is_finished_from_its_files_and_lands() {
     assert_eq!(launch.recover(), 1);
     let finished = launch.sink.finished.lock().unwrap().clone();
     assert!(finished.len() == 1 && finished[0].recover, "{finished:?}");
+    // Finished from its files before it was handed on, so the landing itself does no repair.
+    assert_eq!(*launch.repaired.lock().unwrap(), [true]);
     let landed = launch.landed();
     assert_eq!(landed.len(), 1, "{:?}", launch.landed.lock().unwrap());
     assert!(landed[0].earlier_run);
@@ -230,12 +256,79 @@ fn a_damaged_take_is_skipped_with_a_log_line() {
         ["Recording, Oct 31.klipolo"],
         "no project for the one that didn't land"
     );
-    // Its files stay where they are, and no launch tries it again.
+    // The person is told, its files stay where they are, and no launch tries it again.
+    assert_eq!(launch.told(), [told("nothing", LeftOutcome::NotAdded)]);
     assert!(nothing.root.join(NOT_RECOVERED).is_file());
     assert!(!nothing.imported_mark().exists());
     assert!(nothing.root.join("mic").is_dir());
     assert_eq!(launch.recover(), 0);
     assert_eq!(launch.handed(), ["good", "nothing"]);
+    assert_eq!(launch.told().len(), 1, "told once");
+}
+
+/// A cut-off take with nothing recorded in it is told once and never tried again either.
+#[test]
+fn a_cut_off_take_with_nothing_in_it_is_told_once_and_never_tried_again() {
+    let launch = Launch::new();
+    let (dir, _) = take_in(
+        launch.root(),
+        "empty",
+        Recorded::default(),
+        ImportTarget::New,
+        HOUR_AGO_MS,
+    );
+    assert_eq!(launch.recover(), 0);
+    assert_eq!(launch.told(), [told("empty", LeftOutcome::NotAdded)]);
+    assert!(dir.root.join(NOT_RECOVERED).is_file());
+    assert!(launch.sessions.library_files().is_empty());
+    assert_eq!(launch.recover(), 0);
+    assert_eq!(launch.told().len(), 1, "told once");
+}
+
+/// A take refused for now (the library takes no new project) is told, left unmarked, and lands at the next launch.
+#[test]
+fn a_take_refused_for_now_is_tried_again_at_the_next_launch() {
+    let launch = Launch::new();
+    let dir = launch.saved("left-1", Recorded::default(), HOUR_AGO_MS);
+    launch.sessions.library_refuses(true);
+    assert_eq!(launch.recover(), 0);
+    assert_eq!(launch.told(), [told("left-1", LeftOutcome::NotAdded)]);
+    assert!(!dir.root.join(NOT_RECOVERED).exists(), "not marked");
+    assert!(!dir.imported_mark().exists());
+    launch.sessions.library_refuses(false);
+    assert_eq!(launch.recover(), 1);
+    assert_eq!(launch.handed(), ["left-1", "left-1"]);
+    assert!(dir.imported_mark().is_file());
+    assert_eq!(launch.told().len(), 1);
+}
+
+/// What the person is told about a take that didn't land, and whether that lasts (the take is marked).
+#[test]
+fn a_take_that_did_not_land_is_told_and_marked_only_when_that_lasts() {
+    let outcome = |code: &str| left::outcome_of(&CodedError::new(code));
+    for lasting in [
+        "capture.import.noVideo",
+        "capture.import.videoUnreadable",
+        "capture.recovered.failed",
+    ] {
+        assert_eq!(outcome(lasting), (LeftOutcome::NotAdded, true), "{lasting}");
+    }
+    for passing in [
+        "capture.import.notAdded",
+        "project.moved",
+        "capture.error.os",
+    ] {
+        assert_eq!(
+            outcome(passing),
+            (LeftOutcome::NotAdded, false),
+            "{passing}"
+        );
+    }
+    // Added, its project not opened: said, never marked (its `imported` mark says it is added).
+    assert_eq!(
+        outcome("capture.import.addedNotOpened"),
+        (LeftOutcome::AddedNotOpened, false)
+    );
 }
 
 #[test]
@@ -278,11 +371,14 @@ fn a_take_an_earlier_runs_worker_still_records_lands_once_it_is_saved() {
     };
     std::thread::sleep(WATCH_EVERY * 10);
     assert!(launch.handed().is_empty(), "left to its worker");
+    // The person hears it is still going, once.
+    assert_eq!(launch.told(), [told("live", LeftOutcome::StillRecording)]);
     // The person stops it from the menu bar: it is saved, and its worker goes.
     write_saved(&dir, Recorded::default());
     drop(worker);
     assert_eq!(watching.join().unwrap(), 1);
     assert_eq!(launch.handed(), ["live"]);
+    assert_eq!(launch.told().len(), 1);
     assert!(launch.landed()[0].earlier_run);
     assert!(dir.imported_mark().is_file());
 }

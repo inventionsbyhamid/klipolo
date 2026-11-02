@@ -619,3 +619,36 @@ fn the_camera_bubble_lands_round_in_every_format_whatever_the_main_format() {
         }
     }
 }
+
+/// Takes landing at once (this run's, and ones an earlier run left behind) each land whole in a project of their own:
+/// one opens its project and makes its step before the next opens another.
+#[test]
+fn takes_landing_at_once_each_land_in_a_project_of_their_own() {
+    const TAKES: usize = 8;
+    let sessions = Sessions::start_screen();
+    let takes: Vec<TakeFixture> = (0..TAKES)
+        .map(|_| TakeFixture::saved(Recorded::default(), ImportTarget::New))
+        .collect();
+    let start = std::sync::Barrier::new(TAKES);
+    let landed: Vec<_> = std::thread::scope(|s| {
+        let landing: Vec<_> = (takes.iter())
+            .map(|take| {
+                s.spawn(|| {
+                    start.wait();
+                    sessions.land(&take.done(false, None), None)
+                })
+            })
+            .collect();
+        landing.into_iter().map(|l| l.join().unwrap()).collect()
+    });
+    let mut projects = Vec::new();
+    for result in landed {
+        let import = result.expect("every take landed");
+        assert_eq!(import.snapshot.project.recordings.len(), 1);
+        projects.push(import.snapshot.project.id);
+    }
+    projects.sort();
+    projects.dedup();
+    assert_eq!(projects.len(), TAKES, "a project each");
+    assert_eq!(sessions.library_files().len(), TAKES);
+}

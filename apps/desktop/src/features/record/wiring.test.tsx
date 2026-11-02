@@ -339,6 +339,32 @@ describe('a take that lands', () => {
     expect(toasts()[0].actions?.map((a) => a.label)).toEqual(['Remove zooms']);
   });
 
+  it('takes_from_the_last_session_that_did_not_land_say_so_in_one_toast', async () => {
+    fake.tellLeft({ take: 'left-1', outcome: 'notAdded' });
+    fake.tellLeft({ take: 'left-2', outcome: 'notAdded' });
+    await vi.waitFor(() =>
+      expect(texts()).toEqual([
+        "A recording from your last session couldn't be added. Its files are in Movies / Klipolo / Recordings.",
+      ]),
+    );
+  });
+
+  it('a_take_from_the_last_session_still_going_or_not_opened_says_so', async () => {
+    fake.tellLeft({ take: 'live', outcome: 'stillRecording' });
+    await vi.waitFor(() =>
+      expect(texts()).toEqual([
+        'A recording from your last session is still going. Stop it from the menu bar to add it here.',
+      ]),
+    );
+    useToasts.setState({ toasts: [] });
+    fake.tellLeft({ take: 'left-1', outcome: 'addedNotOpened' });
+    await vi.waitFor(() =>
+      expect(texts()).toEqual([
+        'A recording from your last session was added to a new project. Open it from the start screen to see it.',
+      ]),
+    );
+  });
+
   it('remove_zooms_undoes_only_the_zoom_step', async () => {
     const landed = withTake(fixtureSnapshot(), 'take-clip', 40, 'rec', true);
     fake.land(takeImport(landed, 'take-clip', { recordingId: 'rec', zooms: 2 }));

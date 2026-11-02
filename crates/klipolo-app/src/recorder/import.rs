@@ -14,17 +14,24 @@
 //! Then its clicks get their auto zoom as a second step, "Add auto zoom" (`zoom`), unless the take was in the project
 //! already: zooms are never added twice.
 //!
+//! One take lands at a time (`one_at_a_time`), from opening its project to its step, and again from opening it to its
+//! zoom step: two at once (this run's, and one an earlier run left behind) would each open a project in the other's
+//! place in between. Repair, the probe and reading the cursor file stay outside, so a quick take never waits behind a
+//! long one.
+//!
 //! The person is told how the take ended when nothing said it already (`Done.note`), then the recorder's notes, then the
 //! import's own (`recording_from` leaves out its repeats).
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use klipolo_capture::import::{clip_for, manifest_peaks, recording_from};
 use klipolo_capture::journal::{self, Entry};
 use klipolo_capture::manifest::{Manifest, read_manifest};
 use klipolo_capture::recover::{self, RecoverError};
 use klipolo_capture::session::{self, SessionDir, read_config};
+use klipolo_cursor::timeline::TakeFacts;
 use klipolo_model::Op;
 use klipolo_model::coded::{CodedError, Said};
 use klipolo_model::history::Snapshot;
@@ -36,11 +43,18 @@ use super::destination::{self, Day, Destination, Target};
 use super::env::Done;
 use super::setup::{self, Files};
 use super::types::TakeImport;
-use super::zoom::zoom_take;
+use super::zoom::{take_facts, zoom_with};
 use crate::project::{ProjectSessionState, build_and_apply, open_in, snapshot_now};
 
 /// The step's label: "Add recording".
 pub(super) const LABEL: &str = "undo.record";
+
+/// Held from opening a take's project to its step (the module doc): one take lands at a time.
+static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
+
+fn one_at_a_time() -> MutexGuard<'static, ()> {
+    ONE_AT_A_TIME.lock().unwrap_or_else(PoisonError::into_inner)
+}
 
 /// A take in its project.
 #[derive(Clone, Debug, PartialEq)]
@@ -50,6 +64,8 @@ pub(super) struct Landed {
     /// Where the project is saved.
     pub(super) file: PathBuf,
     pub(super) recording_id: String,
+    /// Its cursor file, for its auto zoom; None without one.
+    pub(super) cursor: Option<String>,
     /// Its clip on the main track.
     pub(super) clip_id: String,
     /// Added now (false: the take was in its project already).
@@ -84,18 +100,22 @@ pub(super) fn import_take(
     let (imported, notes) = recording_from(&manifest, dir, &manifest_peaks, probe)
         .map_err(|e| ImportError::Said(Said::Coded(e)))?;
     let recording = imported.recording;
-    let Target {
-        id: project,
-        file,
-        made,
-    } = destination::open_for(sessions, dir, to)?;
     let mirror = mirror_of(dir);
-    let (clip_id, added) = add(sessions, &project, imported.assets, &recording, mirror)
-        .inspect_err(|_| {
-            if made {
-                destination::unmake(sessions, &file);
-            }
-        })?;
+    let (project, file, clip_id, added) = {
+        let _one = one_at_a_time();
+        let Target {
+            id: project,
+            file,
+            made,
+        } = destination::open_for(sessions, dir, to)?;
+        let (clip_id, added) = add(sessions, &project, imported.assets, &recording, mirror)
+            .inspect_err(|_| {
+                if made {
+                    destination::unmake(sessions, &file);
+                }
+            })?;
+        (project, file, clip_id, added)
+    };
     imported_in(dir, &project);
     tracing::info!(
         take = recording.id,
@@ -110,6 +130,7 @@ pub(super) fn import_take(
     Ok(Landed {
         project,
         file,
+        cursor: recording.cursor_path().map(str::to_owned),
         recording_id: recording.id,
         clip_id,
         added,
@@ -248,33 +269,38 @@ pub(super) fn land(
     after_landing(sessions, done, landed)
 }
 
-/// After a take's step: its project open first, again should the person have closed it, or opened another, since the
-/// step (`snapshot_after`), so its auto zoom goes there and is never lost; then the zoom step (`zoom_take`) when the
-/// take was added now; then the page's `TakeImport`, its snapshot the take's project, zooms and all. A take that
-/// landed but whose zooms the project refused is still landed, with none.
+/// After a take's step: its clicks read from its cursor file when it was added now (`take_facts`); then its project
+/// open, again should the person have closed it, or opened another, since the step (`snapshot_after`), so its auto
+/// zoom goes there and is never lost; then the zoom step (`zoom_with`); then the page's `TakeImport`, its snapshot the
+/// take's project, zooms and all. A take that landed but whose zooms the project refused is still landed, with none.
 pub(super) fn after_landing(
     sessions: &ProjectSessionState,
     done: &Done,
     landed: Landed,
 ) -> Result<TakeImport, CodedError> {
-    let opened = snapshot_after(sessions, &landed)?;
-    let zooms = if landed.added {
-        let (project, take, clip) = (&landed.project, &landed.recording_id, &landed.clip_id);
-        zoom_take(sessions, project, take, clip).unwrap_or_else(|said| {
-            tracing::warn!(
-                take = done.id,
-                ?said,
-                "recorder: the take landed without its auto zoom"
-            );
-            0
-        })
-    } else {
-        0
-    };
-    let snapshot = if zooms > 0 {
-        snapshot_after(sessions, &landed)?
-    } else {
-        opened
+    let facts: Option<Arc<TakeFacts>> = (landed.cursor.as_deref())
+        .filter(|_| landed.added)
+        .and_then(|file| take_facts(file, &landed.recording_id));
+    let (zooms, snapshot) = {
+        let _one = one_at_a_time();
+        let opened = snapshot_after(sessions, &landed)?;
+        let zooms = facts.map_or(0, |facts| {
+            let (project, take, clip) = (&landed.project, &landed.recording_id, &landed.clip_id);
+            zoom_with(sessions, project, take, clip, &facts).unwrap_or_else(|said| {
+                tracing::warn!(
+                    take = done.id,
+                    ?said,
+                    "recorder: the take landed without its auto zoom"
+                );
+                0
+            })
+        });
+        let snapshot = if zooms > 0 {
+            snapshot_after(sessions, &landed)?
+        } else {
+            opened
+        };
+        (zooms, snapshot)
     };
     let mut notes: Vec<CodedError> = done.note.iter().cloned().collect();
     notes.extend(landed.notes);

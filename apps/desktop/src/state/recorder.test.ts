@@ -218,6 +218,61 @@ describe('record', () => {
     expect(fake.calls).toEqual(['setup', 'arm', 'send:start']);
   });
 
+  /** The window is in macOS full screen, and each of its full screen calls is kept, in order. */
+  function fullScreenWindow(): boolean[] {
+    const calls: boolean[] = [];
+    vi.spyOn(appWindow, 'isFullScreen').mockResolvedValue(true);
+    vi.spyOn(appWindow, 'fullScreen').mockImplementation((on) => {
+      calls.push(on);
+      return Promise.resolve(!on);
+    });
+    return calls;
+  }
+
+  it('cancel_before_recording_puts_the_window_back_in_full_screen', async () => {
+    const calls = fullScreenWindow();
+    const take = await pressed();
+    fake.emit(take, countdown(3));
+    await rec().cancel();
+    await vi.waitFor(() => expect(calls).toEqual([false, true]));
+    // A second press and its cancel leave and come back once each.
+    fake.emit(take, state('idle'));
+    await rec().record();
+    await rec().cancel();
+    await vi.waitFor(() => expect(calls).toEqual([false, true, false, true]));
+  });
+
+  it('a_refused_arm_or_start_puts_the_window_back_in_full_screen', async () => {
+    const calls = fullScreenWindow();
+    fake.script.arm = () => refusal('capture.error.busy');
+    await opened();
+    await rec().record();
+    await vi.waitFor(() => expect(calls).toEqual([false, true]));
+    fake.script.arm = undefined;
+    fake.script.send = (_take, command) =>
+      command.cmd === 'start' ? refusal('capture.error.os', { detail: 'gone' }) : undefined;
+    await rec().record();
+    await vi.waitFor(() => expect(calls).toEqual([false, true, false, true]));
+  });
+
+  it('a_take_that_records_leaves_the_window_out_of_full_screen', async () => {
+    const calls = fullScreenWindow();
+    const take = await pressed();
+    fake.emit(take, state('recording'));
+    fake.emit(take, state('stopping'));
+    fake.emit(take, state('idle'));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(calls).toEqual([false]);
+  });
+
+  it('cancel_never_puts_a_window_that_wasn_t_full_screen_in_full_screen', async () => {
+    vi.spyOn(appWindow, 'isFullScreen').mockResolvedValue(false);
+    const fullScreen = vi.spyOn(appWindow, 'fullScreen');
+    await pressed();
+    await rec().cancel();
+    expect(fullScreen).not.toHaveBeenCalled();
+  });
+
   it('record_sends_the_choices_as_the_take_s_options', async () => {
     await opened(recorderSetup({ cameras: [device('facetime')] }));
     rec().pick({ camera: 'facetime', mirror: false });

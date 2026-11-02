@@ -8,8 +8,8 @@
 //! on any zoom track, is left out, so the person's zooms are never covered. Each item is attached to the clip under
 //! it, at 2x at most, on the first zoom track with room (`auto_zoom_ops`).
 //!
-//! The cursor file is read before the project's lock is taken; the plan is made under it, from the project as it is,
-//! so nothing lands between the look and the step.
+//! The cursor file is read first (`take_facts`), before the landing's lock and the project's are taken; the plan is
+//! made under the project's, from the project as it is, so nothing lands between the look and the step (`zoom_with`).
 //!
 //! A take whose cursor file is missing or can't be read lands without zooms, with a warning in the log: never an error.
 //!
@@ -30,14 +30,36 @@ use klipolo_model::query::clip_starts;
 use klipolo_model::time::Us;
 use klipolo_model::timeline::{ItemContent, TrackKind};
 
-use crate::project::{ApplyError, ProjectSessionState, build_and_apply, with_open};
+#[cfg(test)]
+use crate::project::{ApplyError, with_open};
+use crate::project::{ProjectSessionState, build_and_apply};
 
 /// The step's label: "Add auto zoom".
 pub(super) const LABEL: &str = "undo.autoZoom";
 
+/// Take `recording_id`'s clicks and cursor, read from its cursor `file` for its auto zoom: None, with a warning in the
+/// log, when the file is missing or can't be read.
+pub(super) fn take_facts(file: &str, recording_id: &str) -> Option<Arc<TakeFacts>> {
+    match load_track(Path::new(file)) {
+        Ok(track) => Some(Arc::new(TakeFacts::of_cursor(
+            &track,
+            &StillRuns::of(&track),
+        ))),
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                take = recording_id,
+                "recorder: the take's cursor file couldn't be read, so it gets no auto zoom"
+            );
+            None
+        }
+    }
+}
+
 /// Adds the auto zoom of take `recording_id`, played by clip `clip_id` of project `project_id`'s main track, as one step
 /// (the module doc): how many zoom items it added, 0 with no step. A cursor file that is missing or can't be read gives
 /// 0; Err when that project isn't the open one any more (`project.moved`) or refuses the step.
+#[cfg(test)]
 pub(super) fn zoom_take(
     sessions: &ProjectSessionState,
     project_id: &str,
@@ -47,21 +69,24 @@ pub(super) fn zoom_take(
     let Some(file) = cursor_file(sessions, project_id, recording_id)? else {
         return Ok(0);
     };
-    let facts = match load_track(Path::new(&file)) {
-        Ok(track) => Arc::new(TakeFacts::of_cursor(&track, &StillRuns::of(&track))),
-        Err(error) => {
-            tracing::warn!(
-                %error,
-                take = recording_id,
-                "recorder: the take's cursor file couldn't be read, so it gets no auto zoom"
-            );
-            return Ok(0);
-        }
+    let Some(facts) = take_facts(&file, recording_id) else {
+        return Ok(0);
     };
+    zoom_with(sessions, project_id, recording_id, clip_id, &facts)
+}
+
+/// `zoom_take` from the take's `facts`, read already (`take_facts`): the step alone.
+pub(super) fn zoom_with(
+    sessions: &ProjectSessionState,
+    project_id: &str,
+    recording_id: &str,
+    clip_id: &str,
+    facts: &Arc<TakeFacts>,
+) -> Result<u32, Said> {
     let mut added = 0;
     build_and_apply(sessions, Some(project_id), None, LABEL, |project| {
         let mut mint = || uuid::Uuid::new_v4().to_string();
-        let ops = zoom_ops(project, recording_id, clip_id, &facts, &mut mint);
+        let ops = zoom_ops(project, recording_id, clip_id, facts, &mut mint);
         added = ops.len();
         Ok(ops)
     })
@@ -76,6 +101,7 @@ pub(super) fn zoom_take(
 
 /// The cursor file recording `recording_id` names in project `project_id`, the open one; None when it has none (or
 /// isn't there).
+#[cfg(test)]
 fn cursor_file(
     sessions: &ProjectSessionState,
     project_id: &str,

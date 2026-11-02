@@ -5,6 +5,7 @@ import type { BackFromReopen } from '../bindings/BackFromReopen';
 import type { ArmOptions } from '../bindings/ArmOptions';
 import type { CaptureCommand } from '../bindings/CaptureCommand';
 import type { CodedError } from '../bindings/CodedError';
+import type { LeftTake } from '../bindings/LeftTake';
 import type { PreviewKind } from '../bindings/PreviewKind';
 import type { Previews } from '../bindings/Previews';
 import type { PrivacyPage } from '../bindings/PrivacyPage';
@@ -98,6 +99,12 @@ export interface RecorderBridge {
   onEvent(handler: (event: RecorderEvent) => void): Promise<UnlistenFn>;
   /** Every take that went into a project (`recorder-imported`), until the returned function is called. */
   onImported(handler: (landed: TakeImport) => void): Promise<UnlistenFn>;
+  /**
+   * What became of each take an earlier run left behind that didn't land as `onImported` (`recorder-left`): it
+   * couldn't be added, its new project couldn't be opened, or it is still recording. Until the returned function is
+   * called.
+   */
+  onLeft(handler: (left: LeftTake) => void): Promise<UnlistenFn>;
 }
 
 /** The app's recorder. */
@@ -116,6 +123,7 @@ export const tauriRecorder: RecorderBridge = {
   previewAck: (kind) => call<void>('recorder_preview_ack', { kind }),
   onEvent: (handler) => listen<RecorderEvent>('recorder-event', (event) => handler(event.payload)),
   onImported: (handler) => listen<TakeImport>('recorder-imported', (event) => handler(event.payload)),
+  onLeft: (handler) => listen<LeftTake>('recorder-left', (event) => handler(event.payload)),
 };
 
 let current: RecorderBridge = tauriRecorder;
@@ -136,6 +144,7 @@ export const recorder: RecorderBridge = {
   previewAck: (kind) => current.previewAck(kind),
   onEvent: (handler) => current.onEvent(handler),
   onImported: (handler) => current.onImported(handler),
+  onLeft: (handler) => current.onLeft(handler),
 };
 
 /** Uses `bridge` for the recorder from now on (tests); `tauriRecorder` puts the app's back. */
