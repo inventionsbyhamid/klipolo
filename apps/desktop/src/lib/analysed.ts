@@ -110,10 +110,14 @@ function footageFiles(clip: Clip, r: Recording): string[] {
   return footage.runs.filter((run) => playsIn(footage, run, span)).map((run) => run.assetId);
 }
 
-/** What analysis offers in a project, and which recording each voice file is the voice of. */
+/**
+ * What analysis offers in a project, which recording each voice file is the voice of, and which take each offered file
+ * of a take is (its voice, and a camera take's footage).
+ */
 interface Offer {
   out: Asset[];
   voices: Map<string, string>;
+  takes: Map<string, string>;
 }
 
 /** The last offer for each main track, while its assets and recordings stay the same arrays. */
@@ -128,6 +132,7 @@ function offerOf(project: AnalysedScope): Offer {
   const sounding = new Set(assets.filter((a) => a.hasAudio).map((a) => a.id));
   const alone = new Set<string>();
   const voices = new Map<string, string>();
+  const footage = new Map<string, string>();
   for (const clip of main) {
     if (clip.source.type === 'asset') {
       // A take's file is heard for its words only, so one with no sound has nothing to analyse.
@@ -139,10 +144,11 @@ function offerOf(project: AnalysedScope): Offer {
     const recording = recordings.find((r) => r.id === id);
     if (recording) for (const file of voiceFiles(clip, recording, sounding)) voices.set(file, id);
     // A camera take's camera is its footage: watched for a scene log, as imported camera footage is.
-    if (recording) for (const file of footageFiles(clip, recording)) alone.add(file);
+    if (recording) for (const file of footageFiles(clip, recording)) footage.set(file, id);
   }
-  const out = analysedAssets(project).filter((a) => alone.has(a.id) || voices.has(a.id));
-  const offer = { out, voices };
+  const out = analysedAssets(project).filter((a) => alone.has(a.id) || voices.has(a.id) || footage.has(a.id));
+  const takes = new Map([...voices, ...[...footage].filter(([file]) => !voices.has(file))]);
+  const offer = { out, voices, takes };
   offers.set(main, { assets, recordings, offer });
   return offer;
 }
@@ -161,18 +167,23 @@ export function analysable(project: AnalysedScope): Asset[] {
   return offerOf(project).out;
 }
 
-/**
- * Each voice file of the project's takes, by the recording it is the voice of (`analysable`). A take's files count as
- * one clip: offers, rows and notes count its recording once. The same map while the main track, assets and
- * recordings stay the same.
- */
-export function voices(project: AnalysedScope): ReadonlyMap<string, string> {
-  return offerOf(project).voices;
-}
-
-/** The recording whose voice `assetId` is (`voices`), or null: its analysis is the take's, so it reads as one. */
+/** The recording whose voice `assetId` is (`analysable`), or null: its analysis is the take's, so it reads as one. */
 export function voiceOf(project: AnalysedScope, assetId: string): string | null {
   return offerOf(project).voices.get(assetId) ?? null;
+}
+
+/**
+ * Each offered file of the project's takes, by its recording: the voice files (`voiceOf`), then a camera take's
+ * footage, watched beside its voice. A take is one clip: offers, rows and notes count its recording once, and its row
+ * is named as its clip. The same map while the main track, assets and recordings stay the same.
+ */
+export function takes(project: AnalysedScope): ReadonlyMap<string, string> {
+  return offerOf(project).takes;
+}
+
+/** The recording whose take `assetId` is analysed for (`takes`), or null for a clip of its own. */
+export function takeOf(project: AnalysedScope, assetId: string): string | null {
+  return offerOf(project).takes.get(assetId) ?? null;
 }
 
 /** Whether `ids` hold `assetId`, or a file at the same path. */

@@ -278,6 +278,12 @@ describe('the store', () => {
     ]);
     expect(whyNoWords({ mic: silent, mic2: silent }, ['mic', 'mic2'], takes)).toBe('noSpeechOne');
     expect(whyNoWords({ mic: silent, mic2: silent, b: silent }, ['mic', 'mic2', 'b'], takes)).toBe('noSpeechMany');
+    // A camera take: its silent camera (the footage) and its mic with no speech are one clip with none.
+    const camera = new Map([
+      ['mic', 'take'],
+      ['camera', 'take'],
+    ]);
+    expect(whyNoWords({ camera: silent, mic: silent }, ['camera', 'mic'], camera)).toBe('noSpeechOne');
   });
 
   it('retries a failed clip, and puts the offer off with Not now', async () => {
