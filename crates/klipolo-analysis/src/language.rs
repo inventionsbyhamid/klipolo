@@ -10,6 +10,8 @@
 //! Final Cut" stays Chinese. The answer is a BCP 47 primary subtag ("hi", "ar", "zh"), as `Transcript::language` and
 //! the caption faces (`klipolo_model::text_language`) read it. O(characters).
 
+use klipolo_model::speech::is_mark;
+
 /// A transcript with no letters at all (no speech, only digits) is tagged this.
 pub const DEFAULT: &str = "en";
 
@@ -110,14 +112,6 @@ fn script(c: char) -> Option<Script> {
     };
     // Digits and signs inside the blocks (Devanagari's danda, Arabic's comma, Thai's digits) are no letters.
     (c.is_alphabetic() || is_mark(c)).then_some(s)
-}
-
-/// A combining mark (a virama, a vowel sign): part of its word's letters though not alphabetic itself.
-fn is_mark(c: char) -> bool {
-    matches!(
-        c as u32,
-        0x93C | 0x94D | 0x9CD | 0xA4D | 0xACD | 0xB4D | 0xBCD | 0xC4D | 0xCCD | 0xD4D | 0xE3A
-    )
 }
 
 /// The language `words` (a transcript's words, in order) are in: see the module notes. `DEFAULT` when they hold no
