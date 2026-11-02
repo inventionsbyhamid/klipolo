@@ -4,12 +4,13 @@
 //! timestamps), which collects every sample in a `Vec` instead.
 //!
 //! Every stream but the sound is discarded at the demuxer: no other stream becomes packets, and their bytes are skipped
-//! where the file's layout allows: all of them in an MP4 or MOV, whose sound is read directly (`read_sound_directly`),
-//! elsewhere runs longer than FFmpeg's 32 KB short-seek window. The pass reads sound only:
+//! where the file's layout allows: all of them in an MP4 or MOV whose sound samples lie far apart, read directly
+//! (`far_apart`), and elsewhere runs longer than FFmpeg's 32 KB short-seek window. The pass reads sound only:
 //! thumbnails come from a scan of their own after it (`media::store`). A read error (an unplugged drive)
 //! fails the decode: it is never taken for the end of the file.
 
 use std::path::Path;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use ffmpeg::software::resampling;
 use ffmpeg::{ChannelLayout, codec as avcodec};
@@ -21,7 +22,7 @@ use crate::vendor::cap::audio_data::{AudioData, ResamplerOutput, high_quality_re
 /// Decoded audio before a seek point that is decoded and thrown away (a decoder needs it to settle).
 const PRE_ROLL: u64 = 2 * RATE as u64;
 
-/// Bytes of an MP4 or MOV per sound sample from which its sound is read directly (`read_sound_directly`): about 4 Mb/s
+/// Bytes of an MP4 or MOV per sound sample from which its sound is read directly (`far_apart`): about 4 Mb/s
 /// of picture beside 48 kHz AAC (a 1.5 Mb/s one has 4 KB, 2-hour 4K at 10 Mb/s 28 KB).
 const DIRECT_FROM: i64 = 12 * 1024;
 
@@ -91,35 +92,83 @@ pub fn decode(
     until: Option<u64>,
     emit: &mut Emit,
 ) -> Result<(), DecodeError> {
+    let forced = match FORCED.load(Ordering::Relaxed) {
+        1 => Some(true),
+        2 => Some(false),
+        _ => None,
+    };
+    decode_reading(path, from, until, forced, emit)
+}
+
+/// How the sound pass reads every MP4 or MOV, forced (`force_direct_reads`): 0 as each file asks, 1 directly, 2 through
+/// the buffer.
+static FORCED: AtomicU8 = AtomicU8::new(0);
+
+/// Forces how the sound pass reads an MP4 or MOV: directly (`Some(true)`), through its buffer (`Some(false)`), or as
+/// each file asks (`None`, the default). For measurements only (the perf harness compares the two); the app never
+/// sets it.
+pub fn force_direct_reads(force: Option<bool>) {
+    let value = match force {
+        None => 0,
+        Some(true) => 1,
+        Some(false) => 2,
+    };
+    FORCED.store(value, Ordering::Relaxed);
+}
+
+/// [`decode`], an MP4 or MOV read directly as `direct` says (None: as the file asks, `far_apart`).
+fn decode_reading(
+    path: &Path,
+    from: u64,
+    until: Option<u64>,
+    direct: Option<bool>,
+    emit: &mut Emit,
+) -> Result<(), DecodeError> {
     let mut input = crate::media::open::input(&path).map_err(|e| format!("Input Open / {e}"))?;
-    read_sound_directly(&mut input);
+    if is_mov(&input) && direct.unwrap_or_else(|| far_apart(&input)) {
+        read_directly(&mut input);
+    }
     decode_input(input, from, until, emit)
 }
 
-/// An MP4 or MOV's sound read straight from where its samples are. Its demuxer goes to each sound sample through the
-/// file's sample table, but through a 32 KB buffer it reads on through any gap under 64 KB instead of seeking past it:
+/// An MP4 or MOV (QuickTime's family): its demuxer goes to each sound sample through the file's sample table. Other
+/// containers are read in order (Matroska finds its blocks by reading), so they keep the buffer.
+fn is_mov(input: &ffmpeg::format::context::Input) -> bool {
+    input.format().name().split(',').any(|name| name == "mov")
+}
+
+/// Whether an MP4 or MOV's sound samples lie far enough apart to read directly (`DIRECT_FROM` bytes of the file per
+/// sound sample). Through a 32 KB buffer the demuxer reads on through any gap under 64 KB instead of seeking past it:
 /// a file that lays sound and picture frame by frame (FFmpeg's own MP4s, OBS's) had nearly all of it read for its
-/// sound, 9.4 GB for 2 hours of 4K. Read directly (`AVIOContext::direct`), each sample is one seek and one read of
-/// its own bytes. That pays where the picture between two sound samples is large (`DIRECT_FROM`); for a small one,
-/// reading on costs no more locally, and fewer reads are kinder to a network volume. Other containers are read in
-/// order (Matroska finds its blocks by reading), so they keep the buffer.
-fn read_sound_directly(input: &mut ffmpeg::format::context::Input) {
-    if !input.format().name().split(',').any(|name| name == "mov") {
-        return;
-    }
+/// sound, 9.4 GB for 2 hours of 4K. Read directly, each sample is one seek and one read of its own bytes; for samples
+/// close together, reading on costs no more locally, and fewer reads are kinder to a network volume.
+fn far_apart(input: &ffmpeg::format::context::Input) -> bool {
     let Some(packets) = input
         .streams()
         .best(ffmpeg::media::Type::Audio)
         .map(|s| s.frames())
         .filter(|&n| n > 0)
     else {
-        return;
+        return false;
     };
-    // SAFETY: `pb` belongs to `input`, which outlives this read and write (null for formats without one); `direct`
-    // is a plain field each read and seek checks.
+    // SAFETY: `pb` belongs to `input`, which outlives this read (null for formats without one).
+    let size = unsafe {
+        let pb = (*input.as_ptr()).pb;
+        if pb.is_null() {
+            return false;
+        }
+        ffmpeg::ffi::avio_size(pb)
+    };
+    size / packets >= DIRECT_FROM
+}
+
+/// Reads straight from where the samples are (`AVIOContext::direct`): each one seek and one read of its own bytes.
+fn read_directly(input: &mut ffmpeg::format::context::Input) {
+    // SAFETY: `pb` belongs to `input`, which outlives this write (null for formats without one); `direct` is a plain
+    // field each read and seek checks.
     unsafe {
         let pb = (*input.as_mut_ptr()).pb;
-        if !pb.is_null() && ffmpeg::ffi::avio_size(pb) / packets >= DIRECT_FROM {
+        if !pb.is_null() {
             (*pb).direct = 1;
         }
     }
