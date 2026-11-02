@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,12 +10,19 @@ import { captureResizeObservers } from '../test/resizeObservers';
 
 /*
  * Selecting never resizes the video. A plain click selects and shows its card, but the stage and the engine's drawable
- * keep their size and place: the card shows in a slot of its own beside the video, or over the video's right side when
- * a slot would cost the video too much of its size. Selecting, deselecting and walking with the arrows never make the
- * video jump.
+ * keep their size and place: the card shows in the left column, over the library, and nothing in the preview makes
+ * room for it. Selecting, deselecting and walking with the arrows never make the video jump.
  */
 
 vi.mock('../bridge/commands', () => ({ bridge: { apply: vi.fn() }, mediaUrl: (p: string) => p }));
+vi.mock('../bridge/library', () => ({
+  library: {
+    pack: vi.fn(() => Promise.resolve([])),
+    marks: vi.fn(() => Promise.resolve({})),
+    picture: vi.fn(() => Promise.reject(new Error('no pictures in tests'))),
+    speechRanges: vi.fn(() => Promise.resolve([])),
+  },
+}));
 vi.mock('../bridge/engine', () => ({
   engine: {
     setView: vi.fn(() => Promise.resolve()),
@@ -40,6 +47,7 @@ const { useSelection } = await import('../state/selection');
 const { useTimelineFocus } = await import('../state/timelineFocus');
 const { useUi } = await import('../state/ui');
 const { Preview } = await import('./Preview');
+const { Library } = await import('../layout/Library');
 
 const info: EngineInfo = {
   port: 4321,
@@ -80,29 +88,51 @@ afterEach(() => {
   useEngine.setState({ info: null, presenter: 'socket', status: 'off' });
 });
 
-/** What sizes and places the video: the area's and the video box's attributes, and the canvas the layers are placed on. */
+/**
+ * What sizes and places the video: the preview's own markup down to the video box (every class, style and attribute),
+ * and the area's, the video box's and the handles' attributes.
+ */
 function stageBox() {
   const el = (id: string) => screen.getByTestId(id);
   const attrs = (node: HTMLElement) => [node.className, node.getAttribute('style'), node.dataset.card ?? null];
+  const preview = screen.getByRole('main', { name: 'Preview' });
   return {
+    body: (preview.querySelector('.stage-body')!.cloneNode(false) as HTMLElement).outerHTML,
+    children: [...preview.querySelector('.stage-main')!.children].map((c) => c.className),
     area: attrs(el('stage-area')),
     frame: attrs(el('stage')),
     handles: attrs(el('stage-handles')),
   };
 }
 
-const card = () => screen.queryByRole('complementary');
-const hint = () => screen.queryByText('Select something on the video to change it.');
+/** The card, wherever it is. */
+const card = () => screen.queryByRole('complementary', { name: /settings$/ });
+/** The card in the left column, over the library. */
+const columnCard = () => {
+  const library = document.querySelector<HTMLElement>('.library')!;
+  return within(library).queryByRole('complementary', { name: /settings$/ });
+};
+
+function Editor() {
+  return (
+    <>
+      <Library />
+      <Preview />
+    </>
+  );
+}
 
 describe('selecting never resizes the video', () => {
   it('a 16:9 video keeps its size and place as a clip is selected, deselected and selected again', () => {
-    renderWithProviders(<Preview />);
+    renderWithProviders(<Editor />);
     act(() => observers.fire());
     const before = stageBox();
     const views = vi.mocked(engine.setView).mock.calls.length;
     expect(views).toBeGreaterThan(0);
     act(() => useSelection.getState().select('a'));
-    expect(card()).toHaveAccessibleName('Recording 1 settings');
+    expect(columnCard()).toHaveAccessibleName('Recording 1 settings');
+    // Nothing in the preview: no card, no slot.
+    expect(within(screen.getByRole('main', { name: 'Preview' })).queryByRole('complementary')).toBeNull();
     act(() => observers.fire());
     expect(stageBox()).toEqual(before);
     act(() => useSelection.getState().select(null));
@@ -114,53 +144,52 @@ describe('selecting never resizes the video', () => {
     expect(vi.mocked(engine.setView).mock.calls).toHaveLength(views);
   });
 
-  it('a 16:9 video that a slot would shrink by more than a fifth: the card floats over it', () => {
+  it('a 16:9 video keeps its whole area with a card shown: nothing is kept clear for it', () => {
     useSelection.setState({ selectedId: 'a' });
-    renderWithProviders(<Preview />);
-    expect(screen.getByTestId('stage-area')).toHaveAttribute('data-card', 'over');
-    expect(screen.getByTestId('stage-area').style.paddingRight).toBe('');
-    expect(card()).toBeInTheDocument();
+    renderWithProviders(<Editor />);
+    const stage = screen.getByTestId('stage-area');
+    expect(stage).not.toHaveAttribute('data-card');
+    expect(stage.style.paddingRight).toBe('');
+    expect(columnCard()).toBeInTheDocument();
   });
 
-  it('a 9:16 video has the slot beside it: the card shows there, and with nothing selected a note says what goes there', () => {
+  it('a 9:16 video stays centred as a title is selected; no note or slot beside it', () => {
     useUi.setState({ previewFormat: 'portrait' });
     Object.assign(frame, { width: 253, height: 450 });
-    renderWithProviders(<Preview />);
+    renderWithProviders(<Editor />);
     const stage = screen.getByTestId('stage-area');
-    expect(stage).toHaveAttribute('data-card', 'slot');
-    // Moved left only as far as the 264 px card and its 16 px gap need.
-    expect(stage.style.paddingRight).toBe('13px');
-    expect(hint()).toBeInTheDocument();
+    expect(stage.style.paddingRight).toBe('');
+    expect(screen.queryByText('Select something on the video to change it.')).toBeNull();
     const before = stageBox();
     act(() => useSelection.getState().select('title'));
-    expect(card()).toHaveAccessibleName('Title settings');
-    expect(hint()).toBeNull();
+    expect(columnCard()).toHaveAccessibleName('Title settings');
+    expect(stageBox()).toEqual(before);
+    act(() => useSelection.getState().select(null));
+    expect(card()).toBeNull();
     expect(stageBox()).toEqual(before);
   });
 
-  it('the slot keeps its outline while a press holds the card back, with the note only when nothing is selected', () => {
+  it('a press holds the card back and the stage keeps its box, before and after the release', () => {
     useUi.setState({ previewFormat: 'portrait' });
     Object.assign(frame, { width: 253, height: 450 });
-    renderWithProviders(<Preview />);
+    renderWithProviders(<Editor />);
+    const before = stageBox();
     act(() => {
       holdDock();
       useSelection.getState().select('title');
     });
     expect(card()).toBeNull();
-    const slot = document.querySelector('.stage-hint');
-    expect(slot).toBeInTheDocument();
-    expect(slot).toHaveTextContent('');
+    expect(stageBox()).toEqual(before);
     act(() => releaseDock());
-    expect(card()).toHaveAccessibleName('Title settings');
-    expect(document.querySelector('.stage-hint')).toBeNull();
+    expect(columnCard()).toHaveAccessibleName('Title settings');
+    expect(stageBox()).toEqual(before);
   });
 
-  it('full screen keeps no slot: the 9:16 video is centred, with no note beside it', () => {
+  it('full screen shows no card: the 9:16 video is centred', () => {
     useUi.setState({ previewFormat: 'portrait' });
     useFullScreen.setState({ on: true });
-    renderWithProviders(<Preview />);
+    renderWithProviders(<Editor />);
     expect(screen.getByTestId('stage-area').style.paddingRight).toBe('');
-    expect(screen.queryByText('Select something on the video to change it.')).toBeNull();
     act(() => useSelection.getState().select('title'));
     expect(card()).toBeNull();
   });
@@ -170,7 +199,7 @@ describe('selecting never resizes the video', () => {
     const { Timeline } = await import('../features/timeline/Timeline');
     renderWithProviders(
       <>
-        <Preview />
+        <Editor />
         <Timeline />
       </>,
     );
@@ -191,58 +220,27 @@ describe('selecting never resizes the video', () => {
 
   it('no style sizes or places the video by whether a card is shown', () => {
     const css = readFileSync(resolve(__dirname, '../styles/app.css'), 'utf8');
-    expect(css).not.toMatch(/has-inspector[^{]*\.(screen|frame)/);
+    expect(css).not.toMatch(/has-inspector|stage-hint|data-card="(slot|over)"/);
+    // The card's own rules never reach into the preview.
+    expect(css).not.toMatch(/(\.screen|\.frame|\.stage)[^{]*\.inspector|\.inspector[^{]*(\.screen|\.frame|\.stage\b)/);
   });
 });
 
-/*
- * Over the video the card goes to the stage's corner that covers the selected layer least, picked from the layer as the
- * project has it: a drag on the canvas never moves the card, and the stage never changes size or place.
- */
-describe('the card over the video', () => {
-  const anchor = () => screen.getByTestId('stage-area').dataset.anchor;
-
-  it('a title in the top half gets the bottom right', () => {
-    useSelection.setState({ selectedId: 'title' });
-    renderWithProviders(<Preview />);
-    expect(screen.getByTestId('stage-area')).toHaveAttribute('data-card', 'over');
-    expect(card()).toHaveAccessibleName('Title settings');
-    expect(anchor()).toBe('bottom-right');
-  });
-
-  it('a centred caption near the bottom gets the top right, and the stage keeps its box between them', () => {
-    const snapshot = fixtureSnapshot();
-    const title = snapshot.project.timeline.tracks[0].items[0];
-    snapshot.project.timeline.tracks[0].items.push({
-      ...title,
-      id: 'caption',
-      startUs: 5_000_000,
-      layout: { ...title.layout, anchor: 'bottomCenter', rect: { x: 0.2, y: 0.8, w: 0.6, h: 0.12 } },
-    });
-    useProject.setState({ snapshot });
-    useSelection.setState({ selectedId: 'title' });
-    renderWithProviders(<Preview />);
-    const before = stageBox();
-    act(() => useSelection.getState().select('caption'));
-    expect(anchor()).toBe('top-right');
-    act(() => useSelection.getState().select('title'));
-    expect(anchor()).toBe('bottom-right');
-    expect(stageBox()).toEqual(before);
-  });
-
-  it('a drag of the title down the video never moves the card, and the stage keeps its box', async () => {
+/* A drag on the canvas never moves the stage, with the card in the left column throughout. */
+describe('a drag on the video', () => {
+  it('a drag of the title down the video keeps the stage box and the card in the column', async () => {
     const apply = vi.fn(() => Promise.resolve(true));
     useProject.setState({ apply });
     usePlayback.setState({ playheadUs: 2_000_000 });
     useSelection.setState({ selectedId: 'title' });
-    renderWithProviders(<Preview />);
+    renderWithProviders(<Editor />);
     const before = stageBox();
     const title = () => screen.getByRole('button', { name: /^Text: Set up billing/ });
     fireEvent.pointerDown(title(), { button: 0, clientX: 400, clientY: 60, pointerId: 1 });
     for (const y of [120, 240, 400]) {
       fireEvent.pointerMove(title(), { clientX: 400, clientY: y, pointerId: 1 });
       await act(() => new Promise((r) => setTimeout(r, 20)));
-      expect(anchor()).toBe('bottom-right');
+      expect(columnCard()).toHaveAccessibleName('Title settings');
       expect(stageBox()).toEqual(before);
     }
     fireEvent.pointerUp(title(), { pointerId: 1 });
