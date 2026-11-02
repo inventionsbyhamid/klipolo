@@ -1809,3 +1809,34 @@ fn the_context_names_sounds_and_says_volume_keys() {
         "{text}"
     );
 }
+
+/// As Muse Spark wrote them in a paid run: an ease "spring 0.4" is a spring bouncing 0.4, and the text "null" where a
+/// value may be null is null, in presets and in a key's ease alike.
+#[test]
+fn spring_with_a_bounce_and_the_text_null_read_as_meant() {
+    let parsed = call(
+        "setMotion",
+        json!({"layer": "i1", "presets": "null", "keys": [
+            {"atSec": 0.0, "ease": "null", "property": "rotation", "value": -180.0},
+            {"atSec": 1.0, "ease": "spring 0.4", "property": "rotation", "value": 0.0}
+        ]}),
+    );
+    let ToolCall::SetMotion {
+        keys: Some(keys),
+        presets,
+        ..
+    } = parsed
+    else {
+        panic!("{parsed:?}");
+    };
+    assert!(presets.is_empty());
+    assert_eq!(keys[0].ease, None);
+    assert_eq!(keys[1].ease, Some(klipolo_chat::tools::motion::spring(0.4)));
+    let ToolCall::SetLayer { change, .. } = call(
+        "setLayer",
+        json!({"layer": "m1", "set": [{"key": "duck", "value": true}], "volumeKeys": "null"}),
+    ) else {
+        panic!()
+    };
+    assert_eq!((change.duck, change.volume_keys), (Some(true), None));
+}
