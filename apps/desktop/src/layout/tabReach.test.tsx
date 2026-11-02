@@ -143,8 +143,8 @@ describe('the editor from the keyboard', () => {
     // Every control marked 0 and not off is reached.
     const tabbable = controls.filter((c) => c.getAttribute('tabindex') === '0' && !c.matches(':disabled'));
     expect(tabbable.filter((c) => !stops.includes(c)).map((c) => c.outerHTML.slice(0, 80))).toEqual([]);
-    // The regions, in the window's order, as WebKit walks them: it skips what is `inert` (the library under the card),
-    // which jsdom doesn't know.
+    // The regions, in the window's order, as WebKit walks them: it skips what is `inert` (the library under the card;
+    // jsdom skips it as it isn't drawn).
     const order = stops
       .filter(live)
       .map(regionOf)

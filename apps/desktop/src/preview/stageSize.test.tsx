@@ -48,6 +48,7 @@ const { useTimelineFocus } = await import('../state/timelineFocus');
 const { useUi } = await import('../state/ui');
 const { Preview } = await import('./Preview');
 const { Library } = await import('../layout/Library');
+const { useLibraryPanel } = await import('../state/libraryPanel');
 
 const info: EngineInfo = {
   port: 4321,
@@ -67,6 +68,7 @@ let unstub: (() => void)[] = [];
 beforeEach(() => {
   releaseDock();
   useFullScreen.setState({ on: false });
+  useLibraryPanel.setState({ collapsed: false, aside: null });
   useDockHold.setState({ walk: false });
   const snapshot = fixtureSnapshot();
   snapshot.project.settings.formats = ['landscape', 'portrait'];
@@ -183,6 +185,25 @@ describe('selecting never resizes the video', () => {
     act(() => releaseDock());
     expect(columnCard()).toHaveAccessibleName('Title settings');
     expect(stageBox()).toEqual(before);
+  });
+
+  it('with the library folded the card shows over the preview’s edge, and the video keeps its size and place', () => {
+    useLibraryPanel.setState({ collapsed: true });
+    renderWithProviders(<Editor />);
+    act(() => observers.fire());
+    const before = stageBox();
+    const views = vi.mocked(engine.setView).mock.calls.length;
+    act(() => useSelection.getState().select('b'));
+    expect(columnCard()).toHaveAccessibleName('broll.mp4 settings');
+    // The library stays folded: its column keeps the rail's width.
+    expect(document.querySelector('.library')).toHaveAttribute('data-collapsed', 'true');
+    act(() => observers.fire());
+    expect(stageBox()).toEqual(before);
+    act(() => useSelection.getState().select(null));
+    expect(card()).toBeNull();
+    act(() => observers.fire());
+    expect(stageBox()).toEqual(before);
+    expect(vi.mocked(engine.setView).mock.calls).toHaveLength(views);
   });
 
   it('full screen shows no card: the 9:16 video is centred', () => {

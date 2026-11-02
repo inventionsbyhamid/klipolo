@@ -172,25 +172,40 @@
   display: none;
 }
 
-/* While the inspector card has the column (`data-card`) the library stays laid out under it, so its scroll is kept,
-   but isn't drawn. */
-.library[data-card] > .library-body {
-  visibility: hidden;
-}
-
 /* Focused from code only, once the card goes with the keyboard in it: no ring around the whole panel. */
 .library:focus-visible {
   outline: none;
 }
 
 /* Folded (Control Command S), the library is its rail: Open library and Add files, then the clips' thumbnails (design
-   8). Wins over the Captions view's wider panel. The column opens again while the inspector card has it. */
-.workspace:has(.library.panel[data-collapsed="true"]:not([data-card])) {
-  --library-w: var(--library-rail);
+   8). Wins over the Captions view's wider panel. `--library-w` stays the open library's width: the card's, while it
+   lies over the preview's left edge. */
+.workspace:has(.library.panel[data-collapsed="true"]) {
+  grid-template-columns: var(--library-rail) minmax(0, 1fr) var(--chat-w);
+}
+
+/* Folded with something selected: the rail's panel lets its card out over the preview's left edge, at the open
+   library's width and lifted off the video, so the preview never changes size. */
+.library[data-collapsed="true"][data-card] {
+  z-index: 4;
+  overflow: visible;
+}
+
+.library[data-collapsed="true"] > .inspector {
+  right: auto;
+  width: var(--library-w);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
 }
 
 .library-rail[hidden] {
   display: none;
+}
+
+/* Back to settings, over the Looks a clip's card opened: at its own width, under the head. */
+.lib-back-card {
+  align-self: flex-start;
+  margin: 0 var(--space-6) var(--space-4);
 }
 
 .library-rail {
