@@ -96,7 +96,7 @@ export function blockPressHandlers(
       const view = timelineDragView(scroller, found?.track.id ?? null, guideRefs, tipRef);
       return pressBlock(e, gesture, view, playheadUs);
     }
-    // The preview docks the picked block's card once the press is over, not under the pointer.
+    // The left column shows the picked block's card once the press is over, not under the pointer.
     holdDock();
     pickBlock(id);
     const found = findItem(project, id);

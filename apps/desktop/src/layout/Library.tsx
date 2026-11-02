@@ -3,6 +3,8 @@ import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { SearchField } from '../design/SearchField';
 import { SpriteIcon } from '../design/SpriteIcon';
 import { CaptionsPanel } from '../features/captions/CaptionsPanel';
+import { useShownFormat } from '../features/editor/formats';
+import { Inspector } from '../features/inspector/Inspector';
 import { LooksPanel } from '../features/looks/LooksPanel';
 import { ClipRail } from '../features/media/ClipRail';
 import { MediaList } from '../features/media/MediaList';
@@ -11,12 +13,18 @@ import { useCaptionsView, type LeftView } from '../state/captionsView';
 import { useLibraryPanel } from '../state/libraryPanel';
 import { recordYourScreen } from '../state/recorder';
 import { useUi, type LibraryTab } from '../state/ui';
+import { useColumnCard } from './columnCard';
 import { Icon } from './Icon';
 
 const TABS: LibraryTab[] = ['clips', 'music', 'sounds', 'images'];
 
 /** The library's body, which its rail's Open library opens. */
 export const LIBRARY_BODY_ID = 'library-body';
+
+/** The inspector card in the column, in the format the preview shows (its own render, so the library's isn't asked). */
+function ColumnInspector() {
+  return <Inspector format={useShownFormat()} />;
+}
 
 /**
  * The library panel: the Library, Captions and Looks view tabs, Add files, Record your screen (the
@@ -28,6 +36,12 @@ export const LIBRARY_BODY_ID = 'library-body';
  * to its rail (`useLibraryPanel`): Open library (or the edge) opens it again, Add files is kept, and the clips'
  * thumbnails do what their rows do (`ClipRail`). Folded, it stays mounted (`hidden` and `inert`), and a fold with the
  * keyboard inside puts it on the rail.
+ *
+ * While something is selected the column shows its inspector card instead (`useColumnCard`), so the preview never
+ * changes size on a click: the card fills the panel, and the library stays mounted under it, hidden and `inert`, with
+ * its view, tab, search and scroll kept for when the card goes. A folded library opens for the card and folds again
+ * after. A card that leaves with the keyboard in it (Close, Escape, Back to library) leaves the keyboard on the panel,
+ * where Space still plays and Tab goes on into the library.
  */
 export function Library() {
   const { t } = useLingui();
@@ -38,6 +52,10 @@ export function Library() {
   const setView = useCaptionsView((s) => s.setView);
   const [query, setQuery] = useState('');
   const collapsed = useLibraryPanel((s) => s.collapsed);
+  const card = useColumnCard();
+  const panel = useRef<HTMLElement>(null);
+  /** The keyboard was in the card last: when the card goes, it stays on the panel. */
+  const inCard = useRef(false);
   const rail = useRef<HTMLButtonElement>(null);
   const body = useRef<HTMLDivElement>(null);
   /** The keyboard was in the library as it folded: it goes to the rail. */
@@ -51,6 +69,12 @@ export function Library() {
       body.current?.querySelector<HTMLElement>('.view-tab[aria-selected="true"]')?.focus();
     }
   }, [collapsed]);
+  useLayoutEffect(() => {
+    if (card || !inCard.current) return;
+    inCard.current = false;
+    const active = document.activeElement;
+    if (!active || active === document.body) panel.current?.focus({ preventScroll: true });
+  }, [card]);
   const names: Record<LibraryTab, string> = {
     clips: t({ id: 'library.tab.clips', message: 'Clips' }),
     music: t({ id: 'library.tab.music', message: 'Music' }),
@@ -82,11 +106,16 @@ export function Library() {
   );
   return (
     <aside
+      ref={panel}
       className="panel library"
       aria-label={viewLabels[view]}
       data-view={view}
       data-tab={tab}
       data-collapsed={collapsed}
+      data-card={card || undefined}
+      // Focusable from code only: where the keyboard waits once the card goes (Space plays from here).
+      tabIndex={-1}
+      onFocus={(e) => (inCard.current = e.target instanceof Element && e.target.closest('.inspector') !== null)}
     >
       {/* Its edge: a double click folds it, or opens it again from the rail. */}
       <div
@@ -96,7 +125,7 @@ export function Library() {
         onDoubleClick={() => useLibraryPanel.getState().toggle()}
       />
       {collapsed && (
-        <div className="library-rail">
+        <div className="library-rail" hidden={card} inert={card}>
           <div className="rail-actions">
             {/* WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable. */}
             <button
@@ -134,7 +163,7 @@ export function Library() {
         ref={body}
         className="library-body"
         hidden={collapsed}
-        inert={collapsed}
+        inert={collapsed || card}
         onFocus={() => (inside.current = true)}
         onBlur={(e) => {
           const left = e.target;
@@ -220,6 +249,7 @@ export function Library() {
           </>
         )}
       </div>
+      {card && <ColumnInspector />}
     </aside>
   );
 }

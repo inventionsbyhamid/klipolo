@@ -70,8 +70,8 @@ export function blockFocused(): boolean {
 
 /**
  * Keyboard focus moves to block `id` (selecting it): the view mounts it, scrolls to it if it's out of view and
- * focuses it. The arrow keys and the Select previous / next / above / below commands go through here. The preview
- * keeps its dock until the walk settles, so a bare cut on the way (it selects nothing) doesn't resize the frame.
+ * focuses it. The arrow keys and the Select previous / next / above / below commands go through here. The left
+ * column keeps its card until the walk settles, so a bare cut on the way (it selects nothing) doesn't flash it.
  */
 export function moveFocusTo(project: Project, id: string) {
   holdDockForWalk();
