@@ -5,12 +5,13 @@ import type { PackItem } from '../../bindings/PackItem';
 import type { Project } from '../../bindings/Project';
 import type { LibraryMarks } from '../../bridge/library';
 import { Icon } from '../../layout/Icon';
+import { useLibraryPanel } from '../../state/libraryPanel';
 import { useProject } from '../../state/project';
 import type { LibraryTab } from '../../state/ui';
 import { beginMediaDrag } from '../timeline/drag/mediaDrag';
 import { addClip, addMedia, toTheEnd } from './addMedia';
 import { AssetMenu } from './AssetMenu';
-import { AssetRow } from './AssetRow';
+import { AssetRow, type RowPreview } from './AssetRow';
 import { FavoriteButton, type Favorite } from './FavoriteButton';
 import {
   fileKey,
@@ -24,6 +25,7 @@ import {
   useSettledMarks,
 } from './marks';
 import { addImage, addMusic, addPackItem, addSound, dropPackItem } from './place';
+import { stopPreview, togglePreview, usePreview, type SoundFrom } from './preview';
 import { useRowBudget } from './rowBudget';
 import { searchLibrary, type Searchable } from './search';
 import {
@@ -116,6 +118,25 @@ function musicAddLabel(t: ReturnType<typeof useLingui>['t'], name: string): stri
   return t({ id: 'library.add.music', message: `Add ${name} under the whole video`, comment: '{name} is a song’s name' });
 }
 
+/** The preview a sound row's play button runs: item `key`, played from `from`. */
+function usePreviewOf(): (key: string, from: SoundFrom) => RowPreview {
+  const playing = usePreview((s) => s.key);
+  const sounding = usePreview((s) => s.sounding);
+  return (key, from) => ({
+    on: playing === key,
+    sounding: playing === key && sounding,
+    toggle: () => void togglePreview(key, from),
+  });
+}
+
+/** `go` (a row's add or drop), after stopping the preview: what goes onto the timeline is heard there. */
+const stopping =
+  <A extends unknown[]>(go: (...args: A) => void) =>
+  (...args: A) => {
+    stopPreview();
+    go(...args);
+  };
+
 /** Item `key`'s star, from the marks. */
 function favoriteOf(marks: LibraryMarks, key: string): Favorite {
   const on = marks[key]?.favorite ?? false;
@@ -126,12 +147,15 @@ function favoriteOf(marks: LibraryMarks, key: string): Favorite {
 function PackItems({ items, project }: { items: PackItem[]; project: Project }) {
   const { t } = useLingui();
   const marks = useMarks((s) => s.marks);
+  const previewOf = usePreviewOf();
   const used = uses(project).any;
   return items.map((item) => {
     const key = packKey(item.id);
     const favorite = favoriteOf(marks, key);
-    const add = () => void markWhenAdded(key, addPackItem(item));
-    const drop = (target: Parameters<typeof dropPackItem>[1]) => void markWhenAdded(key, dropPackItem(item, target));
+    const add = stopping(() => void markWhenAdded(key, addPackItem(item)));
+    const drop = stopping(
+      (target: Parameters<typeof dropPackItem>[1]) => void markWhenAdded(key, dropPackItem(item, target)),
+    );
     return item.category === 'sticker' ? (
       <Picture
         key={item.id}
@@ -153,6 +177,7 @@ function PackItems({ items, project }: { items: PackItem[]; project: Project }) 
         addLabel={item.category === 'music' ? musicAddLabel(t, item.name) : undefined}
         onDrop={drop}
         favorite={favorite}
+        preview={previewOf(key, { packId: item.id })}
       />
     );
   });
@@ -193,10 +218,10 @@ const packItemKey = (item: PackItem) => packKey(item.id);
  * the project's videos and its recordings, each take one row ("Recording 1", its length and sources) that adds the
  * whole take; Music and Sounds the sounds (by how they play, else by length) and the pack's beds and effects;
  * Images a 3-column grid of your pictures, those made with Muse Image, and the pack's stickers. Drag any row onto the
- * lane it belongs to; the "+" adds it at the playhead. `query` (the panel's search) keeps the items it finds, best
- * first (`search.ts`); in each list, favorites come first, then what the library added most recently (`marks.ts`),
- * which also decide between equal matches. The order follows the marks once the person has left the list
- * (`useSettledMarks`).
+ * lane it belongs to; the "+" adds it at the playhead. A sound or music row's art plays it first (`preview.ts`): adding
+ * or dropping a row stops it. `query` (the panel's search) keeps the items it finds, best first (`search.ts`); in each
+ * list, favorites come first, then what the library added most recently (`marks.ts`), which also decide between equal
+ * matches. The order follows the marks once the person has left the list (`useSettledMarks`).
  */
 export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
   const { t } = useLingui();
@@ -204,6 +229,10 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
   const pack = usePack((s) => s.items);
   const marks = useMarks((s) => s.marks);
   const order = useSettledMarks(`${tab}\n${query}`);
+  const previewOf = usePreviewOf();
+  // A preview stops as the tab changes, the panel folds, or the list goes (another view, the window).
+  const collapsed = useLibraryPanel((s) => s.collapsed);
+  useEffect(() => stopPreview, [tab, collapsed]);
   // A tab of hundreds of files draws its first rows, then more each frame (its files are at most the project's).
   const budget = useRowBudget(`${tab}\n${query}`, (project?.assets.length ?? 0) + (project?.recordings.length ?? 0));
   useEffect(loadPack, []);
@@ -248,10 +277,11 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
       art={art}
       title={asset.name}
       used={used.has(asset.id)}
-      onAdd={() => void markWhenAdded(ownKey(asset), add())}
+      onAdd={stopping(() => void markWhenAdded(ownKey(asset), add()))}
       addLabel={art === 'music' ? musicAddLabel(t, asset.name) : undefined}
-      onDrop={(target) => addMedia(asset.id, target, () => markUsed(ownKey(asset)))}
+      onDrop={stopping((target) => addMedia(asset.id, target, () => markUsed(ownKey(asset))))}
       favorite={favoriteOf(marks, ownKey(asset))}
+      preview={previewOf(ownKey(asset), { path: asset.path })}
     />
   );
 
