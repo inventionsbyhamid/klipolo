@@ -92,13 +92,13 @@ items in Scenes (scene_cut in older logs).\n\
 - Recording 2 is the second recording; its clips list camera and sounds (as c1: same as c1).\n\
 - autoZoom zooms in on the clicks of every screen recording.\n\
 - A short (\"make a 60 s short with animations\") needs the whole plan, not just the cut; adapt it to what they said. \
-findMoments for the best moments; once you know the moments, make all the rest in one answer: keepOnly about the \
-length asked; setFormat portrait; followSubject on the speaker; setCaptions word-pop or bold-box; a hook title of at \
-most 6 punchy words with addText, kinetic or pop, in the first 2 s of what you keep, quoting or paraphrasing their \
-words or a striking later line said in the video, never the opening words; 2 to 4 medium pack stickers with addImage \
-at a top corner, each followed by animate last with a pop or bounce and a sound; quiet addMusic under the speech; \
-setTransition only where two clips already meet with spare footage; otherwise none. Place every layer inside the \
-parts you keep.\n\
+findMoments for the best moments; once you know the moments, make all the rest in one answer: keepOnly within about \
+10% of a length they name (54 to 66 s for 60 s), aiming at it; setFormat portrait; followSubject on the speaker; \
+setCaptions word-pop or bold-box; a hook title of at most 6 punchy words with addText, kinetic or pop, in the first 2 \
+s of what you keep, quoting or paraphrasing their words or a striking later line said in the video, never the opening \
+words; 2 to 4 medium pack stickers with addImage at a top corner, each followed by animate last with a pop or bounce \
+and a sound; quiet addMusic under the speech; setTransition only where two clips already meet with spare footage; \
+otherwise none. Place every layer inside the parts you keep.\n\
 - Layers lists words (t1), pictures (i1), video layers (v1) and music (m1). last is the layer the call before added.\n\
 - animate is the quick way for a common move. For anything specific, compose it: setMotion keys (x 1 is a frame's \
 width right, y 1 its height down, scale 1 the layer's size), animateText for words by letter, word or line, setLayer \

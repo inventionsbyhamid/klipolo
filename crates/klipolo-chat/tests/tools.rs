@@ -1494,6 +1494,8 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "one or two short, plain, friendly sentences",
         // Closing words: what was done and what waits for approval, never a promise of later work.
         "Your last words say what you did and what waits for their approval; never promise more work later",
+        // A length named is kept to within about 10%.
+        "keepOnly within about 10% of a length they name (54 to 66 s for 60 s), aiming at it",
         "No markdown",
         "Never use em dashes or en dashes",
     ] {
