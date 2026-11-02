@@ -61,8 +61,7 @@ function ChatOff() {
 
 /**
  * "Ask for an edit", its suggestions (greyed while chat can't run), the NeedsKey card when there is no key or code, why
- * chat is off when an access code was turned off, and a note while the clips aren't analysed or are being analysed
- *.
+ * chat is off when an access code was turned off, and a note while the clips aren't analysed or are being analysed.
  */
 function EmptyChat() {
   const { t } = useLingui();

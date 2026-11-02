@@ -1,4 +1,4 @@
-/* The export dialog and the top bar's Export while one runs. Values from
+/* The export dialog (its setup, progress and finished states) and the top bar's Export while one runs. Values from
    tokens.css only. The generic dialog pieces are scoped to this dialog, as Settings scopes its own, so the two can't
    clash before the shared design primitives carry them. */
 

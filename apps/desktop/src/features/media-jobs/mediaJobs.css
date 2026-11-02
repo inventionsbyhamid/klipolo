@@ -169,8 +169,7 @@
   font-size: var(--text-xs);
 }
 
-/* The mini bar: a rounded sunken track with a signal red fill; a paused copy's fill is grey, it isn't moving. */
-   moving. */
+/* The mini bar: a rounded sunken track with a signal yellow fill; a paused copy's fill is grey, it isn't moving. */
 .copies-bar {
   height: 4px;
   margin-top: var(--space-1);

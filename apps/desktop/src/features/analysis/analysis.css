@@ -1,6 +1,7 @@
-/* The analysis banner, at the top of the preview: the offer and its progress, styled as `.banner`,
-   `.job` and `.steps`. Values from tokens.css only. Its classes carry the `analysis-` prefix. It is a card: raised
-   grey, a hairline edge, 8 px corners, 12 px inside; its secondary button matches the shared one. */
+/* The analysis banner, at the top of the preview: the offer and its progress, with a row per clip (`.analysis-job`)
+   and its step dots (`.analysis-steps`). Values from tokens.css only. Its classes carry the `analysis-` prefix, and the
+   secondary button and spinner are scoped here, until the shared design primitives carry them. It is a card: raised
+   grey, a hairline edge, 8 px corners, 12 px inside. */
 
 .analysis-banner {
   /* Above the preview frame's bay shadow (it masks everything around the native preview's hole). */

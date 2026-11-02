@@ -487,9 +487,9 @@
   font-weight: var(--weight-strong);
 }
 
-/* The toggle, scoped here until the shared one lands: a 36 x 20 track. Off: sunken, a hairline edge (a
-   3:1 grey under the pointer) and a 16 px ink-soft knob. On: signal yellow with a signal-ink edge and a dark knob. The
-   knob slides in 140 ms, and not at all with reduced motion. */
+/* The toggle, scoped here until the shared one lands: a 36 x 20 track. Off: sunken, a hairline edge (a 3:1 grey under
+   the pointer) and a 16 px ink-soft knob. On: signal yellow with a signal-ink edge and a dark knob. The knob slides in
+   140 ms, and not at all with reduced motion. */
 .settings-dialog .settings-switch {
   position: relative;
   flex: none;

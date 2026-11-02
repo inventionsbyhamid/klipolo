@@ -1,4 +1,4 @@
-/* The Captions view. */
+/* The Captions view of the left panel: the style cards, then the words of the format previewed. */
 
 /* While it is open the left panel is wider (384, 352 below 1280 wide), and the Library's width comes back after. */
 .workspace:has(.library[data-view="captions"]) {

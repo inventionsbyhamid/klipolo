@@ -32,7 +32,7 @@ interface ProposalStore {
 
 /**
  * The proposal waiting for the person, which the timeline draws as red ranges and the chat as a card. Chat sets it;
- * 9.13). Chat sets it; Apply, Discard or a hand edit clear it.
+ * Apply, Discard or a hand edit clear it.
  */
 export const useProposal = create<ProposalStore>((set) => ({
   proposal: null,

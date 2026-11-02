@@ -85,8 +85,8 @@ fn a_partial_sample_table_is_not_stored_as_the_keyframe_index() {
     assert!(crate::media::keyframes::has(root.path(), &key));
 }
 
-/// The index a scan stores says where the picture starts (a phone file whose picture starts 70 ms after
-/// its sound), so a decoder that reads it numbers frames from there, as FFmpeg's decoders do.
+/// The index a scan stores says where the picture starts (a phone file whose picture starts 70 ms after its sound), so
+/// a decoder that reads it numbers frames from there, as FFmpeg's decoders do.
 #[test]
 fn a_scan_stores_where_the_picture_starts() {
     let root = tempfile::tempdir().unwrap();

@@ -1,7 +1,6 @@
 /* The AI surfaces' shared pieces (NeedsKey). Values from tokens.css only. The card is raised grey with a hairline
-   hairline edge, 8 px corners and 12 px inside; its secondary button matches the shared one. Rules name
-   `.card.needs-key`, so the card keeps its own look inside a surface whose headings are styled (the empty chat's
-   display title). */
+   edge, 8 px corners and 12 px inside; its secondary button matches the shared one. Rules name `.card.needs-key`, so
+   the card keeps its own look inside a surface whose headings are styled (the empty chat's display title). */
 
 .card.needs-key {
   display: grid;

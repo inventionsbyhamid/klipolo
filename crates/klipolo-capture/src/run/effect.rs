@@ -78,7 +78,7 @@ pub enum PipeCmd {
     Lower,
     Stop,
     /// From now on the frames show the system cursor (`VideoPipe::set_cursor_in_frames`); the run controller answers
-    /// the core's `cursor_in_frames`.
+    /// with the core's `cursor_in_frames`.
     CursorInFrames,
 }
 

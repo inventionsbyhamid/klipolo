@@ -6,7 +6,7 @@ const css = readFileSync(resolve(__dirname, 'tokens.css'), 'utf8');
 
 /** Colours the same in both themes: signal yellow as a fill, and the dark ink written on it. */
 const SAME_IN_BOTH = ['hilite', 'hilite-press', 'navy', 'paper', 'on-paper'];
-/** Drawn by macOS, listed for reference only. */
+/** Drawn by macOS, listed for reference only: the app never draws them. */
 const MAC_ONLY = ['mac-close', 'mac-min', 'mac-zoom'];
 
 /** A colour token's light and dark values: `--color-name: light-dark(#light, #dark)`, or one `#hex` for both. */

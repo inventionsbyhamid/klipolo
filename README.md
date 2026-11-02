@@ -90,7 +90,7 @@ and ships none.
 
 | Model | What it does in Klipolo | Where it's called |
 | --- | --- | --- |
-| Muse Spark 1.3 (`muse-spark-1.3`) | Chat: reads the project, its transcript and scene log, and edits through strict function tools, up to 8 model calls a message. Klipolo checks every call before anything changes. | `crates/klipolo-analysis/src/providers/meta_chat.rs`, with the tools and checks in `crates/klipolo-chat` |
+| Muse Spark 1.3 (`muse-spark-1.3`) | Chat: reads the project, its transcript and scene log, and edits through strict function tools, up to 10 model calls a message. Klipolo checks every call before anything changes. | `crates/klipolo-analysis/src/providers/meta_chat.rs`, with the tools and checks in `crates/klipolo-chat` |
 | Muse Spark 1.3 | Scene log: watches a 360p copy of each imported clip, with its sound, and logs shots, actions, reactions, text on screen and topic changes, with times. | `crates/klipolo-analysis/src/providers/meta.rs` |
 | Muse Spark 1.3 | Who is speaking: watches a few seconds of a clip, with its sound, and the people SAM 3.1 found, and says whose voice it hears. | `crates/klipolo-analysis/src/providers/meta_voices.rs` |
 | Muse Spark 1.3 | The MCP demo agent: edits the open project through Klipolo's MCP tools. | `scripts/mcp-demo-agent/agent.py` |
@@ -233,9 +233,10 @@ open http://localhost:8000. Its two download links are in the
   stickers are Google's Noto Emoji under the Apache License 2.0.
   `assets/library/LICENSE.txt` credits each file, and
   `scripts/library-sources.json` lists where each one came from.
-- Each font in `assets/fonts` comes with its own licence file. Archivo, the
-  interface and site font, is under the SIL Open Font License
-  (`site/assets/fonts/OFL.txt`).
+- Each font in `assets/fonts` comes with its own licence file. Schibsted
+  Grotesk, the site font, is under the SIL Open Font License
+  (`site/assets/fonts/OFL.txt`); Archivo, the interface font, is under the SIL
+  Open Font License (`apps/desktop/src/styles/fonts/OFL.txt`).
 - The Rust crates and JavaScript packages the app uses are listed with their
   licences in `crates/klipolo-app/licenses/THIRD-PARTY-NOTICES.txt`.
 - The relay (`services/relay`) romanizes words in other scripts for word
