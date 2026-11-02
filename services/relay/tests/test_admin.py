@@ -317,58 +317,58 @@ def test_enable_sam_turns_video_tracking_back_on_for_a_code(cli, conn):
 
 
 def test_set_code_cap_limits_a_codes_spend_and_devices_and_list_codes_shows_them(client, cli, conn):
-    cli("add-code", "testcode", "--note", "for tests")
+    cli("add-code", "classroom", "--note", "for a class")
     cli("add-code", "press")
-    first = register(client, "judges").json()["token"]
+    first = register(client, "classroom").json()["token"]
     device = conn.execute("SELECT device_id FROM devices").fetchone()[0]
     charge(conn, device, 0.5, "2026-11-02T12:00:00+00:00")
 
-    status, out, err = cli("set-code-cap", "judges", "--usd", "30", "--devices", "2")
+    status, out, err = cli("set-code-cap", "classroom", "--usd", "30", "--devices", "2")
 
     assert (status, err) == (0, "")
-    assert out == 'Code "judges": spend cap $30.00 ($0.5000 spent), at most 2 devices (1 registered).\n'
+    assert out == 'Code "classroom": spend cap $30.00 ($0.5000 spent), at most 2 devices (1 registered).\n'
     assert table(cli("list-codes")[1]) == [
         ["CODE", "STATUS", "DEVICES", "SPENT", "CAP", "NOTE"],
-        ["judges", "active", "1/2", "$0.5000", "$30.00", "for", "judges"],
+        ["classroom", "active", "1/2", "$0.5000", "$30.00", "for", "a", "class"],
         ["press", "active", "0", "$0.0000", "-"],
     ]
     # From the next registration: a second device fits, a third doesn't.
-    assert register(client, "testcode").status_code == 200
-    assert register(client, "judges").status_code == 402
+    assert register(client, "classroom").status_code == 200
+    assert register(client, "classroom").status_code == 402
     assert me(client, first)["relay_ai"] is True
 
 
 def test_set_code_cap_keeps_a_limit_left_out_and_none_removes_one(cli, conn):
-    cli("add-code", "testcode")
-    cli("set-code-cap", "judges", "--usd", "30", "--devices", "25")
+    cli("add-code", "classroom")
+    cli("set-code-cap", "classroom", "--usd", "30", "--devices", "25")
 
-    status, out, _ = cli("set-code-cap", "judges", "--devices", "10")
-
-    assert status == 0
-    assert out == 'Code "judges": spend cap $30.00 ($0.0000 spent), at most 10 devices (0 registered).\n'
-
-    status, out, _ = cli("set-code-cap", "judges", "--usd", "none")
+    status, out, _ = cli("set-code-cap", "classroom", "--devices", "10")
 
     assert status == 0
-    assert out == 'Code "judges": no spend cap ($0.0000 spent), at most 10 devices (0 registered).\n'
-    assert table(cli("list-codes")[1])[1] == ["judges", "active", "0/10", "$0.0000", "-"]
+    assert out == 'Code "classroom": spend cap $30.00 ($0.0000 spent), at most 10 devices (0 registered).\n'
 
-    cli("set-code-cap", "judges", "--devices", "none")
+    status, out, _ = cli("set-code-cap", "classroom", "--usd", "none")
 
-    row = conn.execute("SELECT cap_usd, max_devices FROM codes WHERE code = 'judges'").fetchone()
+    assert status == 0
+    assert out == 'Code "classroom": no spend cap ($0.0000 spent), at most 10 devices (0 registered).\n'
+    assert table(cli("list-codes")[1])[1] == ["classroom", "active", "0/10", "$0.0000", "-"]
+
+    cli("set-code-cap", "classroom", "--devices", "none")
+
+    row = conn.execute("SELECT cap_usd, max_devices FROM codes WHERE code = 'classroom'").fetchone()
     assert (row["cap_usd"], row["max_devices"]) == (None, None)
 
 
 def test_set_code_cap_on_an_unknown_code_or_without_a_limit_fails_and_changes_nothing(cli, conn):
-    cli("add-code", "testcode")
+    cli("add-code", "classroom")
 
     assert cli("set-code-cap", "nope", "--usd", "5") == (
         1,
         "",
         'No code "nope". Codes are case-sensitive. Run list-codes to see them.\n',
     )
-    assert cli("set-code-cap", "judges") == (1, "", "Give --usd, --devices or both. Use none to remove a limit.\n")
-    row = conn.execute("SELECT cap_usd, max_devices FROM codes WHERE code = 'judges'").fetchone()
+    assert cli("set-code-cap", "classroom") == (1, "", "Give --usd, --devices or both. Use none to remove a limit.\n")
+    row = conn.execute("SELECT cap_usd, max_devices FROM codes WHERE code = 'classroom'").fetchone()
     assert (row["cap_usd"], row["max_devices"]) == (None, None)
 
 
@@ -378,11 +378,11 @@ def test_set_code_cap_on_an_unknown_code_or_without_a_limit_fails_and_changes_no
     ids=["negative-usd", "not-usd", "nan-usd", "negative-devices", "fraction-devices"],
 )
 def test_set_code_cap_refuses_a_limit_no_code_could_have(cli, conn, option):
-    cli("add-code", "testcode")
+    cli("add-code", "classroom")
 
     with pytest.raises(SystemExit) as exit_info:
-        cli("set-code-cap", "judges", *option)
+        cli("set-code-cap", "classroom", *option)
 
     assert exit_info.value.code == 2
-    row = conn.execute("SELECT cap_usd, max_devices FROM codes WHERE code = 'judges'").fetchone()
+    row = conn.execute("SELECT cap_usd, max_devices FROM codes WHERE code = 'classroom'").fetchone()
     assert (row["cap_usd"], row["max_devices"]) == (None, None)
