@@ -119,7 +119,7 @@ pub(super) fn measure_words(
         words.faces.push(which);
         words.ranges.push([range.start as u32, range.end as u32]);
     }
-    words.levels = word_levels(&shown, &ranges);
+    words.levels = word_levels(&shown, &ranges, language);
     words.shown = shown;
     words
 }
@@ -167,11 +167,13 @@ fn right_to_left(script: Script) -> bool {
     )
 }
 
-/// Each word's bidi level, a word taken as one unit: the page reads the way its first word with a letter does
-/// (Unicode's paragraph rule). On a right-to-left page (1) a word in Latin letters or a number is 2; on a
-/// left-to-right one (0) a word in Arabic or Hebrew letters is 1; a word of neither keeps the page's level. All 0 on a
-/// page with no right-to-left letter, so nothing is reordered there.
-fn word_levels(shown: &str, ranges: &[Range<usize>]) -> ArrayVec<u8, MAX_WORDS> {
+/// Each word's bidi level, a word taken as one unit. The page reads right to left when the captions' language is
+/// written that way (Arabic, Hebrew, Persian, Urdu ...), when more of its words read right to left than left to right,
+/// or, on a tie, when its first word with a letter does (Unicode's paragraph rule): so "YouTube على قناتي" reads from
+/// the right. On a right-to-left page (1) a word in Latin letters or a number is 2; on a left-to-right one (0) a word
+/// in Arabic or Hebrew letters is 1, and so is a number or a mark between two of them, which stays in their run. All 0
+/// on a page with no right-to-left letter, so nothing is reordered there.
+fn word_levels(shown: &str, ranges: &[Range<usize>], language: &str) -> ArrayVec<u8, MAX_WORDS> {
     let read: ArrayVec<Reads, MAX_WORDS> = ranges
         .iter()
         .map(|r| reads(shown.get(r.clone()).unwrap_or_default()))
@@ -179,18 +181,35 @@ fn word_levels(shown: &str, ranges: &[Range<usize>]) -> ArrayVec<u8, MAX_WORDS> 
     if !read.contains(&Reads::Rtl) {
         return ArrayVec::new();
     }
-    let rtl_page = read
+    let count = |want: Reads| read.iter().filter(|&&r| r == want).count();
+    let (rtl, ltr) = (count(Reads::Rtl), count(Reads::Ltr));
+    let first_rtl = read
         .iter()
         .find(|r| matches!(r, Reads::Ltr | Reads::Rtl))
         .is_some_and(|r| *r == Reads::Rtl);
-    read.iter()
-        .map(|r| match (rtl_page, r) {
+    let rtl_page = right_to_left_language(language) || rtl > ltr || (rtl == ltr && first_rtl);
+    // Whether the nearest word with a letter before word `i`, and after it, reads right to left.
+    let lettered = |r: &&Reads| matches!(r, Reads::Ltr | Reads::Rtl);
+    let rtl_before = |i: usize| read[..i].iter().rev().find(lettered) == Some(&Reads::Rtl);
+    let rtl_after = |i: usize| read[i + 1..].iter().find(lettered) == Some(&Reads::Rtl);
+    (0..read.len())
+        .map(|i| match (rtl_page, read[i]) {
             (true, Reads::Ltr | Reads::Number) => 2,
             (true, _) => 1,
             (false, Reads::Rtl) => 1,
+            (false, Reads::Number | Reads::Neutral) if rtl_before(i) && rtl_after(i) => 1,
             (false, _) => 0,
         })
         .collect()
+}
+
+/// Languages written right to left, by their primary subtag.
+fn right_to_left_language(language: &str) -> bool {
+    let primary = language.split(['-', '_']).next().unwrap_or_default();
+    matches!(
+        primary.to_ascii_lowercase().as_str(),
+        "ar" | "he" | "iw" | "fa" | "ur" | "yi" | "ps" | "sd" | "ug" | "dv" | "ckb"
+    )
 }
 
 /// Most of the word's letters are Cyrillic.
@@ -248,5 +267,41 @@ fn runs_within(
         Vec::new()
     } else {
         within
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::word_levels;
+
+    /// Each word's level for `text` split on spaces, in captions of `language`.
+    fn levels(text: &str, language: &str) -> Vec<u8> {
+        let mut at = 0;
+        let ranges: Vec<_> = text
+            .split(' ')
+            .map(|w| {
+                let r = at..at + w.len();
+                at = r.end + 1;
+                r
+            })
+            .collect();
+        word_levels(text, &ranges, language).to_vec()
+    }
+
+    /// A page of more Arabic words than English ones reads from the right though an English word starts it, and so
+    /// does any page in Arabic captions.
+    #[test]
+    fn more_arabic_words_or_arabic_captions_make_a_right_to_left_page() {
+        assert_eq!(levels("YouTube على قناتي", "en"), [2, 1, 1]);
+        assert_eq!(levels("Hello world مرحبا", "ar"), [2, 2, 1]);
+        assert_eq!(levels("Hello world مرحبا", "en"), [0, 0, 1]);
+        assert!(levels("Hello world", "ar").is_empty());
+    }
+
+    /// On a left-to-right page a number or a mark between two Arabic words stays in their run.
+    #[test]
+    fn a_number_between_arabic_words_stays_in_their_run() {
+        assert_eq!(levels("Hello مرحبا 5 بكم world", "en"), [0, 1, 1, 1, 0]);
+        assert_eq!(levels("Hello مرحبا 5 world", "en"), [0, 1, 0, 0]);
     }
 }
