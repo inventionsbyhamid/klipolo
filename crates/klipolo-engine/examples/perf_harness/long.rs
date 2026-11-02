@@ -1,7 +1,8 @@
-//! `… -- long [<video>] [--words <n>] [--runs <n>] [--write <file>]`: a 2-hour talk's project at full size, on the
-//! CPU only (nothing is decoded or drawn). 600 main clips cut from one 2-hour file, Word pop captions over `--words`
-//! (18,000) words, 200 layers (100 titles that enter and leave, 100 images) and 4 picture-in-picture video layers,
-//! each cropped and moving on motion keys. `<video>` is the 2-hour file: only its path goes into the project.
+//! `… -- long [<video>] [--clips <n>] [--words <n>] [--runs <n>] [--write <file>]`: a 2-hour talk's project at full
+//! size, on the CPU only (nothing is decoded or drawn). `--clips` (600) main clips cut from one 2-hour file, Word pop
+//! captions over `--words` (18,000) words, 200 layers (100 titles that enter and leave, 100 images) and 4
+//! picture-in-picture video layers, each cropped and moving on motion keys. `<video>` is the 2-hour file: only its path
+//! goes into the project.
 //!
 //! Each figure is the median of `--runs` (5), in ms: the project's save (its JSON and size) and open (parse and
 //! check); each edit through the document (split, ripple delete, keep only 50 ranges, roll, slip, volume keys, motion
@@ -37,6 +38,7 @@ use super::measure::allocs;
 use super::project::{preset, secs};
 
 const HOURS_S: f64 = 7_200.0;
+/// Main clips unless `--clips` says otherwise.
 const CLIPS: usize = 600;
 /// An over-50 ms step is a finding.
 const FINDING_MS: f64 = 50.0;
@@ -92,7 +94,7 @@ fn keys(values: &[(f64, f64)]) -> Vec<Key> {
 }
 
 /// The 2-hour project and its speech (`video` the file's path).
-pub fn two_hour_project(video: &str, words: usize) -> (Project, Speech) {
+pub fn two_hour_project(video: &str, clips: usize, words: usize) -> (Project, Speech) {
     let mut p = Project::new("Two hours");
     p.id = "long".into();
     p.settings.formats = vec![FormatKind::Landscape, FormatKind::Portrait];
@@ -126,9 +128,9 @@ pub fn two_hour_project(video: &str, words: usize) -> (Project, Speech) {
             rotation: None,
         });
     }
-    // 600 clips, each 11.5 s of a 12 s stretch: the talk with its half-second slips cut out.
-    let stretch = HOURS_S / CLIPS as f64;
-    p.timeline.main = (0..CLIPS)
+    // Each clip its stretch of the talk but its last half second (600: 11.5 s of each 12 s).
+    let stretch = HOURS_S / clips as f64;
+    p.timeline.main = (0..clips)
         .map(|k| {
             let from = k as f64 * stretch;
             let mut c = Clip::new(
@@ -140,7 +142,7 @@ pub fn two_hour_project(video: &str, words: usize) -> (Project, Speech) {
             c
         })
         .collect();
-    let main_s = CLIPS as f64 * (stretch - 0.5);
+    let main_s = clips as f64 * (stretch - 0.5);
     let mut titles = Track::new(TrackKind::Overlay, "Titles");
     let mut images = Track::new(TrackKind::Overlay, "Images");
     for j in 0..100 {
@@ -372,7 +374,11 @@ pub fn run(args: &[String]) {
         .max(1);
 
     let started = Instant::now();
-    let (project, speech) = two_hour_project(&video, words);
+    let clips: usize = value("--clips")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(CLIPS)
+        .max(400);
+    let (project, speech) = two_hour_project(&video, clips, words);
     let layers: usize = project.timeline.tracks.iter().map(|t| t.items.len()).sum();
     println!(
         "2-hour project: {} clips, {layers} layers, {words} words (built in {:.0} ms); median of {runs} runs; \
