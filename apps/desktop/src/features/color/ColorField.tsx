@@ -225,7 +225,13 @@ export function ColorField(props: ColorFieldProps): JSX.Element {
     return (
       <Popover onOpenChange={onOpenChange}>
         <PopoverTrigger asChild>
-          <button type="button" className="select color-compact" aria-label={fieldName}>
+          <button
+            type="button"
+            // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+            tabIndex={0}
+            className="select color-compact"
+            aria-label={fieldName}
+          >
             <span
               aria-hidden
               className={cn('color-compact-dot', mixed && 'mixed')}
