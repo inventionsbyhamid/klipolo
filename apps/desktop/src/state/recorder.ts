@@ -286,6 +286,20 @@ export async function reopenWhereLeft(): Promise<void> {
 }
 
 /**
+ * At launch, once the page follows the recorder: takes the last run left behind (Klipolo quit or crashed during them)
+ * land, each in a new project, heard as any landed take is and told as from the last session. The app looks once per
+ * run, on a thread of its own; a test run has none.
+ */
+export async function recoverLeftTakes(): Promise<void> {
+  try {
+    await followRecorder();
+    await recorder.recoverLeft();
+  } catch {
+    // Nothing to land: the takes stay in their folders for the next launch.
+  }
+}
+
+/**
  * Record your screen, wherever it is offered (the start screen, the Library's head, an empty project's preview): opens
  * the Record dialog, as Shift Command R does.
  */
@@ -337,8 +351,9 @@ export async function onImported(landed: TakeImport): Promise<void> {
 }
 
 /**
- * What the person hears once a take has landed: "Added Recording 1, 0:40.", and with its zooms, "Zooms follow your
- * clicks." with Remove zooms. Then what the take's notes say, each once, but for those said already as Klipolo came back.
+ * What the person hears once a take has landed: "Added Recording 1, 0:40.", or for a take the last run left behind,
+ * "Recovered Recording 1 from your last session."; with its zooms, "Zooms follow your clicks." with Remove zooms. Then
+ * what the take's notes say, each once, but for those said already as Klipolo came back.
  */
 export function landedToast(landed: TakeImport): void {
   const project = landed.snapshot.project;
@@ -347,17 +362,7 @@ export function landedToast(landed: TakeImport): void {
     const name = recordingName(project, landed.recordingId);
     const duration = formatDuration(clipDurationUs(clip));
     const zooms = landed.zooms > 0;
-    const text = zooms
-      ? t({
-          id: 'recorder.landed.zooms',
-          message: `Added ${name}, ${duration}. Zooms follow your clicks.`,
-          comment: 'A recording was added to the project, with zooms on its clicks: {name} is Recording 1',
-        })
-      : t({
-          id: 'recorder.landed',
-          message: `Added ${name}, ${duration}.`,
-          comment: 'A recording was added to the project: {name} is Recording 1, {duration} 0:40',
-        });
+    const text = landed.earlierRun ? recoveredText(name, zooms) : addedText(name, duration, zooms);
     const remove = {
       label: t({ id: 'recorder.removeZooms', message: 'Remove zooms' }),
       run: () => void removeZooms(project.id, landed.recordingId),
@@ -368,6 +373,39 @@ export function landedToast(landed: TakeImport): void {
     const text = codedMessage(note);
     if (text && !saidOnReturn(note.code)) toast.info(text);
   }
+}
+
+/** A take of this run landed: "Added Recording 1, 0:40.", with "Zooms follow your clicks." when it has `zooms`. */
+function addedText(name: string, duration: string, zooms: boolean): string {
+  return zooms
+    ? t({
+        id: 'recorder.landed.zooms',
+        message: `Added ${name}, ${duration}. Zooms follow your clicks.`,
+        comment: 'A recording was added to the project, with zooms on its clicks: {name} is Recording 1',
+      })
+    : t({
+        id: 'recorder.landed',
+        message: `Added ${name}, ${duration}.`,
+        comment: 'A recording was added to the project: {name} is Recording 1, {duration} 0:40',
+      });
+}
+
+/**
+ * A take the last run left behind (Klipolo quit or crashed during it) landed in a new project as Klipolo opened:
+ * "Recovered Recording 1 from your last session.", with "Zooms follow your clicks." when it has `zooms`.
+ */
+function recoveredText(name: string, zooms: boolean): string {
+  return zooms
+    ? t({
+        id: 'recorder.recovered.zooms',
+        message: `Recovered ${name} from your last session. Zooms follow your clicks.`,
+        comment: 'At launch, a take Klipolo closed during went into a new project, with zooms: {name} is Recording 1',
+      })
+    : t({
+        id: 'recorder.recovered',
+        message: `Recovered ${name} from your last session.`,
+        comment: 'At launch, a recording Klipolo closed during went into a new project: {name} is Recording 1',
+      });
 }
 
 /** Whether `project` still has a zoom attached to recording `recordingId` (its auto zoom's, or one added since). */

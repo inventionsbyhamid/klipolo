@@ -29,6 +29,11 @@ export interface TakeImport {
   notes: CodedError[];
   /** How many auto zooms were added after it, as their own undo step. */
   zooms: number;
+  /**
+   * An earlier run of Klipolo left the take behind (it quit or crashed during it), and it landed in a new project as
+   * Klipolo opened again.
+   */
+  earlierRun: boolean;
 }
 
 /**
@@ -65,6 +70,12 @@ export interface RecorderBridge {
    * Record dialog. Once per run; null otherwise.
    */
   backFromReopen(): Promise<BackFromReopen | null>;
+  /**
+   * At launch, once the page follows the recorder: takes an earlier run left behind (Klipolo quit or crashed during
+   * them) land, each in a new project, and come as `onImported` with `earlierRun`. It resolves at once; the app looks
+   * once per run, and not at all in a test run.
+   */
+  recoverLeft(): Promise<void>;
   /** "Open privacy settings": the Screen Recording, camera or microphone page. It only opens the page. */
   openPrivacy(page: PrivacyPage): Promise<void>;
   /**
@@ -98,6 +109,7 @@ export const tauriRecorder: RecorderBridge = {
   allowScreen: () => call<void>('recorder_allow_screen'),
   reopen: () => call<void>('recorder_reopen'),
   backFromReopen: () => call<BackFromReopen | null>('recorder_back_from_reopen'),
+  recoverLeft: () => call<void>('recorder_recover_left'),
   openPrivacy: (page) => call<void>('recorder_open_privacy', { page }),
   previews: (want, onFrame) => call<void>('recorder_previews', { want, frames: new Channel<ArrayBuffer>(onFrame) }),
   previewsOff: () => call<void>('recorder_previews_off'),
@@ -117,6 +129,7 @@ export const recorder: RecorderBridge = {
   allowScreen: () => current.allowScreen(),
   reopen: () => current.reopen(),
   backFromReopen: () => current.backFromReopen(),
+  recoverLeft: () => current.recoverLeft(),
   openPrivacy: (page) => current.openPrivacy(page),
   previews: (want, onFrame) => current.previews(want, onFrame),
   previewsOff: () => current.previewsOff(),

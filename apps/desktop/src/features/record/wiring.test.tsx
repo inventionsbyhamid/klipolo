@@ -212,6 +212,24 @@ describe('in the window', () => {
     expect(rust.heard).not.toContain('project_open');
   });
 
+  it('a_take_the_last_run_left_behind_lands_in_a_new_project_with_one_toast', async () => {
+    const { fake, bridge, useProject, useToasts } = await launch();
+    await screen.findByRole('main', { name: 'Your projects' });
+    // The launch looks for takes left behind once, after its own Reopen check.
+    await waitFor(() => expect(fake.calls).toContain('recoverLeft'));
+    expect(fake.calls.filter((call) => call === 'recoverLeft')).toHaveLength(1);
+    expect(fake.calls.indexOf('backFromReopen')).toBeLessThan(fake.calls.indexOf('recoverLeft'));
+    // Rust lands it in a new project it made and opened: the editor shows it, and one toast says where it came from.
+    const made = withTake(opened('Recording, Oct 31', 1), 'take-clip', 40);
+    act(() => fake.land(bridge.takeImport(made, 'take-clip', { recordingId: 'rec', earlierRun: true })));
+    expect(await screen.findByRole('main', { name: 'Preview' })).toBeInTheDocument();
+    expect(useProject.getState().snapshot?.project.name).toBe('Recording, Oct 31');
+    await waitFor(() =>
+      expect(useToasts.getState().toasts.map((t) => t.text)).toEqual(['Recovered Recording 1 from your last session.']),
+    );
+    expect(recordDialog()).toBeNull();
+  });
+
   it('an_ordinary_launch_opens_no_record_dialog', async () => {
     const { fake } = await launch();
     await screen.findByRole('main', { name: 'Your projects' });
@@ -303,6 +321,21 @@ describe('a take that lands', () => {
     const second = withTake(first, 'take-2', 61.4, 'rec-2', true);
     fake.land(takeImport(second, 'take-2', { recordingId: 'rec-2', zooms: 3 }));
     await vi.waitFor(() => expect(texts()).toEqual(['Added Recording 2, 1:01. Zooms follow your clicks.']));
+    expect(toasts()[0].actions?.map((a) => a.label)).toEqual(['Remove zooms']);
+  });
+
+  it('a_take_from_the_last_session_says_it_was_recovered', async () => {
+    const first = withTake(fixtureSnapshot(), 'take-clip', 40);
+    fake.land(takeImport(first, 'take-clip', { recordingId: 'rec', earlierRun: true }));
+    await vi.waitFor(() => expect(texts()).toEqual(['Recovered Recording 1 from your last session.']));
+    expect(toasts()[0]).toMatchObject({ kind: 'info', done: true });
+    expect(useSelection.getState().selectedId).toBe('take-clip');
+    // With zooms on its clicks: one toast still, with Remove zooms.
+    const second = withTake(first, 'take-2', 61.4, 'rec-2', true);
+    fake.land(takeImport(second, 'take-2', { recordingId: 'rec-2', zooms: 3, earlierRun: true }));
+    await vi.waitFor(() =>
+      expect(texts()).toEqual(['Recovered Recording 2 from your last session. Zooms follow your clicks.']),
+    );
     expect(toasts()[0].actions?.map((a) => a.label)).toEqual(['Remove zooms']);
   });
 
