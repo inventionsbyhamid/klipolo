@@ -4,9 +4,9 @@
 //! vendor type reaches the planner. Tests use a fake.
 //!
 //! A request is the system text, the tools (`tools::tools`, provider-neutral JSON) and an ordered list of input items:
-//! the project context first, then the conversation, then the new message, and in a refusal round the first answer's
-//! function calls with their outputs. The system text, the tools and the context come first and keep their bytes from
-//! one message to the next on the same project revision, so a provider's prompt cache can reuse them.
+//! the project context first, then the conversation, then the new message, and after each answer with calls that
+//! answer's function calls with their outputs. The system text, the tools and the context come first and keep their
+//! bytes from one message to the next on the same project revision, so a provider's prompt cache can reuse them.
 
 use std::fmt;
 use std::future::Future;

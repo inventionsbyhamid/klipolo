@@ -15,7 +15,8 @@ use klipolo_app::chat::{
     ChatOutcome, ChatRequest, ChatSession, Findings, MemoryProjects, Models, Readiness,
 };
 use klipolo_chat::{
-    AnalysisState, BoxFuture, FunctionCall, LanguageModel, ModelError, ModelRequest, ModelResponse,
+    AnalysisState, BoxFuture, FunctionCall, GO_ON, Item, LanguageModel, ModelError, ModelRequest,
+    ModelResponse,
 };
 use klipolo_model::ops::Op;
 use klipolo_model::project::{
@@ -125,17 +126,27 @@ impl Findings for Nothing {
     }
 }
 
-/// A model that answers from a script, in order.
+/// A model that answers each message's first request from a script, in order. A request after it, with what came of
+/// its calls, is answered as a model that is done: no words, no call; so is a first request past the script.
 struct Script(Mutex<VecDeque<ModelResponse>>);
 
 impl LanguageModel for Script {
     fn respond<'a>(
         &'a self,
-        _request: &'a ModelRequest,
+        request: &'a ModelRequest,
     ) -> BoxFuture<'a, Result<ModelResponse, ModelError>> {
-        let answer = (self.0.lock().unwrap().pop_front())
-            .ok_or_else(|| ModelError::other("the script ran out"));
-        Box::pin(async move { answer })
+        let opening = matches!(request.input.last(), Some(Item::User { text }) if text != GO_ON);
+        let scripted = if opening {
+            self.0.lock().unwrap().pop_front()
+        } else {
+            None
+        };
+        let answer = scripted.unwrap_or(ModelResponse {
+            text: String::new(),
+            calls: Vec::new(),
+            usage_usd: 0.0,
+        });
+        Box::pin(async move { Ok(answer) })
     }
 }
 

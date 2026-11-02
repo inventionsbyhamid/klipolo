@@ -1449,6 +1449,9 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "mean the selection",
         "mean the playhead",
         "call each one, in the order asked",
+        // Results come back: the model goes on until the request is done, then replies with no call.
+        "What came of each call comes back to you",
+        "then reply with no call",
         "set keepOthers to true unless the person asks for only that format",
         "\"only vertical\", \"just square\", \"drop the landscape version\"",
         "unclear what to remove",
@@ -1465,9 +1468,9 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "topic and shot items",
         "Muse Image draw a new picture",
         "If the person gave no title words, ask for them",
-        // A short from one prompt: the whole plan in one answer, adapted to what was asked.
+        // A short from one prompt: the whole plan, not just the cut, adapted to what was asked.
         "A short (",
-        "in one answer",
+        "the whole plan, not just the cut",
         "findMoments",
         "keepOnly",
         "setFormat portrait",

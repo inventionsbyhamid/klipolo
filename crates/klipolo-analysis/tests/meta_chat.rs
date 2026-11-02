@@ -304,7 +304,7 @@ fn user_text(item: &Value) -> &str {
 }
 
 #[tokio::test]
-async fn the_wire_body_holds_only_what_the_relay_takes_through_a_refusal_round() {
+async fn the_wire_body_holds_only_what_the_relay_takes_through_each_step() {
     let server = MockServer::start().await;
     answer_once(
         &server,
@@ -342,13 +342,24 @@ async fn the_wire_body_holds_only_what_the_relay_takes_through_a_refusal_round()
         )),
     )
     .await;
+    // Told the cut is proposed, it closes in words.
+    answer_once(
+        &server,
+        ok(spark(
+            vec![reasoning(), message("Marked \u{201c}there\u{201d} to cut.")],
+            2100,
+            1900,
+            50,
+        )),
+    )
+    .await;
     let (p, inputs, ctx) = talk();
     let out = plan(&chat(&server), &[], &ctx, "cut there", &inputs, &p)
         .await
         .unwrap();
 
     let sent = bodies(&server).await;
-    assert_eq!(sent.len(), 2);
+    assert_eq!(sent.len(), 3);
     for body in &sent {
         assert_relay_takes(body);
     }
@@ -357,7 +368,7 @@ async fn the_wire_body_holds_only_what_the_relay_takes_through_a_refusal_round()
     assert_eq!(first.len(), 2);
     assert_eq!(user_text(&first[0]), ctx.text);
     assert_eq!(user_text(&first[1]), "cut there");
-    // The refusal round sends the whole first input again, then the answer's text and call, and the call's output.
+    // The next step sends the whole first input again, then the answer's text and call, and the call's output.
     let second = sent[1]["input"].as_array().unwrap();
     assert_eq!(&second[..2], &first[..]);
     assert_eq!(second.len(), 5);
@@ -382,12 +393,21 @@ async fn the_wire_body_holds_only_what_the_relay_takes_through_a_refusal_round()
         second[4]
     );
 
+    // The next step sends all of that again, then the second answer and its cut's output.
+    let third = sent[2]["input"].as_array().unwrap();
+    assert_eq!(&third[..5], &second[..]);
+    assert_eq!(third.len(), 8);
+    assert_eq!(third[7]["call_id"], "call_2");
+    assert_eq!(third[7]["output"], "proposed");
+
     let proposal = out.compiled.proposal.expect("the cut is proposed");
     assert_eq!(proposal.ranges.len(), 1);
     assert!(proposal.ranges[0].start <= secs(1.0) && proposal.ranges[0].end >= secs(1.4));
-    assert_eq!(out.reply, "I'll cut \u{201c}there\u{201d}.");
+    assert_eq!(out.reply, "Marked \u{201c}there\u{201d} to cut.");
     // Each call priced from its usage, cached input at the cached price.
-    let expected = spark_cost(1800.0, 1700.0, 300.0) + spark_cost(2000.0, 1800.0, 200.0);
+    let expected = spark_cost(1800.0, 1700.0, 300.0)
+        + spark_cost(2000.0, 1800.0, 200.0)
+        + spark_cost(2100.0, 1900.0, 50.0);
     assert!(
         (out.usage_usd - expected).abs() < 1e-12,
         "{} vs {expected}",
@@ -510,7 +530,7 @@ fn spark_cost(input: f64, cached: f64, output: f64) -> f64 {
 #[tokio::test]
 async fn a_cut_off_answer_is_an_error_that_still_counts() {
     let server = MockServer::start().await;
-    // Cut off at the output cap: its call may be partial, so nothing of it is used, and no refusal round is asked.
+    // Cut off at the output cap: its call may be partial, so nothing of it is used, and no next step is asked.
     answer_once(
         &server,
         ok(ended(

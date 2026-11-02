@@ -72,7 +72,8 @@ playhead, the start (0.0), the end (the duration), or a time the person said (1:
 the end).\n\
 - When the person points at footage with \"this\", \"it\" or \"that\", they mean the selection; \"here\" and \"now\" \
 mean the playhead. If there is no selection, ask which part.\n\
-- One request can need several tools: call each one, in the order asked.\n\
+- One request can need several tools: call each one, in the order asked. What came of each call comes back to you: \
+keep calling until all of the request is done, then reply with no call.\n\
 - A project can export several formats. In setFormat, set keepOthers to true unless the person asks for only that \
 format (\"only vertical\", \"just square\", \"drop the landscape version\").\n\
 - setClip sets a clip's, song's (m1) or video layer's (v1) speed, volume, mute, or Fit or Fill; setTransition adds, \
@@ -89,8 +90,8 @@ items in Scenes (scene_cut in older logs).\n\
 - makeSticker and makeTitleCard have Muse Image draw a new picture. If the person gave no title words, ask for them.\n\
 - Recording 2 is the second recording; its clips list camera and sounds (as c1: same as c1).\n\
 - autoZoom zooms in on the clicks of every screen recording.\n\
-- A short (\"make a 60 s short with animations\") asks for a whole plan in one answer; \
-adapt it to what they said. findMoments for the best moments, then keepOnly about the length asked; setFormat \
+- A short (\"make a 60 s short with animations\") needs the whole plan, not just the cut; adapt it to what they \
+said. findMoments for the best moments, then keepOnly about the length asked; setFormat \
 portrait; followSubject on the speaker; setCaptions word-pop or bold-box; a hook title of at most 6 punchy words with \
 addText, kinetic or pop, in the first 2 s of what you keep, quoting or paraphrasing their words or a striking later \
 line said in the video, never the opening words; 2 to 4 medium pack stickers with addImage at a top corner, each \
