@@ -968,6 +968,307 @@
       "annotations": {
         "readOnlyHint": false
       },
+      "description": "Keyframes, or enter, exit and loop presets, for a layer; a recording's clip (c1) keys its camera bubble (x, y, scale). Null keeps.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "keys": {
+            "description": "A property listed gets just these keys; [] removes all.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "atSec": {
+                  "description": "From the layer's start.",
+                  "type": "number"
+                },
+                "ease": {
+                  "description": "linear, in, out, inOut, spring, spring 0.4 (bounce to 0.9), cubic x1 y1 x2 y2.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "property": {
+                  "description": "x, y: frame shares; rotation: degrees.",
+                  "enum": [
+                    "x",
+                    "y",
+                    "scale",
+                    "rotation",
+                    "opacity"
+                  ],
+                  "type": "string"
+                },
+                "value": {
+                  "description": "Its value.",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "property",
+                "atSec",
+                "value",
+                "ease"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "layer": {
+            "description": "last, or a ref.",
+            "type": "string"
+          },
+          "presets": {
+            "description": "Such as \"enter slide left 0.5s spring; exit fade; loop float 1.5 2s\".",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "layer",
+          "keys",
+          "presets"
+        ],
+        "type": "object"
+      },
+      "name": "setMotion"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Words come in by letter, word or line. Keys: by (letter, word, line, or none for plain words); where each unit starts: y (px below), scale, opacity, rotation, blur (px); sec, stagger (s between units), ease, order (start, end, center, random), exit (true: they leave the same way).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "layer": {
+            "description": "last, or a ref.",
+            "type": "string"
+          },
+          "set": {
+            "description": "Keys to set.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "description": "A key.",
+                  "type": "string"
+                },
+                "value": {
+                  "description": "Its value.",
+                  "type": [
+                    "number",
+                    "string",
+                    "boolean"
+                  ]
+                }
+              },
+              "required": [
+                "key",
+                "value"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "layer",
+          "set"
+        ],
+        "type": "object"
+      },
+      "name": "animateText"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "A layer's or clip's card fields. Keys: box (\"x y w h\", frame shares from the top left), rotation, opacity, corners (0 to 0.5), blend (normal, multiply, screen, add, overlay), order (forward, back), start (timeline s), length (s), split (timeline s), remove; video layers: crop (\"l t r b\" or none), fill; clips: crop, separate (its sound), after (a clip ref, or start); clips and music: fadeIn, fadeOut (s); music: duck.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "layer": {
+            "description": "last, or a ref.",
+            "type": "string"
+          },
+          "set": {
+            "description": "Keys to set.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "description": "A key.",
+                  "type": "string"
+                },
+                "value": {
+                  "description": "Its value.",
+                  "type": [
+                    "number",
+                    "string",
+                    "boolean"
+                  ]
+                }
+              },
+              "required": [
+                "key",
+                "value"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "volumeKeys": {
+            "description": "A clip's, music's or sound's level over time; [] removes them.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "atSec": {
+                  "description": "From its start.",
+                  "type": "number"
+                },
+                "ease": {
+                  "description": "Into it.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "value": {
+                  "description": "0 to 2; 1 as recorded.",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "atSec",
+                "value",
+                "ease"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "layer",
+          "set",
+          "volumeKeys"
+        ],
+        "type": "object"
+      },
+      "name": "setLayer"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Words on screen: their text, and their style. Keys: text, look (clean, boldOutline, highlight, box, pop) first, then font, size (px at 1080p), color, highlight and outline (#hex or none), outlineWidth (thin, medium, thick), shadow, align, bold, italic.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "layer": {
+            "description": "last, or a ref.",
+            "type": "string"
+          },
+          "set": {
+            "description": "Keys to set.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "description": "A key.",
+                  "type": "string"
+                },
+                "value": {
+                  "description": "Its value.",
+                  "type": [
+                    "number",
+                    "string",
+                    "boolean"
+                  ]
+                }
+              },
+              "required": [
+                "key",
+                "value"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "layer",
+          "set"
+        ],
+        "type": "object"
+      },
+      "name": "styleText"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Add, change, move or remove one effect on a clip or layer. Keys: its settings, at (its place from 0), remove (true).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "An effect, or a clip's look.",
+            "type": "string"
+          },
+          "set": {
+            "description": "Its settings, and at or remove.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "description": "A key.",
+                  "type": "string"
+                },
+                "value": {
+                  "description": "Its value.",
+                  "type": [
+                    "number",
+                    "string",
+                    "boolean"
+                  ]
+                }
+              },
+              "required": [
+                "key",
+                "value"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "target": {
+            "description": "A ref, or last.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "name",
+          "set"
+        ],
+        "type": "object"
+      },
+      "name": "setEffects"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
       "description": "Show a recording's camera as a bubble, split under the screen, or hidden.",
       "inputSchema": {
         "additionalProperties": false,

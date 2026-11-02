@@ -21,3 +21,22 @@ describe('a title template on the canvas', () => {
     expect(hook?.movable).toBe(false);
   });
 });
+
+describe('animated words on the canvas', () => {
+  it('are picked, moved and turned at their own box, as words are', () => {
+    const project = fixtureSnapshot().project;
+    const rect = { x: 0.1, y: 0.1, w: 0.8, h: 0.15 };
+    project.timeline.tracks[0].items = [
+      {
+        ...titleItem,
+        id: 'words',
+        layout: { ...titleItem.layout, rect, overrides: {}, motion: undefined },
+        content: { type: 'generator', source: 'klipolo.builtin/scene.text-motion', params: { title: 'Day 1' } },
+      },
+    ];
+    const words = gizmoTargets(project, 2_000_000, 'landscape').find((t) => t.id === 'words');
+    expect(words?.box).toEqual(rect);
+    expect(words?.movable).toBe(true);
+    expect(words?.rotatable).toBe(true);
+  });
+});

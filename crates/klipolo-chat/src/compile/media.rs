@@ -134,7 +134,7 @@ fn music<'l>(c: &'l Compiler, asked: &str) -> Result<&'l LibraryItem, Refused> {
 /// Where a media call's time plays in `work`: the playhead when the model gave none, else its time standing on the
 /// evidence (`Evidence::moment`) or refused, naming `field`. A time past the main track's end keeps its distance from
 /// it. Nothing starts at the video's end or past it (refused, so no layer ever makes the video longer).
-fn start(
+pub(super) fn start(
     c: &Compiler,
     work: &Project,
     tool: &str,
@@ -445,19 +445,7 @@ pub(super) fn add_text(
     animation: Option<Entrance>,
     font: Option<&str>,
 ) -> Result<Edit, Refused> {
-    let words = if c.by_app {
-        apps_words(("addText", "text"), text)?
-    } else {
-        (persons_words(&c.inputs.message, text)
-            .or_else(|| said_in_video(c, text))
-            .or_else(|| hook_from_video(c, text)))
-        .ok_or_else(|| {
-            to_model(format!(
-                "addText: the words must be the person's own or said in the video, and {text:?} is neither. If they \
-                 gave none, quote the video or ask them with askUser."
-            ))
-        })?
-    };
+    let words = screen_words(c, ("addText", "text"), text)?;
     let start = start(c, work, "addText", "atSec", at)?;
     // Kinetic words are the kinetic title template, near the top whatever the preset, in its own font.
     if animation == Some(Entrance::Kinetic) {
@@ -694,6 +682,27 @@ pub(super) fn title_background(prompt: &str, with_additions: &Project, title_id:
         format: with_additions.settings.primary_format,
         title_id,
     }
+}
+
+/// Words for the screen, as `addText` takes them: an app's own, cleaned (`apps_words`); chat's the person's own or said
+/// in the video, else refused for `tool`'s `field`.
+pub(super) fn screen_words(
+    c: &Compiler,
+    (tool, field): (&str, &str),
+    text: &str,
+) -> Result<String, Refused> {
+    if c.by_app {
+        return apps_words((tool, field), text);
+    }
+    (persons_words(&c.inputs.message, text)
+        .or_else(|| said_in_video(c, text))
+        .or_else(|| hook_from_video(c, text)))
+    .ok_or_else(|| {
+        to_model(format!(
+            "{tool}: the words must be the person's own or said in the video, and {text:?} is neither. If they gave \
+             none, quote the video or ask them with askUser."
+        ))
+    })
 }
 
 #[cfg(test)]

@@ -11,12 +11,14 @@
 use std::collections::BTreeSet;
 
 use klipolo_chat::tools::{
-    BackgroundChoice, BubbleChange, CHAT_CAPTION_STYLES, ClipRef, Entrance, FunctionCall, LayerRef,
-    Moment, PictureSize, Position, Problem, SizeStep, Sound, TextPreset, ToolCall, TransitionKind,
-    tools,
+    BackgroundChoice, BubbleChange, CHAT_CAPTION_STYLES, ClipRef, EffectChange, Entrance,
+    FunctionCall, KeyIn, LayerChange, LayerRef, Moment, Paint, PictureSize, Position, Problem,
+    Property, SizeStep, Sound, StyleChange, TextPreset, ToolCall, TransitionKind, tools,
 };
 use klipolo_model::captions::styles::{BuiltinCaptionStyle, CaptionStyles};
 use klipolo_model::layout::Anchor;
+use klipolo_model::layout::BoxN;
+use klipolo_model::media::text_motion::{From, TextMotion, Unit};
 use klipolo_model::ops::Edge;
 use klipolo_model::project::FormatKind;
 use klipolo_model::time::{RangeUs, secs_to_us};
@@ -210,6 +212,11 @@ fn every_tool_schema_is_strict() {
             "makeSticker",
             "makeTitleCard",
             "animate",
+            "setMotion",
+            "animateText",
+            "setLayer",
+            "styleText",
+            "setEffects",
             "setCameraMode",
             "adjustCamera",
             "detachCamera",
@@ -277,6 +284,9 @@ fn every_tool_schema_is_strict() {
             "animate.enter",
             "animate.exit",
             "animate.sound",
+            "setMotion.keys",
+            "setMotion.presets",
+            "setLayer.volumeKeys",
             "setCameraMode.clips",
             "setCameraMode.format",
             "adjustCamera.border",
@@ -636,6 +646,85 @@ fn parses_each_tool_from_spike_shaped_calls() {
                 exit: None,
                 emphasis: None,
                 sound: Some("Pop".into()),
+            }],
+        ),
+        (
+            "slide the title in from the left with a little overshoot",
+            vec![SetMotion {
+                layer: LayerRef::One("t1".into()),
+                keys: Some(vec![
+                    KeyIn {
+                        property: Property::X,
+                        at_us: 0,
+                        value: -0.6,
+                        ease: None,
+                    },
+                    KeyIn {
+                        property: Property::X,
+                        at_us: secs_to_us(0.6),
+                        value: 0.0,
+                        ease: Some(klipolo_chat::tools::motion::spring(0.3)),
+                    },
+                ]),
+                presets: Vec::new(),
+            }],
+        ),
+        (
+            "make each word pop in one by one",
+            vec![AnimateText {
+                layer: LayerRef::One("t1".into()),
+                motion: Some(TextMotion {
+                    unit: Unit::Word,
+                    from: From {
+                        scale: Some(0.0),
+                        opacity: Some(0.0),
+                        ..From::default()
+                    },
+                    unit_secs: None,
+                    ease: Some(klipolo_chat::tools::motion::spring(0.5)),
+                    stagger_secs: None,
+                    order: None,
+                    exit: false,
+                }),
+            }],
+        ),
+        (
+            "put the logo in the top right corner, a bit see-through",
+            vec![SetLayer {
+                layer: LayerRef::One("i1".into()),
+                change: Box::new(LayerChange {
+                    rect: Some(BoxN {
+                        x: 0.78,
+                        y: 0.04,
+                        w: 0.18,
+                        h: 0.18,
+                    }),
+                    opacity: Some(0.8),
+                    ..LayerChange::default()
+                }),
+            }],
+        ),
+        (
+            "add a soft glow to the logo",
+            vec![SetEffects {
+                target: LayerRef::One("i1".into()),
+                effects: vec![EffectChange {
+                    name: "glow".into(),
+                    at: None,
+                    remove: false,
+                    settings: Vec::new(),
+                }],
+            }],
+        ),
+        (
+            "make the title yellow with a black outline",
+            vec![StyleText {
+                layer: LayerRef::One("t1".into()),
+                change: Box::new(StyleChange {
+                    color: Some("#FFD02E".into()),
+                    outline: Some(Paint::Color("#000000".into())),
+                    ..StyleChange::default()
+                }),
             }],
         ),
     ];
@@ -1167,7 +1256,21 @@ fn every_tool_in_the_schema_has_a_reader_that_reads_it() {
         let params = &tool["parameters"];
         // Numbers count up from 0.5; a zoom's scale starts at 1.25.
         let mut next = if name == "autoZoom" { 1.0 } else { -0.5 };
-        let args = sample(params, &mut next);
+        let mut args = sample(params, &mut next);
+        // Words the composing tools read by their form: an ease, presets, keys they take.
+        match name {
+            "setMotion" => {
+                args["keys"][0]["ease"] = json!("out");
+                args["presets"] = json!("enter fade");
+            }
+            "animateText" => args["set"] = json!([{"key": "opacity", "value": 0.5}]),
+            "setLayer" => {
+                args["set"] = json!([{"key": "opacity", "value": 0.5}]);
+                args["volumeKeys"] = json!([{"atSec": 0, "value": 1, "ease": "out"}]);
+            }
+            "styleText" => args["set"] = json!([{"key": "bold", "value": true}]),
+            _ => {}
+        }
         let parsed = ToolCall::parse(&call(name, &args.to_string()))
             .unwrap_or_else(|e| panic!("{name} {args}: {e}"));
         assert_eq!(parsed.name(), name);
@@ -1402,6 +1505,16 @@ fn the_prompt_names_only_real_tools() {
                 .cloned()
         })
         .collect();
+    // The composing tools' keys and the effects' settings, which the prompt names as the tools take them.
+    let mut arguments = arguments;
+    let keys = (klipolo_chat::tools::layer::LAYER_KEYS.iter())
+        .chain(&klipolo_chat::tools::style::STYLE_KEYS)
+        .chain(&klipolo_chat::tools::text_motion::TEXT_KEYS);
+    arguments.extend(keys.map(|k| (*k).to_owned()));
+    arguments.extend(
+        (klipolo_model::contrib::Catalog::builtin().defs())
+            .flat_map(|d| d.params.iter().map(|p| p.key.clone())),
+    );
     let prompt = klipolo_chat::prompt::system_prompt();
     let mut named = BTreeSet::new();
     for word in prompt.split(|c: char| !c.is_ascii_alphabetic()) {
@@ -1453,10 +1566,12 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
     // The caps every lane's prompt lines and tools share: 914 prompt tokens measured with the clip tools' line and the
-    // recordings' line, 1,126 with autoZoom's line and the short's recipe; 4,555 tools tokens with the clip tools
-    // (setClip, setTransition), setBackground (about 210), freezeFrame (about 105), addText's font (about 25), the
-    // recording tools (about 1,010) and followSubject's focus (about 117), and about 390 more with animate, the words'
-    // entrance, autoZoom and the shorts' two caption styles.
+    // recordings' line, 1,126 with autoZoom's line and the short's recipe, about 335 more with the composing tools' lines
+    // and the catalogues they name (presets, effects, looks, fonts); 4,555 tools tokens with the clip tools (setClip,
+    // setTransition), setBackground (about 210), freezeFrame (about 105), addText's font (about 25), the recording tools
+    // (about 1,010) and followSubject's focus (about 117), about 390 more with animate, the words' entrance, autoZoom
+    // and the shorts' two caption styles, and about 1,030 more with the tools that compose any edit (setMotion,
+    // animateText, setLayer, styleText, setEffects).
     assert!(prompt_tokens <= 1_800, "prompt {prompt_tokens} tokens");
     assert!(tools_tokens <= 6_500, "tools {tools_tokens} tokens");
 }

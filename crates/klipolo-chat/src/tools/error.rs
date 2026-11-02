@@ -57,6 +57,8 @@ pub enum Problem {
     Unused { why: &'static str },
     /// A call that changes nothing: none of `fields` is set.
     NoChange { fields: &'static str },
+    /// Text that isn't in one of the forms `expected` lists; `got` is the value given, as JSON.
+    NotForm { expected: &'static str, got: String },
 }
 
 impl fmt::Display for ToolError {
@@ -122,6 +124,9 @@ impl fmt::Display for ToolError {
             ),
             Problem::Unused { why } => write!(f, "{tool}: {field} {why}."),
             Problem::NoChange { fields } => write!(f, "{tool}: set at least one of {fields}."),
+            Problem::NotForm { expected, got } => {
+                write!(f, "{tool}: {field} must be {expected}, not {got}.")
+            }
         }
     }
 }

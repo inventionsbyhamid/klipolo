@@ -26,10 +26,16 @@ pub mod animate;
 mod args;
 pub mod background;
 pub mod clips;
+pub mod effects;
 mod error;
+pub mod layer;
 pub mod media;
+pub mod motion;
 pub mod recorded;
 mod schema;
+mod sets;
+pub mod style;
+pub mod text_motion;
 
 use std::ops::RangeInclusive;
 
@@ -46,12 +52,16 @@ pub use animate::{Emphasis, Entrance, Exit, LayerRef};
 use args::{Args, kind};
 pub use background::BackgroundChoice;
 pub use clips::{ClipRef, TransitionKind};
+pub use effects::{EffectChange, SettingValue};
 pub use error::{Problem, ToolError};
+pub use layer::{LayerChange, Order};
 pub use media::{PictureSize, Position, TextPreset};
+pub use motion::{KeyIn, PresetIn, Property, Slot};
 pub use recorded::{BubbleChange, BubbleSize, SizeStep, Sound};
 use schema::{
     boolean, list, nullable_list, nullable_number, nullable_words, object, seconds, string, words,
 };
+pub use style::{Look, OutlineStep, Paint, StyleChange};
 
 /// One tool call as the model made it, whichever provider ran the model: its adapter maps the provider's call into
 /// this.
@@ -291,6 +301,36 @@ pub enum ToolCall {
     /// Zoom in on the clicks of every recording on the main track, at most `scale` (None: the camera's own most), or
     /// take the auto zooms over them away (`on` false).
     AutoZoom { on: bool, scale: Option<f64> },
+    /// Give the layer `layer` names keys (each property listed in `keys` gets exactly those keys, the others keep
+    /// theirs; `Some(vec![])` takes every key away; None keeps them), and set or take away its enter, exit and loop
+    /// presets.
+    SetMotion {
+        layer: LayerRef,
+        keys: Option<Vec<KeyIn>>,
+        presets: Vec<PresetIn>,
+    },
+    /// Bring the words `layer` names in by `motion.unit`, each from `motion.from`; None makes animated words plain words
+    /// again.
+    AnimateText {
+        layer: LayerRef,
+        motion: Option<klipolo_model::media::text_motion::TextMotion>,
+    },
+    /// Place, size, turn, fade, blend, round, crop, frame or reorder the layer `layer` names, or set the fades of the
+    /// clip or song it names and the song's ducking.
+    SetLayer {
+        layer: LayerRef,
+        change: Box<LayerChange>,
+    },
+    /// Restyle the words `layer` names.
+    StyleText {
+        layer: LayerRef,
+        change: Box<StyleChange>,
+    },
+    /// Add, change, move or take off effects on the clip or layer `target` names.
+    SetEffects {
+        target: LayerRef,
+        effects: Vec<EffectChange>,
+    },
     /// Undo the last change.
     Undo,
     /// Ask the person `question` before doing anything more.
@@ -384,6 +424,11 @@ impl ToolCall {
             ToolCall::SetSourceVolume { .. } => "setSourceVolume",
             ToolCall::SeparateSound { .. } => "separateSound",
             ToolCall::AutoZoom { .. } => "autoZoom",
+            ToolCall::SetMotion { .. } => "setMotion",
+            ToolCall::AnimateText { .. } => "animateText",
+            ToolCall::SetLayer { .. } => "setLayer",
+            ToolCall::StyleText { .. } => "styleText",
+            ToolCall::SetEffects { .. } => "setEffects",
             ToolCall::Undo => "undo",
             ToolCall::AskUser { .. } => "askUser",
             ToolCall::CannotDo { .. } => "cannotDo",
@@ -398,7 +443,14 @@ impl ToolCall {
                 clip: ClipRef::One(r),
                 ..
             } => r.starts_with(['m', 'v']),
-            ToolCall::Animate { layer, .. } => matches!(layer, LayerRef::One(_)),
+            ToolCall::Animate { layer, .. }
+            | ToolCall::AnimateText { layer, .. }
+            | ToolCall::StyleText { layer, .. } => matches!(layer, LayerRef::One(_)),
+            ToolCall::SetMotion { layer: target, .. }
+            | ToolCall::SetLayer { layer: target, .. }
+            | ToolCall::SetEffects { target, .. } => {
+                matches!(target, LayerRef::One(r) if !r.starts_with('c'))
+            }
             _ => false,
         }
     }
@@ -429,6 +481,14 @@ impl ToolCall {
             | ToolCall::MuteSource { clips, .. }
             | ToolCall::SetSourceVolume { clips, .. }
             | ToolCall::SeparateSound { clips, .. } => clips.is_some(),
+            ToolCall::SetLayer { layer, change } => {
+                matches!(layer, LayerRef::One(r) if r.starts_with('c'))
+                    || change.start_us.is_some()
+                    || change.split_us.is_some()
+            }
+            ToolCall::SetMotion { layer: target, .. } | ToolCall::SetEffects { target, .. } => {
+                matches!(target, LayerRef::One(r) if r.starts_with('c'))
+            }
             ToolCall::RemoveSilences { .. }
             | ToolCall::RemoveFillers
             | ToolCall::SetFormat { .. }
@@ -439,6 +499,8 @@ impl ToolCall {
             | ToolCall::BlurObjects { .. }
             | ToolCall::Animate { .. }
             | ToolCall::AutoZoom { .. }
+            | ToolCall::AnimateText { .. }
+            | ToolCall::StyleText { .. }
             | ToolCall::Undo
             | ToolCall::AskUser { .. }
             | ToolCall::CannotDo { .. } => false,
@@ -817,6 +879,11 @@ const TOOLS: &[Tool] = &[
     media::MAKE_STICKER,
     media::MAKE_TITLE_CARD,
     animate::ANIMATE,
+    motion::SET_MOTION,
+    text_motion::ANIMATE_TEXT,
+    layer::SET_LAYER,
+    style::STYLE_TEXT,
+    effects::SET_EFFECTS,
     recorded::SET_CAMERA_MODE,
     recorded::ADJUST_CAMERA,
     recorded::DETACH_CAMERA,

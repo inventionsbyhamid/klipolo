@@ -7,7 +7,8 @@
 //! - drawn (lavapipe in CI): the lower third's title area shows its name in the preview and in an exported file, and
 //!   the title card its title and accent; in 16:9, 9:16 and 1:1 both keep their shape (their heights are 1080p pixels,
 //!   not shares of the frame) and in 9:16 everything either draws stays inside the area the apps keep clear
-//!   (`PORTRAIT_CLEAR`); an empty role or subtitle shows nothing. `PRESET_STILLS=<folder>` keeps a still of each.
+//!   (`PORTRAIT_CLEAR`); an empty role or subtitle shows nothing; animated words, the scene their settings make, come in
+//!   word by word inside their own box. `PRESET_STILLS=<folder>` keeps a still of each.
 
 mod support;
 
@@ -693,4 +694,61 @@ fn decoded_rgba(path: &Path, at: usize) -> image::RgbaImage {
     decoder.send_eof().unwrap();
     take(&mut decoder, &mut out);
     out.unwrap_or_else(|| panic!("{} has no frame {at}", path.display()))
+}
+
+/// Animated words (`media::text_motion`), a scene their settings make, drawn through a generator layer in its own
+/// box: nothing of a word shown before its turn (only the first word is in part way), every word in the box once
+/// settled, and white as their settings say.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "needs a GPU (lavapipe in CI)"]
+async fn animated_words_come_in_word_by_word_in_their_box() {
+    use klipolo_model::media::text_motion::{self, From, TextMotion, Unit};
+    use klipolo_model::timeline::TextStyle;
+    let mut h = Headless::new(Registry::builtin()).await.unwrap();
+    let motion = TextMotion {
+        unit: Unit::Word,
+        from: From {
+            y: Some(80.0),
+            opacity: Some(0.0),
+            ..From::default()
+        },
+        unit_secs: Some(0.3),
+        ease: None,
+        stagger_secs: Some(0.6),
+        order: None,
+        exit: false,
+    };
+    let style = TextStyle {
+        shadow: false,
+        ..TextStyle::default()
+    };
+    let params = text_motion::params("ONE TWO THREE", &style, &motion);
+    let content = ItemContent::generator(text_motion::source(), params);
+    let (x, y, w, hh) = (0.1, 0.3, 0.8, 0.2);
+    let mut p = Project::new("Words");
+    p.timeline.tracks.push(overlay_track(
+        "words",
+        vec![item("words", 0.0, 4.0, bx(x, y, w, hh), content)],
+    ));
+    let p = Arc::new(p);
+    let (sw, shh) = (f64::from(SIZE.0), f64::from(SIZE.1));
+    let area = Bounds {
+        x0: x * sw - 2.0,
+        y0: y * shh - 2.0,
+        x1: (x + w) * sw + 2.0,
+        y1: (y + hh) * shh + 2.0,
+    };
+    let white = |px: [u8; 3]| px.iter().all(|&c| c > 200);
+    let (settled, notes) = scene_frame(&mut h, &p, 3.0, SIZE).await;
+    assert!(notes.is_empty(), "{notes:?}");
+    keep_still("animated-words", &settled);
+    let all = bounds_where(&settled, white).expect("the words, once in");
+    assert!(all.within(area), "inside their box: {all:?} in {area:?}");
+    // Part way through the first word's turn, only the first word is in: what shows ends well short of all three.
+    let (early, _) = scene_frame(&mut h, &p, 0.5, SIZE).await;
+    let first = bounds_where(&early, white).expect("the first word");
+    assert!(
+        first.x1 - first.x0 < (all.x1 - all.x0) * 0.6,
+        "one word, not all: {first:?} vs {all:?}"
+    );
 }

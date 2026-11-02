@@ -1040,6 +1040,218 @@
     }
   },
   {
+    "id": "klipolo.builtin/scene.text-motion",
+    "kind": "scene",
+    "name": "Animated words",
+    "params": [
+      {
+        "key": "title",
+        "label": "Words",
+        "type": "text",
+        "default": "Your words",
+        "maxLen": 200
+      },
+      {
+        "key": "by",
+        "label": "By",
+        "type": "choice",
+        "options": [
+          "letter",
+          "word",
+          "line"
+        ],
+        "default": "word"
+      },
+      {
+        "key": "fromY",
+        "label": "From below",
+        "type": "float",
+        "min": -1080.0,
+        "max": 1080.0,
+        "default": 0.0,
+        "step": 1.0,
+        "unit": null
+      },
+      {
+        "key": "fromScale",
+        "label": "From size",
+        "type": "float",
+        "min": 0.0,
+        "max": 10.0,
+        "default": 1.0,
+        "step": 0.05,
+        "unit": null
+      },
+      {
+        "key": "fromOpacity",
+        "label": "From opacity",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 1.0,
+        "step": 0.05,
+        "unit": null
+      },
+      {
+        "key": "fromRotation",
+        "label": "From turn",
+        "type": "float",
+        "min": -720.0,
+        "max": 720.0,
+        "default": 0.0,
+        "step": 1.0,
+        "unit": null
+      },
+      {
+        "key": "fromBlur",
+        "label": "From blur",
+        "type": "float",
+        "min": 0.0,
+        "max": 40.0,
+        "default": 0.0,
+        "step": 1.0,
+        "unit": null
+      },
+      {
+        "key": "sec",
+        "label": "Each one",
+        "type": "float",
+        "min": 0.05,
+        "max": 5.0,
+        "default": 0.5,
+        "step": 0.01,
+        "unit": "seconds"
+      },
+      {
+        "key": "stagger",
+        "label": "Between",
+        "type": "float",
+        "min": 0.0,
+        "max": 2.0,
+        "default": 0.12,
+        "step": 0.01,
+        "unit": "seconds"
+      },
+      {
+        "key": "ease",
+        "label": "Ease",
+        "type": "text",
+        "default": "power2.out",
+        "maxLen": 128
+      },
+      {
+        "key": "order",
+        "label": "First",
+        "type": "choice",
+        "options": [
+          "start",
+          "end",
+          "center",
+          "random"
+        ],
+        "default": "start"
+      },
+      {
+        "key": "exit",
+        "label": "Leave the same way",
+        "type": "bool",
+        "default": false
+      },
+      {
+        "key": "font",
+        "label": "Font",
+        "type": "font",
+        "default": {
+          "family": "Inter",
+          "source": {
+            "type": "bundled"
+          }
+        }
+      },
+      {
+        "key": "weight",
+        "label": "Weight",
+        "type": "float",
+        "min": 100.0,
+        "max": 900.0,
+        "default": 700.0,
+        "step": 100.0,
+        "unit": null
+      },
+      {
+        "key": "italic",
+        "label": "Italic",
+        "type": "bool",
+        "default": false
+      },
+      {
+        "key": "size",
+        "label": "Size",
+        "type": "float",
+        "min": 4.0,
+        "max": 400.0,
+        "default": 64.0,
+        "step": 1.0,
+        "unit": null
+      },
+      {
+        "key": "color",
+        "label": "Colour",
+        "type": "color",
+        "default": "#FFFFFF",
+        "alpha": true
+      },
+      {
+        "key": "highlight",
+        "label": "Highlight",
+        "type": "color",
+        "default": "#00000000",
+        "alpha": true
+      },
+      {
+        "key": "outline",
+        "label": "Outline",
+        "type": "color",
+        "default": "#000000",
+        "alpha": true
+      },
+      {
+        "key": "outlineWidth",
+        "label": "Outline width",
+        "type": "float",
+        "min": 0.0,
+        "max": 100.0,
+        "default": 0.0,
+        "step": 0.5,
+        "unit": null
+      },
+      {
+        "key": "shadow",
+        "label": "Shadow",
+        "type": "bool",
+        "default": true
+      },
+      {
+        "key": "align",
+        "label": "Align",
+        "type": "choice",
+        "options": [
+          "left",
+          "center",
+          "right"
+        ],
+        "default": "center"
+      }
+    ],
+    "description": "Words that come in letter by letter, word by word or line by line, each from its own values.",
+    "tags": [
+      "text",
+      "words",
+      "animation",
+      "kinetic"
+    ]
+  },
+  {
     "id": "klipolo.builtin/scene.title-card",
     "kind": "scene",
     "name": "Title card",

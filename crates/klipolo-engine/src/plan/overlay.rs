@@ -167,7 +167,7 @@ pub fn overlay_layers(
                 still,
                 ..
             } => {
-                let scene = registry.scene(source);
+                let scene = registry.scene_for(source, params);
                 let shader = registry
                     .shader(source)
                     .filter(|sh| sh.kind == ShaderKind::Generator);
@@ -195,7 +195,7 @@ pub fn overlay_layers(
                 blur_in(registry, &item.id, &mv, clock, &mut fx);
                 let (pad_px, reach) = (effects::pad_of(&fx), reach(&mv));
                 let (rotation, opacity) = (l.rotation + mv.rotation, l.opacity * mv.opacity);
-                if let Some(scene) = scene {
+                if let Some(scene) = &scene {
                     let scene_of = (source, &**scene);
                     let inputs =
                         super::scene::inputs(s, &item.id, scene_of, params, p, registry, missing);

@@ -57,6 +57,9 @@ export interface GizmoTarget {
 
 const same = (rect: BoxN) => rect;
 
+/** Animated words: a generator whose scene is made from its settings, placed in its own box (`media::text_motion`). */
+const TEXT_MOTION = 'klipolo.builtin/scene.text-motion';
+
 /**
  * Where a title template's own picture is in the frame, for picking it: the lower third's card (a share of the frame
  * across, 238 of 1080p's pixels tall, as its `scene.json` places it, inside 9:16's clear area), the kinetic title's band
@@ -120,6 +123,8 @@ export function gizmoTargets(project: Project, playheadUs: number, format: Forma
       if (playheadUs < item.startUs || playheadUs >= itemEndUs(item)) continue;
       const content = item.content;
       const scene = content.type === 'generator' ? content : null;
+      // A title template fills the frame; animated words have a box of their own, as words do.
+      const fillsFrame = scene !== null && scene.source !== TEXT_MOTION;
       if (content.type !== 'text' && content.type !== 'image' && content.type !== 'video' && !scene) continue;
       const rect = resolveRect(item.layout, primary, format);
       let boxFor: GizmoTarget['boxFor'] = same;
@@ -152,8 +157,8 @@ export function gizmoTargets(project: Project, playheadUs: number, format: Forma
         box: drawnFor(shown),
         boxFor: drawnFor,
         locked: track.locked,
-        movable: !scene,
-        rotatable: !scene,
+        movable: !fillsFrame,
+        rotatable: !fillsFrame,
         fontSize: text && format === primary ? text.style.size : null,
         ops: (place, size) => {
           const was = layoutNow(item.id, item.layout);

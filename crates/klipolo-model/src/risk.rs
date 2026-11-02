@@ -545,6 +545,22 @@ fn shows(item: &Item) -> Shows<'_> {
     }
 }
 
+/// A layer's kind for telling a restyle from a replacement: animated words (`media::text_motion`) are words, whose
+/// text and look they keep.
+fn kind_of(content: &ItemContent) -> std::mem::Discriminant<ItemContent> {
+    match content {
+        ItemContent::Generator { source, .. }
+            if source.as_str() == crate::media::text_motion::SOURCE =>
+        {
+            std::mem::discriminant(&ItemContent::Text {
+                text: String::new(),
+                style: Default::default(),
+            })
+        }
+        other => std::mem::discriminant(other),
+    }
+}
+
 fn holds(item: &Item) -> Holds<'_> {
     let d = item.duration_us;
     let media = |kind, asset, from: Us, len: Us| Holds::Media {
@@ -621,8 +637,7 @@ fn shortened(before: &Project, after: &Project, items_after: &HashMap<&str, &Ite
                 }
             }
             Holds::Shown { len } => {
-                let same_kind =
-                    std::mem::discriminant(&now.content) == std::mem::discriminant(&item.content);
+                let same_kind = kind_of(&now.content) == kind_of(&item.content);
                 let kept = if same_kind { now.duration_us } else { 0 };
                 if kept.saturating_add(SLACK_US) < len {
                     let entry = lost_lengths.entry(shows(item)).or_default();
