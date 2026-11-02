@@ -1,4 +1,4 @@
-/* The chat panel. */
+/* The chat panel: its header, the conversation and the composer. */
 
 /* Folded, chat is a 56 px strip, never hidden. */
 .workspace:has(.chat[data-collapsed="true"]) {
@@ -170,7 +170,7 @@
   background: transparent;
 }
 
-/* While the clips aren't analysed, or are being analysed. */
+/* The empty chat's note while the clips aren't analysed, or are being analysed. */
 .chat-empty .note {
   display: grid;
   grid-template-columns: auto 1fr;
