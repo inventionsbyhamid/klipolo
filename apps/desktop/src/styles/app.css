@@ -1052,8 +1052,8 @@
   flex: none;
   height: 6px;
   margin: 2px 0;
-  border-radius: var(--radius-pill);
-  background: var(--color-bay-raised);
+  border-radius: var(--radius-xs);
+  background: var(--color-sunken);
   cursor: grab;
   touch-action: none;
 }
@@ -1068,8 +1068,8 @@
   bottom: 0;
   left: var(--x);
   width: var(--w);
-  border-radius: var(--radius-pill);
-  background: var(--color-clip-deep);
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--color-clip) 45%, transparent);
 }
 
 .ov-seg + .ov-seg {
@@ -1092,7 +1092,7 @@
   bottom: -3px;
   min-width: 8px;
   border-radius: 4px;
-  box-shadow: 0 0 0 1.5px var(--color-paper);
+  box-shadow: 0 0 0 1.5px var(--color-signal-ink);
 }
 
 .tl-scroll {
@@ -1246,7 +1246,7 @@
   background: color-mix(in srgb, var(--color-night) 45%, transparent);
 }
 
-/* A file held over a lane that takes it: a paper wash and a dashed paper edge, drawn over the lane's blocks (they are
+/* A file held over a lane that takes it: a signal wash and a dashed signal-ink edge, drawn over the lane's blocks (they are
    z-index 1 to 3) so a full lane still shows it. */
 .tl-lane.is-drop {
   background-image: linear-gradient(var(--color-paper-wash), var(--color-paper-wash));
@@ -1257,7 +1257,7 @@
   position: absolute;
   inset: 0;
   z-index: 4;
-  border: 1px dashed var(--color-paper);
+  border: 1px dashed var(--color-signal-ink);
   border-radius: inherit;
   pointer-events: none;
 }
@@ -1284,7 +1284,7 @@
   pointer-events: none;
 }
 
-/* A recording's markers along the top of the Video lane: a paper flag (you put it there) with a line down through the
+/* A recording's markers along the top of the Video lane: a signal-ink flag (you put it there) with a line down through the
    clips that takes no presses; red while a proposal removes it. Over the clips, under the playhead and the marks. */
 .tl-markers {
   position: absolute;
@@ -1314,7 +1314,7 @@
 .tl-marker-flag {
   position: absolute;
   inset: 0;
-  background: var(--color-paper);
+  background: var(--color-signal-ink);
   clip-path: polygon(0 0, 100% 25%, 0 55%);
 }
 
@@ -1324,7 +1324,7 @@
   left: 0;
   width: 1px;
   height: 400px;
-  background: var(--color-paper);
+  background: var(--color-signal-ink);
   opacity: 0.7;
   pointer-events: none;
 }
@@ -1334,8 +1334,8 @@
   background: var(--color-cut);
 }
 
-/* Clips: clip-deep with a clip-2 edge, filmstrip over 62 %, the clip's own waveform under it, back to back with a
-   1 px seam where two meet. */
+/* Clips: the raised fill with a hairline edge and a 3 px blue edge at the start, filmstrip over 62 %, the clip's own
+   waveform under it, back to back with a 1 px seam where two meet. */
 .tl-clip {
   position: absolute;
   top: 0;
@@ -1346,14 +1346,15 @@
   padding: 0;
   border-radius: 0;
   background: var(--color-clip-deep);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-clip-2) 55%, transparent);
+  /* A hairline edge and a 3 px blue edge at its start. */
+  box-shadow: inset 3px 0 0 var(--color-clip), inset 0 0 0 1px var(--color-line);
   color: var(--color-ink);
   text-align: left;
   transition: box-shadow var(--dur-fast) var(--ease-out);
 }
 
 .tl-clip:not([data-first]) {
-  border-left: 1px solid color-mix(in srgb, var(--color-night) 85%, transparent);
+  border-left: 1px solid var(--color-bay);
 }
 
 .tl-clip[data-first] {
@@ -1371,41 +1372,41 @@
 }
 
 .tl-clip:hover {
-  box-shadow: inset 0 0 0 1px var(--color-clip-2);
+  box-shadow: inset 3px 0 0 var(--color-clip), inset 0 0 0 1px var(--color-ink-faint);
 }
 
 .tl-clip.is-selected {
   z-index: 2;
   overflow: visible;
-  box-shadow: inset 0 0 0 2px var(--color-paper);
+  box-shadow: inset 3px 0 0 var(--color-clip), inset 0 0 0 2px var(--color-signal-ink);
 }
 
 .tl-clip[data-dragging="true"] {
   z-index: 20;
-  box-shadow: var(--shadow-1), inset 0 0 0 2px var(--color-paper);
+  box-shadow: var(--shadow-1), inset 0 0 0 2px var(--color-signal-ink);
   will-change: transform;
 }
 
 .tl-clip-name {
   position: absolute;
   top: 4px;
-  left: 4px;
+  left: 6px;
   z-index: 6;
-  max-width: calc(100% - 8px);
+  max-width: calc(100% - 10px);
   overflow: hidden;
-  padding: 1px 6px;
-  border-radius: var(--radius-xs);
-  background: color-mix(in srgb, var(--color-night) 78%, transparent);
+  padding: 0 3px;
+  border-radius: 2px;
+  background: var(--color-bay-raised);
   color: var(--color-ink);
-  font-size: var(--text-2xs);
-  line-height: var(--lh-2xs);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
   font-weight: var(--weight-medium);
   white-space: nowrap;
   text-overflow: ellipsis;
   pointer-events: none;
 }
 
-/* Trim handles: a 12 px pad on each edge; a selected clip shows 8 x 22 paper grips, a selected overlay on-paper ones. */
+/* Trim handles: a 12 px pad on each edge; a selected clip shows 8 x 22 signal-ink grips, a selected overlay thin ones. */
 .tl-trim {
   position: absolute;
   top: 0;
@@ -1470,7 +1471,7 @@
   position: fixed;
   z-index: 60;
   pointer-events: none;
-  border: 1px solid var(--color-paper);
+  border: 1px solid var(--color-signal-ink);
   border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--color-paper) 12%, transparent);
 }
@@ -1494,7 +1495,7 @@
   bottom: 0;
   left: 2px;
   width: 2px;
-  background: var(--color-paper);
+  background: var(--color-signal-ink);
   opacity: 0;
   transition: opacity var(--dur-fast) var(--ease-out);
 }
@@ -1522,8 +1523,8 @@
   max-height: calc(100% - 4px);
   transform: translateY(-50%);
   border-radius: 3px;
-  background: var(--color-paper);
-  box-shadow: 0 0 0 1.5px var(--color-on-paper);
+  background: var(--color-signal-ink);
+  box-shadow: 0 0 0 1.5px var(--color-bay);
   opacity: 0;
   transition: opacity var(--dur-fast) var(--ease-out);
 }
@@ -1580,8 +1581,8 @@
   justify-content: center;
   overflow: hidden;
   border-radius: var(--radius-xs);
-  background: color-mix(in srgb, var(--color-night) 78%, transparent);
-  box-shadow: inset 0 0 0 1px var(--color-clip-2);
+  background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-signal-ink);
   transition: background-color var(--dur-fast) var(--ease-out);
 }
 
@@ -1621,7 +1622,7 @@
   height: 14px;
   border-radius: 50%;
   background: var(--color-dialog);
-  box-shadow: inset 0 0 0 1px var(--color-paper), var(--shadow-1);
+  box-shadow: inset 0 0 0 1px var(--color-signal-ink), var(--shadow-1);
 }
 
 .tl-cut-dot {
@@ -1730,7 +1731,7 @@
 
 .icon-btn.tl-track-toggle.is-on {
   background: var(--color-paper-wash);
-  box-shadow: inset 0 0 0 1px var(--color-paper);
+  box-shadow: inset 0 0 0 1px var(--color-signal-ink);
   color: var(--color-ink);
 }
 
@@ -1739,7 +1740,7 @@
   min-width: 0;
   height: 22px;
   padding: 0 var(--space-2);
-  border: 1px solid var(--color-paper);
+  border: 1px solid var(--color-signal-ink);
   border-radius: var(--radius-xs);
   background: var(--color-night);
   color: var(--color-ink);
@@ -1817,8 +1818,9 @@
   width: 240px;
 }
 
-/* Layers: overlays (paper at 16 % with a 2 px paper edge; solid paper when selected), sound effects (teal, named to
-   the right in teal) and music (violet body and edge, its waveform at 40 %, its name in a violet tag). */
+/* Layers: overlays (violet at 20 % with a 3 px violet edge; a signal-ink ring when selected), sound effects (teal,
+   named to the right in teal) and music (green at 20 % with a 3 px green edge, its waveform at 40 %, its name in a
+   green tag). */
 .tl-item {
   position: absolute;
   z-index: 1;
@@ -1867,16 +1869,14 @@
 
 .tl-item.is-overlay {
   overflow: hidden;
-  padding: 0 6px;
-  background: color-mix(in srgb, var(--color-lane-overlay) 16%, transparent);
-  box-shadow: inset 2px 0 0 var(--color-paper);
+  padding: 0 6px 0 8px;
+  background: color-mix(in srgb, var(--color-lane-overlay) 20%, var(--color-bay));
+  box-shadow: inset 3px 0 0 var(--color-lane-overlay);
 }
 
 .tl-item.is-overlay.is-selected {
   overflow: visible;
-  background: var(--color-paper);
-  box-shadow: none;
-  color: var(--color-on-paper);
+  box-shadow: inset 3px 0 0 var(--color-lane-overlay), inset 0 0 0 2px var(--color-signal-ink);
 }
 
 .tl-item.is-overlay .tl-trim::after {
@@ -1887,7 +1887,7 @@
   bottom: 3px;
   transform: none;
   border-radius: 2px;
-  background: var(--color-on-paper);
+  background: var(--color-signal-ink);
   box-shadow: none;
 }
 
@@ -1911,7 +1911,7 @@
 }
 
 .tl-item.is-sound.is-selected {
-  box-shadow: 0 0 0 2px var(--color-paper);
+  box-shadow: 0 0 0 2px var(--color-signal-ink);
 }
 
 /* A take's own sound separated from its clip: the clip's blue, its waveform in clip-2, named in a tag inside it as a
@@ -1936,15 +1936,15 @@
 }
 
 .tl-item.is-sound.is-recorded.is-selected {
-  box-shadow: inset 0 0 0 2px var(--color-paper);
+  box-shadow: inset 0 0 0 2px var(--color-signal-ink);
 }
 
 .tl-item.is-music {
   align-items: flex-start;
   overflow: hidden;
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--color-lane-music) 14%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-lane-music) 50%, transparent);
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--color-lane-music) 20%, var(--color-bay));
+  box-shadow: inset 3px 0 0 var(--color-lane-music);
 }
 
 .tl-item.is-music canvas {
@@ -1964,7 +1964,7 @@
 
 .tl-item.is-music.is-selected,
 .tl-item.is-music.is-in-run {
-  box-shadow: inset 0 0 0 2px var(--color-paper);
+  box-shadow: inset 0 0 0 2px var(--color-signal-ink);
 }
 
 /* The music's volume line: green, 2 px, dipping where it ducks under speech. Its grip is a wider
@@ -1992,10 +1992,10 @@
   cursor: ns-resize;
 }
 
-/* A clip's or sound's volume line (selected), in paper over its block. */
+/* A clip's or sound's volume line (selected), in signal-ink over its block. */
 .tl-volume.is-clip .tl-volume-line,
 .tl-volume.is-sound .tl-volume-line {
-  stroke: var(--color-paper);
+  stroke: var(--color-signal-ink);
 }
 
 /* A volume line's keys: points on the line, beside the block in the lane (they follow its moves). */
@@ -2013,13 +2013,13 @@
   padding: 0;
   border: 1.5px solid var(--color-bay);
   border-radius: 50%;
-  background: var(--color-paper);
+  background: var(--color-signal-ink);
   cursor: move;
   pointer-events: auto;
 }
 
 .tl-volume-key:focus-visible {
-  outline: 2px solid var(--color-paper);
+  outline: 2px solid var(--color-signal-ink);
   outline-offset: 2px;
 }
 
@@ -2057,7 +2057,7 @@
   padding: 0 4px;
   border-radius: var(--radius-xs);
   background: var(--color-bay-raised);
-  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   color: var(--color-ink-soft);
   font-size: var(--text-2xs);
   line-height: 1;
@@ -2142,7 +2142,7 @@
   }
 }
 
-/* The time range you selected: paper, because it is yours. */
+/* The time range you selected: a signal wash between signal-ink edges. */
 .tl-range {
   position: absolute;
   bottom: 0;
@@ -2173,8 +2173,8 @@
   height: 22px;
   margin-top: -11px;
   border-radius: 3px;
-  background: var(--color-paper);
-  box-shadow: 0 0 0 1.5px var(--color-on-paper);
+  background: var(--color-signal-ink);
+  box-shadow: 0 0 0 1.5px var(--color-bay);
   cursor: ew-resize;
   pointer-events: auto;
 }
@@ -2194,7 +2194,7 @@
   right: -4px;
 }
 
-/* The playhead: a 2 px paper line through the lanes and a 12 x 14 paper head on the ruler. Never red. The head spans
+/* The playhead: a 2 px red line through the timeline and a 12 x 14 red head on the ruler. The head spans
    the ruler (top and bottom 0, as the line) and runs on as a 2 px stem to its foot: the sticky ruler row covers the
    lanes' line there. */
 .tl-playhead {
@@ -2203,7 +2203,7 @@
   bottom: 0;
   left: 0;
   width: 2px;
-  background: var(--color-paper);
+  background: var(--color-cut);
   pointer-events: none;
   will-change: transform;
 }
@@ -2215,12 +2215,13 @@
   clip-path: polygon(0 0, 100% 0, 100% 8.4px, 7px 13px, 7px 100%, 5px 100%, 5px 13px, 0 8.4px);
 }
 
-/* Menus, tooltips and popovers: the dialog surface, 10 px radius, 32 px rows on the hover fill. */
+/* Menus, tooltips and popovers: the dialog surface with a hairline edge, 8 px corners, 32 px rows; the highlighted row
+   takes the signal fill. A tooltip is inverted: the ink colour with canvas text. */
 .menu {
   z-index: 50;
-  min-width: 208px;
-  padding: 6px;
-  border-radius: var(--radius-md);
+  min-width: 192px;
+  padding: 4px;
+  border-radius: var(--radius-lg);
   background: var(--color-dialog);
   box-shadow: var(--shadow-1);
   animation: menu-in var(--dur-fast) var(--ease-out);
