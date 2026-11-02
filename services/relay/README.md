@@ -11,7 +11,7 @@ The relay lets people with an access code use Meta's models in Klipolo without t
 | `GET /v1/devices/me` | Whether relay AI is on, the budget and the spend. The credit left is the budget less the spend: when the device's code has a cap with less left than the device, the budget is cut to match. |
 | `POST /meta/v1/responses`, `POST /meta/v1/asr/transcribe`, `POST /meta/v1/images/generations`, `POST /meta/v1/files`, `GET` and `DELETE /meta/v1/files/{id}` | Forwarded to Meta for devices with an active code, and charged against the caps. |
 | `POST /meta/v1/sam/videos` | A video for SAM, sent as its raw bytes (at most 64 MB, one a device at a time): the relay decodes it with ffmpeg and writes its own copy (one video track, 2 frames a second, its long side at most 640, no sound, at most 10 minutes), uploads that to Meta and answers with Meta's file. SAM takes only videos made this way, and the relay reserves their frames. ffmpeg reads only MOV/MP4 from a file, on two threads, pictures up to 4K, under a 1.5 GB memory limit at a lower priority; two copies are made at once, a third waits at most 10 s (then 429), and each has 60 s. |
-| `POST /v1/align` | Word timing for transcript turns: multipart `audio` (16 kHz mono 16-bit WAV, at most 10 minutes) and `turns` (JSON). Open to every registered device, 120 minutes a day. |
+| `POST /v1/align` | Word timing for transcript turns: multipart `audio` (16 kHz mono 16-bit WAV, at most 10 minutes) and `turns` (JSON). Open to every registered device, 120 minutes a day. Turns in any script are timed: words in other scripts than Latin are romanized with uroman first (see Third-party software). |
 
 Errors are always `{"error": "<code>", "message": "<sentence>"}`, except Traefik's rate limit (see Limits to know). Without a Meta key the proxied routes answer 503 `not_configured`.
 
@@ -66,6 +66,8 @@ uv venv && uv pip install -e '.[dev]'
 ```
 
 Alignment needs torch 2.8 and the MMS model, which live in the container image. Without them `/v1/align` answers 503 `align_unavailable`.
+
+The romanizer (uroman) is a plain Python package installed with the rest. It takes about 10 s to load its tables, at startup with `ALIGN_WARMUP` on, otherwise on the first turn with words in another script.
 
 ## Test
 
@@ -217,3 +219,7 @@ docker buildx imagetools inspect python:3.12-slim-bookworm | grep -m1 Digest
 ```
 
 Put that digest after `@sha256:` in the `FROM` line, rebuild, and run the full test suite.
+
+## Third-party software
+
+The relay romanizes words in other scripts than Latin with uroman 1.3.1.1 (https://github.com/isi-nlp/uroman), under its MIT-style licence, which asks for this note: This project uses the universal romanizer software 'uroman' written by Ulf Hermjakob, USC Information Sciences Institute (2015-2020). Ulf Hermjakob, Jonathan May, and Kevin Knight. 2018. Out-of-the-box universal romanization tool uroman. In Proceedings of the 56th Annual Meeting of Association for Computational Linguistics, Demo Track.
