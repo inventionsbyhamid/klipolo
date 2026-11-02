@@ -159,7 +159,8 @@ pub trait Host: Send + Sync + 'static {
 
     /// Starts a job that costs money, after the app's own checks (a Meta key or an access code, relay credit for its
     /// estimate): `NoCredit` with no key or code, `LowCredit` when the credit is below the estimate. A picture runs on
-    /// (`Started::Later`); following a subject is done before this returns (`Started::Done`).
+    /// (`Started::Later`); following a subject is done before this returns (`Started::Done`). A clip to play backward
+    /// costs nothing: the page writes its reversed copy (`Started::Later`).
     fn start_paid(&self, client: &str, job: &Job) -> Result<Started, HostError>;
 
     /// The apps connected now, by name, sorted: told whenever the list changes.
