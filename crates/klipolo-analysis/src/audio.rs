@@ -21,6 +21,7 @@ use klipolo_engine::audio::decode::{self, DecodeError};
 use klipolo_engine::render::probe::probe_media;
 use klipolo_model::time::Us;
 use klipolo_platform::durable::{self, Durability};
+use memmap2::Mmap;
 use serde::{Deserialize, Serialize};
 
 /// What Voice Transcribe takes.
@@ -238,6 +239,8 @@ const TAPS: usize = 95;
 // At least 63 (the stopband the test below checks needs about 90).
 const _: () = assert!(TAPS >= 63 && TAPS % 2 == 1);
 const HALF: usize = (TAPS - 1) / 2;
+/// Outputs the decimator sums side by side.
+const LANES: usize = 16;
 /// Where the gain is half (-6 dB): below the 8 kHz Nyquist of 16 kHz, leaving room for the transition.
 const CUTOFF_HZ: f64 = 7_000.0;
 /// Kaiser β for about 72 dB of stopband attenuation (β = 0.1102 (A - 8.7)); with 95 taps the transition runs from about
@@ -284,6 +287,8 @@ struct Decimator {
     base: i64,
     /// The input index the next output is centred on.
     next: i64,
+    /// The input under a run of outputs dealt into its `FACTOR` phases (`drain`).
+    phases: [Vec<f32>; FACTOR],
 }
 
 impl Decimator {
@@ -293,6 +298,7 @@ impl Decimator {
             buf: vec![0.0; HALF],
             base: -(HALF as i64),
             next: 0,
+            phases: Default::default(),
         }
     }
 
@@ -311,6 +317,31 @@ impl Decimator {
     /// Every output whose input is all in the buffer, then drops the input no later output needs.
     fn drain(&mut self, out: &mut Vec<f32>) {
         let end = self.base + self.buf.len() as i64;
+        // `LANES` outputs at a time, each summed over its taps in order as below: a sum waits for the add before it,
+        // so one output at a time spends most of its time waiting, while side by side they overlap (the same sums,
+        // bit for bit). Dealt into its phases, the input a tap reads for the outputs side by side lies side by side.
+        let ready = (end - 1 - HALF as i64 - self.next).div_euclid(FACTOR as i64) + 1;
+        let groups = ready.max(0) as usize / LANES;
+        if groups > 0 {
+            let from = (self.next - HALF as i64 - self.base) as usize;
+            let past = from + (groups * LANES - 1) * FACTOR + TAPS;
+            for (r, phase) in self.phases.iter_mut().enumerate() {
+                phase.clear();
+                phase.extend(self.buf[from + r..past].iter().step_by(FACTOR));
+            }
+            for g in 0..groups {
+                let mut sums = [-0.0f32; LANES];
+                for (i, h) in self.taps.iter().enumerate() {
+                    let at = i / FACTOR + g * LANES;
+                    let xs = &self.phases[i % FACTOR][at..at + LANES];
+                    for (sum, x) in sums.iter_mut().zip(xs) {
+                        *sum += x * h;
+                    }
+                }
+                out.extend_from_slice(&sums);
+            }
+            self.next += (groups * LANES * FACTOR) as i64;
+        }
         while self.next + (HALF as i64) < end {
             let from = (self.next - HALF as i64 - self.base) as usize;
             let window = &self.buf[from..from + TAPS];
@@ -420,6 +451,85 @@ pub fn read_pcm(wav: &[u8]) -> Result<MonoPcm, AudioError> {
 /// the file's bytes are never held beside them, so a 25-minute clip takes 48 MB, not 96.
 pub fn read_pcm_file(path: &Path) -> Result<MonoPcm, AudioError> {
     let mut file = File::open(path)?;
+    let (rate, at, mut left) = pcm_layout(&mut file)?;
+    file.seek(SeekFrom::Start(at))?;
+    let mut samples = Vec::with_capacity(left / 2);
+    let mut piece = vec![0u8; 64 * 1024];
+    while left > 0 {
+        let n = left.min(piece.len());
+        file.read_exact(&mut piece[..n])?;
+        samples.extend(
+            piece[..n]
+                .chunks_exact(2)
+                .map(|b| i16::from_le_bytes([b[0], b[1]])),
+        );
+        left -= n;
+    }
+    Ok(MonoPcm { rate, samples })
+}
+
+/// A mono 16-bit WAV file's samples mapped from the file instead of read (`map_pcm_file`): the system brings them in
+/// as they are read and can let them go again, so a 2-hour clip's 230 MB of speech sound never sit in the app's own
+/// memory while it is transcribed.
+pub struct MappedPcm {
+    pub rate: u32,
+    map: Mmap,
+    /// The samples' byte offset in the file, and how many there are.
+    from: usize,
+    len: usize,
+}
+
+impl MappedPcm {
+    pub fn samples(&self) -> &[i16] {
+        if self.len == 0 {
+            return &[];
+        }
+        // SAFETY: `map_pcm_file` checked that `len` samples from `from` lie in the mapping, 2-byte aligned, and that
+        // this computer reads 16-bit values little-endian, as a WAV stores them.
+        unsafe {
+            std::slice::from_raw_parts(self.map.as_ptr().add(self.from).cast::<i16>(), self.len)
+        }
+    }
+}
+
+impl std::fmt::Debug for MappedPcm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MappedPcm")
+            .field("rate", &self.rate)
+            .field("samples", &self.len)
+            .finish()
+    }
+}
+
+/// `read_pcm_file`'s samples (the same rules and answers), mapped from the file in place: None where they can't be
+/// used in place (a big-endian computer), for the caller to read them instead. The WAVs analysis writes are written
+/// whole under another name and renamed into place (`extract_wav_16k`), never changed after, so what is mapped stays
+/// what it was.
+pub fn map_pcm_file(path: &Path) -> Result<Option<MappedPcm>, AudioError> {
+    let mut file = File::open(path)?;
+    let (rate, at, bytes) = pcm_layout(&mut file)?;
+    if cfg!(target_endian = "big") {
+        return Ok(None);
+    }
+    // SAFETY: see above: the file is never written again once it has its name.
+    let map = unsafe { Mmap::map(&file) }?;
+    let from = usize::try_from(at).map_err(|_| AudioError::NotWav)?;
+    let len = bytes / 2;
+    let fits = from.checked_add(bytes).is_some_and(|end| end <= map.len());
+    if !fits || !(map.as_ptr() as usize + from).is_multiple_of(2) {
+        return Ok(None);
+    }
+    Ok(Some(MappedPcm {
+        rate,
+        map,
+        from,
+        len,
+    }))
+}
+
+/// Where a mono 16-bit WAV file's samples are: its rate, the byte offset of its data and how many bytes of whole
+/// samples are there (a streamed file may state more than it holds, or 0xFFFFFFFF).
+fn pcm_layout(file: &mut File) -> Result<(u32, u64, usize), AudioError> {
     let len = file.metadata()?.len();
     let mut head = [0u8; 12];
     if file.read_exact(&mut head).is_err() || &head[0..4] != b"RIFF" || &head[8..12] != b"WAVE" {
@@ -450,20 +560,8 @@ pub fn read_pcm_file(path: &Path) -> Result<MonoPcm, AudioError> {
                 return Err(AudioError::NotMono);
             }
             // A streamed file may state more than it holds (or 0xFFFFFFFF): only what is there counts.
-            let mut left = (size.min(len.saturating_sub(body)) / 2 * 2) as usize;
-            let mut samples = Vec::with_capacity(left / 2);
-            let mut piece = vec![0u8; 64 * 1024];
-            while left > 0 {
-                let n = left.min(piece.len());
-                file.read_exact(&mut piece[..n])?;
-                samples.extend(
-                    piece[..n]
-                        .chunks_exact(2)
-                        .map(|b| i16::from_le_bytes([b[0], b[1]])),
-                );
-                left -= n;
-            }
-            return Ok(MonoPcm { rate, samples });
+            let bytes = (size.min(len.saturating_sub(body)) / 2 * 2) as usize;
+            return Ok((rate, body, bytes));
         }
         // Chunks are padded to an even length.
         at = body + size + (size & 1);
@@ -561,6 +659,48 @@ mod tests {
     }
 
     #[test]
+    fn each_output_is_its_windows_sum_in_tap_order() {
+        // Output m is Σ x[3m - HALF + i] · h[i] over the taps in order (silence outside the input), bit for bit,
+        // whatever the blocks: however the work is laid out, no sum is reordered.
+        let mut x = 0x9e37_79b9_7f4a_7c15u64;
+        let input: Vec<f32> = (0..5_003)
+            .map(|_| {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                (x >> 40) as f32 / (1u64 << 24) as f32 * 2.0 - 1.0
+            })
+            .collect();
+        let taps = lowpass();
+        let at = |k: i64| {
+            usize::try_from(k)
+                .ok()
+                .and_then(|k| input.get(k))
+                .copied()
+                .unwrap_or(0.0)
+        };
+        let expected: Vec<u32> = (0..input.len().div_ceil(FACTOR) as i64)
+            .map(|m| {
+                let from = m * FACTOR as i64 - HALF as i64;
+                (0..TAPS)
+                    .map(|i| at(from + i as i64) * taps[i])
+                    .sum::<f32>()
+                    .to_bits()
+            })
+            .collect();
+        for block in [1, 5, 64, 1_000, input.len()] {
+            let mut d = Decimator::new();
+            let mut out = Vec::new();
+            for part in input.chunks(block) {
+                d.push(part, &mut out);
+            }
+            d.finish(&mut out);
+            let got: Vec<u32> = out.iter().map(|s| s.to_bits()).collect();
+            assert!(got == expected, "blocks of {block}");
+        }
+    }
+
+    #[test]
     fn the_buffer_stays_small() {
         let mut d = Decimator::new();
         let mut out = Vec::new();
@@ -654,6 +794,58 @@ mod tests {
         assert_eq!(all.samples, samples);
         assert!(matches!(
             read_pcm_file(&dir.path().join("missing.wav")),
+            Err(AudioError::Io(_))
+        ));
+    }
+
+    /// Mapped instead of read, a file gives the same samples and the same refusals.
+    #[test]
+    fn mapping_a_file_matches_reading_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let body: Vec<u8> = (0..30_001i32)
+            .flat_map(|i| ((i * 7919 % 65_536 - 32_768) as i16).to_le_bytes())
+            .collect();
+        let plain = [
+            wav_header(16_000, 1, body.len() as u32).to_vec(),
+            body.clone(),
+        ]
+        .concat();
+        let mut listed = plain.clone();
+        listed.splice(
+            36..36,
+            [b'L', b'I', b'S', b'T', 3, 0, 0, 0, b'a', b'b', b'c', 0],
+        );
+        let mut streamed = plain.clone();
+        streamed[40..44].copy_from_slice(&u32::MAX.to_le_bytes());
+        streamed.push(9);
+        let cases: [(&str, Vec<u8>); 6] = [
+            ("plain", plain),
+            ("listed", listed),
+            ("streamed", streamed),
+            ("empty", wav_header(16_000, 1, 0).to_vec()),
+            (
+                "stereo",
+                [wav_header(16_000, 2, 4).to_vec(), vec![1, 0, 2, 0]].concat(),
+            ),
+            ("not a wav", b"RIFX0000WAVE".to_vec()),
+        ];
+        for (name, bytes) in cases {
+            let path = dir.path().join(format!("{name}.wav"));
+            std::fs::write(&path, &bytes).unwrap();
+            let read = read_pcm_file(&path).map_err(|e| e.to_string());
+            let mapped = map_pcm_file(&path)
+                .map(|m| {
+                    let m = m.expect("mapped in place");
+                    MonoPcm {
+                        rate: m.rate,
+                        samples: m.samples().to_vec(),
+                    }
+                })
+                .map_err(|e| e.to_string());
+            assert_eq!(mapped, read, "{name}");
+        }
+        assert!(matches!(
+            map_pcm_file(&dir.path().join("missing.wav")),
             Err(AudioError::Io(_))
         ));
     }

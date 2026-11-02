@@ -111,6 +111,10 @@ pub(crate) struct KWeight {
     z: [[f64; 2]; 2],
 }
 
+/// A filter memory smaller than this is zero: its square (1e-60) is under the smallest power an f32 energy holds, and
+/// 24-bit sound's quietest step is 6e-8.
+const AT_REST: f64 = 1e-30;
+
 /// The two stages' (b0, b1, b2, a1, a2) at 48 kHz (BS.1770-4, table 1 and 2).
 const K_STAGES: [[f64; 5]; 2] = [
     [
@@ -132,6 +136,12 @@ impl KWeight {
             z[0] = b1 * v - a1 * y + z[1];
             z[1] = b2 * v - a2 * y;
             v = y;
+            // After sound, digital silence lets the memory fade toward subnormal values, where every sum costs about a
+            // hundred times more and rounding can hold it: a stage rests at zero once both its values are far below
+            // anything a power can show (one alone would ring on).
+            if z[0].abs() < AT_REST && z[1].abs() < AT_REST {
+                *z = [0.0; 2];
+            }
         }
         v
     }
@@ -568,5 +578,27 @@ mod tests {
         assert!((ours - exact).abs() < 0.01, "{ours} vs {exact}");
         assert_eq!(integrated(&power[..3]), None, "under 400 ms");
         assert_eq!(integrated(&[0.0; 50]), None, "silence");
+    }
+
+    /// Digital silence after sound (a system-sound track between sounds, a muted stretch) lets the filter's memory fade
+    /// out to zero, never through subnormal values: each sum on one costs about a hundred times a normal one, and a
+    /// 2-hour file's sound cache spent most of its time there.
+    #[test]
+    fn silence_after_sound_rests_the_weighting_at_zero_without_subnormals() {
+        let mut weight = KWeight::default();
+        for n in 0..4_800 {
+            weight.run(0.5 * (n as f32 * 0.37).sin());
+        }
+        for n in 0..RATE as usize {
+            let y = weight.run(0.0);
+            assert!(!y.is_subnormal(), "sample {n} of silence: {y:e}");
+            assert!(
+                weight.z.iter().flatten().all(|z| !z.is_subnormal()),
+                "sample {n} of silence: {:?}",
+                weight.z
+            );
+        }
+        assert_eq!(weight.z, [[0.0; 2]; 2], "at rest after 1 s of silence");
+        assert_eq!(weight.run(0.0), 0.0);
     }
 }

@@ -7,12 +7,14 @@
 //! `cargo run -p klipolo-engine --example perf_harness -- export [<worker binary>]` (default: this harness, which runs
 //! the worker for `--export-worker`); `… -- export-job <dir> <standard|high|maximum|master> <hardware|softwareSafe>
 //! <seconds> <landscape|portrait|square>…` plans a job (files in `<dir>`, the job in `<dir>/.jobs/<id>`) and prints
-//! its manifest's path for running the worker by hand.
+//! its manifest's path for running the worker by hand; `… -- export-case layers|scattered <quality> <video>...` exports a
+//! 2-minute text-heavy short with four video layers, or 50 scattered ranges of a 2-hour file (`case`).
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use klipolo_engine::api::ExportQuality;
@@ -20,8 +22,12 @@ use klipolo_engine::export::job::ExportJob;
 use klipolo_engine::export::naming::plan_files;
 use klipolo_engine::export::protocol::{WorkerLine, parse_line};
 use klipolo_engine::export::runner::Batch;
+use klipolo_model::contrib::ContribId;
+use klipolo_model::layout::{Anchor, BoxN, Layout};
+use klipolo_model::motion::Motion;
 use klipolo_model::project::{Asset, AssetKind, FormatKind, Project};
-use klipolo_model::timeline::{Clip, ClipSource};
+use klipolo_model::speech::{Speech, Transcript, Word, WordKind};
+use klipolo_model::timeline::{Clip, ClipSource, Item, ItemContent, TextStyle, Track, TrackKind};
 
 use super::measure::{Usage, mb, usage};
 use super::project::{fixture, secs};
@@ -135,7 +141,27 @@ fn services() -> Vec<(i32, Usage)> {
 }
 
 fn run_one(bin: &Path, dir: &Path, formats: &[FormatKind], quality: ExportQuality) {
-    let p = project();
+    run_project(
+        bin,
+        dir,
+        project(),
+        Speech::default(),
+        formats,
+        quality,
+        60.0,
+    );
+}
+
+/// Exports `p` (`seconds` long) in `formats` at `quality` with the worker `bin`, and prints what it cost.
+fn run_project(
+    bin: &Path,
+    dir: &Path,
+    p: Project,
+    speech: Speech,
+    formats: &[FormatKind],
+    quality: ExportQuality,
+    seconds: f64,
+) {
     let files = plan_files(&p, formats, quality, dir);
     let batch = Batch {
         project: p,
@@ -143,7 +169,7 @@ fn run_one(bin: &Path, dir: &Path, formats: &[FormatKind], quality: ExportQualit
         quality,
         files,
         pcm_dir: None,
-        speech: Default::default(),
+        speech: Arc::new(speech),
         text_language: "en".into(),
         contribs: Default::default(),
         caption_file: None,
@@ -204,7 +230,7 @@ fn run_one(bin: &Path, dir: &Path, formats: &[FormatKind], quality: ExportQualit
         formats.len(),
         segment_s(),
         if ok { "done" } else { "FAILED" },
-        60.0 / wall,
+        seconds / wall,
         worker_cpu / wall,
         vt_cpu / wall,
         mb(worker.peak_footprint),
@@ -228,4 +254,159 @@ pub fn run(args: &[String]) {
         run_one(&bin, dir.path(), &all[..1], quality);
         run_one(&bin, dir.path(), &all, quality);
     }
+}
+
+/// `export-case layers <quality> <main video> <video>...`: a 2-minute portrait short exported, the main video over its
+/// blurred picture with four cropped, moving video layers (`layers::project`), Word pop captions three words a second
+/// and a title entering every 10 s. `export-case scattered <quality> <2-hour video>`: what keeping 50 scattered 2 s
+/// ranges of a 2-hour file leaves (a seek at every clip), exported in landscape. `<quality>`: standard, high, maximum
+/// or master. `--seconds <s>` sets the short's length (120); `--write <file>` writes the project there (and its words
+/// beside it, `<file>.words.json`) instead of exporting it.
+pub fn case(args: &[String]) {
+    let flag = |name: &str| {
+        args.iter()
+            .position(|a| a == name)
+            .and_then(|i| args.get(i + 1))
+            .cloned()
+    };
+    let write = flag("--write");
+    let length: Option<f64> = flag("--seconds").and_then(|s| s.parse().ok());
+    let args: Vec<String> = args
+        .iter()
+        .scan(false, |value, a| {
+            let keep = !*value && !a.starts_with("--");
+            *value = a.starts_with("--");
+            Some(keep.then(|| a.clone()))
+        })
+        .flatten()
+        .collect();
+    let (Some(kind), Some(quality), Some(main)) = (args.first(), args.get(1), args.get(2)) else {
+        eprintln!(
+            "usage: export-case layers <quality> <main> <video>... | export-case scattered <quality> <2-hour video>"
+        );
+        std::process::exit(2);
+    };
+    let quality: ExportQuality =
+        serde_json::from_value(serde_json::Value::String(quality.clone())).expect("a quality");
+    let bin = std::env::current_exe().expect("this binary");
+    let dir = tempfile::tempdir().unwrap();
+    let (p, speech, formats, seconds) = match kind.as_str() {
+        "layers" => {
+            let seconds = length.unwrap_or(120.0);
+            let (p, speech) = text_heavy(
+                super::layers::project(main, &args[3..], 4, seconds),
+                seconds,
+            );
+            (p, speech, [FormatKind::Portrait], seconds)
+        }
+        "scattered" => {
+            let p = scattered(main);
+            let seconds = 50.0 * 2.0;
+            (p, Speech::default(), [FormatKind::Landscape], seconds)
+        }
+        other => panic!("unknown case {other:?}"),
+    };
+    if let Some(file) = write {
+        std::fs::write(&file, serde_json::to_vec(&p).expect("JSON")).expect("writes the project");
+        if let Some(t) = speech.transcripts.get("main") {
+            std::fs::write(
+                format!("{file}.words.json"),
+                serde_json::to_vec(t.as_ref()).expect("JSON"),
+            )
+            .expect("writes the words");
+        }
+        println!("wrote {file}");
+        return;
+    }
+    println!("export-case {kind}: {seconds:.0} s");
+    run_project(&bin, dir.path(), p, speech, &formats, quality, seconds);
+}
+
+/// `p` with Word pop captions over its main video (three words a second, a pause every eight) and a 3 s title entering
+/// every 10 s.
+fn text_heavy(mut p: Project, seconds: f64) -> (Project, Speech) {
+    const SAID: [&str; 8] = ["this", "is", "how", "we", "cut", "a", "faster", "short"];
+    let words: Vec<Word> = (0..(seconds * 3.0) as usize)
+        .filter(|i| i % 8 != 7)
+        .map(|i| {
+            let at = i as f64 / 3.0;
+            Word {
+                text: format!("{}{}", SAID[i % 8], if i % 8 == 6 { "!" } else { "" }),
+                start_us: secs(at),
+                end_us: secs(at + 0.3),
+                confidence: 0.9,
+                kind: WordKind::Word,
+            }
+        })
+        .collect();
+    let speech = Speech {
+        transcripts: HashMap::from([(
+            "main".to_owned(),
+            Arc::new(Transcript {
+                key: "main".into(),
+                language: "en".into(),
+                model: "m".into(),
+                covered_us: secs(seconds),
+                complete: true,
+                words,
+            }),
+        )]),
+        ..Speech::default()
+    };
+    p.captions.enabled = true;
+    p.captions.style = Some(ContribId::builtin("caption.word-pop"));
+    let mut titles = Track::new(TrackKind::Overlay, "Titles");
+    for k in 0..(seconds / 10.0) as usize {
+        let mut layout = Layout::new(
+            Anchor::TopLeft,
+            BoxN {
+                x: 0.08,
+                y: 0.3,
+                w: 0.84,
+                h: 0.12,
+            },
+        );
+        layout.motion = Some(Motion {
+            enter: Some(super::project::preset("fade")),
+            exit: Some(super::project::preset("slide")),
+            ..Motion::default()
+        });
+        titles.items.push(Item {
+            id: format!("title-{k}"),
+            start_us: secs(k as f64 * 10.0 + 1.0),
+            duration_us: secs(3.0),
+            attach: None,
+            layout,
+            content: ItemContent::Text {
+                text: format!("Step {}: keep it short", k + 1),
+                style: TextStyle {
+                    size: 72.0,
+                    ..TextStyle::default()
+                },
+            },
+            effects: Vec::new(),
+        });
+    }
+    p.timeline.tracks.push(titles);
+    (
+        klipolo_model::apply_ops(&p, &[]).expect("a checked project"),
+        speech,
+    )
+}
+
+/// The 2-hour `video` after keeping 50 scattered 2 s ranges: 50 clips, each from its own place in the file.
+fn scattered(video: &str) -> Project {
+    let mut p = Project::new("Scattered");
+    p.assets = vec![super::layers::asset("talk", video)];
+    let length = p.assets[0].duration_us;
+    p.timeline.main = (0..50)
+        .map(|k| {
+            // Out of order, so each clip seeks: 37 is coprime with 50.
+            let at = length / 50 * ((k * 37) % 50) + secs(13.0);
+            let mut c = Clip::new(ClipSource::Asset { id: "talk".into() }, at, at + secs(2.0));
+            c.id = format!("kept-{k}");
+            c
+        })
+        .collect();
+    klipolo_model::apply_ops(&p, &[]).expect("a checked project")
 }
