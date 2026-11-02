@@ -827,6 +827,7 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
             "kind": kind.map_or("none", |k| k.key()),
             "durationSec": duration_us.map(s),
         }),
+        ToolCall::ReverseClip { clip, backward } => json!({"clip": clip, "backward": backward}),
         ToolCall::SetFormat {
             format,
             keep_others,

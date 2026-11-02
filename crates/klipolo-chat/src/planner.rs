@@ -595,6 +595,13 @@ fn finish(
                 (true, true) => "Done. The removals are waiting for you to apply them.",
                 (true, false) => "Done.",
                 (false, true) => "Here is what I would remove. Apply it or discard it.",
+                // Only clips being reversed: their copies are being written.
+                (false, false)
+                    if !compiled.jobs.is_empty()
+                        && (compiled.jobs.iter()).all(|j| matches!(j, crate::Job::Reverse { .. })) =>
+                {
+                    crate::compile::REVERSING
+                }
                 // Only work for a runner: a picture being drawn, a subject being tracked.
                 (false, false) if !compiled.jobs.is_empty() => "Working on it.",
                 (false, false) => "Nothing changed.",
@@ -655,6 +662,8 @@ fn done(call: &ToolCall) -> Option<&'static str> {
         } => "The clips are changed.",
         ToolCall::SetClip { .. } => "The clip is changed.",
         ToolCall::SetTransition { .. } => "The transitions are changed.",
+        ToolCall::ReverseClip { backward: true, .. } => crate::compile::REVERSING,
+        ToolCall::ReverseClip { backward: false, .. } => "The clip plays forward again.",
         ToolCall::TrimClip { .. } => "The clip is longer.",
         ToolCall::SetCameraMode { .. } | ToolCall::AdjustCamera { .. } => "The camera is changed.",
         ToolCall::DetachCamera { .. } => "The camera is its own layer now.",
@@ -710,6 +719,7 @@ fn task(tool: &str) -> &'static str {
         "freezeFrame" => "hold that frame",
         "setClip" => "change the clip",
         "setTransition" => "change the transition",
+        "reverseClip" => "reverse the clip",
         "setFormat" => "change the format",
         "setCaptions" => "change the captions",
         "setBackground" => "change the background",

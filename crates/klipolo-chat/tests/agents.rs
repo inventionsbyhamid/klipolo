@@ -577,6 +577,13 @@ fn every_call() -> Vec<(ToolCall, bool)> {
             false,
         ),
         (
+            ToolCall::ReverseClip {
+                clip: "c2".into(),
+                backward: true,
+            },
+            true,
+        ),
+        (
             ToolCall::FindMoments {
                 query: "a question".into(),
                 moments: vec![Moment {

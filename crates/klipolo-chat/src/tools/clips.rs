@@ -1,7 +1,7 @@
 //! The clip tools: a clip's speed, volume, mute and Fit or Fill (`setClip`, the clip card's fields; a song's volume and
 //! mute and a video layer's speed, volume and mute, their own cards' fields), and the transition at a cut
-//! (`setTransition`, Add transition and the transition card). Each is one entry of `TOOLS`; the words they
-//! take are here.
+//! (`setTransition`, Add transition and the transition card), and Reverse (`reverseClip`, the clip menu's). Each is one
+//! entry of `TOOLS`; the words they take are here.
 //!
 //! They take exactly what the cards offer: a speed from `clip_settings::SPEEDS`, a volume from 0 to 2 in hundredths, a
 //! transition from the built-in four, from 0.1 to 5 s long (`transitions::MIN_TRANSITION_US`, `MAX_TRANSITION_US`).
@@ -18,7 +18,7 @@ use klipolo_model::transitions::{MAX_TRANSITION_US, MIN_TRANSITION_US};
 
 use super::args::Args;
 use super::error::{Problem, ToolError};
-use super::schema::{Word, nullable_boolean, nullable_number, nullable_words, string, words};
+use super::schema::{Word, boolean, nullable_boolean, nullable_number, nullable_words, string, words};
 use super::{FORMATS, Tool, ToolCall};
 
 /// What a clip tool names: one clip by its ref from the context (`c2`, not yet resolved), or every clip (`all`). For
@@ -277,6 +277,23 @@ pub(super) const SET_TRANSITION: Tool = Tool {
             after,
             kind,
             duration_us,
+        })
+    },
+};
+
+pub(super) const REVERSE_CLIP: Tool = Tool {
+    name: "reverseClip",
+    description: "Play a clip backward (Klipolo writes a reversed copy first) or forward again.",
+    parameters: || {
+        vec![
+            ("clip", string("The clip's ref, such as c2.")),
+            ("backward", boolean("False plays it forward again.")),
+        ]
+    },
+    read: |a| {
+        Ok(ToolCall::ReverseClip {
+            clip: a.text("clip")?,
+            backward: a.flag("backward")?,
         })
     },
 };

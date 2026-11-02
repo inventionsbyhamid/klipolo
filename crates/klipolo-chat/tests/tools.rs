@@ -198,6 +198,7 @@ fn every_tool_schema_is_strict() {
             "freezeFrame",
             "setClip",
             "setTransition",
+            "reverseClip",
             "setBackground",
             "setFormat",
             "setCaptions",
@@ -728,6 +729,13 @@ fn parses_each_tool_from_spike_shaped_calls() {
                     outline: Some(Paint::Color("#000000".into())),
                     ..StyleChange::default()
                 }),
+            }],
+        ),
+        (
+            "play the second clip backward",
+            vec![ReverseClip {
+                clip: "c2".into(),
+                backward: true,
             }],
         ),
     ];

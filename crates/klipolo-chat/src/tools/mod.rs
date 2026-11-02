@@ -181,6 +181,9 @@ pub enum ToolCall {
         kind: Option<TransitionKind>,
         duration_us: Option<Us>,
     },
+    /// Play the clip `clip` names (a ref from the context, not yet resolved) backward from a reversed copy written first,
+    /// as the clip menu's Reverse does, or forward again (`backward` false).
+    ReverseClip { clip: String, backward: bool },
     /// Set what shows behind the video where it doesn't fill the frame (`kind`, its colours), and the inset round it
     /// (`padding`, a share of the frame's shorter side); None leaves each as the project has it, and at least one is
     /// set. The background card's fields, but for a picture.
@@ -407,6 +410,7 @@ impl ToolCall {
             ToolCall::FreezeFrame { .. } => "freezeFrame",
             ToolCall::SetClip { .. } => "setClip",
             ToolCall::SetTransition { .. } => "setTransition",
+            ToolCall::ReverseClip { .. } => "reverseClip",
             ToolCall::SetBackground { .. } => "setBackground",
             ToolCall::SetFormat { .. } => "setFormat",
             ToolCall::SetCaptions { .. } => "setCaptions",
@@ -470,6 +474,7 @@ impl ToolCall {
             | ToolCall::TrimClip { .. }
             | ToolCall::SplitAt { .. }
             | ToolCall::FindMoments { .. }
+            | ToolCall::ReverseClip { .. }
             | ToolCall::AddSound { .. } => true,
             ToolCall::SetClip { clip: target, .. }
             | ToolCall::SetTransition { after: target, .. } => *target != ClipRef::All,
@@ -716,6 +721,7 @@ const TOOLS: &[Tool] = &[
     },
     clips::SET_CLIP,
     clips::SET_TRANSITION,
+    clips::REVERSE_CLIP,
     background::SET_BACKGROUND,
     Tool {
         name: "setFormat",
