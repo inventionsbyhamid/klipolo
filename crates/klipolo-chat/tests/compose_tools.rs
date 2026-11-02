@@ -1656,6 +1656,8 @@ fn set_motion_on_a_recordings_clip_keys_its_camera_bubble() {
         "presets": null});
     let out = run(&p, &[("setMotion", turns)]);
     assert!(refused_to_model(&out, 0).contains("x, y and scale"));
+    // A clip with no camera bubble: its scale keys push in on its footage (`tests/push_in.rs`), and with no push over
+    // it, no keys take nothing away.
     let out = run(
         &project(),
         &[(
@@ -1663,7 +1665,9 @@ fn set_motion_on_a_recordings_clip_keys_its_camera_bubble() {
             json!({"layer": "c1", "keys": [], "presets": null}),
         )],
     );
-    assert!(refused_to_model(&out, 0).contains("has no camera"));
+    assert_eq!(out.refusals, vec![]);
+    assert_eq!(out.additions, None);
+    assert_eq!(out.proposal, None);
 }
 
 fn whoosh() -> Asset {

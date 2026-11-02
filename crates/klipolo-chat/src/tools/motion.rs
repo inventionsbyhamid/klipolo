@@ -399,7 +399,8 @@ pub(super) fn layer_field() -> (&'static str, Value) {
 pub(super) const SET_MOTION: Tool = Tool {
     name: "setMotion",
     description: "Keyframes, or enter, exit and loop presets, for a layer; a recording's clip (c1) keys its camera \
-                  bubble (x, y, scale). Null keeps.",
+                  bubble (x, y, scale); on a clip without one, scale keys (1, then the size) push in slowly on \
+                  its footage, toward x, y (0 to 1). Null keeps.",
     parameters: || {
         vec![
             layer_field(),

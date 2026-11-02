@@ -70,6 +70,11 @@ describe('undo labels as message ids', () => {
     );
   });
 
+  it("words chat's slow push-in and a clip played forward again", () => {
+    expect(historyAction('undo', 'chat.setMotion', { layer: 'zoom' })).toBe('Undo zoom in slowly');
+    expect(historyAction('undo', 'chat.reverseClip', { clip: 'c2' })).toBe('Undo play forward');
+  });
+
   it("words chat's clip and transition changes as the cards' own entries, with a speed's note", () => {
     const clip = (change: string) => historyAction('undo', 'chat.setClip', { clip: 'c2', change, noun: 'clip' });
     expect(['speed', 'volume', 'mute', 'unmute', 'fit', 'fill', 'several'].map(clip)).toEqual([
