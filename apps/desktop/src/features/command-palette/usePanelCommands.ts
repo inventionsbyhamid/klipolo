@@ -1,19 +1,22 @@
 import { useLingui } from '@lingui/react/macro';
 import { useMemo } from 'react';
 import { useChatPanel } from '../../state/chatPanel';
-import { useLibraryPanel } from '../../state/libraryPanel';
+import { cardHasColumn, useLibraryPanel } from '../../state/libraryPanel';
+import { useSelection } from '../../state/selection';
 import { useUi } from '../../state/ui';
 import { searchWords, type Command } from './command';
 
 /**
  * The panels' commands: Control Command I folds chat to its strip or opens it with the cursor in its composer, as
- * Command K does; Command B (or Control Command S) folds the library to its rail or opens it. Each label says what a
- * press does.
+ * Command K does; Command B (or Control Command S) folds the library to its rail or opens it. While the inspector card
+ * has the column, it folds the column and the card steps aside. Each label says what a press does.
  */
 export function usePanelCommands(): Command[] {
   const { t } = useLingui();
   const chatFolded = useChatPanel((s) => s.collapsed);
-  const libraryFolded = useLibraryPanel((s) => s.collapsed);
+  const aside = useLibraryPanel((s) => s.aside);
+  const carded = useSelection((s) => cardHasColumn(aside, s));
+  const libraryFolded = useLibraryPanel((s) => s.collapsed) && !carded;
   return useMemo(
     () => [
       {
