@@ -90,7 +90,7 @@ and ships none.
 
 | Model | What it does in Klipolo | Where it's called |
 | --- | --- | --- |
-| Muse Spark 1.3 (`muse-spark-1.3`) | Chat: reads the project, its transcript and scene log, and edits through strict function tools, up to 8 model calls a message. Klipolo checks every call before anything changes. | `crates/klipolo-analysis/src/providers/meta_chat.rs`, with the tools and checks in `crates/klipolo-chat` |
+| Muse Spark 1.3 (`muse-spark-1.3`) | Chat: reads the project, its transcript and scene log, and edits through strict function tools, up to 10 model calls a message. Klipolo checks every call before anything changes. | `crates/klipolo-analysis/src/providers/meta_chat.rs`, with the tools and checks in `crates/klipolo-chat` |
 | Muse Spark 1.3 | Scene log: watches a 360p copy of each imported clip, with its sound, and logs shots, actions, reactions, text on screen and topic changes, with times. | `crates/klipolo-analysis/src/providers/meta.rs` |
 | Muse Spark 1.3 | Who is speaking: watches a few seconds of a clip, with its sound, and the people SAM 3.1 found, and says whose voice it hears. | `crates/klipolo-analysis/src/providers/meta_voices.rs` |
 | Muse Spark 1.3 | The MCP demo agent: edits the open project through Klipolo's MCP tools. | `scripts/mcp-demo-agent/agent.py` |
