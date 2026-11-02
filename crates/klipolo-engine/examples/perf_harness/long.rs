@@ -441,6 +441,17 @@ pub fn run(args: &[String]) {
     // Edits through the document, each followed by the engine's revision.
     let mid = main_us / 2;
     let clip = |k: usize| project.timeline.main[k].id.clone();
+    // A dip over the middle half of clip 250, whatever its length.
+    let dip = {
+        let c = &project.timeline.main[250];
+        let len = (c.source_out_us - c.source_in_us) as f64 / 1e6;
+        keys(&[
+            (0.0, 1.0),
+            (len * 0.25, 0.3),
+            (len * 0.65, 0.3),
+            (len * 0.9, 1.0),
+        ])
+    };
     let mut motion = project.timeline.tracks[2].items[0].layout.clone();
     if let Some(keys) = motion.motion.as_mut().and_then(|m| m.keys.as_mut()) {
         keys.opacity = (0..20)
@@ -501,7 +512,7 @@ pub fn run(args: &[String]) {
                 vec![Op::UpdateClip {
                     id: clip(250),
                     patch: ClipPatch {
-                        volume_keys: Some(keys(&[(0.0, 1.0), (2.0, 0.3), (6.0, 0.3), (8.0, 1.0)])),
+                        volume_keys: Some(dip),
                         ..ClipPatch::default()
                     },
                 }],
