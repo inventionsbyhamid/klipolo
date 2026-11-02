@@ -143,6 +143,8 @@ function BarButton({
     <Tooltip label={tip} shortcut={enabled ? shortcut : undefined} side="top">
       <button
         type="button"
+        // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+        tabIndex={0}
         className="btn btn-ghost btn-sm"
         // Off but focusable, so its tooltip says why.
         aria-disabled={!enabled || undefined}
@@ -223,6 +225,7 @@ export function PlayerBar() {
           <Tooltip label={playing ? 'Pause' : 'Play'} shortcut="Space" side="top">
             <button
               type="button"
+              tabIndex={0}
               className="play"
               aria-label={playing ? 'Pause' : 'Play'}
               disabled={!ready}
@@ -282,6 +285,7 @@ export function PlayerBar() {
         <Tooltip label="Fit the whole video" shortcut="⇧Z" side="top">
           <button
             type="button"
+            tabIndex={0}
             className="btn btn-ghost btn-sm"
             disabled={!command('zoom-fit')?.enabled}
             onClick={() => run('zoom-fit')}

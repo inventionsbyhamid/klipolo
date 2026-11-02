@@ -109,6 +109,8 @@ export const KeyDiamonds = memo(function KeyDiamonds({
         <button
           key={us}
           type="button"
+          // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+          tabIndex={0}
           className="tl-key"
           data-picked={isPicked(picked, id, us) || undefined}
           style={{ left: at(us) }}
