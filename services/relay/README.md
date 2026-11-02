@@ -8,7 +8,7 @@ The relay lets people with an access code use Meta's models in Klipolo without t
 | --- | --- |
 | `GET /healthz` | `{"ok": true}` |
 | `POST /v1/devices` | Registers a device, with or without an access code. Returns a bearer token. A code at its device limit takes no new devices (402 `budget`, "Klipolo's shared AI credit is used up for now."), but its own devices may register again. |
-| `GET /v1/devices/me` | Whether relay AI is on, the budget and the spend. |
+| `GET /v1/devices/me` | Whether relay AI is on, the budget and the spend. The credit left is the budget less the spend: when the device's code has a cap with less left than the device, the budget is cut to match. |
 | `POST /meta/v1/responses`, `POST /meta/v1/asr/transcribe`, `POST /meta/v1/images/generations`, `POST /meta/v1/files`, `GET` and `DELETE /meta/v1/files/{id}` | Forwarded to Meta for devices with an active code, and charged against the caps. |
 | `POST /meta/v1/sam/videos` | A video for SAM, sent as its raw bytes (at most 64 MB, one a device at a time): the relay decodes it with ffmpeg and writes its own copy (one video track, 2 frames a second, its long side at most 640, no sound, at most 10 minutes), uploads that to Meta and answers with Meta's file. SAM takes only videos made this way, and the relay reserves their frames. ffmpeg reads only MOV/MP4 from a file, on two threads, pictures up to 4K, under a 1.5 GB memory limit at a lower priority; two copies are made at once, a third waits at most 10 s (then 429), and each has 60 s. |
 | `POST /v1/align` | Word timing for transcript turns: multipart `audio` (16 kHz mono 16-bit WAV, at most 10 minutes) and `turns` (JSON). Open to every registered device, 120 minutes a day. |
@@ -179,7 +179,7 @@ docker exec $C python -c "import sqlite3; sqlite3.connect('/data/relay.db').back
 docker cp $C:/data/backup.db relay-backup.db && docker exec $C rm /data/backup.db
 ```
 
-The relay moves the database to its current schema when it opens it, in one transaction. Schema 3 adds the per-code limits: two columns on codes (no limits), the code on each ledger row (filled in for earlier rows from their device's code) and the table of devices registered with each code (filled in from the devices on each code). It only adds, so an earlier relay still runs on it; charges and registrations it makes meanwhile don't count toward a code's limits.
+The relay moves the database to its current schema when it opens it, in one transaction. Schema 3 adds the per-code limits: two columns on codes (no limits), the code on each ledger row (filled in for earlier rows from their device's code) and the table of devices registered with each code (filled in from the devices on each code). It only adds, so an earlier relay still runs on it (a rollback, or the old container during a deploy). The charges and registrations an earlier relay writes lack their code; the next time this relay opens the database it fills them in the same way, and only takes the write lock when there is something to fill in.
 
 ## Limits to know
 
