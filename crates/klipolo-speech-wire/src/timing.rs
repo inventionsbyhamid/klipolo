@@ -183,6 +183,24 @@ pub fn fillers(language: &str) -> &'static [&'static str] {
         "es" => &["eh", "ehm", "mmm", "hm"],
         "it" => &["ehm", "eh", "uhm", "mmm", "hm"],
         "pt" => &["ahn", "hum", "hm"],
+        // Hindi as Voice Transcribe writes it (in Devanagari, English hums and all) and as Hinglish is typed. Never
+        // "हम" ("we") or "अ" alone.
+        "hi" => &[
+            "um",
+            "umm",
+            "uh",
+            "uhh",
+            "uhm",
+            "hm",
+            "hmm",
+            "mm",
+            "mhm",
+            "उम",
+            "उम्म",
+            "अं",
+            "अम्म",
+            "हम्म",
+        ],
         _ => &["hm", "hmm", "mm", "mhm"],
     }
 }

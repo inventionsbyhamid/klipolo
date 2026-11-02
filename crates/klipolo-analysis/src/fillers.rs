@@ -4,14 +4,18 @@
 use klipolo_speech_wire::timing::fillers;
 
 /// Whether `text` (a word as heard, in any case and with its punctuation: "Um,") is one of `language`'s filler sounds.
-/// Its letters alone are compared, lowercased, so "Uh-huh" ("uhhuh") is a word.
+/// Its letters alone are compared, lowercased, so "Uh-huh" ("uhhuh") is a word. A virama (the sign that joins
+/// Devanagari's "म्म") counts as a letter, so "हम्म" (a hum) is never "हम" ("we").
 pub fn is_filler(language: &str, text: &str) -> bool {
-    let bare: String = text
-        .chars()
-        .filter(|c| c.is_alphabetic())
+    let heard = bare(text);
+    !heard.is_empty() && fillers(language).iter().any(|f| bare(f) == heard)
+}
+
+fn bare(text: &str) -> String {
+    text.chars()
+        .filter(|&c| c.is_alphabetic() || c == '\u{94D}')
         .flat_map(char::to_lowercase)
-        .collect();
-    !bare.is_empty() && fillers(language).contains(&bare.as_str())
+        .collect()
 }
 
 #[cfg(test)]
@@ -43,5 +47,17 @@ mod tests {
         assert!(!is_filler("de", "er"));
         assert!(is_filler("de", "Äh,"));
         assert!(is_filler("en-US", "um"));
+    }
+
+    #[test]
+    fn hindi_hums_are_fillers_and_its_words_are_not() {
+        for w in ["हम्म", "उम्म,", "अं...", "Hmm", "um"] {
+            assert!(is_filler("hi", w), "{w}");
+        }
+        for w in ["हम", "अ", "उन", "और", "है"] {
+            assert!(!is_filler("hi", w), "{w}");
+        }
+        // English hums are no filler in a language whose list doesn't hold them ("um" is Portuguese for "a").
+        assert!(!is_filler("pt", "um"));
     }
 }
