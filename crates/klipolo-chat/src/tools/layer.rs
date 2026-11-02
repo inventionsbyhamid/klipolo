@@ -7,13 +7,25 @@
 
 use klipolo_model::crop::Crop;
 use klipolo_model::layout::BoxN;
-use klipolo_model::motion::Blend;
+use klipolo_model::motion::{Blend, Ease, Key};
 use klipolo_model::time::{Us, secs_to_us};
 
+use super::args::Args;
 use super::error::Problem;
-use super::motion::layer_field;
+use super::error::ToolError;
+use super::motion::{layer_field, nullable_each, nullable_list};
+use super::schema::{nullable_string, object, seconds};
 use super::sets::{pairs, schema};
 use super::{Tool, ToolCall};
+use serde_json::json;
+
+/// One volume key as written: its time from the start, its level within `volume::LIMITS`, and its ease.
+fn level(a: &mut Args) -> Result<(Us, f64, Option<Ease>), ToolError> {
+    let at = a.time("atSec")?;
+    let value = a.number_within("value", klipolo_model::volume::LIMITS)?;
+    let ease = a.nullable_ease("ease")?;
+    Ok((at, value, ease))
+}
 
 /// Up or down the stack: onto the track above or below.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -77,6 +89,8 @@ pub struct LayerChange {
     pub after: Option<String>,
     /// Split a layer in two at this timeline time, as the context shows it.
     pub split_us: Option<Us>,
+    /// A clip's, a song's or a sound's level over time, keys from its start (`volume`): `Some(vec![])` takes them away.
+    pub volume_keys: Option<Vec<Key>>,
 }
 
 pub(super) const SET_LAYER: Tool = Tool {
@@ -85,12 +99,37 @@ pub(super) const SET_LAYER: Tool = Tool {
                   rotation, opacity, corners (0 to 0.5), blend (normal, multiply, screen, add, overlay), order (forward, \
                   back), start (timeline s), length (s), split (timeline s), remove; video layers: crop (\"l t r b\" or \
                   none), fill; clips: crop, separate (its sound), after (a clip ref, or start); clips and music: fadeIn, fadeOut (s); music: duck.",
-    parameters: || vec![layer_field(), ("set", schema("Keys to set."))],
+    parameters: || {
+        vec![
+            layer_field(),
+            ("set", schema("Keys to set.")),
+            (
+                "volumeKeys",
+                nullable_list(
+                    object(vec![
+                        ("atSec", seconds("From its start.")),
+                        (
+                            "value",
+                            json!({"type": "number", "description": "0 to 2; 1 as recorded."}),
+                        ),
+                        ("ease", nullable_string("Into it.")),
+                    ]),
+                    "A clip's, music's or sound's level over time; [] removes them.",
+                ),
+            ),
+        ]
+    },
     read: |a| {
         let layer = a.layer_ref("layer")?;
         let mut change = LayerChange::default();
         let set = pairs(a, "set", &LAYER_KEYS)?;
-        if set.is_empty() {
+        change.volume_keys = (nullable_each(a, "volumeKeys", level)?).map(|levels| {
+            levels
+                .into_iter()
+                .map(|(t_us, v, ease)| Key { t_us, v, ease })
+                .collect()
+        });
+        if set.is_empty() && change.volume_keys.is_none() {
             return Err(a.error("set", Problem::Empty));
         }
         for p in set {

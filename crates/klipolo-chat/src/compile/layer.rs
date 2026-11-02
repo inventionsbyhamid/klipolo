@@ -12,13 +12,15 @@ use klipolo_model::coded::ErrorParam;
 use klipolo_model::ids::Id;
 use klipolo_model::layout::anchor_for_rect;
 use klipolo_model::media::music::{MUSIC_DUCK_DB, runs};
-use klipolo_model::motion::Blend;
+use klipolo_model::motion::{Blend, Key, MAX_KEYS};
 use klipolo_model::ops::{ClipPatch, Edge, ItemPatch, Op};
+use klipolo_model::time::Us;
 use klipolo_model::timeline::{ItemContent, TrackKind};
 
 use super::animate::noun;
 use super::motion::drawn;
 use super::{Compiler, Edit, Refused, label, to_model};
+use crate::context::secs;
 use crate::tools::{LayerChange, Order};
 
 /// `setLayer` on the layer `id` of `work`, named `said`: its layout and a video layer's crop and framing in one
@@ -51,6 +53,12 @@ pub(super) fn set_layer(
     if change.separate {
         return Err(to_model(format!(
             "setLayer: separate is for imported clips (c1), and {said} is a layer. Leave it out."
+        )));
+    }
+    if change.volume_keys.is_some() {
+        return Err(to_model(format!(
+            "setLayer: volumeKeys are for clips, music and sounds (c1, m1, s1), and {said} is a layer that makes no \
+             sound of its own. Set a video layer's volume with setClip."
         )));
     }
     if change.after.is_some() {
@@ -271,14 +279,19 @@ pub(super) fn set_clip_fades(
         .crop
         .filter(|c| (!c.is_none()).then_some(*c) != clip.crop);
     let fades = (fade_in, fade_out) != (clip.fade_in_us, clip.fade_out_us);
+    let volume_keys = (change.volume_keys.as_deref())
+        .map(|keys| levels(keys, length))
+        .transpose()?
+        .filter(|keys| *keys != clip.volume_keys);
     let mut ops = Vec::new();
-    if fades || crop.is_some() {
+    if fades || crop.is_some() || volume_keys.is_some() {
         ops.push(Op::UpdateClip {
             id: id.clone(),
             patch: ClipPatch {
                 fade_in_us: change.fade_in_us.filter(|_| fades),
                 fade_out_us: change.fade_out_us.filter(|_| fades),
                 crop,
+                volume_keys,
                 ..ClipPatch::default()
             },
         });
@@ -365,6 +378,11 @@ pub(super) fn set_song_sound(
         });
     }
     let last = pieces.len() - 1;
+    // The song's keys run from its first piece's start; each piece keeps its own part of the line.
+    let song_start = pieces[0].start_us;
+    let song_keys = (change.volume_keys.as_deref())
+        .map(|keys| levels(keys, pieces[last].end_us().saturating_sub(song_start)))
+        .transpose()?;
     let mut ops = Vec::new();
     for (k, piece) in pieces.iter().enumerate() {
         let mut content = piece.content.clone();
@@ -372,11 +390,16 @@ pub(super) fn set_song_sound(
             fade_in_us,
             fade_out_us,
             duck,
+            volume_keys,
             ..
         } = &mut content
         else {
             continue;
         };
+        if let Some(keys) = &song_keys {
+            let from = piece.start_us.saturating_sub(song_start);
+            *volume_keys = klipolo_model::volume::piece(keys, from, piece.duration_us);
+        }
         if let (0, Some(f)) = (k, change.fade_in_us) {
             *fade_in_us = f.min(piece.duration_us);
         }
@@ -411,6 +434,7 @@ pub(crate) enum Target {
     Layer(Id, String),
     Song(String, String),
     Clip(Id, String),
+    Sound(Id, String),
 }
 
 /// `setLayer`'s edit on `target` of `work`, `change` as the call gave it.
@@ -424,5 +448,106 @@ pub(super) fn again(
         Target::Layer(id, said) => set_layer(c, work, (id, said), change),
         Target::Song(first, said) => set_song_sound(work, (first, said), change),
         Target::Clip(id, said) => set_clip_fades(c, work, (id, said), change),
+        Target::Sound(id, said) => set_sound(work, (id, said), change),
     }
+}
+
+/// `keys` (volume keys from the start of a clip or layer `len_us` long) in time order, or why they can't go there, for
+/// the model: a key past the end, two at one time, or more than `motion::MAX_KEYS`.
+fn levels(keys: &[Key], len_us: Us) -> Result<Vec<Key>, Refused> {
+    for (i, k) in keys.iter().enumerate() {
+        if k.t_us > len_us {
+            return Err(to_model(format!(
+                "setLayer: volumeKeys[{i}].atSec {} is past the end; it lasts {} s, so use 0 to {}.",
+                secs(k.t_us),
+                secs(len_us),
+                secs(len_us)
+            )));
+        }
+    }
+    let mut sorted = keys.to_vec();
+    sorted.sort_by_key(|k| k.t_us);
+    if let Some(w) = sorted.windows(2).find(|w| w[0].t_us == w[1].t_us) {
+        return Err(to_model(format!(
+            "setLayer: two volumeKeys are at {} s; give each time one level.",
+            secs(w[0].t_us)
+        )));
+    }
+    if sorted.len() > MAX_KEYS {
+        return Err(to_model(format!(
+            "setLayer: volumeKeys holds {} keys; a line has at most {MAX_KEYS}.",
+            sorted.len()
+        )));
+    }
+    Ok(sorted)
+}
+
+/// `setLayer` on the sound layer `id` (a sound effect, or a recording's separated sound), named `said`: its level over
+/// time, its fades, or taking it away, as its card does.
+pub(super) fn set_sound(
+    work: &Project,
+    (id, said): (&Id, &str),
+    change: &LayerChange,
+) -> Result<Edit, Refused> {
+    if let Some(key) = beyond_sound(change, true).or((change.duck.is_some()).then_some("duck")) {
+        return Err(to_model(format!(
+            "setLayer: {said} is a sound, which takes only volumeKeys, fadeIn, fadeOut and remove here, not {key}."
+        )));
+    }
+    let Some(item) = (work.timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .find(|i| &i.id == id)
+    else {
+        return Err(to_model(format!("setLayer: {said} is gone.")));
+    };
+    if change.remove {
+        if *change
+            != (LayerChange {
+                remove: true,
+                ..LayerChange::default()
+            })
+        {
+            return Err(to_model(
+                "setLayer: remove takes the sound away, so it goes alone: leave the other keys out.".to_owned(),
+            ));
+        }
+        return Ok(Edit {
+            ops: vec![Op::RemoveItem { id: id.clone() }],
+            label: label("removeLayer", vec![("layer", ErrorParam::from("sound"))]),
+        });
+    }
+    let mut content = item.content.clone();
+    let ItemContent::Audio {
+        fade_in_us,
+        fade_out_us,
+        volume_keys,
+        ..
+    } = &mut content
+    else {
+        return Err(to_model(format!("setLayer: {said} is not a sound.")));
+    };
+    if let Some(keys) = &change.volume_keys {
+        *volume_keys = levels(keys, item.duration_us)?;
+    }
+    if let Some(f) = change.fade_in_us {
+        *fade_in_us = f.min(item.duration_us);
+    }
+    if let Some(f) = change.fade_out_us {
+        *fade_out_us = f.min(item.duration_us.saturating_sub(*fade_in_us));
+    }
+    let ops = if content == item.content {
+        Vec::new()
+    } else {
+        vec![Op::UpdateItem {
+            id: id.clone(),
+            patch: ItemPatch {
+                content: Some(content),
+                ..ItemPatch::default()
+            },
+        }]
+    };
+    Ok(Edit {
+        ops,
+        label: label("setLayer", vec![("layer", ErrorParam::from("sound"))]),
+    })
 }

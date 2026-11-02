@@ -369,7 +369,7 @@ impl Args {
 }
 
 /// A nullable list of objects, each read by `read`: None when it is null or left out.
-fn nullable_each<T>(
+pub(super) fn nullable_each<T>(
     a: &mut Args,
     key: &str,
     read: fn(&mut Args) -> Result<T, ToolError>,
@@ -381,7 +381,7 @@ fn nullable_each<T>(
     a.each(key, read).map(Some)
 }
 
-fn nullable_list(items: Value, description: &str) -> Value {
+pub(super) fn nullable_list(items: Value, description: &str) -> Value {
     let mut schema = list(items, description);
     schema["type"] = json!(["array", "null"]);
     schema

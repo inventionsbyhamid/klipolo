@@ -286,6 +286,7 @@ fn every_tool_schema_is_strict() {
             "animate.sound",
             "setMotion.keys",
             "setMotion.presets",
+            "setLayer.volumeKeys",
             "setCameraMode.clips",
             "setCameraMode.format",
             "adjustCamera.border",
@@ -1262,7 +1263,11 @@ fn every_tool_in_the_schema_has_a_reader_that_reads_it() {
                 args["keys"][0]["ease"] = json!("out");
                 args["presets"] = json!("enter fade");
             }
-            "animateText" | "setLayer" => args["set"] = json!([{"key": "opacity", "value": 0.5}]),
+            "animateText" => args["set"] = json!([{"key": "opacity", "value": 0.5}]),
+            "setLayer" => {
+                args["set"] = json!([{"key": "opacity", "value": 0.5}]);
+                args["volumeKeys"] = json!([{"atSec": 0, "value": 1, "ease": "out"}]);
+            }
             "styleText" => args["set"] = json!([{"key": "bold", "value": true}]),
             _ => {}
         }

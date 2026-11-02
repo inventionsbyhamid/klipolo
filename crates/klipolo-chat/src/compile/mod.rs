@@ -1165,6 +1165,11 @@ impl Compiler<'_> {
                 let edit = layer::set_song_sound(work, (first, r), change);
                 return Some(edit.map(|edit| Done::again(edit, Again::Layer(target))));
             }
+            if let Some(id) = refs.sound(r) {
+                let target = layer::Target::Sound(id.to_owned(), r.clone());
+                let edit = layer::set_sound(work, (&id.to_owned(), r), change);
+                return Some(edit.map(|edit| Done::again(edit, Again::Layer(target))));
+            }
         }
         let id = match self.animated_layer((tool, "change"), calls, layer, i, added) {
             Ok(Added::Item(id)) => id,

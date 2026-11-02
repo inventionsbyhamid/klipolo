@@ -985,6 +985,11 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
         ToolCall::SetLayer { layer, change } => json!({
             "layer": layer_word(layer),
             "set": layer_said(change),
+            "volumeKeys": change.volume_keys.as_ref().map(|keys| {
+                (keys.iter())
+                    .map(|k| json!({"atSec": s(k.t_us), "value": k.v, "ease": k.ease.map(|e| e.name())}))
+                    .collect::<Vec<_>>()
+            }),
         }),
         ToolCall::StyleText { layer, change } => json!({
             "layer": layer_word(layer),

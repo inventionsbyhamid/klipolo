@@ -1665,3 +1665,147 @@ fn set_motion_on_a_recordings_clip_keys_its_camera_bubble() {
     );
     assert!(refused_to_model(&out, 0).contains("has no camera"));
 }
+
+fn whoosh() -> Asset {
+    asset("whoosh", "audio", "whoosh.wav", 2.0, (0, 0), true)
+}
+
+/// `project()` with the Whoosh sound at 4.0 s.
+fn with_sound() -> Project {
+    let mut p = project();
+    p.assets.push(whoosh());
+    let ops = klipolo_model::media::sound::add_sound_ops(&p, &whoosh(), secs(4.0)).unwrap();
+    apply_ops(&p, &ops).unwrap()
+}
+
+fn level(t: f64, v: f64, ease: Option<Ease>) -> Key {
+    key(t, v, ease)
+}
+
+fn volume_keys(layer: &str, keys: Value) -> Value {
+    json!({"layer": layer, "set": [], "volumeKeys": keys})
+}
+
+/// setLayer's volumeKeys: a level from 0 to 2 at times from the start, with an ease, refused with the range when a
+/// level is out of it; an empty list takes them away.
+#[test]
+fn volume_keys_are_read_with_their_range() {
+    let ToolCall::SetLayer { change, .. } = call(
+        "setLayer",
+        volume_keys(
+            "m1",
+            json!([{"atSec": 0, "value": 0.5, "ease": null}, {"atSec": 10, "value": 0.15, "ease": "out"}]),
+        ),
+    ) else {
+        panic!()
+    };
+    assert_eq!(
+        change.volume_keys,
+        Some(vec![
+            level(0.0, 0.5, None),
+            level(10.0, 0.15, Some(Ease::Power2Out))
+        ])
+    );
+    assert_eq!(
+        refused(
+            "setLayer",
+            volume_keys("m1", json!([{"atSec": 0, "value": 3, "ease": null}]))
+        ),
+        "setLayer: volumeKeys[0].value must be between 0 and 2, not 3."
+    );
+    assert_eq!(
+        refused(
+            "setLayer",
+            json!({"layer": "m1", "set": [], "volumeKeys": null})
+        ),
+        "setLayer: set must not be empty."
+    );
+}
+
+/// "Duck the music between 0:10 and 0:20": the song's keys go on its pieces, from its start; a clip's on the clip, a
+/// sound's on its layer; [] takes them away; a key past the end, or keys on a picture, go back to the model.
+#[test]
+fn volume_keys_go_on_music_clips_and_sounds() {
+    let p = with_sound();
+    let duck = json!([
+        {"atSec": 9.5, "value": 0.3, "ease": null}, {"atSec": 10, "value": 0.1, "ease": "inOut"},
+        {"atSec": 20, "value": 0.1, "ease": null}, {"atSec": 20.5, "value": 0.3, "ease": "inOut"}
+    ]);
+    let out = run(&p, &[("setLayer", volume_keys("m1", duck.clone()))]);
+    let after = applied(&p, &out);
+    let music = layer(&after, klipolo_model::media::music::is_music);
+    assert_eq!(music.content.volume_keys().len(), 4);
+    assert_eq!(
+        music.content.volume_keys()[1],
+        level(10.0, 0.1, Some(Ease::Power2InOut))
+    );
+    let cleared = applied(
+        &after,
+        &run(&after, &[("setLayer", volume_keys("m1", json!([])))]),
+    );
+    assert!(
+        layer(&cleared, klipolo_model::media::music::is_music)
+            .content
+            .volume_keys()
+            .is_empty()
+    );
+    let clip = applied(&p, &run(&p, &[("setLayer", volume_keys("c1", duck))]));
+    assert_eq!(clip.timeline.main[0].volume_keys.len(), 4);
+    let fade =
+        json!([{"atSec": 0, "value": 1, "ease": null}, {"atSec": 2, "value": 0, "ease": "in"}]);
+    let sound = applied(&p, &run(&p, &[("setLayer", volume_keys("s1", fade))]));
+    let whoosh = layer(
+        &sound,
+        |i| matches!(&i.content, ItemContent::Audio { asset_id, .. } if asset_id == "whoosh"),
+    );
+    assert_eq!(whoosh.content.volume_keys().len(), 2);
+    let late = json!([{"atSec": 40, "value": 1, "ease": null}]);
+    let out = run(&p, &[("setLayer", volume_keys("m1", late))]);
+    assert!(refused_to_model(&out, 0).contains("volumeKeys[0].atSec 40.0 is past"));
+    let out = run(&p, &[("setLayer", volume_keys("i1", json!([])))]);
+    assert!(refused_to_model(&out, 0).contains("volumeKeys are for clips, music and sounds"));
+}
+
+/// The context names sound effects (`s1`) and says when a clip, a song or a sound has volume keys.
+#[test]
+fn the_context_names_sounds_and_says_volume_keys() {
+    let p = with_sound();
+    let keyed = json!([{"atSec": 0, "value": 1, "ease": null}, {"atSec": 1, "value": 0.5, "ease": null},
+        {"atSec": 2, "value": 1, "ease": null}]);
+    let out = run(
+        &p,
+        &[
+            ("setLayer", volume_keys("m1", keyed.clone())),
+            ("setLayer", volume_keys("c1", keyed.clone())),
+            (
+                "setLayer",
+                volume_keys(
+                    "s1",
+                    json!([{"atSec": 0, "value": 1, "ease": null}, {"atSec": 1, "value": 0, "ease": null}]),
+                ),
+            ),
+        ],
+    );
+    let after = applied(&p, &out);
+    let ctx = klipolo_chat::build_context(
+        &after,
+        &Speech::default(),
+        &Default::default(),
+        &Default::default(),
+        &View::default(),
+        &Library::default(),
+    );
+    let text = &ctx.text;
+    assert!(
+        text.contains("c1 0.0-30.0 talk.mov (volume keyed, 3 keys)"),
+        "{text}"
+    );
+    assert!(
+        text.contains("m1 0.0-30.0 lofi.mp3 (music, volume keyed, 3 keys)"),
+        "{text}"
+    );
+    assert!(
+        text.contains("s1 4.0-6.0 whoosh.wav (sound, volume keyed, 2 keys)"),
+        "{text}"
+    );
+}

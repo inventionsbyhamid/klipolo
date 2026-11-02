@@ -14,7 +14,7 @@
 //! short recipe the model adapts to what was asked, never a fixed macro; the layer refs and `last`; when a preset is
 //! enough (`animate`) and when to compose keys, words by unit, a card's fields or an effect; the catalogues those tools
 //! name, kept out of their schemas: the motion presets, the effects with their settings and a clip's looks (a test holds
-//! them to `Catalog::builtin`), the bundled fonts; that volume has no keys; `cannotDo` when nothing fits); and how to
+//! them to `Catalog::builtin`), the bundled fonts; volume keys for a stretch; `cannotDo` when nothing fits); and how to
 //! reply (one or two short plain sentences, no markdown, no em or en dashes).
 //! What a tool's own schema says (a null time is the playhead, or the start for music, a title is the person's words, a
 //! plain title goes over the video with addText and only a title card asked for has Muse Image draw its background)
@@ -103,7 +103,9 @@ and styleText for a card's fields, setEffects for an effect.\n\
 ",
     catalogues!(),
     "\
-- Volume has no keys: to lower music while someone talks, setLayer duck; fades are fadeIn and fadeOut.\n\
+- Volume over time: setLayer volumeKeys on a clip, music (m1) or a sound (s1), levels 0 to 2 from its start (1 as \
+recorded), for a stretch such as \"lower the music from 0:10 to 0:20\" or while one person talks; duck lowers music \
+whenever anyone speaks.\n\
 - If no tool can do it, call cannotDo with the reason. A question about the project needs no tool: just answer it.\n\
 \n\
 Reply in one or two short, plain, friendly sentences. No markdown. Never use em dashes or en dashes."

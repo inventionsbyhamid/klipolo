@@ -1122,11 +1122,45 @@
               "type": "object"
             },
             "type": "array"
+          },
+          "volumeKeys": {
+            "description": "A clip's, music's or sound's level over time; [] removes them.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "atSec": {
+                  "description": "From its start.",
+                  "type": "number"
+                },
+                "ease": {
+                  "description": "Into it.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "value": {
+                  "description": "0 to 2; 1 as recorded.",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "atSec",
+                "value",
+                "ease"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           }
         },
         "required": [
           "layer",
-          "set"
+          "set",
+          "volumeKeys"
         ],
         "type": "object"
       },
