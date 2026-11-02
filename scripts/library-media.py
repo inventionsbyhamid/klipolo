@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Makes the bundled pack's sounds and pictures that come from others (scripts/library-sources.json) from their
-downloads, and records each file's SHA-256 there. scripts/gen-library.py then lists them with the pack's own items.
+downloads. Written into assets/library, each file's SHA-256 and its download's are recorded in the table, which
+scripts/gen-library.py then checks; written anywhere else (--out), the table is left as it is, and a download that
+isn't the one the table records is named.
 
 Each sound: decoded to 48 kHz mono, cut as the table says (start and length, in seconds), high-passed at 20 Hz with
 its DC removed, its quiet start and end trimmed, faded in and out (raised cosine) so it starts and ends at silence,
 and set to the same loudness as the others: its loudest 400 ms at -17 LUFS (BS.1770 K-weighting), its peak no higher
-than -3.5 dBFS and no lower than -9.5 dBFS, and its loudest 20 ms no louder than -9.5 dBFS. Written as 16-bit mono WAV, under 3 s.
+than -3.5 dBFS and no lower than -9.5 dBFS, and its loudest 20 ms no louder than -9.5 dBFS. Written as 16-bit mono
+WAV, under 3 s.
 Each picture: the emoji's SVG drawn 896 px square in the middle of a 1024 x 1024 transparent canvas, 8-bit RGBA PNG.
 
 Needs ffmpeg, and rsvg-convert for the pictures. The downloads are the files the table's `source` pages give
@@ -168,17 +171,24 @@ def main():
     args = parser.parse_args()
     table = json.loads(TABLE.read_text())
     only = set(args.only.split(",")) if args.only else None
+    record = args.out.resolve() == (REPO / "assets" / "library").resolve()
     for item in table["items"]:
         if only and item["id"] not in only:
             continue
         folder, ext, make = (("sounds", "wav", sound) if item["category"] == "sound" else ("stickers", "png", sticker))
+        download = hashlib.sha256((args.downloads / item["from"]).read_bytes()).hexdigest()
         data, said = make(item, args.downloads)
         target = args.out / folder / f"{item['id']}.{ext}"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
-        item["sha256"] = hashlib.sha256(data).hexdigest()
+        if record:
+            item["download_sha256"] = download
+            item["sha256"] = hashlib.sha256(data).hexdigest()
+        elif item.get("download_sha256") not in (None, download):
+            print(f"{item['id']}: {item['from']} isn't the download the table records")
         print(f"{item['id']:<16} {said:<26} {len(data):>8} bytes  {item['source']}")
-    TABLE.write_text(json.dumps(table, indent=2, ensure_ascii=False) + "\n")
+    if record:
+        TABLE.write_text(json.dumps(table, indent=2, ensure_ascii=False) + "\n")
 
 
 if __name__ == "__main__":
