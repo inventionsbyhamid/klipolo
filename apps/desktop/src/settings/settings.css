@@ -4,13 +4,14 @@
 
 /* ---------- Top bar chip ---------- */
 
+/* A 32 px control with 6 px corners on the top bar's panel; it fills on hover as a ghost button does. */
 .ai-chip {
   display: inline-flex;
   align-items: center;
   gap: var(--space-3);
   height: 32px;
   padding: 0 var(--space-5) 0 var(--space-4);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-md);
   background: var(--color-bay);
   color: var(--color-ink-soft);
   font-size: var(--text-sm);
@@ -39,8 +40,12 @@
 
 .ai-chip.is-missing {
   background: transparent;
-  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   color: var(--color-ink);
+}
+
+.ai-chip.is-missing:hover {
+  background: var(--color-bay-hover);
 }
 
 /* ---------- Dialog ---------- */
@@ -96,11 +101,9 @@
 }
 
 .settings-dialog .dialog-title {
-  word-spacing: 0.08em;
   font-size: var(--text-2xl);
   line-height: var(--lh-2xl);
-  font-weight: var(--weight-display);
-  font-stretch: var(--wdth-display);
+  font-weight: var(--weight-title);
 }
 
 .settings-dialog .dialog-sub {
@@ -119,20 +122,23 @@
 .settings-dialog .dialog-foot .left {
   margin-right: auto;
   color: var(--color-ink-faint);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
 }
 
+/* Secondary buttons as everywhere else: raised, a hairline edge, a sunken fill on hover; an off one keeps its edge. */
 .settings-dialog .btn-secondary {
-  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   color: var(--color-ink);
 }
 
 .settings-dialog .btn-secondary:not(:disabled):hover {
-  box-shadow: inset 0 0 0 1px var(--color-ink);
+  background: var(--color-sunken);
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
 .settings-dialog .btn-secondary:disabled {
-  box-shadow: none;
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
 /* ---------- Ways to pay ---------- */
@@ -143,16 +149,22 @@
   gap: var(--space-4);
 }
 
+/* A card: raised, a hairline edge, 8 px corners. The chosen one takes the signal wash and a signal-ink edge, and keeps
+   them under the pointer. */
 .mode {
   display: grid;
   grid-template-columns: auto 1fr;
   align-content: start;
   gap: var(--space-2) var(--space-4);
   padding: var(--space-5);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
+  color: var(--color-ink);
   text-align: left;
-  transition: background-color var(--dur-fast) var(--ease-out);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 
 .mode:hover {
@@ -160,30 +172,34 @@
 }
 
 .mode[aria-checked='true'] {
-  box-shadow: inset 0 0 0 2px var(--color-paper);
+  background: var(--color-paper-wash);
+  box-shadow: inset 0 0 0 1px var(--color-signal-ink);
+  color: var(--color-ink);
 }
 
+/* A 14 px radio: a 3:1 grey ring; chosen, a signal-ink ring with a 6 px signal-ink dot. */
 .mode .radio {
   grid-row: span 2;
-  width: 20px;
-  height: 20px;
-  margin-top: 1px;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
   border-radius: 50%;
-  box-shadow: inset 0 0 0 1.5px var(--color-line-strong);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
 }
 
 .mode[aria-checked='true'] > .radio {
-  box-shadow: inset 0 0 0 6px var(--color-paper);
+  background: radial-gradient(circle, var(--color-signal-ink) 3px, transparent 3.5px);
+  box-shadow: inset 0 0 0 1px var(--color-signal-ink);
 }
 
 .mode b {
-  font-weight: var(--weight-strong);
+  font-weight: var(--weight-medium);
 }
 
 .mode span:not(.radio) {
   color: var(--color-ink-soft);
-  font-size: var(--text-sm);
-  line-height: var(--lh-sm);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
 }
 
 /* ---------- Fields ---------- */
@@ -194,7 +210,8 @@
 }
 
 .settings-dialog .field-v label {
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
   font-weight: var(--weight-medium);
 }
 
@@ -209,22 +226,22 @@
   gap: var(--space-3);
 }
 
+/* A 32 px field: raised, a hairline edge, 6 px corners, 12 px in from the sides. */
 .settings-dialog .input {
   display: flex;
   align-items: center;
   flex: 1;
   width: 100%;
   min-width: 0;
-  height: 40px;
+  height: 32px;
   padding: 0 var(--space-5);
   border: 0;
   border-radius: var(--radius-md);
   background: var(--color-bay-raised);
-  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   color: var(--color-ink);
   font: inherit;
-  font-size: var(--text-md);
-  letter-spacing: 0.04em;
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
   /* Text inputs have their own focus ring: the 2 px inset signal-ink ring below replaces the outline. */
   outline: none;
@@ -235,26 +252,24 @@
 
 .settings-dialog .input::placeholder {
   color: var(--color-ink-faint);
-  letter-spacing: normal;
 }
 
 .settings-dialog .input:hover {
-  box-shadow: inset 0 0 0 1px var(--color-ink-soft);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
 }
 
 .settings-dialog .input[readonly],
 .settings-dialog .input.is-static {
-  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
 /* After the read-only rule, so the saved code or key shows the ring too when focused. */
 .settings-dialog .input:focus {
-  box-shadow: inset 0 0 0 2px var(--color-paper);
+  box-shadow: inset 0 0 0 2px var(--color-signal-ink);
 }
 
 .settings-dialog .input.is-static {
   color: var(--color-ink-soft);
-  letter-spacing: normal;
 }
 
 /* The key field, with Show inside its right edge. */
@@ -271,8 +286,8 @@
 
 .secret-field .show-secret {
   position: absolute;
-  top: 5px;
-  right: 5px;
+  top: var(--space-1);
+  right: var(--space-1);
 }
 
 .status-ok {
@@ -296,8 +311,8 @@
   align-items: flex-start;
   gap: var(--space-3);
   color: var(--color-ink);
-  font-size: var(--text-sm);
-  line-height: var(--lh-sm);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
 }
 
 .field-note {
@@ -306,8 +321,8 @@
 
 .field-error .ico,
 .field-note .ico {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   flex: none;
   margin-top: 1px;
 }
@@ -318,7 +333,7 @@
   flex: none;
   border-radius: 50%;
   border: 2px solid var(--color-paper-track);
-  border-top-color: var(--color-paper);
+  border-top-color: var(--color-signal-ink);
   animation: settings-spin 0.9s linear infinite;
 }
 
@@ -330,19 +345,20 @@
 
 /* ---------- Credit ---------- */
 
+/* A card: raised, a hairline edge, 8 px corners. */
 .budget {
   display: grid;
   gap: var(--space-4);
-  padding: var(--space-6);
-  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
   background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
 .budget-num {
   font-size: var(--text-3xl);
   line-height: 1;
   font-weight: var(--weight-display);
-  font-stretch: var(--wdth-display);
   font-variant-numeric: tabular-nums;
 }
 
@@ -351,14 +367,14 @@
   color: var(--color-ink-soft);
   font-size: var(--text-md);
   font-weight: var(--weight-medium);
-  font-stretch: 100%;
 }
 
+/* A 6 px bar: a sunken track with a signal yellow fill. */
 .settings-dialog .progress {
-  height: 8px;
+  height: 6px;
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: var(--color-bay-press);
+  background: var(--color-sunken);
 }
 
 .settings-dialog .progress i {
@@ -471,16 +487,17 @@
   font-weight: var(--weight-strong);
 }
 
-/* The toggle, scoped here until the shared one lands: a 36 x 20 track. Off: raised, a line-strong edge and
-   an ink-soft knob. On: paper with an on-paper knob. The knob slides in 140 ms, and not at all with reduced motion. */
+/* The toggle, scoped here until the shared one lands: a 36 x 20 track. Off: sunken, a hairline edge (a
+   3:1 grey under the pointer) and a 16 px ink-soft knob. On: signal yellow with a signal-ink edge and a dark knob. The
+   knob slides in 140 ms, and not at all with reduced motion. */
 .settings-dialog .settings-switch {
   position: relative;
   flex: none;
   width: 36px;
   height: 20px;
   border-radius: var(--radius-pill);
-  background: var(--color-bay-raised);
-  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  background: var(--color-sunken);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   transition:
     background-color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out);
@@ -489,10 +506,10 @@
 .settings-dialog .settings-switch::after {
   content: "";
   position: absolute;
-  top: 4px;
-  left: 4px;
-  width: 12px;
-  height: 12px;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--color-ink-soft);
   transition: background-color var(--dur-fast) var(--ease-out);
@@ -507,12 +524,13 @@
 }
 
 .settings-dialog .settings-switch:not([aria-disabled="true"]):hover {
-  box-shadow: inset 0 0 0 1px var(--color-ink-soft);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
 }
 
-.settings-dialog .settings-switch[aria-checked="true"] {
+.settings-dialog .settings-switch[aria-checked="true"],
+.settings-dialog .settings-switch[aria-checked="true"]:not([aria-disabled="true"]):hover {
   background: var(--color-paper);
-  box-shadow: none;
+  box-shadow: inset 0 0 0 1px var(--color-signal-ink);
 }
 
 .settings-dialog .settings-switch[aria-checked="true"]::after {
@@ -521,6 +539,6 @@
 }
 
 .settings-dialog .settings-switch:focus-visible {
-  outline: 2px solid var(--color-paper);
+  outline: 2px solid var(--color-signal-ink);
   outline-offset: 2px;
 }

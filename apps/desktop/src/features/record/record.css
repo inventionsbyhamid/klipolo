@@ -1,6 +1,6 @@
 /* The Record dialog: the one wide dialog. Values from tokens.css only. Generic pieces the shared design
    primitives will carry (dialog head and foot, spinner, notes) are scoped to the dialog here, so they can't clash with
-   those when they land. No red anywhere: the record glyph is ink. */
+   those when they land. Red only on Record itself, the button that starts a take. */
 
 .record-scrim {
   position: fixed;
@@ -56,12 +56,9 @@
 }
 
 .record-dialog .dialog-title {
-  word-spacing: 0.08em;
-  letter-spacing: var(--tracking-display);
   font-size: var(--text-2xl);
   line-height: var(--lh-2xl);
-  font-weight: var(--weight-display);
-  font-stretch: var(--wdth-display);
+  font-weight: var(--weight-title);
   outline: none;
 }
 
@@ -83,6 +80,17 @@
   color: var(--color-ink-faint);
   font-size: var(--text-xs);
   line-height: var(--lh-xs);
+}
+
+/* Record, the only red control: tally red with its own text colour, and a soft red ring under the pointer (the label
+   keeps its contrast). While it can't record it keeps the shared off look. */
+.record-dialog .dialog-foot .btn-primary:not(:disabled):not([aria-disabled="true"]) {
+  background: var(--color-cut);
+  color: var(--color-on-cut);
+}
+
+.record-dialog .dialog-foot .btn-primary:not(:disabled):not([aria-disabled="true"]):hover {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-cut) 25%, transparent);
 }
 
 /* The body scrolls; its own padding keeps focus rings inside the scrolled box. Each row is as tall as what is in it:
@@ -120,8 +128,8 @@
 
 .record-caption {
   color: var(--color-ink-soft);
-  font-size: var(--text-sm);
-  line-height: var(--lh-sm);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
 }
 
 /* ---------- Waiting and the setup's refusal ---------- */
@@ -140,7 +148,7 @@
   flex: none;
   border-radius: 50%;
   border: 2px solid var(--color-paper-track);
-  border-top-color: var(--color-paper);
+  border-top-color: var(--color-signal-ink);
   animation: record-spin 0.9s linear infinite;
 }
 
@@ -179,8 +187,9 @@
 
 /* ---------- Preview ---------- */
 
-/* 16:9 over the full width, on the darkest surface; the clip art until the live picture's first frame. Dark in both
-   themes, as the video is: what is said over it (the Screen Recording step, the countdown) is dark too. */
+/* 16:9 over the full width, 8 px corners, in the preview's dark well; the clip art until the live picture's first
+   frame. Dark in both themes, as the video is: what is said over it (the Screen Recording step, the countdown) is dark
+   too. */
 .record-preview {
   color-scheme: dark;
   position: relative;
@@ -188,8 +197,8 @@
   place-items: center;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  border-radius: var(--radius-sm);
-  background: var(--color-night);
+  border-radius: var(--radius-lg);
+  background: var(--color-stage);
 }
 
 .record-art {
@@ -226,7 +235,7 @@
   filter: grayscale(1) brightness(0.5);
 }
 
-/* The live picture of what is chosen, fitted over the box's black. */
+/* The live picture of what is chosen, fitted over the box's dark well. */
 .record-live {
   position: absolute;
   inset: 0;
@@ -255,7 +264,7 @@
   transform: scaleX(-1);
 }
 
-/* "Record yourself": the camera over the whole box, fitted over its black, mirrored in the picture only. */
+/* "Record yourself": the camera over the whole box, fitted over its dark well, mirrored in the picture only. */
 .record-camera {
   position: absolute;
   inset: 0;
@@ -278,14 +287,19 @@
   justify-self: stretch;
 }
 
+/* A card: raised, a hairline edge, 8 px corners. The chosen one takes the signal wash and a signal-ink edge, and keeps
+   them under the pointer. */
 .record-card {
   display: grid;
   min-width: 0;
   padding: var(--space-4);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   text-align: left;
-  transition: background-color var(--dur-fast) var(--ease-out);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 
 .record-card:hover {
@@ -293,7 +307,9 @@
 }
 
 .record-card[aria-checked="true"] {
-  box-shadow: inset 0 0 0 2px var(--color-paper);
+  background: var(--color-paper-wash);
+  box-shadow: inset 0 0 0 1px var(--color-signal-ink);
+  color: var(--color-ink);
 }
 
 /* Until a still is drawn: the screen or app icon, soft, on the pressed surface. */
@@ -355,21 +371,29 @@
   gap: var(--space-3);
 }
 
+/* A raised card with a hairline edge, a 14 px icon and 12 px soft text. */
 .record-note {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-5);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   color: var(--color-ink-soft);
-  font-size: var(--text-sm);
-  line-height: var(--lh-sm);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+.record-note .ico {
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
 }
 
 /* ---------- Permission steps ---------- */
 
-/* A raised note in the preview's place: the Screen Recording step, or why a press didn't go. */
+/* A raised card with a hairline edge in the preview's place: the Screen Recording step, or why a press didn't go. */
 .record-step {
   position: relative;
   display: grid;
@@ -378,8 +402,9 @@
   max-width: 480px;
   margin: var(--space-6);
   padding: var(--space-6);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
 .record-step .record-step-more {
@@ -443,12 +468,9 @@
   border-radius: 50%;
   background: var(--color-scrim);
   color: var(--color-ink);
-  word-spacing: 0.08em;
-  letter-spacing: var(--tracking-display);
   font-size: var(--text-3xl);
   line-height: var(--lh-3xl);
   font-weight: var(--weight-display);
-  font-stretch: var(--wdth-display);
   font-variant-numeric: tabular-nums;
 }
 
@@ -469,14 +491,14 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The microphone's level: a 6 px pill track with a paper fill. It follows the voice under reduced motion too (it is
-   content), so its width has no transition. */
+/* The microphone's level: a 6 px round-ended sunken track with a signal yellow fill. It follows the voice under
+   reduced motion too (it is content), so its width has no transition. */
 .record-meter {
   justify-self: stretch;
   height: 6px;
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: var(--color-bay-press);
+  background: var(--color-sunken);
 }
 
 .record-meter[data-off] {

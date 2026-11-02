@@ -538,9 +538,12 @@ describe('the dialog and its choices', () => {
     expect(screen.getByRole('dialog', { name: 'Record' })).toBeInTheDocument();
   });
 
-  it('no_red_and_no_em_or_en_dash', async () => {
+  it('red_only_on_record_and_no_em_or_en_dash', async () => {
     const css = readFileSync(resolve(__dirname, 'record.css'), 'utf8');
-    expect(css).not.toMatch(/--color-cut/);
+    // Red only on Record itself, the dialog foot's primary button that starts a take.
+    const red = css.replace(/\/\*[\s\S]*?\*\//g, '').match(/[^{}]+\{[^{}]*--color-cut[^{}]*\}/g) ?? [];
+    expect(red.length).toBeGreaterThan(0);
+    for (const rule of red) expect(rule.trim()).toMatch(/^\.record-dialog \.dialog-foot \.btn-primary:not\(:disabled\)/);
     // Tokens only: no raw colours.
     expect(css).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
     const dialog = await openOn(
