@@ -87,16 +87,25 @@ function useKeysOnEditor() {
 }
 
 /**
+ * The editor's keys. Their commands follow the project, the selection and playback, so they live apart from the
+ * panels: a change they follow never draws the editor again.
+ */
+function EditorKeys() {
+  useEditorShortcuts();
+  return null;
+}
+
+/**
  * The editor, while a project is open: the library, the preview, the timeline and chat, and the player bar. Finder
  * drops and the editor's keys work only here, and the project's editing copies are followed (the top bar's pill).
  */
 function Editor() {
   const [filesOver, setFilesOver] = useState(false);
   useFinderDrop(setFilesOver);
-  useEditorShortcuts();
   useKeysOnEditor();
   return (
     <>
+      <EditorKeys />
       <div className="workspace">
         <Library />
         <Preview filesOver={filesOver} />
