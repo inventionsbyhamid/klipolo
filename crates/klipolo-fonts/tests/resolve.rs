@@ -82,6 +82,35 @@ fn fallbacks_point_at_a_real_file_at_every_weight_and_cjk_only_after_a_download(
             None
         );
     }
+    // Each bundled script's Noto Sans, declared at the asked weight and style, drawn from its nearest file.
+    use klipolo_fonts::fallback::NotoScript;
+    let hindi = resolve_fallback(
+        &shipped(),
+        Fallback::Script(NotoScript::Devanagari),
+        900,
+        true,
+    )
+    .unwrap();
+    assert_eq!(
+        (hindi.alias.as_str(), hindi.weight, hindi.italic),
+        ("kl:fallback:devanagari", 900, true)
+    );
+    assert!(
+        hindi
+            .file
+            .unwrap()
+            .path
+            .ends_with("NotoSansDevanagari/NotoSansDevanagari-Bold.ttf")
+    );
+    let arabic =
+        resolve_fallback(&shipped(), Fallback::Script(NotoScript::Arabic), 300, false).unwrap();
+    assert!(
+        arabic
+            .file
+            .unwrap()
+            .path
+            .ends_with("NotoSansArabic/NotoSansArabic-Regular.ttf")
+    );
     // The last CJK fallback is the bundled Adobe NotDef, at any weight.
     let notdef = resolve_fallback(&shipped(), Fallback::Notdef, 700, true).unwrap();
     assert_eq!(
