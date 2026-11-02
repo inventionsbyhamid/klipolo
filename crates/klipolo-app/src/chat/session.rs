@@ -785,7 +785,7 @@ impl ChatSession {
             reply = reply.note(n);
         }
         if let Some(applied) = landed.applied {
-            reply = reply.applied(applied.change, applied.undo);
+            reply = reply.applied_with(applied);
         }
         if let Some(undone) = landed.undone {
             reply = reply.undone(undone);

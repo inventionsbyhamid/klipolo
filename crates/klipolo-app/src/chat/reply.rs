@@ -3,7 +3,7 @@
 //! built: its fields are set only by these constructors, so the page shows them as they are and never cleans them
 //! itself. Klipolo's own sentences (a proposal's title, a failure's plain reason) are written without dashes.
 
-use klipolo_chat::{ChatError, ChatErrorKind, PlanOut, sanitize};
+use klipolo_chat::{ANALYZE_FIRST, Audience, ChatError, ChatErrorKind, PlanOut, sanitize};
 use klipolo_model::coded::CodedError;
 use klipolo_model::history::SnapshotPatch;
 use klipolo_model::project::FormatKind;
@@ -73,6 +73,9 @@ pub struct ChatReply {
     revision: u64,
     /// Pictures it asked for, to draw (`chat_draw_picture`) and show with Use and Try again.
     pictures: Vec<ChatPicture>,
+    /// Something asked for needs a clip analyzed that isn't yet ("Analyze this clip first"): the panel offers Analyze
+    /// under the reply, which shows the price before anything is spent.
+    analyze: bool,
 }
 
 /// What another app (MCP) did, for the chat panel: its name as it gave it (cleaned, `klipolo_mcp::client_name`), and a
@@ -228,6 +231,12 @@ impl ChatReply {
         self
     }
 
+    /// The additions applied at once, each change of a step of several listed too.
+    pub fn applied_with(mut self, applied: ChatApplied) -> Self {
+        self.applied = Some(applied);
+        self
+    }
+
     pub fn undone(mut self, change: SnapshotPatch) -> Self {
         self.undone = Some(change);
         self
@@ -285,6 +294,8 @@ impl ChatReply {
     /// app's to add (`applied`, `proposal`), once it has applied or kept them.
     pub fn from_plan(id: impl Into<String>, plan: &PlanOut) -> Self {
         let mut reply = Self::new(id, &plan.reply);
+        reply.analyze = (plan.compiled.refusals.iter())
+            .any(|r| r.audience == Audience::Person && r.reason == ANALYZE_FIRST);
         for question in &plan.compiled.questions {
             if !plan.reply.contains(question.trim()) {
                 reply = reply.question(question);

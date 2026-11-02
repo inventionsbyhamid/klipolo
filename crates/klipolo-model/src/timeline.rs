@@ -10,6 +10,7 @@ use crate::fill_focus::FillFocus;
 use crate::font::FontRef;
 use crate::ids::{new_id, Id};
 use crate::layout::{Anchor, BoxN, Layout};
+use crate::motion::Key;
 use crate::params::ParamValue;
 use crate::project::FormatKind;
 use crate::recording::{RecordingSource, SourceMix};
@@ -253,6 +254,10 @@ pub struct Clip {
     pub source_out_us: Us,
     pub speed: f64,
     pub volume: f64,
+    /// The level over time, set by hand (`volume`): keys from the clip's start, each a gain from 0 to 2. With keys the
+    /// line is the clip's level and `volume` waits for when they are gone. Left out of the JSON while empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub volume_keys: Vec<Key>,
     pub muted: bool,
     pub fade_in_us: Us,
     pub fade_out_us: Us,
@@ -332,6 +337,7 @@ impl Clip {
             source_out_us,
             speed: 1.0,
             volume: 1.0,
+            volume_keys: Vec::new(),
             muted: false,
             fade_in_us: 0,
             fade_out_us: 0,
@@ -613,6 +619,10 @@ pub enum ItemContent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         duck: Option<f64>,
+        /// The level over time, set by hand (`volume`): keys from the layer's start, each a gain from 0 to 2. With keys
+        /// the line is the layer's level and `volume` waits for when they are gone. Left out of the JSON while empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        volume_keys: Vec<Key>,
     },
     Zoom {
         target: ZoomTarget,
@@ -659,6 +669,22 @@ impl ItemContent {
     pub fn set_tie(&mut self, to: Option<Tie>) {
         if let Self::Audio { tie, .. } | Self::Video { tie, .. } = self {
             *tie = to;
+        }
+    }
+
+    /// A sound layer's volume keys (`volume`); other layers have none.
+    pub fn volume_keys(&self) -> &[Key] {
+        match self {
+            Self::Audio { volume_keys, .. } => volume_keys,
+            _ => &[],
+        }
+    }
+
+    /// A sound layer's volume keys to change; None for other layers.
+    pub fn volume_keys_mut(&mut self) -> Option<&mut Vec<Key>> {
+        match self {
+            Self::Audio { volume_keys, .. } => Some(volume_keys),
+            _ => None,
         }
     }
 

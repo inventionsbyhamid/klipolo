@@ -13,7 +13,7 @@
 //! time holds a word or a scene, or a ref a clip, is the compiler's to judge against the project. A call that doesn't
 //! fit is a `ToolError` naming the tool and the field, whose text is one plain sentence the planner can send back to
 //! the model. Where the meaning is clear it reads leniently: no arguments at all for a tool that takes none, a nullable
-//! value left out, text with stray spaces.
+//! value left out, text with stray spaces, a nullable value written as the text "null".
 //!
 //! Adding a tool is one `ToolCall` variant and one entry in `TOOLS`, where its name, description, parameters and reader
 //! sit together; the tests check every schema is strict and every reader reads the fields its schema lists. Splitting
@@ -360,12 +360,27 @@ impl ToolCall {
         } else {
             serde_json::from_str(text).map_err(|_| whole(Problem::NotJson))?
         };
-        let Value::Object(map) = value else {
+        let Value::Object(mut map) = value else {
             return Err(whole(Problem::WrongType {
                 expected: "an object",
                 got: kind(&value),
             }));
         };
+        // A field that may be null, written as the text "null" (as some models write it), is null.
+        let nullable: Vec<&'static str> = ((tool.parameters)().into_iter())
+            .filter(|(_, schema)| {
+                (schema["type"].as_array()).is_some_and(|ts| ts.contains(&Value::from("null")))
+            })
+            .map(|(name, _)| name)
+            .collect();
+        for name in nullable {
+            if let Some(v) = map.get_mut(name)
+                && v.as_str()
+                    .is_some_and(|s| s.trim().eq_ignore_ascii_case("null"))
+            {
+                *v = Value::Null;
+            }
+        }
         let mut args = Args {
             tool: tool.name,
             path: String::new(),

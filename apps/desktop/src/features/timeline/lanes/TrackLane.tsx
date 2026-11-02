@@ -109,6 +109,7 @@ export function linePieces(
         top={box.top}
         height={box.height}
         look={look}
+        motion={item.layout.motion}
         onPick={o.onPick}
         onPress={o.onPress}
         onTrimPress={o.onTrimPress}

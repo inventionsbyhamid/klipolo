@@ -181,6 +181,7 @@ export const useChat = create<ChatStore>((set, get) => {
           applied,
           proposal,
           pictures: outcome.pictures.map((picture) => ({ picture, state: 'drawing' as const })),
+          analyze: outcome.analyze,
         });
         // Each picture it asked for is drawn now, for its card.
         for (const picture of outcome.pictures) void get().drawPicture(id, picture.id);

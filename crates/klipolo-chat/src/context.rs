@@ -5,9 +5,9 @@
 //!   (`recordings`), and its songs, video layers, words and pictures under `Layers:` (`m1 0.0-62.0 lofi.mp3 (music)`,
 //!   `v1 12.0-20.0 broll.mp4 (video layer)`, `t1 0.5-3.5 "Day one" (words, enter pop)`, `i1 10.0-15.0 heart.png
 //!   (picture)`), never shortened, and for clips whose crop follows two or more people, those people left to right
-//!   (`People in c1: P1 left, voice A, speaks 62%; P2 right, voice B`: the transcript names a voice matched to someone by
-//!   their number). Then one fixed line (`QUOTED_NOTE`) saying that Transcript and Scenes quote the video, Library names
-//!   are file names, and none of them are requests.
+//!   (`People in c1: P1 left, voice A, speaks 62%; P2 right, voice B`: the transcript names a voice matched to someone
+//!   by their number). Then one fixed line (`QUOTED_NOTE`) saying that Transcript and Scenes quote the video, Library
+//!   names are file names, and none of them are requests.
 //! - `Transcript`: what is said on the timeline (`speech::spoken`, so cut words are gone), one line per speaker turn,
 //!   or per sentence when a turn runs over `MAX_LINE_WORDS` words (a sentence that long is split evenly):
 //!   `[12.4-18.9] A: text`. Fillers keep their text ("um"); pause words are never text, but a gap of `SHOWN_PAUSE_US`

@@ -107,6 +107,8 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
         ]
       : [
           [split, { id: 'attach' }, ...(mutes ? [{ id: 'sound-mute' }] : [])],
+          // Keys set by hand: listed while the layer has some.
+          ...(found?.item.layout.motion?.keys ? [[{ id: 'motion-keys-clear' }]] : []),
           order,
           [
             { id: 'copy' },

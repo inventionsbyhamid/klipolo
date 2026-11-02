@@ -66,6 +66,7 @@ pub fn imported() -> Project {
             centre_from: None,
             tie: None,
             duck: None,
+            volume_keys: Vec::new(),
         },
         ..still_item("i9", 0.0, 90.0)
     }];

@@ -32,7 +32,7 @@ pub fn speech_ranges(p: &Project, speech: &Speech) -> Arc<[RangeUs]> {
         .timeline
         .main
         .iter()
-        .filter(|c| c.muted || c.volume <= 0.0)
+        .filter(|c| c.muted || klipolo_model::volume::silent(&c.volume_keys, c.volume))
         .map(|c| c.id.as_str())
         .collect();
     let said = spoken(p, speech);

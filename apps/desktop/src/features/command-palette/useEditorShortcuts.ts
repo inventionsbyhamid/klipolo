@@ -17,6 +17,7 @@ import {
 } from './shortcutKeys';
 import { markRange } from '../timeline/commands';
 import { useCommands } from './useCommands';
+import { deletePickedKey } from '../../state/keyPick';
 
 /** Undo, redo and export reach the editor from a panel's own list (`PAGE_LIST`). */
 const FROM_PAGE_LIST = new Set(['z', 'e']);
@@ -190,7 +191,8 @@ export function useEditorShortcuts() {
       run('play');
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
-      run('delete');
+      // A key picked on the timeline (a diamond, a volume line's point) goes, not its clip or layer.
+      if (!deletePickedKey()) run('delete');
     } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault();
       const back = e.key === 'ArrowLeft';

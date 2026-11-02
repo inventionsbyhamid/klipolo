@@ -4,7 +4,7 @@ import type { Clip } from '../../../bindings/Clip';
 import type { Recording } from '../../../bindings/Recording';
 import { useLocale } from '../../../i18n/react';
 import { isInstalled } from '../../../lib/contrib';
-import { clipLabel, isFreeze, STILL_SPEED } from '../../../lib/timeline';
+import { clipHasSound, clipLabel, isFreeze, STILL_SPEED } from '../../../lib/timeline';
 import { defaultTransitionUs, splitDuration, type Footage } from '../../../lib/transitions';
 import { useProject } from '../../../state/project';
 import { transitionClipId } from '../../../state/selection';
@@ -177,6 +177,8 @@ export const MainLane = memo(function MainLane({
         sourceInUs={clip.freezeAtUs ?? clip.sourceInUs}
         speed={isFreeze(clip) ? STILL_SPEED : clip.speed}
         volume={clip.volume}
+        volumeKeys={clip.volumeKeys}
+        hasSound={clipHasSound(sources, clip)}
         fadeInUs={clip.fadeInUs}
         fadeOutUs={clip.fadeOutUs}
         muted={clip.muted}

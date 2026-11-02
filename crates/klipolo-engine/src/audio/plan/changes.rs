@@ -68,6 +68,7 @@ pub fn may_change_sound(p: &Project, op: &Op) -> bool {
         Op::UpdateClip { patch, .. } => {
             patch.speed.is_some()
                 || patch.volume.is_some()
+                || patch.volume_keys.is_some()
                 || patch.muted.is_some()
                 || patch.fade_in_us.is_some()
                 || patch.fade_out_us.is_some()

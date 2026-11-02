@@ -870,3 +870,79 @@ fn a_landscape_picture_keeps_its_corner_and_size() {
     let b = sticker_box(&p, &out);
     assert!((b.w - 0.35).abs() < 1e-6, "{b:?}");
 }
+
+#[test]
+fn the_text_null_reads_as_null_where_a_field_may_be_null() {
+    // As Muse Spark sometimes writes it.
+    let read = call(
+        "animate",
+        json!({"layer": "last", "enter": "pop", "exit": "null", "emphasis": " NULL ", "sound": "null"}),
+    );
+    assert_eq!(
+        read,
+        ToolCall::Animate {
+            layer: LayerRef::Last,
+            enter: Some(Entrance::Pop),
+            exit: None,
+            emphasis: None,
+            sound: None,
+        }
+    );
+    let read = call(
+        "addText",
+        json!({"text": "Day one", "preset": "title", "atSec": "null", "durationSec": null, "animation": "null",
+               "font": "null"}),
+    );
+    assert!(matches!(
+        read,
+        ToolCall::AddText {
+            at_us: None,
+            animation: None,
+            font: None,
+            ..
+        }
+    ));
+    // Words that must be given stay as written.
+    let read = call(
+        "addText",
+        json!({"text": "null", "preset": "title", "atSec": null, "durationSec": null, "animation": null, "font": null}),
+    );
+    assert!(matches!(read, ToolCall::AddText { ref text, .. } if text == "null"));
+}
+
+#[test]
+fn a_hook_may_paraphrase_a_line_in_six_words_or_fewer() {
+    let p = project();
+    let hook = |text: &str| json!({"text": text, "preset": "title", "atSec": 0.0, "durationSec": 2.0, "animation": "kinetic", "font": null});
+    // Most of its words are said in the video ("flying", "Lisbon", "today"): a paraphrase, taken.
+    let out = run(
+        &p,
+        "make a short with a hook",
+        &[("addText", hook("Flying over Lisbon today"))],
+    );
+    assert_eq!(out.refusals, vec![]);
+    // Seven words or more, or words the video never says, go back to the model.
+    let out = run(
+        &p,
+        "make a short with a hook",
+        &[("addText", hook("Flying over Lisbon today was so much fun"))],
+    );
+    assert!(refused_to_model(&out, 0).contains("said in the video"));
+    let out = run(
+        &p,
+        "make a short with a hook",
+        &[("addText", hook("Best trip ever"))],
+    );
+    assert!(refused_to_model(&out, 0).contains("said in the video"));
+    // The tool says how long a hook is.
+    let tools = klipolo_chat::tools();
+    let add_text = (tools.as_array().unwrap().iter())
+        .find(|t| t["name"] == "addText")
+        .unwrap();
+    assert!(
+        add_text["description"]
+            .as_str()
+            .unwrap()
+            .contains("at most 6 punchy words")
+    );
+}

@@ -5,12 +5,17 @@ import type { EffectInstance } from "./EffectInstance";
 import type { FillFocus } from "./FillFocus";
 import type { FormatKind } from "./FormatKind";
 import type { Framing } from "./Framing";
+import type { Key } from "./Key";
 import type { Look } from "./Look";
 
 /**
  * Clip fields to change. Unset fields are left alone and omitted from JSON.
  */
-export type ClipPatch = { speed?: number, volume?: number, muted?: boolean, fadeInUs?: number, fadeOutUs?: number, look?: Look, camera?: CameraLayout, framing?: { [key in FormatKind]?: Framing }, 
+export type ClipPatch = { speed?: number, volume?: number, 
+/**
+ * Replaces the volume keys (`Clip::volume_keys`); an empty list takes them off.
+ */
+volumeKeys?: Array<Key>, muted?: boolean, fadeInUs?: number, fadeOutUs?: number, look?: Look, camera?: CameraLayout, framing?: { [key in FormatKind]?: Framing }, 
 /**
  * Replaces every format's Fill focus (`Clip::fill_focus`).
  */

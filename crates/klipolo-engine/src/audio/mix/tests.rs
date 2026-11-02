@@ -32,6 +32,7 @@ fn source(path: &str, start: i64, end: i64, source_in: i64) -> AudioSource {
         centre_from: None,
         duck: None,
         seam: Default::default(),
+        line: None,
     }
 }
 
@@ -136,4 +137,49 @@ fn a_voice_handed_on_across_a_jump_is_let_go() {
     mixdown.render(&lookup, 50_000, &mut out);
     mixdown.render(&lookup, 50_500, &mut out);
     assert!(mixdown.voices.iter().all(Option::is_none));
+}
+
+/// Volume keys set by hand: the source's gain follows its line sample by sample, the first key's level before it and
+/// the last's after it, eased in between, on top of its own gain.
+#[test]
+fn a_line_of_volume_keys_sets_the_gain_between_keys() {
+    use klipolo_model::motion::{Ease, Key};
+
+    use crate::audio::plan::Line;
+
+    let steady = Arc::new(Pcm::from_channels(vec![0.5; 2 * 3 * RATE as usize], 2));
+    let key = |t_us: i64, v: f64, ease: Option<Ease>| Key { t_us, v, ease };
+    let mut s = source("/steady", 0, 2 * i64::from(RATE), 0);
+    s.gain = 0.8;
+    // From 0.5 s: full, down to silence at 1.5 s, then up to half over an ease in to 1.9 s.
+    s.line = Some(Line {
+        origin_us: 500_000,
+        keys: Arc::from(vec![
+            key(0, 1.0, None),
+            key(1_000_000, 0.0, None),
+            key(1_400_000, 0.5, Some(Ease::EaseIn)),
+        ]),
+    });
+    let plan = AudioPlan {
+        sources: vec![s],
+        loudness: Loudness::Off,
+    };
+    let mut out = vec![0f32; 2 * 2 * RATE as usize];
+    super::mix(&plan, &|_| Some(steady.clone()), 0, 1.0, &mut out);
+    let at = |seconds: f64| out[2 * (seconds * f64::from(RATE)).round() as usize];
+    let near = |seconds: f64, level: f64| {
+        let want = 0.5 * 0.8 * level;
+        assert!(
+            (f64::from(at(seconds)) - want).abs() < 1e-4,
+            "{seconds} s: {} for {want}",
+            at(seconds)
+        );
+    };
+    near(0.25, 1.0);
+    near(1.0, 0.5);
+    near(1.25, 0.25);
+    near(1.5, 0.0);
+    // An ease in starts slow: under the straight line's level halfway.
+    assert!(f64::from(at(1.7)) < 0.5 * 0.8 * 0.25);
+    near(1.95, 0.5);
 }

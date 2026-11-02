@@ -1468,15 +1468,17 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "setFormat portrait",
         "followSubject",
         "word-pop or bold-box",
-        "a hook title with addText, kinetic or pop",
+        "addText, kinetic or pop",
         "in the first 2 s of what you keep",
         "a striking later line said in the video, never the opening words",
+        "at most 6 punchy words",
+        "only where two clips already meet with spare footage; otherwise none",
+        "never the text \"null\"",
         "medium pack stickers",
         "at a top corner",
         "animate last",
         "a sound",
         "addMusic",
-        "setTransition only at cuts already there",
         "Place every layer inside the parts you keep",
         "one or two short, plain, friendly sentences",
         "No markdown",
@@ -1559,8 +1561,8 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
     // The caps every lane's prompt lines and tools share: 914 prompt tokens measured with the clip tools' line and the
-    // recordings' line, 1,098 with autoZoom's line and the short's recipe, 1,431 with the composing tools' lines and the
-    // catalogues they name (presets, effects, looks, fonts); 4,555 tools tokens with the clip tools (setClip,
+    // recordings' line, 1,126 with autoZoom's line and the short's recipe, about 335 more with the composing tools' lines
+    // and the catalogues they name (presets, effects, looks, fonts); 4,555 tools tokens with the clip tools (setClip,
     // setTransition), setBackground (about 210), freezeFrame (about 105), addText's font (about 25), the recording tools
     // (about 1,010) and followSubject's focus (about 117), about 390 more with animate, the words' entrance, autoZoom
     // and the shorts' two caption styles, and about 1,030 more with the tools that compose any edit (setMotion,

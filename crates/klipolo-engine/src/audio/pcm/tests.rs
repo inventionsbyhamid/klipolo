@@ -384,6 +384,7 @@ fn a_file_whose_reading_keeps_failing_plays_up_to_there_and_waits_for_the_next_o
                 filter: None,
                 centre_from: None,
                 duck: None,
+                line: None,
             }],
             loudness: Loudness::Off,
         };

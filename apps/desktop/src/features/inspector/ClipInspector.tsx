@@ -8,7 +8,7 @@ import { Icon } from '../../layout/Icon';
 import { formatNumber } from '../../lib/format';
 import { clipOp } from '../../lib/ops';
 import { formatTime } from '../../lib/time';
-import { clipHasSound, clipLabel, isFreeze } from '../../lib/timeline';
+import { clipDurationUs, clipHasSound, clipLabel, clipStarts, isFreeze } from '../../lib/timeline';
 import { clipNow } from '../../state/latest';
 import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
@@ -107,6 +107,12 @@ export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind
             volume={clip.volume}
             noun="clip"
             volumeOps={(volume) => [clipOp(clip, { volume })]}
+            line={{
+              target: { kind: 'clip', id: clip.id },
+              keys: clip.volumeKeys,
+              startUs: clipStarts(project.timeline.main)[project.timeline.main.findIndex((c) => c.id === clip.id)] ?? 0,
+              lenUs: clipDurationUs(clip),
+            }}
             mute={{
               id: clip.id,
               muted: clip.muted,

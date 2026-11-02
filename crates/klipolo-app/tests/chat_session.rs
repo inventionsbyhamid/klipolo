@@ -468,7 +468,14 @@ async fn additions_apply_at_once_as_one_undo_step_from_chat() {
     assert_eq!(r["applied"]["change"]["baseRevision"], 0);
     assert_eq!(r["applied"]["change"]["history"]["revision"], 1);
     assert_eq!(r["applied"]["undo"]["code"], "chat.andMore");
+    // A step of several changes lists each, in the order asked, for the reply to show.
+    let changes: Vec<&str> = (r["applied"]["changes"].as_array().expect("each change"))
+        .iter()
+        .map(|c| c["code"].as_str().unwrap())
+        .collect();
+    assert_eq!(changes, ["chat.setFormat", "chat.setCaptions"]);
     assert!(r["proposal"].is_null());
+    assert_eq!(r["analyze"], false, "every clip is analyzed");
     let p = chat.project.project();
     assert_eq!(p.settings.primary_format, FormatKind::Portrait);
     assert_eq!(chat.project.undo_steps(), 1, "one undo step");
@@ -767,6 +774,8 @@ async fn a_clip_not_analyzed_yet_is_named() {
     let r = reply(&chat.session.send(request("cut the ums")).await.unwrap());
     assert_eq!(r["text"], "Analyze this clip (talk.mov) first.");
     assert!(r["proposal"].is_null());
+    // The panel offers Analyze under it, with its price before anything is spent.
+    assert_eq!(r["analyze"], true);
 }
 
 #[tokio::test]
@@ -1749,8 +1758,10 @@ fn find_intro() -> FunctionCall {
 async fn a_reply_names_the_revision_its_moments_are_on() {
     let mut calls = vertical_karaoke();
     calls.push(find_intro());
+    // A look is answered again with what it found: the second answer is the reply.
     let chat = chat(vec![
-        answer("Here it is.", vec![find_intro()]),
+        answer("", vec![find_intro()]),
+        answer("Here it is.", vec![]),
         answer("", calls),
     ]);
     let r = reply(&chat.session.send(request("find the intro")).await.unwrap());
@@ -1770,10 +1781,10 @@ async fn a_reply_names_the_revision_its_moments_are_on() {
 
 #[tokio::test]
 async fn moments_found_while_the_project_changed_are_left_out() {
-    let model = Script::new(vec![answer(
-        "The intro is at the start.",
-        vec![find_intro()],
-    )]);
+    let model = Script::new(vec![
+        answer("", vec![find_intro()]),
+        answer("The intro is at the start.", vec![]),
+    ]);
     let gate = model.hold();
     let chat = chat_with(model.clone(), Found::done(), Paying::key(model.clone()));
     let sent = tokio::spawn({
@@ -1782,6 +1793,9 @@ async fn moments_found_while_the_project_changed_are_left_out() {
     });
     model.arrived.notified().await;
     chat.project.hand_edit(&rename("Mine")).unwrap();
+    gate.notify_one();
+    // Told what it found, it answers again.
+    model.arrived.notified().await;
     gate.notify_one();
     let r = reply(&sent.await.unwrap());
     assert_eq!(r["moments"], serde_json::json!([]), "{r:#}");
@@ -1989,6 +2003,8 @@ async fn a_project_switch_while_the_model_answers_leaves_the_new_project_alone()
         });
         model.arrived.notified().await;
         chat.project.switch(Some(talk())).unwrap();
+        // Only the plan waits: the summary a big plan asks for (the script has none) comes at once.
+        *model.hold.lock().unwrap() = None;
         gate.notify_one();
         let r = reply(&sent.await.unwrap());
         assert_eq!(r["text"], MOVED, "{r:#}");
@@ -2367,6 +2383,7 @@ async fn ums_are_cut_while_the_scene_log_is_made_and_moments_wait() {
                 r#"{"query": "the module", "ranges": []}"#,
             )],
         ),
+        answer("", vec![]),
     ]);
     let chat = chat_with(
         model.clone(),

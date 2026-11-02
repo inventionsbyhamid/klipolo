@@ -22,6 +22,7 @@ import { useColorCommit } from '../color/useColorCommit';
 import { FontMenu } from '../fonts/FontMenu';
 import { MissingFontBadge } from '../fonts/MissingFontBadge';
 import { AnimationField, PositionField, TimingField } from './common';
+import { MotionField } from './MotionField';
 import { EffectsButton } from './EffectsButton';
 import { Field } from './fields';
 import { TextField } from './TextField';
@@ -238,6 +239,7 @@ export function TextInspector({
       <EffectsButton target={{ type: 'item', id: item.id }} effects={item.effects} />
       <PositionField item={item} format={format} primary={primary} />
       <AnimationField item={item} typewriter />
+      <MotionField item={item} />
       <TimingField item={item} />
     </>
   );

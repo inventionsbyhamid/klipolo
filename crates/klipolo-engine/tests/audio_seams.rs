@@ -51,6 +51,7 @@ fn music_laid_back_to_back_plays_through_its_seams() {
             centre_from: None,
             tie: None,
             duck: Some(-12.0),
+            volume_keys: Vec::new(),
         },
         effects: Vec::new(),
     };

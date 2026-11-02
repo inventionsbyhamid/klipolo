@@ -81,6 +81,7 @@ function external(client: string, parts: Partial<ChatReply>): ExternalReply {
       moments: [],
       revision: fixtureSnapshot().history.revision,
       pictures: [],
+      analyze: false,
       ...parts,
     },
   };

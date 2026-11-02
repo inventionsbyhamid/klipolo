@@ -866,7 +866,8 @@ fn an_apps_words_go_on_screen_as_it_gave_them() {
     assert_eq!(out.refusals, vec![]);
     assert_eq!(out.additions.as_ref().unwrap().label, "chat.addText");
     assert_eq!(words_on(&the_layer(&p, &out)), "Day 1 in Lisbon");
-    let out = compile(&p, &i, &[text("Day 1 in Lisbon")]);
+    // Chat's model may only paraphrase the video ("Day one in Lisbon"): words it never says go back.
+    let out = compile(&p, &i, &[text("Day 2 in Porto")]);
     assert_eq!(out.additions, None);
     assert!(
         refused_to_model(&out, 0).starts_with("addText: the words must be the person's own"),

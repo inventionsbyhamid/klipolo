@@ -99,6 +99,8 @@ export type Message =
       proposal: ProposalPart | null;
       /** The pictures it asked for (stickers, title card backgrounds). */
       pictures: PicturePart[];
+      /** Something asked for needs a clip analyzed that isn't yet: Analyze under it, which shows the price first. */
+      analyze?: boolean;
       /**
        * Another app's reply (MCP): the app's name, as it gave it. Its `text` is empty: the panel says what the app did.
        * Undefined for Klipolo's own.
