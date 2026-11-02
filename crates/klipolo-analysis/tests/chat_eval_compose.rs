@@ -58,6 +58,11 @@ fn pair(key: &str, value: Value) -> Value {
     json!({"key": key, "value": value})
 }
 
+/// A volume key: a level at a time from the song's start, easing in and out.
+fn level(at: f64, value: f64) -> Value {
+    json!({"atSec": at, "value": value, "ease": "inOut"})
+}
+
 /// The answer each case asks for.
 fn ideal(message: &str) -> Vec<(&'static str, Value)> {
     match message {
@@ -84,7 +89,15 @@ fn ideal(message: &str) -> Vec<(&'static str, Value)> {
         )],
         "fade the music down while I'm talking" => vec![(
             "setLayer",
-            json!({"layer": "m1", "set": [pair("duck", json!(true))]}),
+            json!({"layer": "m1", "set": [], "volumeKeys": [
+                level(0.0, 0.5), level(1.0, 0.15), level(150.0, 0.15), level(152.0, 0.5)
+            ]}),
+        )],
+        "duck the music between 0:10 and 0:20" => vec![(
+            "setLayer",
+            json!({"layer": "m1", "set": [], "volumeKeys": [
+                level(9.5, 0.5), level(10.0, 0.15), level(20.0, 0.15), level(20.5, 0.5)
+            ]}),
         )],
         "make the sticker float up and down gently" => vec![(
             "setMotion",
@@ -106,7 +119,7 @@ fn ideal(message: &str) -> Vec<(&'static str, Value)> {
     }
 }
 
-const MESSAGES: [&str; 9] = [
+const MESSAGES: [&str; 10] = [
     "slide the title in from the left with a little overshoot",
     "make the logo spin in and bounce",
     "make each word pop in one by one",
@@ -116,6 +129,7 @@ const MESSAGES: [&str; 9] = [
     "make the title yellow with a black outline",
     "put the logo in the top right corner and make it a bit see-through",
     "add a soft vignette to the video",
+    "duck the music between 0:10 and 0:20",
 ];
 
 async fn meta(answer: impl Fn(&str) -> Vec<(&'static str, Value)>) -> MockServer {
@@ -149,7 +163,7 @@ async fn every_composed_edit_answered_as_it_should_be_passes() {
     let out = run(&env(&server), &["--cases", CASES]).await;
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stdout.contains("9/9 passed"), "{stdout}{stderr}");
+    assert!(stdout.contains("10/10 passed"), "{stdout}{stderr}");
     assert_eq!(out.status.code(), Some(0));
     assert!(!stdout.contains(KEY) && !stderr.contains(KEY));
 }
