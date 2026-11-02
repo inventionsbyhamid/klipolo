@@ -316,30 +316,24 @@ fn refusal_round_trip_then_success() {
 fn a_call_refused_on_every_step_is_left_undone() {
     let (p, speech) = talk();
     let i = inputs(&p, speech);
-    // Each try at a part nothing stands on: after the last step, it is named as not done.
-    let tries: Vec<_> = [
-        (12.3, 19.7),
-        (13.1, 18.4),
-        (14.0, 20.0),
-        (15.0, 21.0),
-        (16.0, 22.0),
-        (7.9, 29.8),
-    ]
-    .iter()
-    .enumerate()
-    .map(|(k, (a, b))| {
-        answer(
-            "Cutting it now.",
-            vec![cut_call(&format!("call_{k}"), *a, *b)],
-            0.004,
-        )
-    })
-    .collect();
+    // Every step's try at another part nothing stands on, then one that would stand: never asked for.
+    let tries: Vec<_> = (0..MAX_STEPS)
+        .map(|k| (12.0 + 0.5 * k as f64, 18.0 + 0.5 * k as f64))
+        .chain([(7.9, 29.8)])
+        .enumerate()
+        .map(|(k, (a, b))| {
+            answer(
+                "Cutting it now.",
+                vec![cut_call(&format!("call_{k}"), a, b)],
+                0.004,
+            )
+        })
+        .collect();
     let model = Fake::new(tries);
     let out = send(&model, &[], "cut the boring bit", &i, &p).unwrap();
 
     assert_eq!(model.seen().len(), MAX_STEPS);
-    assert_eq!(model.left(), 1, "the sixth answer is never asked for");
+    assert_eq!(model.left(), 1, "the last answer is never asked for");
     // Nothing invented is applied, and the reply says plainly what couldn't be done.
     assert_eq!(out.compiled.proposal, None);
     assert_eq!(out.compiled.additions, None);
@@ -351,7 +345,7 @@ fn a_call_refused_on_every_step_is_left_undone() {
     );
     // The model's claim that it is cutting is not repeated when nothing came of it.
     assert!(!out.reply.contains("Cutting it now"), "{}", out.reply);
-    assert!((out.usage_usd - 0.02).abs() < 1e-12);
+    assert!((out.usage_usd - 0.004 * MAX_STEPS as f64).abs() < 1e-12);
 }
 
 /// The serialized request up to and including the context item.
@@ -1180,6 +1174,117 @@ fn find_call(call_id: &str) -> FunctionCall {
     )
 }
 
+/// `i` with a pack picture (Star), sound (Pop) and song (Soft ambient) in its library.
+fn with_pack(mut i: Inputs) -> Inputs {
+    let item = |id: &str, name: &str, kind: MediaKind| {
+        let picture = kind == MediaKind::Image;
+        LibraryItem {
+            name: name.into(),
+            kind,
+            asset: serde_json::from_value(serde_json::json!({
+                "id": id, "kind": if picture { "image" } else { "audio" }, "path": format!("/pack/{id}"),
+                "name": name, "durationUs": 60_000_000, "width": if picture { 512 } else { 0 },
+                "height": if picture { 512 } else { 0 }, "fps": 0.0, "hasAudio": !picture,
+            }))
+            .unwrap(),
+            pack: true,
+            tags: Vec::new(),
+        }
+    };
+    i.library.items.extend([
+        item("klipolo-pack-star", "Star", MediaKind::Image),
+        item("klipolo-pack-pop", "Pop", MediaKind::Sound),
+        item("klipolo-pack-ambient", "Soft ambient", MediaKind::Music),
+    ]);
+    i
+}
+
+#[test]
+fn a_short_is_a_look_then_one_batch_then_words() {
+    let (p, speech) = talk();
+    let i = with_pack(inputs(&p, speech));
+    // Once it knows the moments, the whole plan in one answer: three model calls for the whole short.
+    let batch = vec![
+        fc(
+            "call_2",
+            "keepOnly",
+            r#"{"ranges": [{"startSec": 0.5, "endSec": 7.8}]}"#,
+        ),
+        fc(
+            "call_3",
+            "setFormat",
+            r#"{"format": "portrait", "keepOthers": true}"#,
+        ),
+        fc(
+            "call_4",
+            "followSubject",
+            r#"{"description": "person", "focus": null}"#,
+        ),
+        fc(
+            "call_5",
+            "setCaptions",
+            r#"{"on": true, "style": "word-pop"}"#,
+        ),
+        fc(
+            "call_6",
+            "addText",
+            r#"{"text": "the new module", "preset": "title", "atSec": 0.5, "durationSec": 2.0, "animation": "kinetic", "font": null}"#,
+        ),
+        fc(
+            "call_7",
+            "addImage",
+            r#"{"file": "Star", "size": "medium", "position": "top-right", "atSec": 3.0, "durationSec": 2.0}"#,
+        ),
+        fc(
+            "call_8",
+            "animate",
+            r#"{"layer": "last", "enter": "pop", "exit": null, "emphasis": null, "sound": "Pop"}"#,
+        ),
+        fc(
+            "call_9",
+            "addMusic",
+            r#"{"file": "Soft ambient", "volume": 0.15, "duck": true, "atSec": null}"#,
+        ),
+    ];
+    let model = Fake::new(vec![
+        answer("", vec![find_call("call_1")], 0.001),
+        answer("", batch, 0.002),
+        answer(
+            "Here is your vertical short. Review the cut below.",
+            vec![],
+            0.001,
+        ),
+    ]);
+    let out = send(&model, &[], "make a 60 s short with animations", &i, &p).unwrap();
+    assert_eq!(model.seen().len(), 3);
+    assert_eq!(out.compiled.refusals, vec![], "{:?}", out.compiled.refusals);
+    let changes: Vec<&str> = out
+        .compiled
+        .changes
+        .iter()
+        .map(|c| c.code.as_str())
+        .collect();
+    assert_eq!(
+        changes,
+        [
+            "chat.setFormat",
+            "chat.setCaptions",
+            "chat.addText",
+            "chat.addImage",
+            "chat.animate",
+            "chat.addMusic"
+        ]
+    );
+    assert!(out.compiled.proposal.is_some(), "the cut is proposed");
+    assert_eq!(out.compiled.jobs.len(), 1, "the follow");
+    assert_eq!(
+        out.reply,
+        "Here is your vertical short. Review the cut below."
+    );
+    // A short whose model goes one call a step still has room: the steps are a safety net, not the plan.
+    assert_eq!(MAX_STEPS, 8);
+}
+
 #[test]
 fn the_model_goes_on_after_each_step_until_it_answers_in_words() {
     let (p, speech) = talk();
@@ -1295,11 +1400,11 @@ fn a_promise_without_calls_is_asked_to_go_on() {
 }
 
 #[test]
-fn a_message_never_takes_more_than_five_model_calls() {
+fn a_message_never_takes_more_than_max_steps_model_calls() {
     let (p, speech) = talk();
     let i = inputs(&p, speech);
     // Each answer another look: the steps run out, and what was found is shown.
-    let looks: Vec<_> = (0..7)
+    let looks: Vec<_> = (0..MAX_STEPS + 2)
         .map(|k| {
             let look = fc(
                 &format!("call_{k}"),

@@ -51,8 +51,9 @@ use crate::tools::{FunctionCall, ToolCall, tools};
 /// The exchanges the conversation keeps.
 pub const KEPT_TURNS: usize = 6;
 /// The most model calls one message makes: each answer with calls gets what came of them and is asked again, until
-/// one answers in words alone.
-pub const MAX_STEPS: usize = 5;
+/// one answers in words alone. A safety net: the prompt asks for calls that don't depend on each other in one answer,
+/// and the spend cap still bounds what a message costs.
+pub const MAX_STEPS: usize = 8;
 /// Sent back when an answer says what it will do but calls no tool.
 pub const GO_ON: &str = "Go on: make the calls now.";
 /// Said after what was done when a model call failed before the model was done.
