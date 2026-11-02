@@ -4,7 +4,10 @@
 //! - **CJK** (Han, kana, Hangul, Bopomofo) falls back only to Adobe NotDef's boxes. The script runs
 //!   (`script_runs::runs`) already ask for the language's own Noto Sans; NotDef is all that's left after it, in the
 //!   engine as in the webview (never another language's Noto, never a system face).
-//! - **Other scripts** (Thai, Arabic…) keep the system's script fallbacks and never reach NotDef: it is on the
+//! - **Indic, Arabic, Hebrew and Thai** fall back to their script's bundled Noto Sans (`NotoScript`), at the text's
+//!   weight and style, so they draw the same in the preview and in every export on any computer. cosmic-text shapes
+//!   each line's runs in their own direction, so Arabic and Hebrew read right to left.
+//! - **Other scripts** (Ethiopic, Khmer…) keep the system's script fallbacks and never reach NotDef: it is on the
 //!   forbidden list, which cosmic-text's last stage (any face not on it) reads and its script stage doesn't.
 //! - **Installed CJK families** (PingFang, Hiragino, Apple SD Gothic Neo, hidden ones too) join the forbidden list once
 //!   the scan has found them (`forbid_installed_cjk`), so the last stage never borrows them for CJK the
@@ -16,7 +19,7 @@ use std::sync::OnceLock;
 
 use glyphon::cosmic_text::{Fallback, PlatformFallback};
 use klipolo_fonts::coverage::CJK;
-use klipolo_fonts::fallback::{LATIN, NOTDEF};
+use klipolo_fonts::fallback::{LATIN, NOTDEF, NotoScript};
 use klipolo_fonts::index::InstalledFamily;
 use klipolo_fonts::installed::NORMAL_WIDTH;
 use klipolo_fonts::unicode_script::Script;
@@ -95,7 +98,21 @@ impl Fallback for KlipoloFallback {
             | Script::Katakana
             | Script::Hangul
             | Script::Bopomofo => &[NOTDEF],
-            _ => PLATFORM.script_fallback(script, locale),
+            _ => match NotoScript::of(script) {
+                Some(noto) => noto_list(noto),
+                None => PLATFORM.script_fallback(script, locale),
+            },
         }
     }
+}
+
+/// `[noto.alias()]`, as the static list cosmic-text takes.
+fn noto_list(noto: NotoScript) -> &'static [&'static str] {
+    static LISTS: OnceLock<[[&'static str; 1]; NotoScript::ALL.len()]> = OnceLock::new();
+    let lists = LISTS.get_or_init(|| NotoScript::ALL.map(|s| [s.alias()]));
+    let at = NotoScript::ALL
+        .iter()
+        .position(|&s| s == noto)
+        .unwrap_or_default();
+    &lists[at]
 }

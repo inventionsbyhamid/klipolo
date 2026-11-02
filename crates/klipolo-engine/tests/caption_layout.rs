@@ -186,7 +186,7 @@ fn a_word_wider_than_the_line_autofits_and_is_never_cut() {
 }
 
 /// An emoji in a heavy caption finds the emoji face at the caption's own weight at once (cosmic-text no longer loads
-/// the computer's fonts one by one to reach it), and a condensed face keeps the system's script faces, so its Thai
+/// the computer's fonts one by one to reach it), and a condensed face keeps the system's script faces, so its Ethiopic
 /// never draws as boxes.
 #[test]
 fn an_emoji_at_900_finds_its_face_and_a_condensed_face_keeps_the_script_fallbacks() {
@@ -195,7 +195,7 @@ fn an_emoji_at_900_finds_its_face_and_a_condensed_face_keeps_the_script_fallback
     configure_for_tests();
     let index = test_index();
     let dir = index.bundled_dir().unwrap();
-    // Adobe NotDef's file has a glyph for every character: it stands in for this computer's emoji and Thai faces.
+    // Adobe NotDef's file has a glyph for every character: it stands in for this computer's emoji and script faces.
     let any = dir.join("AdobeNotDef/AND-Regular.ttf");
     let emoji = klipolo_platform::fonts::emoji_family();
     let (_, drawn, weight) = test_installed_shape(
@@ -222,7 +222,8 @@ fn an_emoji_at_900_finds_its_face_and_a_condensed_face_keeps_the_script_fallback
         ),
         ("Test Thai", any, 400, 5),
     ];
-    let (choice, drawn, _) = test_installed_shape(&faces, &condensed, 400, "ไทย");
+    // Ethiopic: a script with no bundled fallback, so the system's face answers.
+    let (choice, drawn, _) = test_installed_shape(&faces, &condensed, 400, "ሰላም");
     // A condensed CJK family's twin is as forbidden as the family itself (never a fallback).
     let cjk = klipolo_fonts::index::InstalledFamily {
         family: "Test CJK Condensed".into(),
@@ -249,6 +250,6 @@ fn an_emoji_at_900_finds_its_face_and_a_condensed_face_keeps_the_script_fallback
     assert_eq!(choice.family, "kl:w:Test Condensed:3");
     assert_eq!(
         drawn, "Test Thai",
-        "the system's Thai face, not boxes in the condensed one"
+        "the system's script face, not boxes in the condensed one"
     );
 }

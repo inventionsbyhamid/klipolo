@@ -3,7 +3,8 @@
 //! - every bundled face, at its real weight and style (`kl:b:<family>`);
 //! - every downloaded family registered here (`register`), the same way (`kl:g:<family>:<version>`);
 //! - the fallback aliases at all nine weights in both styles, each pointing at its nearest real file:
-//!   `kl:fallback:latin` (Inter) and `kl:fallback:notdef` (Adobe NotDef's boxes, the last CJK fallback). The CJK
+//!   `kl:fallback:latin` (Inter), `kl:fallback:notdef` (Adobe NotDef's boxes, the last CJK fallback) and a bundled
+//!   Noto Sans for each of eleven scripts (`kl:fallback:devanagari`, `kl:fallback:arabic`...). The CJK
 //!   aliases `kl:fallback:{sc,tc,jp,kr}` exist only once their Noto Sans is downloaded and registered here
 //!   (`index().cjk(script)`, the downloaded Noto Sans SC, TC, JP or KR only, never a system face).
 //!
@@ -51,9 +52,9 @@ pub(crate) use recorded::take_given as take_recorded_scan;
 pub use recorded::{record_scan, use_recorded_scan};
 #[doc(hidden)]
 pub use testing::{
-    TestFace, test_fallback_face, test_group_installed, test_index, test_installed_draw,
-    test_installed_shape, test_record_scan_of, test_shape_face, test_system_fallback_face,
-    test_template_face,
+    TestFace, test_fallback_face, test_glyphs, test_group_installed, test_index,
+    test_installed_draw, test_installed_shape, test_record_scan_of, test_shape_face,
+    test_system_fallback_face, test_template_face,
 };
 pub(crate) use twins::width_alias;
 
@@ -202,7 +203,7 @@ pub struct FaceChoice {
 
 /// `resolve`'s answer as the engine shapes with it, with the CJK the face covers. A family with only italic faces is
 /// asked for upright, where it is registered too (`managed`): the system's script faces are upright, and cosmic-text
-/// only falls back to faces of the asked style, so its Thai or Devanagari never boxes. For
+/// only falls back to faces of the asked style, so its Khmer or Ethiopic never boxes. For
 /// the same reason a face that isn't normal width (an installed condensed one) is asked at normal width under its width
 /// twin's alias (`width_alias`): it draws its own glyphs, at its own width, and keeps the system's script
 /// faces for the letters it lacks.
