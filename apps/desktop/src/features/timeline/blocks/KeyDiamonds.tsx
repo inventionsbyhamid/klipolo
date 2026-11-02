@@ -89,7 +89,9 @@ export const KeyDiamonds = memo(function KeyDiamonds({
     e.currentTarget.style.left = `${at(p.fromUs)}px`;
     const item = itemNow(id);
     if (!item || toUs === p.fromUs) return;
-    // Delete straight after takes the keys where they went (stopping short of a key in the way), not the layer.
+    // Delete straight after takes the keys where they went (stopping short of a key in the way), not the layer, nor
+    // the keys a copy came from: this diamond lets go of the focus, so Delete goes to the pick.
+    e.currentTarget.blur();
     const keys: MotionKeys = { x: [], y: [], scale: [], rotation: [], opacity: [], ...item.layout.motion?.keys };
     const goesTo = landedAt(keys, movedKeysAt(keys, p.fromUs, toUs, item.durationUs, e.altKey)) ?? p.fromUs;
     const landed = moveKeysAt(item, p.fromUs, toUs, e.altKey);

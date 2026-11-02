@@ -109,7 +109,9 @@ export const VolumePoints = memo(function VolumePoints({
     const { toUs, v } = moved(p, e.clientX, e.clientY);
     settle(e.currentTarget, p.fromUs);
     const landed = moveVolumeKey(target, p.fromUs, toUs, v);
-    // Delete straight after takes the point where it went, not the clip or sound.
+    // Delete straight after takes the point where it went, not the clip or sound. This point lets go of the focus (it
+    // stays drawn here until the move lands), so Delete goes to the pick.
+    e.currentTarget.blur();
     pickMoved({ kind: 'volume', target, tUs: toUs }, p.fromUs, landed);
     void landed.then(() => previewLine(id, null));
   };

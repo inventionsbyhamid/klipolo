@@ -15,7 +15,10 @@ import { renderWithProviders } from '../../test/render';
  */
 
 const apply = vi.fn<(label: string, ops: Op[]) => Promise<boolean>>(() => Promise.resolve(true));
-vi.mock('../../bridge/commands', () => ({ bridge: { apply: vi.fn() }, mediaUrl: (p: string) => p }));
+vi.mock('../../bridge/commands', () => ({
+  bridge: { apply: vi.fn(), undo: vi.fn(), redo: vi.fn() },
+  mediaUrl: (p: string) => p,
+}));
 vi.mock('../../bridge/engine', () => ({
   engine: {
     preview: vi.fn().mockResolvedValue(undefined),
@@ -31,6 +34,7 @@ const { useSpeech } = await import('./media/speech');
 const { Timeline } = await import('./Timeline');
 const { clearMotionKeys } = await import('../../state/keyEdits');
 const { deletePickedKey, useKeyPick } = await import('../../state/keyPick');
+const { bridge } = await import('../../bridge/commands');
 
 type AudioContent = Extract<ItemContent, { type: 'audio' }>;
 const S = 1_000_000;
@@ -62,6 +66,16 @@ function landing(_label: string, ops: Op[]): Promise<boolean> {
   }
   useProject.setState({ snapshot });
   return Promise.resolve(true);
+}
+
+/** An undo as Rust answers it: `item` (the layer as it was) back in the project, at the next revision. */
+function undoTo(item: Item) {
+  const { history } = useProject.getState().snapshot!;
+  return Promise.resolve({
+    baseRevision: history.revision,
+    history: { ...history, revision: history.revision + 1 },
+    patch: { clips: [], items: [item] },
+  });
 }
 
 /** A drag of `el` from `fromX` to `toX` (and down by `dy`) that lets go there. */
@@ -157,6 +171,30 @@ describe('motion keys on the timeline', () => {
     expect(left.opacity).toEqual([]);
     expect(lands.mock.calls.flatMap(([, ops]) => ops.map((op) => op.type))).not.toContain('removeItem');
   });
+
+  it('Delete straight after an Option drag takes the copy, not the keys it was copied from', async () => {
+    moving();
+    const lands = vi.fn(landing);
+    useProject.setState({ apply: lands });
+    renderWithProviders(<Timeline />);
+    const [first] = diamonds();
+    // Copied from 0.5 s to 1 s into the layer.
+    fireEvent.pointerDown(first, { button: 0, pointerId: 1, clientX: 150, altKey: true });
+    fireEvent.pointerMove(first, { pointerId: 1, clientX: 200, altKey: true });
+    fireEvent.pointerUp(first, { pointerId: 1, clientX: 200, altKey: true });
+    await act(async () => undefined);
+    expect(lands.mock.calls[0][0]).toBe('keys.copy.undo');
+    expect(useKeyPick.getState().picked).toEqual({ kind: 'motion', itemId: 'title', tUs: 1 * S });
+    // The pressed diamond stays, but lets go of the focus: Delete goes to the picked copy, not to it.
+    expect(diamonds()).toContain(first);
+    expect(document.activeElement).not.toBe(first);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Delete' });
+    expect(deletePickedKey()).toBe(true);
+    await act(async () => undefined);
+    expect(lands).toHaveBeenCalledTimes(2);
+    expect(lands.mock.calls[1][0]).toBe('keys.delete.undo');
+    expect(layoutOf(lands.mock.calls[1]).motion!.keys!.x).toEqual([key(0.5, 0), key(2, 0.2)]);
+  });
 });
 
 describe('volume keys on the timeline', () => {
@@ -251,6 +289,50 @@ describe('volume keys on the timeline', () => {
     expect(contentOf(lands.mock.calls[1]).volumeKeys).toEqual([key(6, 1)]);
     expect(lands.mock.calls.flatMap(([, ops]) => ops.map((op) => op.type))).not.toContain('removeItem');
   });
+
+  it('a dragged point lets go of the focus, so a Delete before the move lands takes it where it went', async () => {
+    sound([key(2, 0.5), key(6, 1)]);
+    let land!: () => void;
+    const slow = vi.fn((label: string, ops: Op[]) =>
+      label === 'volumeKeys.move.undo'
+        ? new Promise<boolean>((done) => (land = () => void landing(label, ops).then(done)))
+        : landing(label, ops),
+    );
+    useProject.setState({ apply: slow });
+    renderWithProviders(<Timeline />);
+    const [first] = document.querySelectorAll<HTMLElement>('.tl-volume-key');
+    drag(first, 200, 300);
+    await act(async () => undefined);
+    expect(slow).toHaveBeenCalledTimes(1);
+    // Still drawn at 2 s until the move is in, but not focused: its own Delete would take nothing there by then.
+    expect(document.activeElement).not.toBe(first);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Delete' });
+    expect(deletePickedKey()).toBe(true);
+    await act(async () => land());
+    await vi.waitFor(() => expect(slow).toHaveBeenCalledTimes(2));
+    expect(slow.mock.calls[1][0]).toBe('volumeKeys.remove.undo');
+    expect(contentOf(slow.mock.calls[1]).volumeKeys).toEqual([key(6, 1)]);
+  });
+
+  it('an undo after a drag lets the point go, so Delete acts on the selection again', async () => {
+    sound([key(2, 0.5), key(6, 1)]);
+    const [song] = useProject.getState().snapshot!.project.timeline.tracks[1].items;
+    const lands = vi.fn(landing);
+    useProject.setState({ apply: lands });
+    vi.mocked(bridge.undo).mockImplementation(() => undoTo(song));
+    renderWithProviders(<Timeline />);
+    drag(document.querySelector('.tl-volume-key')!, 200, 300);
+    await act(async () => undefined);
+    expect(useKeyPick.getState().picked?.tUs).toBe(3 * S);
+    // ⌘Z: the point goes back to 2 s, and nothing is picked or drawn picked.
+    await act(async () => useProject.getState().undo());
+    expect(bridge.undo).toHaveBeenCalledTimes(1);
+    const back = useProject.getState().snapshot!.project.timeline.tracks[1].items[0].content as AudioContent;
+    expect(back.volumeKeys).toEqual([key(2, 0.5), key(6, 1)]);
+    expect(useKeyPick.getState().picked).toBeNull();
+    expect(document.querySelector('.tl-volume-key[data-picked]')).toBeNull();
+    expect(deletePickedKey()).toBe(false);
+  });
 });
 
 describe('a picked key', () => {
@@ -271,14 +353,14 @@ describe('a picked key', () => {
     fireEvent.pointerDown(document.body, { button: 0, pointerId: 3 });
     expect(useKeyPick.getState().picked).toBeNull();
     expect(deletePickedKey()).toBe(false);
-    // A pick of a key that is gone does nothing, yet spends the Delete: its layer stays. Another selection lets a
-    // pick go.
+    // A pick of a key that is gone is let go and changes nothing: Delete acts on the selection, as with none picked.
     const before = apply.mock.calls.length;
     useKeyPick.getState().pick({ kind: 'motion', itemId: 'title', tUs: 7 * S });
-    expect(deletePickedKey()).toBe(true);
+    expect(deletePickedKey()).toBe(false);
     await act(async () => undefined);
     expect(apply.mock.calls.slice(before).flatMap(([, ops]) => ops)).toEqual([]);
     expect(useKeyPick.getState().picked).toBeNull();
+    // Another selection lets a pick go.
     useKeyPick.getState().pick({ kind: 'motion', itemId: 'title', tUs: 2 * S });
     act(() => useSelection.getState().select('b'));
     expect(useKeyPick.getState().picked).toBeNull();
@@ -304,5 +386,22 @@ describe('a picked key', () => {
     await vi.waitFor(() => expect(slow).toHaveBeenCalledTimes(2));
     expect(slow.mock.calls[1][0]).toBe('keys.delete.undo');
     expect(layoutOf(slow.mock.calls[1]).motion!.keys!.x).toEqual([key(2, 0.2)]);
+  });
+
+  it('a picked key taken away by another edit (chat, a voice) lets Delete act on the selection', async () => {
+    const snapshot = moving();
+    renderWithProviders(<Timeline />);
+    const [first] = diamonds();
+    fireEvent.pointerDown(first, { button: 0, pointerId: 1, clientX: 150 });
+    fireEvent.pointerUp(first, { pointerId: 1, clientX: 150 });
+    expect(useKeyPick.getState().picked?.tUs).toBe(0.5 * S);
+    // Chat clears the layer's motion keys.
+    const next = structuredClone(snapshot);
+    const title = next.project.timeline.tracks[0].items[0];
+    delete title.layout.motion!.keys;
+    act(() => useProject.setState({ snapshot: next }));
+    expect(deletePickedKey()).toBe(false);
+    await act(async () => undefined);
+    expect(apply).not.toHaveBeenCalled();
   });
 });
