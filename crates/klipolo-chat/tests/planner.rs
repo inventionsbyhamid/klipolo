@@ -1664,3 +1664,48 @@ fn a_short_places_its_sticker_and_sounds_on_the_words_said() {
     );
     assert!(video_duration(&short.timeline) < secs(6.0));
 }
+
+#[test]
+fn an_answer_cut_off_keeps_its_finished_calls_and_is_asked_again_once() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let cut_off = |calls: Vec<FunctionCall>| {
+        Err(ModelError::CutOff(ModelResponse {
+            text: String::new(),
+            calls,
+            usage_usd: 0.004,
+        }))
+    };
+    // Its finished cut is kept and proposed; the model is told it was cut off and finishes in the next step.
+    let model = Fake::new(vec![
+        cut_off(vec![cut_call("call_1", 7.9, 29.8)]),
+        answer("I proposed the cut.", vec![], 0.001),
+    ]);
+    let out = send(&model, &[], "cut the end", &i, &p).unwrap();
+    let seen = model.seen();
+    assert_eq!(seen.len(), 2);
+    assert_eq!(output_for(&seen[1], "call_1"), PROPOSED_OUTPUT);
+    assert_eq!(
+        seen[1].input.last(),
+        Some(&Item::User {
+            text: klipolo_chat::CUT_OFF.into()
+        })
+    );
+    assert!(out.compiled.proposal.is_some());
+    assert_eq!(out.reply, "I proposed the cut.");
+    assert!((out.usage_usd - 0.005).abs() < 1e-12, "{}", out.usage_usd);
+    // Cut off before any call: asked again all the same.
+    let model = Fake::new(vec![
+        cut_off(vec![]),
+        answer("", vec![cut_call("call_2", 7.9, 29.8)], 0.002),
+    ]);
+    let out = send(&model, &[], "cut the end", &i, &p).unwrap();
+    assert!(out.compiled.proposal.is_some());
+    // Cut off again: the message fails, as any failed answer does, billed for both.
+    let model = Fake::new(vec![cut_off(vec![]), cut_off(vec![])]);
+    let e = send(&model, &[], "cut the end", &i, &p).unwrap_err();
+    assert_eq!(e.kind, ChatErrorKind::Other);
+    assert_plain(&e.message);
+    assert!((e.usage_usd - 0.008).abs() < 1e-12, "{}", e.usage_usd);
+    assert_eq!(model.seen().len(), 2);
+}

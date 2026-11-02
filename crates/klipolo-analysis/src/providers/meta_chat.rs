@@ -173,9 +173,10 @@ fn item(item: &Item) -> Value {
     }
 }
 
-/// Meta's answer in chat's terms, priced from its usage. An answer that came back `failed`, or `incomplete` (cut off,
-/// at its output cap or otherwise), is an error: its calls may be partial, so none of them is used. It is still billed,
-/// so the error carries its cost.
+/// Meta's answer in chat's terms, priced from its usage. An answer cut off at its output cap is `ModelError::CutOff`
+/// with its words and the calls it finished (arguments that read as a JSON object; one cut part-way doesn't), for the
+/// planner to keep and ask again. One that came back `failed`, or `incomplete` for another reason, is an error, none of
+/// its calls used. Either is still billed, so the error carries its cost.
 fn answer(out: ResponseOut) -> Result<ModelResponse, ModelError> {
     let usage_usd = pricing::spark_usd(out.usage);
     // A code from the answer, for logs: only lowercase letters, digits and underscores, never free text.
@@ -190,7 +191,10 @@ fn answer(out: ResponseOut) -> Result<ModelResponse, ModelError> {
             .unwrap_or("no reason given")
             .to_owned()
     };
+    let cut_off = out.status.as_deref() == Some("incomplete")
+        && code("/incomplete_details/reason") == "max_output_tokens";
     let detail = match out.status.as_deref() {
+        _ if cut_off => None,
         Some("failed") => Some(format!("answer failed: {}", code("/error/code"))),
         Some("incomplete") => Some(format!("cut off: {}", code("/incomplete_details/reason"))),
         _ => None,
@@ -198,9 +202,12 @@ fn answer(out: ResponseOut) -> Result<ModelResponse, ModelError> {
     if let Some(detail) = detail {
         return Err(ModelError::Other { detail, usage_usd });
     }
-    Ok(ModelResponse {
+    let answer = ModelResponse {
         text: out.output_text.unwrap_or_default(),
         calls: (out.function_calls.into_iter())
+            .filter(|c| {
+                !cut_off || serde_json::from_str::<Value>(&c.arguments).is_ok_and(|v| v.is_object())
+            })
             .map(|c| FunctionCall {
                 name: c.name,
                 call_id: c.call_id,
@@ -208,7 +215,11 @@ fn answer(out: ResponseOut) -> Result<ModelResponse, ModelError> {
             })
             .collect(),
         usage_usd,
-    })
+    };
+    if cut_off {
+        return Err(ModelError::CutOff(answer));
+    }
+    Ok(answer)
 }
 
 /// What the person is told when the relay, or Traefik in front of it, gave up waiting and said nothing (a bare 504 or

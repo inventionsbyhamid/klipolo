@@ -85,8 +85,11 @@ pub enum ModelError {
     Refused,
     /// The provider turned this request down under its content policy: its sentence for the person.
     Declined(String),
+    /// The answer stopped at its output cap: its words and the calls it finished (the provider leaves out one cut
+    /// part-way), billed (`usage_usd`). The planner keeps those calls and asks once more for the rest.
+    CutOff(ModelResponse),
     /// Anything else: a request refused as sent, an answer that can't be read, or one that came back failed or cut
-    /// off (at its output cap), which is billed (`usage_usd`). `detail` is for logs, never shown.
+    /// off for another reason, which is billed (`usage_usd`). `detail` is for logs, never shown.
     Other { detail: String, usage_usd: f64 },
 }
 
@@ -103,6 +106,7 @@ impl ModelError {
     pub fn usage_usd(&self) -> f64 {
         match self {
             ModelError::Other { usage_usd, .. } => *usage_usd,
+            ModelError::CutOff(partial) => partial.usage_usd,
             _ => 0.0,
         }
     }
@@ -119,6 +123,7 @@ impl fmt::Display for ModelError {
             ModelError::Network => f.write_str("no answer"),
             ModelError::Refused => f.write_str("not allowed"),
             ModelError::Declined(said) => write!(f, "declined: {said}"),
+            ModelError::CutOff(_) => f.write_str("failed: cut off: max_output_tokens"),
             ModelError::Other { detail, .. } => write!(f, "failed: {detail}"),
         }
     }

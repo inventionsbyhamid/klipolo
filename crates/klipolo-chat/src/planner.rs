@@ -56,6 +56,9 @@ pub const KEPT_TURNS: usize = 6;
 pub const MAX_STEPS: usize = 8;
 /// Sent back when an answer says what it will do but calls no tool.
 pub const GO_ON: &str = "Go on: make the calls now.";
+/// Sent back after an answer cut off at its output cap: its finished calls are kept, and it is asked once more.
+pub const CUT_OFF: &str =
+    "Your last answer was cut off. Send fewer calls at a time; you can finish in the next step.";
 /// Said after what was done when a model call failed before the model was done.
 pub const STOPPED: &str = "I couldn't finish the rest of it.";
 
@@ -184,7 +187,9 @@ impl ChatError {
             ModelError::Network => (ChatErrorKind::Network, NO_CONNECTION.to_owned()),
             ModelError::Refused => (ChatErrorKind::Refused, NOT_ACCEPTED.to_owned()),
             ModelError::Declined(s) => (ChatErrorKind::Declined, said(Some(s), DECLINED)),
-            ModelError::Other { .. } => (ChatErrorKind::Other, FAILED.to_owned()),
+            ModelError::CutOff(_) | ModelError::Other { .. } => {
+                (ChatErrorKind::Other, FAILED.to_owned())
+            }
         };
         Self {
             kind,
@@ -243,14 +248,31 @@ pub async fn plan(
     let mut said = String::new();
     let mut closing: Option<String> = None;
     let mut stopped: Option<ChatError> = None;
+    // Whether an answer was cut off at its output cap: the first is kept and asked again once, the next fails.
+    let mut cut_before = false;
     loop {
         steps += 1;
-        let answer = match ask(model, &request, spent, steps).await {
-            Ok(answer) => answer,
+        let (answer, cut) = match ask(model, &request, spent, steps).await {
+            Ok(answer) => (answer, false),
+            Err(Asked::CutOff(partial)) if !cut_before && steps < MAX_STEPS => {
+                cut_before = true;
+                (partial, true)
+            }
+            Err(Asked::CutOff(partial)) => {
+                let e = ModelError::CutOff(partial);
+                let usage_usd = spent + e.usage_usd();
+                let e = ChatError::from_model(e, usage_usd, steps);
+                if calls.is_empty() {
+                    return Err(e);
+                }
+                spent = e.usage_usd;
+                stopped = Some(e);
+                break;
+            }
             // Nothing done yet: the message failed.
-            Err(e) if calls.is_empty() => return Err(e),
+            Err(Asked::Failed(e)) if calls.is_empty() => return Err(e),
             // What was done stands, and the reply says it stopped.
-            Err(e) => {
+            Err(Asked::Failed(e)) => {
                 spent = e.usage_usd;
                 stopped = Some(e);
                 break;
@@ -261,6 +283,13 @@ pub async fn plan(
         let text = answer.text.trim();
         if !text.is_empty() {
             said = text.to_owned();
+        }
+        if answer.calls.is_empty() && cut {
+            // Cut off before any call was finished: asked again, to send fewer at a time.
+            request.input.push(Item::User {
+                text: CUT_OFF.to_owned(),
+            });
+            continue;
         }
         if answer.calls.is_empty() {
             // It says what it will do but did nothing: told to go on.
@@ -282,7 +311,7 @@ pub async fn plan(
             .filter(|c| !calls.contains(c))
             .cloned()
             .collect();
-        if fresh.is_empty() && read.unreadable.is_empty() {
+        if fresh.is_empty() && read.unreadable.is_empty() && !cut {
             // Only what it already did: it has nothing more.
             break;
         }
@@ -333,6 +362,12 @@ pub async fn plan(
             .cloned()
             .collect();
         calls.extend(kept);
+        if cut {
+            // Its finished calls are kept; the rest is asked for once more, fewer at a time.
+            request.input.push(Item::User {
+                text: CUT_OFF.to_owned(),
+            });
+        }
         if steps >= MAX_STEPS {
             break;
         }
@@ -435,11 +470,21 @@ async fn ask(
     request: &ModelRequest,
     spent: f64,
     nth: usize,
-) -> Result<ModelResponse, ChatError> {
-    (model.respond(request).await).map_err(|e| {
-        let usage_usd = spent + e.usage_usd();
-        ChatError::from_model(e, usage_usd, nth)
+) -> Result<ModelResponse, Asked> {
+    (model.respond(request).await).map_err(|e| match e {
+        ModelError::CutOff(partial) => Asked::CutOff(partial),
+        e => {
+            let usage_usd = spent + e.usage_usd();
+            Asked::Failed(ChatError::from_model(e, usage_usd, nth))
+        }
     })
+}
+
+/// Why a model call gave no whole answer: cut off at its output cap (what it finished, `ModelError::CutOff`), or
+/// failed.
+enum Asked {
+    CutOff(ModelResponse),
+    Failed(ChatError),
 }
 
 /// One answer's calls, read.
