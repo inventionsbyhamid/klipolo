@@ -33,7 +33,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use futures::stream::{self, StreamExt, TryStreamExt};
-use klipolo_model::speech::{PAUSE_US, Transcript, Word, WordKind};
+use klipolo_model::speech::{PAUSE_US, Transcript, Word, WordKind, spaced_words};
 use klipolo_model::time::{RangeUs, Us};
 use serde::{Deserialize, Serialize};
 
@@ -346,7 +346,8 @@ fn turns_in(said: Vec<SpeakerTurn>, chunk: RangeUs, index: usize) -> Vec<Turn> {
             Turn {
                 start_us: start,
                 end_us: at(t.end_ms).max(start),
-                text: t.text.trim().to_owned(),
+                // Chinese and Japanese as one word per character, so captions and word timing have words.
+                text: spaced_words(t.text.trim()).into_owned(),
                 speaker: t.speaker,
                 chunk: index as u32,
                 aligned: false,

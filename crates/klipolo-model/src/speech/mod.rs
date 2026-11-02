@@ -176,6 +176,75 @@ pub fn joins_unspaced(c: char) -> bool {
     )
 }
 
+/// The byte ranges of `text`'s words, as captions show them: its runs between whitespace, with each Chinese or Japanese
+/// character (Han, kana) a word of its own (words of `joins_unspaced` characters meet without a space, so they read as
+/// written). A character's punctuation ("，", "。", a closing bracket), Japanese's small kana, long-vowel and repeat
+/// marks stay with the character before it; an opening bracket goes with the one after it; letters or digits of
+/// another script start a word of their own ("用Final" is "用", "Final"). Text with none of those characters is split
+/// on whitespace alone. O(characters).
+pub fn word_ranges(text: &str) -> Vec<std::ops::Range<usize>> {
+    let mut out = Vec::new();
+    let mut start: Option<usize> = None;
+    // The word being read holds a letter or digit (not only an opening bracket), and its last character was Chinese
+    // or Japanese (a character or its punctuation).
+    let (mut has_letter, mut after_unspaced) = (false, false);
+    for (i, c) in text.char_indices() {
+        if c.is_whitespace() {
+            if let Some(s) = start.take() {
+                out.push(s..i);
+            }
+            (has_letter, after_unspaced) = (false, false);
+            continue;
+        }
+        let unspaced = joins_unspaced(c);
+        let breaks = has_letter
+            && if unspaced {
+                (c.is_alphabetic() && !attaches_back(c)) || (OPENING.contains(&c) && after_unspaced)
+            } else {
+                after_unspaced && (c.is_alphanumeric() || OPENING.contains(&c))
+            };
+        if breaks {
+            if let Some(s) = start.replace(i) {
+                out.push(s..i);
+            }
+            has_letter = false;
+        }
+        start.get_or_insert(i);
+        has_letter |= c.is_alphanumeric();
+        after_unspaced = unspaced;
+    }
+    if let Some(s) = start {
+        out.push(s..text.len());
+    }
+    out
+}
+
+/// `text`'s words (`word_ranges`) with one space between each: a Chinese or Japanese sentence as one word per
+/// character. Text with no Chinese or Japanese character comes back as it was.
+pub fn spaced_words(text: &str) -> std::borrow::Cow<'_, str> {
+    if !text.chars().any(joins_unspaced) {
+        return std::borrow::Cow::Borrowed(text);
+    }
+    let words: Vec<&str> = word_ranges(text).into_iter().map(|r| &text[r]).collect();
+    std::borrow::Cow::Owned(words.join(" "))
+}
+
+/// Opening brackets and quotes: they go with the character after them.
+const OPENING: [char; 12] = [
+    '「', '『', '（', '【', '〈', '《', '〔', '〖', '“', '‘', '［', '｛',
+];
+
+/// Japanese's small kana, long-vowel mark and repeat marks: part of the sound of the character before them.
+fn attaches_back(c: char) -> bool {
+    matches!(
+        c as u32,
+        0x3041 | 0x3043 | 0x3045 | 0x3047 | 0x3049 | 0x3063 | 0x3083 | 0x3085 | 0x3087 | 0x308E | 0x3095 | 0x3096
+            | 0x30A1 | 0x30A3 | 0x30A5 | 0x30A7 | 0x30A9 | 0x30C3 | 0x30E3 | 0x30E5 | 0x30E7 | 0x30EE | 0x30F5
+            | 0x30F6 | 0x31F0..=0x31FF | 0x30FC | 0x309D | 0x309E | 0x30FD | 0x30FE | 0x3005 | 0xFF67..=0xFF70
+            | 0xFF9E | 0xFF9F
+    )
+}
+
 /// `text` without Unicode's tag characters (U+E0000–E007F): they draw nothing, so a correction holding them could carry
 /// text the person never sees but an agent reads. A correction is stored without them.
 pub fn without_tags(text: &str) -> std::borrow::Cow<'_, str> {

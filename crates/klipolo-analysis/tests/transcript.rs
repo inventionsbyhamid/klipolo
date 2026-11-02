@@ -1120,6 +1120,17 @@ async fn a_transcript_is_tagged_with_its_words_language() {
     let english = words("Um, today I want to show you how to cut a video.").await;
     assert_eq!(english.transcript.language, "en");
     assert_eq!(spoken(&english)[0].kind, WordKind::Filler);
+
+    // Chinese is written without spaces: each character is a word, as captions and word timing need.
+    let chinese = words("大家好，今天我来教大家。").await;
+    assert_eq!(chinese.transcript.language, "zh");
+    assert_eq!(
+        texts(&chinese),
+        [
+            "大", "家", "好，", "今", "天", "我", "来", "教", "大", "家。"
+        ]
+    );
+    assert_eq!(chinese.turns[0].text, "大 家 好， 今 天 我 来 教 大 家。");
 }
 
 /// Alignment that failed runs again later on the cached turns (`Sound::load`, `align`, `finish`), with no new

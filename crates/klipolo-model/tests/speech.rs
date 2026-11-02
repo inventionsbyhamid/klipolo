@@ -780,3 +780,36 @@ fn speech_parity_json_is_current() {
         "stale: run with KLIPOLO_UPDATE_PARITY=1"
     );
 }
+
+/// Chinese and Japanese are written without spaces: each character is a word of its own, its punctuation and
+/// Japanese's small kana stay with it, an opening bracket goes with the next, and another script starts a word.
+#[test]
+fn chinese_and_japanese_characters_are_each_a_word() {
+    use klipolo_model::speech::{spaced_words, word_ranges};
+    let words = |t: &str| -> Vec<String> {
+        word_ranges(t)
+            .into_iter()
+            .map(|r| t[r].to_owned())
+            .collect()
+    };
+    assert_eq!(words("大家好，今天。"), ["大", "家", "好，", "今", "天。"]);
+    assert_eq!(
+        words("きょうは「動画」です"),
+        ["きょ", "う", "は", "「動", "画」", "で", "す"]
+    );
+    assert_eq!(
+        words("我们用Final Cut剪辑5分钟"),
+        ["我", "们", "用", "Final", "Cut", "剪", "辑", "5", "分", "钟"]
+    );
+    assert_eq!(
+        words("  Hello, world!  don't "),
+        ["Hello,", "world!", "don't"]
+    );
+    assert_eq!(words("안녕하세요 여러분"), ["안녕하세요", "여러분"]);
+    assert_eq!(words("नमस्ते दोस्तों।"), ["नमस्ते", "दोस्तों।"]);
+    assert_eq!(spaced_words("大家好，今天"), "大 家 好， 今 天");
+    assert!(matches!(
+        spaced_words("Hi there"),
+        std::borrow::Cow::Borrowed("Hi there")
+    ));
+}
