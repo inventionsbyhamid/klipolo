@@ -44,6 +44,8 @@ pub(super) struct Words {
     /// The drawn words in one string, a space where the text has one, and each word's bytes in it.
     pub shown: String,
     pub ranges: ArrayVec<[u32; 2], MAX_WORDS>,
+    /// Each word's bidi level on the page (`word_levels`): odd reads right to left. Empty: all 0.
+    pub levels: ArrayVec<u8, MAX_WORDS>,
 }
 
 /// `page`'s drawn words measured in `faces[0]` (a Cyrillic one in the style's stand-in, pushed to `faces` when used),
@@ -117,8 +119,78 @@ pub(super) fn measure_words(
         words.faces.push(which);
         words.ranges.push([range.start as u32, range.end as u32]);
     }
+    words.levels = word_levels(&shown, &ranges);
     words.shown = shown;
     words
+}
+
+/// Which way a word reads: by its first letter, else a number, else neither (punctuation, symbols).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Reads {
+    Ltr,
+    Rtl,
+    Number,
+    Neutral,
+}
+
+fn reads(word: &str) -> Reads {
+    let mut number = false;
+    for c in word.chars() {
+        if c.is_alphabetic() {
+            return if right_to_left(c.script()) {
+                Reads::Rtl
+            } else {
+                Reads::Ltr
+            };
+        }
+        number |= c.is_numeric();
+    }
+    if number {
+        Reads::Number
+    } else {
+        Reads::Neutral
+    }
+}
+
+/// The scripts written right to left.
+fn right_to_left(script: Script) -> bool {
+    matches!(
+        script,
+        Script::Arabic
+            | Script::Hebrew
+            | Script::Syriac
+            | Script::Thaana
+            | Script::Nko
+            | Script::Adlam
+            | Script::Samaritan
+            | Script::Mandaic
+    )
+}
+
+/// Each word's bidi level, a word taken as one unit: the page reads the way its first word with a letter does
+/// (Unicode's paragraph rule). On a right-to-left page (1) a word in Latin letters or a number is 2; on a
+/// left-to-right one (0) a word in Arabic or Hebrew letters is 1; a word of neither keeps the page's level. All 0 on a
+/// page with no right-to-left letter, so nothing is reordered there.
+fn word_levels(shown: &str, ranges: &[Range<usize>]) -> ArrayVec<u8, MAX_WORDS> {
+    let read: ArrayVec<Reads, MAX_WORDS> = ranges
+        .iter()
+        .map(|r| reads(shown.get(r.clone()).unwrap_or_default()))
+        .collect();
+    if !read.contains(&Reads::Rtl) {
+        return ArrayVec::new();
+    }
+    let rtl_page = read
+        .iter()
+        .find(|r| matches!(r, Reads::Ltr | Reads::Rtl))
+        .is_some_and(|r| *r == Reads::Rtl);
+    read.iter()
+        .map(|r| match (rtl_page, r) {
+            (true, Reads::Ltr | Reads::Number) => 2,
+            (true, _) => 1,
+            (false, Reads::Rtl) => 1,
+            (false, _) => 0,
+        })
+        .collect()
 }
 
 /// Most of the word's letters are Cyrillic.

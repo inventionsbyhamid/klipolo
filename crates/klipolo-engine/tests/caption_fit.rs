@@ -215,3 +215,35 @@ fn the_seam_is_where_a_portrait_splits_halves_meet() {
     let bubble = ctx(p);
     assert_eq!(split_seam(&bubble, secs(1.0), FormatKind::Portrait), None);
 }
+
+/// An Arabic or Hebrew page reads from the right: its first word stands right of its second, and English words in it
+/// still read left to right. An English page reads from the left, Arabic words in it turned around.
+#[test]
+fn a_right_to_left_page_reads_from_the_right() {
+    let s = style("caption.bold");
+    let x = |layout: &PageLayout, k: usize| layout.words[k].centre[0];
+    let same_line =
+        |layout: &PageLayout, a: usize, b: usize| layout.words[a].line == layout.words[b].line;
+    let hebrew = lay_out(&s, &page(&["שלום", "עולם"]));
+    assert!(same_line(&hebrew, 0, 1));
+    assert!(x(&hebrew, 0) > x(&hebrew, 1), "{:?}", hebrew.words);
+    let arabic = lay_out(&s, &page(&["مرحبا", "Klip", "Studio", "سلام"]));
+    for (a, b, left_of) in [(0, 1, false), (1, 2, true), (2, 3, false)] {
+        if same_line(&arabic, a, b) {
+            assert_eq!(
+                x(&arabic, a) < x(&arabic, b),
+                left_of,
+                "{a} {b}: {:?}",
+                arabic.words
+            );
+        }
+    }
+    let english = lay_out(&s, &page(&["Hello", "world"]));
+    assert!(x(&english, 0) < x(&english, 1));
+    let mixed = lay_out(&s, &page(&["I", "said", "مرحبا", "بكم"]));
+    assert!(same_line(&mixed, 2, 3));
+    assert!(x(&mixed, 2) > x(&mixed, 3), "{:?}", mixed.words);
+    if same_line(&mixed, 1, 2) {
+        assert!(x(&mixed, 1) < x(&mixed, 3));
+    }
+}

@@ -1,9 +1,11 @@
-//! Where a laid-out page's words go: on their lines, centred per line around the block's centre, and in
-//! their cells of the page's atlas, each with room for the outline, the shadow and the blurs.
+//! Where a laid-out page's words go: on their lines, centred per line around the block's centre, in reading
+//! order (right to left for Arabic and Hebrew: `Words::levels`), and in their cells of the page's atlas, each with room
+//! for the outline, the shadow and the blurs.
 
+use arrayvec::ArrayVec;
 use klipolo_model::captions::style::{BoxOn, CaptionStyleDef};
 
-use super::layout::{PageLayout, WordBox};
+use super::layout::{MAX_WORDS, PageLayout, WordBox};
 use super::shaping::Words;
 use crate::plan::captions::place::word_growth;
 
@@ -17,6 +19,7 @@ const MAX_ATLAS_SIDE: u32 = 8192;
 /// Each word's box on its line (lines starting at `starts`, a `space` between two words at scale 1), and each line's
 /// rect, at `layout.autofit`. In a style whose words grow as they are said (`word_growth`), two words are as far apart
 /// as a space at that growth, plus what each grows into the gap, so a word that grows never touches its neighbour.
+/// Each line's words stand in their reading order (`visual_order`); `layout.words` stays in the page's order.
 pub(super) fn place_words(
     layout: &mut PageLayout,
     style: &CaptionStyleDef,
@@ -36,17 +39,27 @@ pub(super) fn place_words(
         _ => (0.0, 0.0),
     };
     let grow = word_growth(style) as f32;
-    // The gap after word i: a space at the growth, and what i and the word after it grow into it.
-    let gap =
-        |i: usize| space * grow + (grow - 1.0) / 2.0 * (words.widths[i] + words.widths[i + 1]);
+    // The gap between words i and j side by side: a space at the growth, and what each grows into it.
+    let gap = |i: usize, j: usize| {
+        space * grow + (grow - 1.0) / 2.0 * (words.widths[i] + words.widths[j])
+    };
     let n = words.widths.len();
     for (line, &from) in starts.iter().enumerate() {
         let from = from as usize;
         let to = starts.get(line + 1).map_or(n, |&e| e as usize);
-        let gaps: f32 = (from..to.saturating_sub(1)).map(gap).sum();
+        let order = visual_order(&words.levels, from, to);
+        let gaps: f32 = order.windows(2).map(|p| gap(p[0], p[1])).sum();
         let line_w = (words.widths[from..to].iter().sum::<f32>() + gaps) * a;
         let y = -block_h / 2.0 + line_h * (line as f32 + 0.5);
+        // Each word's left edge, by its index on the line, walking the line left to right.
+        let mut lefts = [0.0f32; MAX_WORDS];
         let mut left = -line_w / 2.0;
+        for (v, &i) in order.iter().enumerate() {
+            lefts[i - from] = left;
+            if let Some(&next) = order.get(v + 1) {
+                left += words.widths[i] * a + gap(i, next) * a;
+            }
+        }
         let on_line = words.widths[from..to]
             .iter()
             .zip(&words.heights[from..to])
@@ -56,7 +69,7 @@ pub(super) fn place_words(
         for (k, ((((&w, &h), &scale), &face), &text)) in on_line.enumerate() {
             let w = w * a;
             layout.words.push(WordBox {
-                centre: [left + w / 2.0, y],
+                centre: [lefts[k] + w / 2.0, y],
                 size: [w, h * a],
                 cell: [0; 4],
                 line: line as u8,
@@ -64,9 +77,6 @@ pub(super) fn place_words(
                 face,
                 text,
             });
-            if from + k + 1 < to {
-                left += w + gap(from + k) * a;
-            }
         }
         layout.lines.push([
             -line_w / 2.0 - box_x,
@@ -75,6 +85,39 @@ pub(super) fn place_words(
             y + line_h / 2.0 + box_y,
         ]);
     }
+}
+
+/// The words `from..to` of a line in the order they stand, left to right: the bidi rule (L2) with each word one unit at
+/// its level (`Words::levels`; none is level 0, all left to right). From the highest level down to the lowest odd one,
+/// every run of words at that level or above turns around, so an Arabic line reads from the right and an English name
+/// in it still reads left to right.
+pub(super) fn visual_order(levels: &[u8], from: usize, to: usize) -> ArrayVec<usize, MAX_WORDS> {
+    let mut order: ArrayVec<usize, MAX_WORDS> = (from..to).take(MAX_WORDS).collect();
+    let level = |i: usize| levels.get(i).copied().unwrap_or(0);
+    let highest = order.iter().map(|&i| level(i)).max().unwrap_or(0);
+    let lowest_odd = order
+        .iter()
+        .map(|&i| level(i))
+        .filter(|l| l % 2 == 1)
+        .min()
+        .unwrap_or(highest + 1);
+    let mut at = highest;
+    while at >= lowest_odd && at > 0 {
+        let mut k = 0;
+        while k < order.len() {
+            if level(order[k]) < at {
+                k += 1;
+                continue;
+            }
+            let start = k;
+            while k < order.len() && level(order[k]) >= at {
+                k += 1;
+            }
+            order[start..k].reverse();
+        }
+        at -= 1;
+    }
+    order
 }
 
 /// Room around a word's box at `em` px: its outline, the shadow's offset, the widest blur's reach (3σ, where the
@@ -155,6 +198,21 @@ mod tests {
     use klipolo_model::contrib::ContribId;
 
     use super::*;
+
+    /// Words as bidi units: a right-to-left line turns around, a left-to-right run inside it keeps its order, and a
+    /// line with no levels stays as it is.
+    #[test]
+    fn a_right_to_left_line_reads_from_the_right() {
+        let order = |levels: &[u8], from, to| visual_order(levels, from, to).to_vec();
+        assert_eq!(order(&[], 0, 3), [0, 1, 2]);
+        assert_eq!(order(&[1, 1, 1], 0, 3), [2, 1, 0]);
+        // An Arabic line with an English name in it: the name still reads left to right.
+        assert_eq!(order(&[1, 2, 2, 1], 0, 4), [3, 1, 2, 0]);
+        // An English line with two Arabic words in it: only they turn around.
+        assert_eq!(order(&[0, 0, 1, 1], 0, 4), [0, 1, 3, 2]);
+        // The second line of a page: its own words only.
+        assert_eq!(order(&[1, 1, 1, 1], 2, 4), [3, 2]);
+    }
 
     /// Word pop's words, each grown as far as a word being said grows, keep a space's width at that size between them.
     #[test]
