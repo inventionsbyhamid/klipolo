@@ -6,13 +6,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use klipolo_analysis::cache::{Dir, content_key};
+use klipolo_analysis::language;
 use klipolo_analysis::providers::meta::Meta;
 use klipolo_analysis::providers::{ProviderErrorKind, Transcriber};
 use klipolo_analysis::scenes::{self, SceneLog};
 use klipolo_analysis::transcript::{ROUGH_WORDS, Sound, TranscriptOut, align, finish, hear};
 use klipolo_analysis::{AnalysisError, VideoError};
 use klipolo_model::speech::Levels;
-use klipolo_model::speech::Word;
+use klipolo_model::speech::{Word, WordKind};
 use klipolo_platform::qos::{self, Qos};
 use serde::{Deserialize, Serialize};
 
@@ -79,11 +80,25 @@ pub(crate) const WORDS_STOPPED: &str = "Word timing stopped before it finished."
 pub(crate) const WORDS_UNFINISHED: &str = "Word timing didn't finish last time.";
 
 /// Whether `found`'s words are timed roughly for a reason another try may fix (word timing failed, stopped or was
-/// unreachable), rather than because its turns don't match their sound (`transcript::ROUGH_WORDS`).
+/// unreachable), rather than because its turns don't match their sound (`transcript::ROUGH_WORDS`). A transcript made
+/// before transcripts were tagged with their words' language (`made_as_english`) is timed again too: word timing
+/// then read Latin letters alone, so its Hindi or Arabic words never matched their sound, and now they can.
 pub(crate) fn timed_again(found: &TranscriptOut) -> bool {
     found.approximate
         && !found.turns.is_empty()
-        && found.approximate_reason.as_deref() != Some(ROUGH_WORDS)
+        && (found.approximate_reason.as_deref() != Some(ROUGH_WORDS) || made_as_english(found))
+}
+
+/// Tagged English, though its words are another language's: made when every transcript was tagged English. Timing it
+/// again tags it with its words' language (`transcript::finish`), so this holds once.
+fn made_as_english(found: &TranscriptOut) -> bool {
+    let words = found
+        .transcript
+        .words
+        .iter()
+        .filter(|w| w.kind != WordKind::Pause);
+    found.transcript.language == language::DEFAULT
+        && language::of_words(words.map(|w| w.text.as_str())) != language::DEFAULT
 }
 
 /// What `hear_and_time` heard.
@@ -706,5 +721,37 @@ impl AnalysisState {
             Ok(Err(e)) => tracing::warn!(%e, name, "analysis: not cached"),
             Err(e) => tracing::warn!(%e, name, "analysis: not cached"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use klipolo_analysis::transcript::{ROUGH_WORDS, TranscriptOut, Turn, finish};
+
+    use super::timed_again;
+
+    /// A transcript of one turn, its words spread (`finish` without a timing), its reason `ROUGH_WORDS`.
+    fn rough(text: &str, language: &str) -> TranscriptOut {
+        let turn = Turn {
+            start_us: 0,
+            end_us: 2_000_000,
+            text: text.into(),
+            speaker: None,
+            chunk: 0,
+            aligned: false,
+        };
+        let mut out = finish("m", 2_000_000, vec![turn], None, 0.0);
+        out.approximate_reason = Some(ROUGH_WORDS.into());
+        out.transcript.language = language.into();
+        out
+    }
+
+    /// Words that didn't match their sound are timed again only when the transcript was tagged English though its
+    /// words are Hindi: made before word timing read other scripts.
+    #[test]
+    fn a_hindi_transcript_tagged_english_is_timed_again() {
+        assert!(timed_again(&rough("आज हम वीडियो एडिट करेंगे", "en")));
+        assert!(!timed_again(&rough("आज हम वीडियो एडिट करेंगे", "hi")));
+        assert!(!timed_again(&rough("Today we edit a video", "en")));
     }
 }
