@@ -193,6 +193,38 @@ def test_me_reports_the_device_status(client, conn):
     assert response.json() == {"relay_ai": True, "budget_usd": 2.00, "spent_usd": 0}
 
 
+def charged(conn, token, usd):
+    """A charge of `usd` to the device with `token`, under its code, as the relay writes it."""
+    device_id = conn.execute(
+        "SELECT device_id FROM devices WHERE token_hash = ?", (hashlib.sha256(token.encode()).hexdigest(),)
+    ).fetchone()[0]
+    conn.execute(
+        "INSERT INTO ledger (device_id, at, endpoint, model, usage_json, cost_usd, code)"
+        " VALUES (?, 'now', 'responses', 'muse-spark-1.3', '{}', ?, (SELECT code FROM devices WHERE device_id = ?))",
+        (device_id, usd, device_id),
+    )
+    conn.execute("UPDATE devices SET spent_usd = spent_usd + ? WHERE device_id = ?", (usd, device_id))
+
+
+@pytest.mark.parametrize(
+    ("cap", "budget"),
+    [(None, 2.00), (30.00, 2.00), (1.00, 0.50), (0.60, 0.25)],
+    ids=["no-cap", "device-has-less-left", "code-has-less-left", "code-over-its-cap"],
+)
+def test_me_reports_what_is_left_on_the_device_or_its_code_whichever_is_less(client, conn, cap, budget):
+    # This device spent $0.25 and another on its code $0.50: the code has its cap less $0.75 left, the device $1.75.
+    add_code(conn, "testcode")
+    conn.execute("UPDATE codes SET cap_usd = ? WHERE code = 'testcode'", (cap,))
+    token = register(client, access_code="testcode").json()["token"]
+    charged(conn, token, 0.25)
+    charged(conn, register(client, access_code="testcode").json()["token"], 0.50)
+
+    body = client.get("/v1/devices/me", headers=bearer(token)).json()
+
+    # The app shows budget_usd less spent_usd as the credit left.
+    assert body == {"relay_ai": True, "budget_usd": pytest.approx(budget), "spent_usd": 0.25}
+
+
 def test_relay_ai_follows_the_code_active_flag(client, conn):
     add_code(conn, "testcode")
     token = register(client, access_code="testcode").json()["token"]

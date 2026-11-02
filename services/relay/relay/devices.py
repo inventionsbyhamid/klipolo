@@ -47,12 +47,27 @@ def has_relay_ai(conn: sqlite3.Connection, device: sqlite3.Row) -> bool:
 def device_status(
     conn: sqlite3.Connection, device: sqlite3.Row, settings: Settings
 ) -> dict[str, Any]:
+    """Relay AI, the budget and the spend. Clients show `budget_usd` less
+    `spent_usd` as the credit left, so when the device's code has a cap with
+    less left than the device, the budget is cut to what the code has left."""
     relay_ai = has_relay_ai(conn, device)
-    return {
-        "relay_ai": relay_ai,
-        "budget_usd": settings.device_cap_usd if relay_ai else 0.0,
-        "spent_usd": float(device["spent_usd"]),
-    }
+    spent = float(device["spent_usd"])
+    budget = settings.device_cap_usd if relay_ai else 0.0
+    if relay_ai:
+        code_left = _code_left(conn, device["code"])
+        if code_left is not None:
+            budget = min(budget, spent + code_left)
+    return {"relay_ai": relay_ai, "budget_usd": budget, "spent_usd": spent}
+
+
+def _code_left(conn: sqlite3.Connection, code: str) -> float | None:
+    """What `code`'s cap has left after everything charged under it; None
+    without a cap."""
+    row = conn.execute("SELECT cap_usd FROM codes WHERE code = ?", (code,)).fetchone()
+    if row is None or row["cap_usd"] is None:
+        return None
+    spent = conn.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM ledger WHERE code = ?", (code,)).fetchone()[0]
+    return max(row["cap_usd"] - spent, 0.0)
 
 
 def current_device(request: Request, conn: Conn) -> sqlite3.Row:
