@@ -208,6 +208,19 @@ pub struct CaptionSettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub font: Option<FontRef>,
+    /// The words' size as a factor of the style's own in every format (`captions::styles::CAPTION_SIZES`); None is the
+    /// style's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub size: Option<f64>,
+    /// `#RRGGBB` for the words, over the style's and its look's (on a line's box too); None is theirs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub color: Option<String>,
+    /// Uppercase (true) or as said (false); None is the style's case.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub upper: Option<bool>,
     /// The block's centre y per format, as a share of the frame's height (x is centred); a format without one takes the
     /// style's `position`. Only listed formats keep theirs.
     #[serde(default)]

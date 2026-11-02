@@ -50,6 +50,7 @@ pub const MESSAGES: Messages = &[
     ("model.captions.look", "That caption look isn't part of this style."),
     ("model.captions.color", "A caption colour must be a colour like #FFD400."),
     ("model.captions.font", "That font can't be used for captions."),
+    ("model.captions.size", "Captions can be from half to twice their style's size."),
     ("model.captions.place", "Captions must sit between 5 % and 95 % of the video's height."),
     ("model.captions.language", "The captions' language must be a language tag, like ja or zh-Hans."),
     // Contributions, by kind: `id` is the id as written, `name` the contribution's id (worded as its name).
