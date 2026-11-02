@@ -70,7 +70,10 @@ fn a_camera_take_keeps_its_camera_and_mic_in_sync() {
     assert_eq!(m.kind, RecordingKind::Camera);
     assert_eq!(
         sources(&m),
-        [("camera", SourceRole::Camera, 1), ("mic", SourceRole::Mic, 1)]
+        [
+            ("camera", SourceRole::Camera, 1),
+            ("mic", SourceRole::Mic, 1)
+        ]
     );
     assert!(m.cursor.is_none(), "no screen, no cursor");
     let worst_ms = h.sync_error_ms("camera", "mic");
@@ -88,14 +91,21 @@ fn a_finished_camera_take_imports_as_camera_footage() {
         common::harness::fake_backend(),
         dir.clone(),
         false,
-        vec![(0, Command::Start), (900, Command::Marker), (2_500, Command::Stop)],
+        vec![
+            (0, Command::Start),
+            (900, Command::Marker),
+            (2_500, Command::Stop),
+        ],
     );
     assert_eq!(code, 0);
     let m = read_manifest(&dir).unwrap();
     assert_eq!(m.kind, RecordingKind::Camera);
     assert_eq!(
         sources(&m),
-        [("camera", SourceRole::Camera, 1), ("mic", SourceRole::Mic, 1)]
+        [
+            ("camera", SourceRole::Camera, 1),
+            ("mic", SourceRole::Mic, 1)
+        ]
     );
     assert_eq!(m.markers.len(), 1, "Mark this moment");
     let camera = &m.sources[0].runs[0];
@@ -111,7 +121,10 @@ fn a_finished_camera_take_imports_as_camera_footage() {
     assert_eq!(r.markers.len(), 1);
     let clip = clip_for(r, cfg.mirror_camera, FormatKind::Landscape);
     assert_eq!(clip.camera.map(|c| c.mirror), Some(false));
-    assert_eq!((clip.source_in_us, clip.source_out_us), (0, r.duration_us()));
+    assert_eq!(
+        (clip.source_in_us, clip.source_out_us),
+        (0, r.duration_us())
+    );
 }
 
 #[test]
@@ -135,7 +148,10 @@ fn a_crashed_camera_take_resumes_and_finishes() {
     assert_eq!(m.kind, RecordingKind::Camera);
     assert_eq!(
         sources(&m),
-        [("camera", SourceRole::Camera, 2), ("mic", SourceRole::Mic, 2)],
+        [
+            ("camera", SourceRole::Camera, 2),
+            ("mic", SourceRole::Mic, 2)
+        ],
         "the crashed runs, then the resumed ones"
     );
     for run in &m.sources[0].runs {

@@ -103,7 +103,10 @@ pub fn camera_footage<'p>(p: &'p Project, clip: &Clip) -> Vec<FootageRun<'p>> {
         return Vec::new();
     };
     (source.runs.iter())
-        .filter(|run| p.asset(&run.asset_id).is_some_and(|a| a.kind == AssetKind::Video))
+        .filter(|run| {
+            p.asset(&run.asset_id)
+                .is_some_and(|a| a.kind == AssetKind::Video)
+        })
         .map(|run| FootageRun { source, run })
         .collect()
 }

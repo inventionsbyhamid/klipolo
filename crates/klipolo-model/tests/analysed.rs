@@ -190,7 +190,10 @@ fn a_camera_take_s_clip_plays_its_camera_runs_on_the_take_s_clock() {
     assert_eq!(runs[0].source_span(), (200_000, secs(60.0)));
     assert_eq!(runs[0].file_of(secs(1.2)), secs(1.0));
     assert!(camera_footage(&p, &p.timeline.main[1]).is_empty(), "b-roll");
-    assert!(camera_footage(&fixture(), &fixture().timeline.main[0]).is_empty(), "a screen take");
+    assert!(
+        camera_footage(&fixture(), &fixture().timeline.main[0]).is_empty(),
+        "a screen take"
+    );
 }
 
 /// `p` with file `id`'s sound on or off.

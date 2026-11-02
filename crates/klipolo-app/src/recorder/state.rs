@@ -262,7 +262,8 @@ impl RecorderState {
         on.recorder.refuse_while_busy()?;
         let files = on.files.as_ref().ok_or_else(words::no_settings_folder)?;
         let backend = on.backend.get();
-        if options.what.records_the_screen() && backend.permissions().screen != Permission::Granted {
+        if options.what.records_the_screen() && backend.permissions().screen != Permission::Granted
+        {
             on.note_screen(true);
             return Err(words::not_allowed());
         }

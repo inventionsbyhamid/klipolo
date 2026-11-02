@@ -1330,22 +1330,20 @@ fn a_camera_take_s_clip_reads_as_camera_footage_with_its_scenes() {
         text: "Waves".into(),
         on_screen_text: None,
     };
-    let log = klipolo_chat::context::SceneLog {
-        items: vec![entry],
-    };
+    let log = klipolo_chat::context::SceneLog { items: vec![entry] };
     let scenes = HashMap::from([
         ("cam2".to_owned(), log.clone()),
         ("broll".to_owned(), Default::default()),
     ]);
     // 5 s into the camera's file is 6 s into the take, and c3 starts at 40 s: 46.0 to 49.0.
     let said = scenes_of(&p, &scenes);
-    assert!(
-        said.contains("[46.0-49.0] gesture (host): Waves"),
-        "{said}"
-    );
+    assert!(said.contains("[46.0-49.0] gesture (host): Waves"), "{said}");
     // A screen take's camera is a bubble, never watched: its log is not its clip's.
     let screen_take = two_takes();
-    let scenes = HashMap::from([("cam2".to_owned(), log), ("broll".to_owned(), Default::default())]);
+    let scenes = HashMap::from([
+        ("cam2".to_owned(), log),
+        ("broll".to_owned(), Default::default()),
+    ]);
     assert!(!scenes_of(&screen_take, &scenes).contains("Waves"));
 }
 

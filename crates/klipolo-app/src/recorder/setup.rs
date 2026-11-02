@@ -337,8 +337,13 @@ fn plan_camera(
     if options.camera.is_none() {
         return Err(words::no_device());
     }
-    let choice = shown.report.as_ref().and_then(|r| Some((r, camera_alone(r)?)));
-    let camera_preset = choice.as_ref().map_or(PresetId::Camera720, |(_, c)| c.preset);
+    let choice = shown
+        .report
+        .as_ref()
+        .and_then(|r| Some((r, camera_alone(r)?)));
+    let camera_preset = choice
+        .as_ref()
+        .map_or(PresetId::Camera720, |(_, c)| c.preset);
     let camera_encoders = (choice.as_ref())
         .map(|(report, c)| camera_encoders_for(report, c, None, None))
         .unwrap_or_default();
