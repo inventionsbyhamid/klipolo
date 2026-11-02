@@ -1,7 +1,8 @@
 import { useLingui } from '@lingui/react/macro';
-import type { PointerEvent, ReactNode } from 'react';
+import { isValidElement, memo, type PointerEvent, type ReactNode } from 'react';
 import type { Asset } from '../../bindings/Asset';
 import { Icon } from '../../layout/Icon';
+import { countRender } from '../../lib/renderCount';
 import { formatRowLength } from '../../lib/time';
 import { beginMediaDrag } from '../timeline/drag/mediaDrag';
 import type { DropTarget } from '../timeline/drops';
@@ -41,13 +42,45 @@ interface AssetRowProps {
   recording?: string;
 }
 
+/** The same fields with the same values: an asset rebuilt from the same project reads the same. */
+function sameAsset(a: Asset, b: Asset): boolean {
+  if (a === b) return true;
+  const keys = Object.keys(a) as (keyof Asset)[];
+  return keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k]);
+}
+
+/** The asset a row's menu is for (`AssetMenu`), if it has one. */
+const menuAsset = (menu: ReactNode) => (isValidElement<{ asset?: Asset }>(menu) ? menu.props.asset : undefined);
+
+/**
+ * Whether a row shows the same: its callbacks and its menu are made from these same fields, so a row whose fields are
+ * unchanged acts the same with the ones it has, and an edit elsewhere (or to another row) doesn't draw it again.
+ */
+function sameRow(a: AssetRowProps, b: AssetRowProps): boolean {
+  const menuA = menuAsset(a.menu);
+  const menuB = menuAsset(b.menu);
+  return (
+    sameAsset(a.asset, b.asset) &&
+    a.art === b.art &&
+    a.title === b.title &&
+    a.used === b.used &&
+    a.addLabel === b.addLabel &&
+    a.meta === b.meta &&
+    a.recording === b.recording &&
+    !!a.favorite === !!b.favorite &&
+    a.favorite?.on === b.favorite?.on &&
+    !!a.menu === !!b.menu &&
+    (menuA === menuB || (!!menuA && !!menuB && sameAsset(menuA, menuB)))
+  );
+}
+
 /**
  * One file in the Library, or one recording as a whole: its art, its name and length (and "On the
  * timeline" when the video uses it), and a "+" that appears on hover or focus and adds it at the playhead, then its
  * star (shown while it is a favorite). Pressed and moved, it drags onto the timeline (`drag/mediaDrag`), where it
  * lands on the lane under the pointer.
  */
-export function AssetRow({
+export const AssetRow = memo(function AssetRow({
   asset,
   art,
   title,
@@ -60,6 +93,7 @@ export function AssetRow({
   meta,
   recording,
 }: AssetRowProps) {
+  countRender(`row:${recording ?? asset.id}`);
   const { t } = useLingui();
   const onPointerDown = (e: PointerEvent<HTMLLIElement>) => {
     // The buttons are their own controls.
@@ -112,4 +146,4 @@ export function AssetRow({
       </span>
     </li>
   );
-}
+}, sameRow);
