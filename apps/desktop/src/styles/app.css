@@ -2702,6 +2702,15 @@
   height: 16px;
 }
 
+/* An error: a red edge and a red icon. */
+.toast.is-error {
+  box-shadow: var(--shadow-soft), inset 0 0 0 1px var(--color-cut);
+}
+
+.toast.is-error .ico {
+  color: var(--color-cut-text);
+}
+
 .toast-text {
   margin: 0;
 }

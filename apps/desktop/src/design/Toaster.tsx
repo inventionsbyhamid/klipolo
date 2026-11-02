@@ -73,7 +73,7 @@ function ToastItem({ toast: t, onDismiss }: { toast: ToastMessage; onDismiss: (i
       }
       type={error ? 'foreground' : 'background'}
       onOpenChange={(open) => !open && !keep.current && onDismiss(t.id)}
-      className="toast"
+      className={error ? 'toast is-error' : 'toast'}
     >
       <Icon name={t.done ? 'check' : 'info'} />
       <Toast.Description className="toast-text">
