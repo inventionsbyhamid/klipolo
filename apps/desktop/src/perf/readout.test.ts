@@ -48,6 +48,7 @@ describe('the render tally', () => {
     expect((after.byPanel.preview ?? 0) - (before.byPanel.preview ?? 0)).toBe(1);
     expect(after.byPanel.chat ?? 0).toBe(before.byPanel.chat ?? 0);
     expect((after.byName.Block ?? 0) - (before.byName.Block ?? 0)).toBe(2);
+    expect((after.byWhere['timeline Block'] ?? 0) - (before.byWhere['timeline Block'] ?? 0)).toBe(2);
   });
 });
 

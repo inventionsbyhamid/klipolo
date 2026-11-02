@@ -41,11 +41,11 @@ function rendersLine(from: RenderTotals, to: RenderTotals, per?: number): string
   return panels ? `${counts} (${panels})` : counts;
 }
 
-/** The most rendered components between `from` and `to` (a second over `per`), when names are known (development). */
+/** The most rendered components between `from` and `to` (a second over `per`), by panel, when names are known. */
 function namesLine(from: RenderTotals, to: RenderTotals, per = 1): string {
-  const top = Object.entries(to.byName)
-    .map(([name, n]): [string, number] => [name, Math.round((n - (from.byName[name] ?? 0)) / per)])
-    .filter(([name, n]) => n > 0 && name.length > 2)
+  const top = Object.entries(to.byWhere)
+    .map(([name, n]): [string, number] => [name, Math.round((n - (from.byWhere[name] ?? 0)) / per)])
+    .filter(([name, n]) => n > 0 && !/ .{1,2}$/.test(name))
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
   return top.length > 0 ? `; most: ${top.map(([name, n]) => `${name} ${n}`).join(', ')}` : '';

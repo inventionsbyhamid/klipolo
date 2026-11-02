@@ -23,6 +23,8 @@ export interface RenderTotals {
   renders: number;
   byPanel: Record<string, number>;
   byName: Record<string, number>;
+  /** By panel and name together ("timeline Tooltip"). */
+  byWhere: Record<string, number>;
 }
 
 /** React's fiber flag for a component that rendered (`PerformedWork`), and the tags of components. */
@@ -42,11 +44,11 @@ const PANELS: [string, string][] = [
   ['playerbar', 'player bar'],
 ];
 
-const totals: RenderTotals = { commits: 0, renders: 0, byPanel: {}, byName: {} };
+const totals: RenderTotals = { commits: 0, renders: 0, byPanel: {}, byName: {}, byWhere: {} };
 
 /** A copy of the totals now. */
 export function renderTotals(): RenderTotals {
-  return { ...totals, byPanel: { ...totals.byPanel }, byName: { ...totals.byName } };
+  return { ...totals, byPanel: { ...totals.byPanel }, byName: { ...totals.byName }, byWhere: { ...totals.byWhere } };
 }
 
 function panelOf(fiber: Fiber, outer: string): string {
@@ -86,6 +88,8 @@ export function tallyCommit(root: Fiber) {
         totals.byPanel[outer] = (totals.byPanel[outer] ?? 0) + 1;
         const name = nameOf(f);
         totals.byName[name] = (totals.byName[name] ?? 0) + 1;
+        const where = `${outer} ${name}`;
+        totals.byWhere[where] = (totals.byWhere[where] ?? 0) + 1;
       }
       if (f.child && f.subtreeFlags & PERFORMED_WORK) stack.push([f.child, panelOf(f, outer)]);
     }
