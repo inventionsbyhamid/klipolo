@@ -288,4 +288,27 @@ mod tests {
         near(loudest(&path, u64::from(frames)).unwrap(), [0.5, 1.0]);
         assert_eq!(loudest(&dir.path().join("missing.wav"), 1), None);
     }
+
+    /// A decode from a seek (its 2 s pre-roll thrown away, placed by its first frame's timestamp) gives exactly the
+    /// samples a decode from the start gives from there.
+    #[test]
+    fn a_seek_decodes_the_same_samples_as_reading_from_the_start() {
+        let path = crate::fixture_set::fixture_dir().join("longgop-20s-1080p.mp4");
+        assert!(path.exists(), "run scripts/gen-engine-fixtures.sh");
+        let from_frame = |from: u64| {
+            let mut bits = Vec::new();
+            decode(&path, from, None, &mut |_, block| {
+                bits.extend(block.iter().map(|s| s.to_bits()));
+                Ok(true)
+            })
+            .unwrap();
+            bits
+        };
+        let whole = from_frame(0);
+        // Mono: one sample a frame.
+        let from = 7 * u64::from(RATE) + 1_234;
+        let seeked = from_frame(from);
+        assert!(!seeked.is_empty() && whole.len() > from as usize);
+        assert!(seeked == whole[from as usize..], "from {from}");
+    }
 }
