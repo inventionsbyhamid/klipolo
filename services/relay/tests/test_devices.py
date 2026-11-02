@@ -9,6 +9,10 @@ INVALID_CODE = {
     "error": "invalid_code",
     "message": "This access code is not valid. Check the code or add your own Meta key in Settings.",
 }
+SHARED_CREDIT = {
+    "error": "budget",
+    "message": "Klipolo's shared AI credit is used up for now. Add your own Meta key in Settings.",
+}
 
 
 @pytest.fixture
@@ -108,6 +112,54 @@ def test_reregister_with_inactive_or_unknown_code_is_403_and_keeps_the_device(
     assert me.json()["relay_ai"] is True
 
 
+def devices_on(conn, code):
+    return conn.execute("SELECT count(*) FROM devices WHERE code = ?", (code,)).fetchone()[0]
+
+
+def test_a_code_takes_any_number_of_devices_until_the_owner_sets_a_limit(client, conn):
+    add_code(conn, "testcode")
+
+    responses = [register(client, access_code="testcode") for _ in range(30)]
+
+    assert {response.status_code for response in responses} == {200}
+    assert devices_on(conn, "testcode") == 30
+
+
+def test_a_code_at_its_device_limit_refuses_new_devices_but_not_its_own(client, conn):
+    add_code(conn, "testcode")
+    add_code(conn, "other")
+    conn.execute("UPDATE codes SET max_devices = 2 WHERE code = 'testcode'")
+    first, second = str(uuid.uuid4()), str(uuid.uuid4())
+    assert register(client, first, "testcode").status_code == 200
+    assert register(client, second, "testcode").status_code == 200
+
+    refused = register(client, access_code="testcode")
+
+    assert refused.status_code == 402
+    assert refused.json() == SHARED_CREDIT
+    assert devices_on(conn, "testcode") == 2
+    # Its own devices register again (a new token after a 401), and other codes are not affected.
+    again = register(client, first, "testcode")
+    assert again.status_code == 200
+    assert again.json()["relay_ai"] is True
+    assert register(client, access_code="other").status_code == 200
+
+
+def test_a_device_that_leaves_a_code_frees_no_room_on_it(client, conn):
+    add_code(conn, "testcode")
+    conn.execute("UPDATE codes SET max_devices = 1 WHERE code = 'testcode'")
+    device_id = str(uuid.uuid4())
+    register(client, device_id, "testcode")
+    assert register(client, device_id).json()["relay_ai"] is False
+
+    refused = register(client, access_code="testcode")
+
+    assert refused.status_code == 402
+    assert refused.json() == SHARED_CREDIT
+    # The device that registered with it before may come back.
+    assert register(client, device_id, "testcode").json()["relay_ai"] is True
+
+
 @pytest.mark.parametrize(
     "headers",
     [
@@ -139,6 +191,38 @@ def test_me_reports_the_device_status(client, conn):
 
     assert response.status_code == 200
     assert response.json() == {"relay_ai": True, "budget_usd": 2.00, "spent_usd": 0}
+
+
+def charged(conn, token, usd):
+    """A charge of `usd` to the device with `token`, under its code, as the relay writes it."""
+    device_id = conn.execute(
+        "SELECT device_id FROM devices WHERE token_hash = ?", (hashlib.sha256(token.encode()).hexdigest(),)
+    ).fetchone()[0]
+    conn.execute(
+        "INSERT INTO ledger (device_id, at, endpoint, model, usage_json, cost_usd, code)"
+        " VALUES (?, 'now', 'responses', 'muse-spark-1.3', '{}', ?, (SELECT code FROM devices WHERE device_id = ?))",
+        (device_id, usd, device_id),
+    )
+    conn.execute("UPDATE devices SET spent_usd = spent_usd + ? WHERE device_id = ?", (usd, device_id))
+
+
+@pytest.mark.parametrize(
+    ("cap", "budget"),
+    [(None, 2.00), (30.00, 2.00), (1.00, 0.50), (0.60, 0.25)],
+    ids=["no-cap", "device-has-less-left", "code-has-less-left", "code-over-its-cap"],
+)
+def test_me_reports_what_is_left_on_the_device_or_its_code_whichever_is_less(client, conn, cap, budget):
+    # This device spent $0.25 and another on its code $0.50: the code has its cap less $0.75 left, the device $1.75.
+    add_code(conn, "testcode")
+    conn.execute("UPDATE codes SET cap_usd = ? WHERE code = 'testcode'", (cap,))
+    token = register(client, access_code="testcode").json()["token"]
+    charged(conn, token, 0.25)
+    charged(conn, register(client, access_code="testcode").json()["token"], 0.50)
+
+    body = client.get("/v1/devices/me", headers=bearer(token)).json()
+
+    # The app shows budget_usd less spent_usd as the credit left.
+    assert body == {"relay_ai": True, "budget_usd": pytest.approx(budget), "spent_usd": 0.25}
 
 
 def test_relay_ai_follows_the_code_active_flag(client, conn):

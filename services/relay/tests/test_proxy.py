@@ -120,10 +120,15 @@ def add_device(conn, *, code="testcode", active=True, spent=0.0):
     )
     if spent:
         conn.execute(
-            "INSERT INTO ledger (device_id, at, endpoint, model, usage_json, cost_usd) VALUES (?, ?, ?, ?, ?, ?)",
-            (device_id, "2026-10-30T00:00:00+00:00", "responses", "muse-spark-1.3", "{}", spent),
+            "INSERT INTO ledger (device_id, at, endpoint, model, usage_json, cost_usd, code) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (device_id, "2026-10-30T00:00:00+00:00", "responses", "muse-spark-1.3", "{}", spent, code),
         )
     return Dev(device_id, token)
+
+
+def cap_code(conn, code, usd):
+    """The admin's cap on what all of `code`'s devices may spend together (`admin set-code-cap --usd`)."""
+    conn.execute("UPDATE codes SET cap_usd = ? WHERE code = ?", (usd, code))
 
 
 def ledger(conn, device=None):
@@ -744,6 +749,63 @@ def test_the_shared_credit_is_named_before_the_device_credit(client, conn, meta)
 
     assert response.status_code == 402
     assert response.json() == GLOBAL_BUDGET
+
+
+def test_a_code_without_a_cap_is_held_only_by_the_device_and_global_caps(client, conn, meta):
+    # Nineteen devices on one code have spent nearly all they may: by default the code itself has no cap.
+    for _ in range(19):
+        add_device(conn, spent=1.99)
+    fresh = add_device(conn)
+    meta.post("/responses").respond(200, json=spark_body())
+
+    assert client.post("/meta/v1/responses", json=spark_request(), headers=fresh.headers).status_code == 200
+
+
+def test_a_codes_cap_counts_what_all_its_devices_spent(client, conn, meta):
+    add_device(conn, spent=0.5)
+    add_device(conn, spent=0.5 - SPARK_RESERVATION / 2)
+    fresh = add_device(conn)
+    elsewhere = add_device(conn, code="press")
+    cap_code(conn, "testcode", 1.00)
+    route = meta.post("/responses").respond(200, json=spark_body())
+
+    # Less than a reservation is left on the code: a device that spent nothing gets the shared credit's answer.
+    refused = client.post("/meta/v1/responses", json=spark_request(), headers=fresh.headers)
+
+    assert refused.status_code == 402
+    assert refused.json() == GLOBAL_BUDGET
+    assert not route.called
+    # Other codes go on, and so does this one once the owner raises its cap.
+    assert client.post("/meta/v1/responses", json=spark_request(), headers=elsewhere.headers).status_code == 200
+    cap_code(conn, "testcode", 2.00)
+    assert client.post("/meta/v1/responses", json=spark_request(), headers=fresh.headers).status_code == 200
+
+
+def test_a_spent_code_is_refused_before_the_body_is_read(client, conn, meta, monkeypatch):
+    monkeypatch.setattr(proxy, "MAX_JSON_BYTES", 100)
+    add_device(conn, spent=1.00)
+    fresh = add_device(conn)
+    cap_code(conn, "testcode", 1.00)
+
+    response = client.post("/meta/v1/responses", json=spark_request(input="x" * 500), headers=fresh.headers)
+
+    assert response.status_code == 402
+    assert response.json() == GLOBAL_BUDGET
+
+
+def test_a_charge_stays_with_the_code_it_was_made_under(client, conn, meta):
+    device, other = add_device(conn), add_device(conn)
+    meta.post("/responses").respond(200, json=spark_body())
+    assert client.post("/meta/v1/responses", json=spark_request(), headers=device.headers).status_code == 200
+    assert [row["code"] for row in ledger(conn, device)] == ["testcode"]
+
+    # The device leaving the code takes none of the code's spend with it.
+    conn.execute("UPDATE devices SET code = NULL WHERE device_id = ?", (device.device_id,))
+    cap_code(conn, "testcode", SPARK_COST + SPARK_RESERVATION / 2)
+    refused = client.post("/meta/v1/responses", json=spark_request(), headers=other.headers)
+
+    assert refused.status_code == 402
+    assert refused.json() == GLOBAL_BUDGET
 
 
 # Meta errors.
@@ -1593,6 +1655,29 @@ def test_reservations_in_flight_count_against_the_global_cap(client, conn, meta,
     assert client.app.state.in_flight.reserved(first.device_id) == (0.0, 0.0)
 
 
+def test_reservations_in_flight_count_against_their_codes_cap(client, conn, meta):
+    first, second = add_device(conn), add_device(conn)
+    elsewhere = add_device(conn, code="press")
+    cap_code(conn, "testcode", 1.5 * SPARK_RESERVATION)
+    state = hold_meta_calls(meta)
+
+    with concurrent.futures.ThreadPoolExecutor(2) as pool:
+        held = pool.submit(client.post, "/meta/v1/responses", json=spark_request(), headers=first.headers)
+        wait_for(lambda: state["arrived"] == 1)
+        # The first call's reservation leaves the code no room for a second device's call; another code has room.
+        refused = client.post("/meta/v1/responses", json=spark_request(), headers=second.headers)
+        other = pool.submit(client.post, "/meta/v1/responses", json=spark_request(), headers=elsewhere.headers)
+        wait_for(lambda: state["arrived"] == 2)
+        state["release"] = True
+
+    assert held.result().status_code == 200
+    assert other.result().status_code == 200
+    assert refused.status_code == 429
+    assert refused.json() == GLOBAL_BUSY
+    assert refused.headers["retry-after"] == "5"
+    assert client.app.state.in_flight.code_reserved("testcode") == 0.0
+
+
 def test_a_fresh_devices_third_video_call_at_once_is_busy_not_out_of_credit(client, conn, meta):
     # Two video reservations ($0.79 each) leave less than a third's room in
     # $2, but the device has spent nothing.
@@ -1708,6 +1793,22 @@ def test_a_slot_that_reserved_nothing_frees_while_its_device_has_another_call(fi
     first.release()
     assert in_flight.count() == 0
     assert in_flight.reserved("device") == (0.0, 0.0)
+
+
+def test_a_codes_reservations_are_its_devices_and_go_back_to_zero():
+    in_flight = proxy.InFlight()
+    first, second = in_flight.acquire("one", "code"), in_flight.acquire("two", "code")
+    elsewhere, no_code = in_flight.acquire("three", "other"), in_flight.acquire("four")
+    for slot, amount in [(first, 0.1), (second, 0.2), (elsewhere, 0.4), (no_code, 0.8)]:
+        slot.reserve(amount)
+
+    assert in_flight.code_reserved("code") == pytest.approx(0.3)
+    assert in_flight.code_reserved("other") == pytest.approx(0.4)
+    assert in_flight.code_reserved(None) == 0.0
+    first.release()
+    assert in_flight.code_reserved("code") == pytest.approx(0.2)
+    second.release()
+    assert in_flight.code_reserved("code") == 0.0
 
 
 # Charging.
@@ -2950,6 +3051,44 @@ def test_meta_billing_more_frames_than_reserved_turns_sam_off_for_the_code(clien
     assert meta.calls.call_count == sent
 
 
+def test_the_breaker_turns_sam_off_for_the_code_the_call_came_under(client, conn, meta):
+    device = add_device(conn)
+    add_device(conn, code="othercode")
+    counted(client.app, device, "file-1", 120)
+    done = {"type": "response.completed", "response": {"status": "completed", "usage": {"video_frames_processed": 500}}}
+
+    def moved_then_answer(request):
+        # The device registers again with another code while its call is with Meta.
+        conn.execute("UPDATE devices SET code = 'othercode' WHERE device_id = ?", (device.device_id,))
+        return httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, stream=MetaStream([sse(CREATED), sse(done)])
+        )
+
+    meta.post("/responses").mock(side_effect=moved_then_answer)
+
+    assert client.post("/meta/v1/responses", json=sam_on("file-1"), headers=device.headers).status_code == 200
+
+    sam_off = dict(conn.execute("SELECT code, sam_off FROM codes").fetchall())
+    assert sam_off == {"testcode": 1, "othercode": 0}
+
+
+@pytest.mark.parametrize(("billed", "sam_off"), [(52, 0), (53, 0), (54, 1)])
+def test_the_breaker_allows_a_couple_of_frames_over_a_small_copy(client, conn, meta, billed, sam_off):
+    # A 50-frame copy: 2% is a single frame, so 2 frames more are allowed on top (50 * 1.02 + 2 = 53).
+    device = add_device(conn)
+    counted(client.app, device, "file-1", 50)
+    done = {"type": "response.completed", "response": {"status": "completed", "usage": {"video_frames_processed": billed}}}
+    stream_from_meta(meta, MetaStream([sse(CREATED), sse(done)]))
+
+    response = client.post("/meta/v1/responses", json=sam_on("file-1"), headers=device.headers)
+
+    # Charged what Meta billed either way.
+    assert response.status_code == 200
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(billed * 0.20 / 1000)
+    assert conn.execute("SELECT sam_off FROM codes WHERE code = 'testcode'").fetchone()[0] == sam_off
+
+
 def test_sam_has_its_own_daily_cap(client, conn, meta):
     # $4.99 of SAM today on one device: another device's 120 frames ($0.024) would pass the $5.00 a day.
     spender = add_device(conn)
@@ -3134,7 +3273,7 @@ def shutil_usage(free):
 
 
 def test_the_breaker_counts_every_sam_call_and_sam_takes_only_known_parts_and_picture_data(client, conn, meta):
-    # A call with no video reserves no frames: any video frames Meta bills for it trip the breaker.
+    # A call with no video reserves no frames: more than the 2 frames of slack billed for it trip the breaker.
     device = add_device(conn)
     image = {"type": "input_image", "image_url": "data:image/png;base64,AAAA"}
     body = {"model": "sam-3.1", "input": [{"role": "user", "content": [{"type": "input_text", "text": "face"}, image]}]}

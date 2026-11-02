@@ -19,7 +19,7 @@ use klipolo_app::chat::pictures::{
     TITLE_GONE,
 };
 use klipolo_app::chat::session::{
-    KEEP_ONLY_READY, MOMENTS_MOVED, MOMENTS_UNDONE, MOVED, NEEDS_KEY, OTHER_PROJECT,
+    KEEP_ONLY_READY, MOMENTS_MOVED, MOMENTS_UNDONE, MOVED, NEEDS_KEY, NOT_CHATS, OTHER_PROJECT,
 };
 use klipolo_app::chat::{
     BLUR_COMING, ChatOutcome, ChatRequest, ChatSession, CommitError, FOLLOW_COMING, Findings,
@@ -1095,12 +1095,59 @@ async fn new_chat_forgets_the_last_change_too() {
 }
 
 #[tokio::test]
-async fn the_models_undo_takes_back_the_top_step() {
-    let chat = chat(vec![answer("Undone.", vec![fc("u", "undo", "{}")])]);
+async fn the_models_undo_takes_back_chats_own_last_change() {
+    let chat = chat(vec![
+        answer("", vertical_karaoke()),
+        answer("Undone.", vec![fc("u", "undo", "{}")]),
+        answer("Undone.", vec![fc("u", "undo", "{}")]),
+    ]);
     chat.project.hand_edit(&rename("Mine")).unwrap();
+    chat.session.send(request("vertical")).await.unwrap();
     let r = reply(&chat.session.send(request("undo that")).await.unwrap());
-    assert_eq!(r["undone"]["baseRevision"], 1);
-    assert_eq!(chat.project.project().name, "Talk");
+    assert_eq!(r["undone"]["baseRevision"], 2);
+    assert_eq!(
+        chat.project.project().settings.primary_format,
+        FormatKind::Landscape
+    );
+    // Once: the step under it is the person's own.
+    let r = reply(&chat.session.send(request("undo again")).await.unwrap());
+    assert_eq!(r["text"], NOT_CHATS);
+    assert!(r["undone"].is_null(), "{r:#}");
+    assert_eq!(chat.project.project().name, "Mine");
+}
+
+#[tokio::test]
+async fn the_models_undo_leaves_a_step_that_isnt_chats() {
+    let chat = chat(vec![
+        answer("", vertical_karaoke()),
+        answer("Undone.", vec![fc("u", "undo", "{}")]),
+    ]);
+    chat.session.send(request("vertical")).await.unwrap();
+    // The person's own edit lands on top of chat's change.
+    chat.project.hand_edit(&rename("Mine")).unwrap();
+    let before = chat.project.revision();
+    let r = reply(
+        &chat
+            .session
+            .send(request("undo the captions"))
+            .await
+            .unwrap(),
+    );
+    // The person's edit and chat's change both stay, and the reply says why.
+    assert_eq!(r["text"], NOT_CHATS);
+    assert!(r["undone"].is_null(), "{r:#}");
+    assert_eq!(chat.project.revision(), before);
+    assert_eq!(chat.project.project().name, "Mine");
+    assert_eq!(
+        chat.project.project().settings.primary_format,
+        FormatKind::Portrait
+    );
+    assert_eq!(chat.project.undo_steps(), 2);
+    assert!(
+        chat.session.turns()[1].note.contains("not chat's"),
+        "{:?}",
+        chat.session.turns()[1].note
+    );
 }
 
 #[tokio::test]

@@ -5,15 +5,17 @@ Run it next to the server, on the live database:
     python -m relay.admin add-code CODE [--note TEXT]
     python -m relay.admin deactivate-code CODE
     python -m relay.admin enable-sam CODE
+    python -m relay.admin set-code-cap CODE [--usd DOLLARS] [--devices COUNT]
     python -m relay.admin list-codes
     python -m relay.admin spend
 
 The database path comes from RELAY_DB_PATH, like the server, unless --db is
 given. Changes apply from the next request without a restart: the server
-reads a code's active flag on every request.
+reads a code's active flag and limits on every request.
 """
 
 import argparse
+import math
 import sqlite3
 import sys
 from collections.abc import Collection, Sequence
@@ -26,6 +28,10 @@ from relay.config import Settings, load_settings
 # padded code could never be used.
 MAX_CODE_LENGTH = 128
 LATEST_ROWS = 20
+# What set-code-cap takes to remove a limit.
+NO_LIMIT = "none"
+# An option set-code-cap was not given: the limit stays as it is.
+_KEEP = object()
 
 
 class AdminError(Exception):
@@ -78,12 +84,38 @@ def deactivate_code(
     print(f'Deactivated code "{code}". New registrations with it get 403. {effect}')
 
 
+def set_code_cap(conn: sqlite3.Connection, args: argparse.Namespace, settings: Settings) -> None:
+    """A code's limits: the most all its devices may spend together (--usd)
+    and how many devices may register with it (--devices). `none` removes
+    one; an option left out keeps it."""
+    code = args.code
+    if args.usd is _KEEP and args.devices is _KEEP:
+        raise AdminError(f"Give --usd, --devices or both. Use {NO_LIMIT} to remove a limit.")
+    with db.transaction(conn):
+        row = conn.execute("SELECT cap_usd, max_devices FROM codes WHERE code = ?", (code,)).fetchone()
+        if row is None:
+            raise AdminError(f'No code "{code}". Codes are case-sensitive. Run list-codes to see them.')
+        cap = row["cap_usd"] if args.usd is _KEEP else args.usd
+        devices = row["max_devices"] if args.devices is _KEEP else args.devices
+        conn.execute("UPDATE codes SET cap_usd = ?, max_devices = ? WHERE code = ?", (cap, devices, code))
+        spent, registered = _code_use(conn, code)
+    spend_part = f"no spend cap ({_usd(spent)} spent)" if cap is None else f"spend cap ${cap:.2f} ({_usd(spent)} spent)"
+    devices_part = (
+        f"no device limit ({registered} registered)"
+        if devices is None
+        else f"at most {_plural(devices, 'device')} ({registered} registered)"
+    )
+    print(f'Code "{code}": {spend_part}, {devices_part}.')
+
+
 def list_codes(conn: sqlite3.Connection, args: argparse.Namespace, settings: Settings) -> None:
+    # DEVICES counts every device that ever registered with the code, as its device limit does.
     rows = conn.execute(
         """
-        SELECT codes.code, codes.active, codes.sam_off, codes.note, count(devices.device_id) AS devices
-        FROM codes LEFT JOIN devices ON devices.code = codes.code
-        GROUP BY codes.code
+        SELECT codes.code, codes.active, codes.sam_off, codes.note, codes.cap_usd, codes.max_devices,
+            (SELECT count(*) FROM code_devices WHERE code_devices.code = codes.code) AS devices,
+            (SELECT coalesce(sum(cost_usd), 0) FROM ledger WHERE ledger.code = codes.code) AS spent
+        FROM codes
         ORDER BY codes.code
         """
     ).fetchall()
@@ -91,17 +123,19 @@ def list_codes(conn: sqlite3.Connection, args: argparse.Namespace, settings: Set
         print("No codes yet. Add one with add-code.")
         return
     _print_table(
-        ["CODE", "STATUS", "DEVICES", "NOTE"],
+        ["CODE", "STATUS", "DEVICES", "SPENT", "CAP", "NOTE"],
         [
             [
                 row["code"],
                 ("active" if row["active"] else "inactive") + (", video off" if row["sam_off"] else ""),
-                str(row["devices"]),
+                str(row["devices"]) + ("" if row["max_devices"] is None else f"/{row['max_devices']}"),
+                _usd(row["spent"]),
+                "-" if row["cap_usd"] is None else f"${row['cap_usd']:.2f}",
                 row["note"],
             ]
             for row in rows
         ],
-        right={2},
+        right={2, 3, 4},
     )
 
 
@@ -158,6 +192,13 @@ def spend(conn: sqlite3.Connection, args: argparse.Namespace, settings: Settings
         ],
         right={4},
     )
+
+
+def _code_use(conn: sqlite3.Connection, code: str) -> tuple[float, int]:
+    """What was charged under `code`, and how many devices ever registered with it."""
+    spent = conn.execute("SELECT coalesce(sum(cost_usd), 0) FROM ledger WHERE code = ?", (code,)).fetchone()[0]
+    registered = conn.execute("SELECT count(*) FROM code_devices WHERE code = ?", (code,)).fetchone()[0]
+    return spent, registered
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -234,6 +275,28 @@ def _parser() -> argparse.ArgumentParser:
     sam.add_argument("code", type=_code, help="the code, case-sensitive")
     sam.set_defaults(command=enable_sam)
 
+    cap = commands.add_parser(
+        "set-code-cap",
+        parents=[db_option],
+        help="limit what a code's devices may spend together and how many may register with it",
+    )
+    cap.add_argument("code", type=_code, help="the code, case-sensitive")
+    cap.add_argument(
+        "--usd",
+        type=_dollars,
+        default=_KEEP,
+        metavar="DOLLARS",
+        help=f"most all its devices may spend together, all time ({NO_LIMIT}: no cap)",
+    )
+    cap.add_argument(
+        "--devices",
+        type=_count,
+        default=_KEEP,
+        metavar="COUNT",
+        help=f"most devices that may register with it, counting every one that ever did ({NO_LIMIT}: no limit)",
+    )
+    cap.set_defaults(command=set_code_cap)
+
     listing = commands.add_parser("list-codes", parents=[db_option], help="list all codes")
     listing.set_defaults(command=list_codes)
 
@@ -253,6 +316,30 @@ def _code(raw: str) -> str:
     if len(code) > MAX_CODE_LENGTH:
         raise argparse.ArgumentTypeError(f"the code is longer than {MAX_CODE_LENGTH} characters")
     return code
+
+
+def _dollars(raw: str) -> float | None:
+    if raw.strip().lower() == NO_LIMIT:
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not an amount in dollars: {raw!r}") from None
+    if not math.isfinite(value) or value < 0:
+        raise argparse.ArgumentTypeError(f"the amount must be 0 or more, got {raw!r}")
+    return value
+
+
+def _count(raw: str) -> int | None:
+    if raw.strip().lower() == NO_LIMIT:
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a whole number: {raw!r}") from None
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"the count must be 0 or more, got {raw!r}")
+    return value
 
 
 def _plural(count: int, noun: str) -> str:

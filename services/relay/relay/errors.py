@@ -6,6 +6,10 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
+# A 402 when the shared credit a device draws on is used up: the relay's overall cap, or its access code's.
+GLOBAL_BUDGET_MESSAGE = "Klipolo's shared AI credit is used up for now. Add your own Meta key in Settings."
+
+
 class RelayError(Exception):
     def __init__(
         self,
