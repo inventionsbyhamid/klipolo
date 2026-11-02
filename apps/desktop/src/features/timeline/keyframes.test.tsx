@@ -157,6 +157,30 @@ describe('motion keys on the timeline', () => {
     expect(left.opacity).toEqual([]);
     expect(lands.mock.calls.flatMap(([, ops]) => ops.map((op) => op.type))).not.toContain('removeItem');
   });
+
+  it('Delete straight after an Option drag takes the copy, not the keys it was copied from', async () => {
+    moving();
+    const lands = vi.fn(landing);
+    useProject.setState({ apply: lands });
+    renderWithProviders(<Timeline />);
+    const [first] = diamonds();
+    // Copied from 0.5 s to 1 s into the layer.
+    fireEvent.pointerDown(first, { button: 0, pointerId: 1, clientX: 150, altKey: true });
+    fireEvent.pointerMove(first, { pointerId: 1, clientX: 200, altKey: true });
+    fireEvent.pointerUp(first, { pointerId: 1, clientX: 200, altKey: true });
+    await act(async () => undefined);
+    expect(lands.mock.calls[0][0]).toBe('keys.copy.undo');
+    expect(useKeyPick.getState().picked).toEqual({ kind: 'motion', itemId: 'title', tUs: 1 * S });
+    // The pressed diamond stays, but lets go of the focus: Delete goes to the picked copy, not to it.
+    expect(diamonds()).toContain(first);
+    expect(document.activeElement).not.toBe(first);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Delete' });
+    expect(deletePickedKey()).toBe(true);
+    await act(async () => undefined);
+    expect(lands).toHaveBeenCalledTimes(2);
+    expect(lands.mock.calls[1][0]).toBe('keys.delete.undo');
+    expect(layoutOf(lands.mock.calls[1]).motion!.keys!.x).toEqual([key(0.5, 0), key(2, 0.2)]);
+  });
 });
 
 describe('volume keys on the timeline', () => {
@@ -250,6 +274,30 @@ describe('volume keys on the timeline', () => {
     expect(lands.mock.calls[1][0]).toBe('volumeKeys.remove.undo');
     expect(contentOf(lands.mock.calls[1]).volumeKeys).toEqual([key(6, 1)]);
     expect(lands.mock.calls.flatMap(([, ops]) => ops.map((op) => op.type))).not.toContain('removeItem');
+  });
+
+  it('a dragged point lets go of the focus, so a Delete before the move lands takes it where it went', async () => {
+    sound([key(2, 0.5), key(6, 1)]);
+    let land!: () => void;
+    const slow = vi.fn((label: string, ops: Op[]) =>
+      label === 'volumeKeys.move.undo'
+        ? new Promise<boolean>((done) => (land = () => void landing(label, ops).then(done)))
+        : landing(label, ops),
+    );
+    useProject.setState({ apply: slow });
+    renderWithProviders(<Timeline />);
+    const [first] = document.querySelectorAll<HTMLElement>('.tl-volume-key');
+    drag(first, 200, 300);
+    await act(async () => undefined);
+    expect(slow).toHaveBeenCalledTimes(1);
+    // Still drawn at 2 s until the move is in, but not focused: its own Delete would take nothing there by then.
+    expect(document.activeElement).not.toBe(first);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Delete' });
+    expect(deletePickedKey()).toBe(true);
+    await act(async () => land());
+    await vi.waitFor(() => expect(slow).toHaveBeenCalledTimes(2));
+    expect(slow.mock.calls[1][0]).toBe('volumeKeys.remove.undo');
+    expect(contentOf(slow.mock.calls[1]).volumeKeys).toEqual([key(6, 1)]);
   });
 });
 
