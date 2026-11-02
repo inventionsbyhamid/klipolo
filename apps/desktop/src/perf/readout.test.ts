@@ -7,7 +7,7 @@ vi.mock('../bridge/commands', () => ({ bridge: { apply: vi.fn() }, mediaUrl: (p:
 const { usePlayback } = await import('../state/playback');
 const { useProject } = await import('../state/project');
 const { useUi } = await import('../state/ui');
-const { startPagePerf } = await import('./readout');
+const { readoutOnLine, startPagePerf } = await import('./readout');
 
 /** A fiber as React commits it: `flags & 1` when it rendered, `subtreeFlags & 1` when something under it did. */
 interface F {
@@ -157,5 +157,12 @@ describe('the page perf readout', () => {
     usePlayback.setState({ playing: false });
     expect(lines).toHaveLength(0);
     expect(frames).toHaveLength(0);
+  });
+});
+
+describe('the first line', () => {
+  it("says the readout is on, and whether React's commits reach the count", () => {
+    tallyCommit(commit());
+    expect(readoutOnLine()).toBe('page perf readout on; React commits counted');
   });
 });

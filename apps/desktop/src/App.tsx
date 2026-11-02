@@ -23,7 +23,7 @@ import { Library } from './layout/Library';
 import { TopBar } from './layout/TopBar';
 import { errorMessage } from './lib/errors';
 import { pagePerfOn } from './perf/flag';
-import { startPagePerf } from './perf/readout';
+import { readoutOnLine, startPagePerf } from './perf/readout';
 import { PlayerBar } from './player/PlayerBar';
 import { Preview } from './preview/Preview';
 import { SettingsDialog } from './settings/SettingsDialog';
@@ -166,7 +166,11 @@ export function App() {
     // The start screen's posters, made in the background: each card swaps to its own as it lands.
     void followPosters();
     // Launched with `KLIPOLO_PAGE_PERF=1`: first renders, timeline frames and renders while playing, into the log.
-    if (pagePerfOn()) startPagePerf({ log: (line) => void pagePerf.log(line).catch(() => undefined) });
+    if (pagePerfOn()) {
+      const log = (line: string) => void pagePerf.log(line).catch(() => undefined);
+      log(readoutOnLine());
+      startPagePerf({ log });
+    }
     // Development builds only: Control Shift P a stand-in chat, Control Shift W sample words (`dev/devChat`).
     if (import.meta.env.DEV) void import('./dev/devChat').then((dev) => dev.listenForDevKeys());
     // Until a clip's analysis feeds speech: Control Shift S shows sample speech under the music (development only).

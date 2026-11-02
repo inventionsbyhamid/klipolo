@@ -54,6 +54,11 @@ function namesLine(from: RenderTotals, to: RenderTotals, per = 1): string {
 const layersOf = (s: Snapshot) => s.project.timeline.tracks.reduce((n, t) => n + t.items.length, 0);
 const openingOf = (s: Snapshot | null) => (s ? `${s.project.id}:${s.opening ?? ''}` : null);
 
+/** The readout's first line: it is on, and whether React's commits reach its count (they have by the app's start). */
+export function readoutOnLine(): string {
+  return `page perf readout on; React commits ${renderTotals().commits > 0 ? 'counted' : 'not counted'}`;
+}
+
 /** Starts the readout; the function it returns stops it. */
 export function startPagePerf({
   log,
