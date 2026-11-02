@@ -320,6 +320,17 @@ pub(super) fn options_screen() -> ArmOptions {
     }
 }
 
+/// "Record yourself": camera-1 and mic-1 alone, mirrored, no screen.
+pub(super) fn options_yourself() -> ArmOptions {
+    ArmOptions {
+        what: WhatToRecord::Camera,
+        mic: Some("mic-1".into()),
+        camera: Some("camera-1".into()),
+        camera_bubble: false,
+        mirror_camera: true,
+    }
+}
+
 /// A state change from the worker.
 pub(super) fn state(state: klipolo_capture::shell::WorkerState) -> Event {
     Event::State {
