@@ -18,7 +18,9 @@ use klipolo_model::transitions::{MAX_TRANSITION_US, MIN_TRANSITION_US};
 
 use super::args::Args;
 use super::error::{Problem, ToolError};
-use super::schema::{Word, boolean, nullable_boolean, nullable_number, nullable_words, string, words};
+use super::schema::{
+    Word, boolean, nullable_boolean, nullable_number, nullable_words, string, words,
+};
 use super::{FORMATS, Tool, ToolCall};
 
 /// What a clip tool names: one clip by its ref from the context (`c2`, not yet resolved), or every clip (`all`). For

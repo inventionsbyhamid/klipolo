@@ -520,7 +520,9 @@ impl<S: SessionOf> Host for AppHost<S> {
         // The page writes the copy, as the clip menu's Reverse does, and turns the clip with it as one undo step.
         if let Job::Reverse { clip_id } = job {
             let at = self.at_now();
-            let asked = reply().reverse(clip_id).on_revision(at.as_ref().map_or(0, |at| at.revision));
+            let asked = reply()
+                .reverse(clip_id)
+                .on_revision(at.as_ref().map_or(0, |at| at.revision));
             self.told(client, at.map_or(0, |at| at.opening), asked);
             return Ok(Started::Later);
         }

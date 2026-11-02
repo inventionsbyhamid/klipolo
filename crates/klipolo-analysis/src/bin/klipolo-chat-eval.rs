@@ -766,7 +766,10 @@ fn look_json(look: &CaptionChange) -> Option<Value> {
             set.push(json!({"key": key, "value": value}));
         }
     };
-    put("font", look.font.clone().map(|f| or_none(f.map(Value::from))));
+    put(
+        "font",
+        look.font.clone().map(|f| or_none(f.map(Value::from))),
+    );
     put("size", look.size.map(Value::from));
     put(
         "position",
@@ -777,7 +780,10 @@ fn look_json(look: &CaptionChange) -> Option<Value> {
             CaptionPlace::At(y) => json!(y),
         }),
     );
-    put("color", look.color.clone().map(|c| or_none(c.map(Value::from))));
+    put(
+        "color",
+        look.color.clone().map(|c| or_none(c.map(Value::from))),
+    );
     put(
         "highlight",
         look.highlight.clone().map(|c| or_none(c.map(Value::from))),

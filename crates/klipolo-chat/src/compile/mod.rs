@@ -288,7 +288,9 @@ pub enum Job {
     /// The main track's clip `clip_id` to play backward: the app writes its reversed copy as the clip menu's Reverse does,
     /// its progress in the top bar, then adds the copy and turns the clip as one undo step, if the clip is still there
     /// as it was.
-    Reverse { clip_id: Id },
+    Reverse {
+        clip_id: Id,
+    },
 }
 
 /// A sticker of `prompt` to draw, cut out of its background, and show for `duration_us` at `size` and `position`
@@ -703,7 +705,9 @@ impl Compiler<'_> {
                             } else {
                                 notes.push((i, REVERSING.to_owned()));
                             }
-                            jobs.extend(ids.into_iter().map(|clip_id| (i, Job::Reverse { clip_id })));
+                            jobs.extend(
+                                ids.into_iter().map(|clip_id| (i, Job::Reverse { clip_id })),
+                            );
                             continue;
                         }
                         Ok(clips::Reverse::Forward(edit)) => (Ok(edit), Removal::Moved(call)),
@@ -811,7 +815,10 @@ impl Compiler<'_> {
                 // once.
                 Ok(tried)
                     if tried.removes
-                        && !matches!(call, ToolCall::AutoZoom { .. } | ToolCall::ReverseClip { .. }) =>
+                        && !matches!(
+                            call,
+                            ToolCall::AutoZoom { .. } | ToolCall::ReverseClip { .. }
+                        ) =>
                 {
                     format_proposed |= matches!(call, ToolCall::SetFormat { .. });
                     waiting.push((i, if_it_removes));

@@ -98,7 +98,9 @@ pub(super) fn read_look(a: &mut Args) -> Result<CaptionChange, ToolError> {
     for p in &pairs(a, "set", &CAPTION_KEYS)? {
         match p.key {
             "font" => change.font = Some((!none(p)).then(|| p.text(a)).transpose()?),
-            "size" => change.size = Some(p.number(a, (*CAPTION_SIZES.start(), *CAPTION_SIZES.end()))?),
+            "size" => {
+                change.size = Some(p.number(a, (*CAPTION_SIZES.start(), *CAPTION_SIZES.end()))?)
+            }
             "position" => change.position = Some(place(p, a)?),
             "color" => change.color = Some(color(p, a)?),
             "highlight" => change.highlight = Some(color(p, a)?),

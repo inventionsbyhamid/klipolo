@@ -885,7 +885,11 @@ async fn a_message_sent_to_a_project_that_closed_while_it_waited_is_not_sent() {
 async fn a_clip_to_reverse_is_named_for_the_page() {
     let chat = chat(vec![answer(
         "Reversing it.",
-        vec![fc("r", "reverseClip", r#"{"clip": "c1", "backward": true}"#)],
+        vec![fc(
+            "r",
+            "reverseClip",
+            r#"{"clip": "c1", "backward": true}"#,
+        )],
     )]);
     let r = reply(
         &chat

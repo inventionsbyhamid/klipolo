@@ -598,7 +598,8 @@ fn finish(
                 // Only clips being reversed: their copies are being written.
                 (false, false)
                     if !compiled.jobs.is_empty()
-                        && (compiled.jobs.iter()).all(|j| matches!(j, crate::Job::Reverse { .. })) =>
+                        && (compiled.jobs.iter())
+                            .all(|j| matches!(j, crate::Job::Reverse { .. })) =>
                 {
                     crate::compile::REVERSING
                 }
@@ -663,7 +664,9 @@ fn done(call: &ToolCall) -> Option<&'static str> {
         ToolCall::SetClip { .. } => "The clip is changed.",
         ToolCall::SetTransition { .. } => "The transitions are changed.",
         ToolCall::ReverseClip { backward: true, .. } => crate::compile::REVERSING,
-        ToolCall::ReverseClip { backward: false, .. } => "The clip plays forward again.",
+        ToolCall::ReverseClip {
+            backward: false, ..
+        } => "The clip plays forward again.",
         ToolCall::TrimClip { .. } => "The clip is longer.",
         ToolCall::SetCameraMode { .. } | ToolCall::AdjustCamera { .. } => "The camera is changed.",
         ToolCall::DetachCamera { .. } => "The camera is its own layer now.",

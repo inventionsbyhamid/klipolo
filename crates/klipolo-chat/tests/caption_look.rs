@@ -7,9 +7,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use klipolo_chat::tools::{CaptionChange, CaptionPlace};
-use klipolo_chat::{
-    AnalysisState, Compiled, FunctionCall, Inputs, Refs, ToolCall, View, compile,
-};
+use klipolo_chat::{AnalysisState, Compiled, FunctionCall, Inputs, Refs, ToolCall, View, compile};
 use klipolo_model::captions::styles::BuiltinCaptionStyle;
 use klipolo_model::font::{FontRef, FontSource};
 use klipolo_model::ops::Op;
@@ -184,7 +182,11 @@ fn a_value_that_does_not_fit_its_key_is_said_back() {
             "set[0].value",
             "#FFD02E",
         ),
-        (json!([{"key": "outline", "value": "#000000"}]), "set[0].key", "font"),
+        (
+            json!([{"key": "outline", "value": "#000000"}]),
+            "set[0].key",
+            "font",
+        ),
     ] {
         let err = parse(json!({"on": true, "style": null, "set": set})).unwrap_err();
         assert_eq!(err.field.as_deref(), Some(field), "{set}: {err}");
@@ -209,7 +211,11 @@ fn the_look_goes_over_the_style_in_one_step() {
     );
     let c = captions(&p, &out);
     assert!(c.enabled);
-    assert_eq!(c.style, Some(BuiltinCaptionStyle::Bold.id()), "the style kept");
+    assert_eq!(
+        c.style,
+        Some(BuiltinCaptionStyle::Bold.id()),
+        "the style kept"
+    );
     assert_eq!(c.font, Some(FontRef::bundled("Anton")));
     assert_eq!(c.size, Some(1.3));
     assert_eq!(c.color.as_deref(), Some("#FFD02E"));
@@ -226,12 +232,18 @@ fn the_look_goes_over_the_style_in_one_step() {
 #[test]
 fn the_middle_bottom_or_a_height_is_every_formats_place() {
     let p = project();
-    let c = captions(&p, &run(&p, json!([{"key": "position", "value": "bottom"}])));
+    let c = captions(
+        &p,
+        &run(&p, json!([{"key": "position", "value": "bottom"}])),
+    );
     assert_eq!(
         c.place,
         [(FormatKind::Landscape, 0.88), (FormatKind::Portrait, 0.7)].into()
     );
-    let c = captions(&p, &run(&p, json!([{"key": "position", "value": "middle"}])));
+    let c = captions(
+        &p,
+        &run(&p, json!([{"key": "position", "value": "middle"}])),
+    );
     assert_eq!(
         c.place,
         [(FormatKind::Landscape, 0.5), (FormatKind::Portrait, 0.5)].into()
