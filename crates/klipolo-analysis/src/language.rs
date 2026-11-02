@@ -202,122 +202,60 @@ fn bare(word: &str) -> String {
         .collect()
 }
 
-/// The commonest short words of the Latin-script languages Voice Transcribe hears. A word may stand in more than one
-/// list ("de", "la"): each language it is in counts it.
-const LATIN_WORDS: [(&str, &[&str]); 12] = [
+/// The commonest short words of the Latin-script languages Voice Transcribe hears, space separated. A word may stand in
+/// more than one list ("de", "la"): each language it is in counts it.
+const LATIN_WORDS: [(&str, &str); 12] = [
     (
         "en",
-        &[
-            "the", "and", "is", "you", "to", "of", "it", "that", "this", "in", "i", "what", "with",
-            "for", "are", "my", "we", "have", "be", "so", "just", "how", "your", "was", "on",
-            "can", "will", "i'm", "it's", "don't",
-        ],
+        "the and is you to of it that this in i what with for are my we have be so just how your was on \
+         can will i'm it's don't",
     ),
     (
         "es",
-        &[
-            "el", "la", "los", "las", "de", "que", "y", "en", "un", "una", "es", "por", "con",
-            "para", "como", "del", "se", "lo", "muy", "pero", "hoy", "más", "les", "voy", "cómo",
-            "menos", "yo", "está", "qué",
-        ],
+        "el la los las de que y en un una es por con para como del se lo muy pero hoy más les voy cómo \
+         menos yo está qué",
     ),
     (
         "fr",
-        &[
-            "le",
-            "la",
-            "les",
-            "de",
-            "des",
-            "et",
-            "est",
-            "un",
-            "une",
-            "je",
-            "vous",
-            "que",
-            "en",
-            "pour",
-            "dans",
-            "pas",
-            "ce",
-            "il",
-            "on",
-            "sur",
-            "avec",
-            "nous",
-            "c'est",
-            "d'une",
-            "moins",
-            "aujourd'hui",
-            "du",
-            "au",
-            "vais",
-        ],
+        "le la les de des et est un une je vous que en pour dans pas ce il on sur avec nous c'est d'une \
+         moins aujourd'hui du au vais",
     ),
     (
         "de",
-        &[
-            "der", "die", "das", "und", "ist", "ich", "nicht", "ein", "eine", "einer", "zu", "mit",
-            "den", "wie", "euch", "es", "auf", "sie", "wir", "auch", "man", "heute", "weniger",
-            "als", "dem", "sich", "ihr", "dass",
-        ],
+        "der die das und ist ich nicht ein eine einer zu mit den wie euch es auf sie wir auch man heute \
+         weniger als dem sich ihr dass",
     ),
     (
         "it",
-        &[
-            "il", "la", "di", "che", "e", "un", "una", "per", "non", "sono", "è", "con", "mi",
-            "ti", "questo", "come", "della", "oggi", "vi", "meno", "gli", "anche", "ma",
-        ],
+        "il la di che e un una per non sono è con mi ti questo come della oggi vi meno gli anche ma",
     ),
     (
         "pt",
-        &[
-            "o", "a", "os", "as", "de", "que", "e", "um", "uma", "não", "é", "para", "com", "você",
-            "do", "da", "em", "no", "na", "hoje", "vou", "como", "menos", "mais", "eu",
-        ],
+        "o a os as de que e um uma não é para com você do da em no na hoje vou como menos mais eu",
     ),
     (
         "nl",
-        &[
-            "de", "het", "een", "en", "is", "ik", "niet", "van", "dat", "je", "met", "op", "zijn",
-            "wat", "voor", "ook", "jullie", "vandaag", "hoe", "minder", "dan",
-        ],
+        "de het een en is ik niet van dat je met op zijn wat voor ook jullie vandaag hoe minder dan",
     ),
     (
         "pl",
-        &[
-            "nie", "się", "to", "jest", "w", "na", "i", "z", "że", "do", "co", "jak", "ale", "tak",
-            "mnie", "dzisiaj", "wam", "pokażę",
-        ],
+        "nie się to jest w na i z że do co jak ale tak mnie dzisiaj wam pokażę",
     ),
     (
         "tr",
-        &[
-            "bir", "ve", "bu", "da", "de", "ne", "için", "çok", "ben", "mi", "ile", "var", "bugün",
-            "nasıl", "size", "daha",
-        ],
+        "bir ve bu da de ne için çok ben mi ile var bugün nasıl size daha",
     ),
     (
         "id",
-        &[
-            "yang", "dan", "di", "ini", "itu", "dengan", "untuk", "tidak", "saya", "ada", "akan",
-            "ke", "dari", "hari", "kita", "cara",
-        ],
+        "yang dan di ini itu dengan untuk tidak saya ada akan ke dari hari kita cara",
     ),
     (
         "tl",
-        &[
-            "ang", "ng", "sa", "na", "mga", "ay", "at", "ko", "ako", "hindi", "ito", "siya",
-            "kung", "paano",
-        ],
+        "ang ng sa na mga ay at ko ako hindi ito siya kung paano",
     ),
     (
         "vi",
-        &[
-            "của", "và", "là", "không", "tôi", "có", "được", "này", "những", "các", "cho", "một",
-            "hôm", "nay", "cách", "bạn",
-        ],
+        "của và là không tôi có được này những các cho một hôm nay cách bạn",
     ),
 ];
 
@@ -339,42 +277,17 @@ fn latin_language(words: &[String]) -> &'static str {
 /// The fewest common words that make Latin letters another language than English.
 const LATIN_MIN: usize = 2;
 
-fn count(words: &[String], list: &[&str]) -> usize {
-    words.iter().filter(|w| list.contains(&w.as_str())).count()
+fn count(words: &[String], list: &str) -> usize {
+    words
+        .iter()
+        .filter(|w| list.split(' ').any(|l| l == w.as_str()))
+        .count()
 }
 
 /// Marathi's commonest words, which Hindi doesn't use: Devanagari speech holding more of them than of Hindi's is
 /// Marathi.
-const MARATHI: &[&str] = &[
-    "आहे",
-    "आणि",
-    "नाही",
-    "मी",
-    "तुम्ही",
-    "आहेत",
-    "होते",
-    "आम्ही",
-    "कसे",
-    "मध्ये",
-    "आज",
-    "करू",
-];
-const HINDI: &[&str] = &[
-    "है",
-    "और",
-    "नहीं",
-    "मैं",
-    "आप",
-    "हैं",
-    "था",
-    "हम",
-    "कैसे",
-    "में",
-    "का",
-    "की",
-    "के",
-    "को",
-];
+const MARATHI: &str = "आहे आणि नाही मी तुम्ही आहेत होते आम्ही कसे मध्ये आज करू";
+const HINDI: &str = "है और नहीं मैं आप हैं था हम कैसे में का की के को";
 
 fn devanagari_language(words: &[&str]) -> &'static str {
     let plain: Vec<String> = words
@@ -384,7 +297,11 @@ fn devanagari_language(words: &[&str]) -> &'static str {
                 .to_owned()
         })
         .collect();
-    let n = |list: &[&str]| plain.iter().filter(|w| list.contains(&w.as_str())).count();
+    let n = |list: &str| {
+        (plain.iter())
+            .filter(|w| list.split(' ').any(|l| l == w.as_str()))
+            .count()
+    };
     if n(MARATHI) > n(HINDI) { "mr" } else { "hi" }
 }
 
