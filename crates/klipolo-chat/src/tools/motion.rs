@@ -1,6 +1,7 @@
 //! The motion tool: keys on a layer's position, scale, rotation and opacity, and its enter, exit and loop presets with
 //! their settings, length and ease (`setMotion`), for any motion a person describes. `animate`'s words are the quick
 //! shortcuts; this is what they are made of. The ease words (`EASE_FORMS`) are `animateText`'s too.
+//! On a clip, keys move a recording's camera bubble; on a clip with none, scale keys push in slowly on its footage.
 //!
 //! Values are the model's own (`motion::LIMITS`): x and y move the layer by fractions of the frame (1 is a frame's width
 //! right or height down), scale 1 is its size, rotation is degrees clockwise, opacity 0 to 1. A value outside them is

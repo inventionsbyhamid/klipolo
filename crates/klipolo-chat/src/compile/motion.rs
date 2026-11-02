@@ -7,6 +7,8 @@
 //! - A preset is the model's built-in of that word (`slide` with its side, a loop with its strength), lasting what was
 //!   asked or as `animate`'s do (`animate::ENTER_US`, `EXIT_US`, `EMPHASIS_US`), cut to the layer's length; `none`
 //!   takes its slot's away. A typewriter is for words.
+//! - On a main clip, the keys move a recording's camera bubble (`bubble_motion`); on a clip with none, scale keys push in
+//!   slowly on its footage, one push zoom (`push_in`).
 
 use std::collections::BTreeMap;
 

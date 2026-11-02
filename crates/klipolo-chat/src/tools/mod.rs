@@ -18,9 +18,10 @@
 //! Adding a tool is one `ToolCall` variant and one entry in `TOOLS`, where its name, description, parameters and reader
 //! sit together; the tests check every schema is strict and every reader reads the fields its schema lists. Splitting
 //! by concern: `schema` (the pieces of a schema, and the words a tool takes), `args` (a call's arguments read field by
-//! field), `error` (why a call couldn't be read), `media` (the media tools and their words), `clips` (the clip and
-//! transition tools and their words), `background` (the background tool and its words), `recorded` (a recording's
-//! camera and recorded sounds, and their words), `animate` (a layer's animation and its words).
+//! field), `error` (why a call couldn't be read), `media` (the media tools and their words), `clips` (the clip,
+//! transition and reverse tools and their words), `captions` (the captions' look `setCaptions` sets), `background` (the
+//! background tool and its words), `recorded` (a recording's camera and recorded sounds, and their words), `animate` (a
+//! layer's animation and its words).
 
 pub mod animate;
 mod args;
