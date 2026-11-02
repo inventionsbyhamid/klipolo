@@ -65,10 +65,11 @@ def add_device(conn, code=None):
 
 
 def charge(conn, device_id, cost, at, endpoint="responses", model="muse-spark-1.3"):
+    """A charge under the device's code, as the relay writes it."""
     conn.execute(
-        "INSERT INTO ledger (device_id, at, endpoint, model, usage_json, cost_usd)"
-        " VALUES (?, ?, ?, ?, '{}', ?)",
-        (device_id, at, endpoint, model, cost),
+        "INSERT INTO ledger (device_id, at, endpoint, model, usage_json, cost_usd, code)"
+        " VALUES (?, ?, ?, ?, '{}', ?, (SELECT code FROM devices WHERE device_id = ?))",
+        (device_id, at, endpoint, model, cost, device_id),
     )
 
 
@@ -92,8 +93,8 @@ def test_add_then_list_shows_active_code(cli):
 
     assert status == 0
     assert table(out) == [
-        ["CODE", "STATUS", "DEVICES", "NOTE"],
-        ["testcode", "active", "0", "for", "tests"],
+        ["CODE", "STATUS", "DEVICES", "SPENT", "CAP", "NOTE"],
+        ["testcode", "active", "0", "$0.0000", "-", "for", "tests"],
     ]
 
 
@@ -133,7 +134,7 @@ def test_add_code_on_an_existing_code_reactivates_it_and_updates_the_note(client
     assert out == 'Code "testcode" already exists. Reactivated it. Updated its note.\n'
     assert me(client, token)["relay_ai"] is True
     assert register(client, "testcode").status_code == 200
-    assert table(cli("list-codes")[1])[1] == ["testcode", "active", "2", "new", "note"]
+    assert table(cli("list-codes")[1])[1] == ["testcode", "active", "2", "$0.0000", "-", "new", "note"]
 
 
 def test_add_code_again_without_a_note_keeps_the_note(cli):
@@ -143,7 +144,7 @@ def test_add_code_again_without_a_note_keeps_the_note(cli):
 
     assert status == 0
     assert out == 'Code "testcode" already exists. It was already active.\n'
-    assert table(cli("list-codes")[1])[1] == ["testcode", "active", "0", "for", "tests"]
+    assert table(cli("list-codes")[1])[1] == ["testcode", "active", "0", "$0.0000", "-", "for", "tests"]
 
 
 def test_deactivate_unknown_code_fails_and_changes_nothing(cli):
@@ -313,3 +314,75 @@ def test_enable_sam_turns_video_tracking_back_on_for_a_code(cli, conn):
     assert out == 'Video tracking is on again for code "testcode".\n'
     assert conn.execute("SELECT sam_off FROM codes WHERE code = 'testcode'").fetchone()[0] == 0
     assert cli("enable-sam", "nope")[0] == 1
+
+
+def test_set_code_cap_limits_a_codes_spend_and_devices_and_list_codes_shows_them(client, cli, conn):
+    cli("add-code", "testcode", "--note", "for tests")
+    cli("add-code", "press")
+    first = register(client, "judges").json()["token"]
+    device = conn.execute("SELECT device_id FROM devices").fetchone()[0]
+    charge(conn, device, 0.5, "2026-11-02T12:00:00+00:00")
+
+    status, out, err = cli("set-code-cap", "judges", "--usd", "30", "--devices", "2")
+
+    assert (status, err) == (0, "")
+    assert out == 'Code "judges": spend cap $30.00 ($0.5000 spent), at most 2 devices (1 registered).\n'
+    assert table(cli("list-codes")[1]) == [
+        ["CODE", "STATUS", "DEVICES", "SPENT", "CAP", "NOTE"],
+        ["judges", "active", "1/2", "$0.5000", "$30.00", "for", "judges"],
+        ["press", "active", "0", "$0.0000", "-"],
+    ]
+    # From the next registration: a second device fits, a third doesn't.
+    assert register(client, "testcode").status_code == 200
+    assert register(client, "judges").status_code == 402
+    assert me(client, first)["relay_ai"] is True
+
+
+def test_set_code_cap_keeps_a_limit_left_out_and_none_removes_one(cli, conn):
+    cli("add-code", "testcode")
+    cli("set-code-cap", "judges", "--usd", "30", "--devices", "25")
+
+    status, out, _ = cli("set-code-cap", "judges", "--devices", "10")
+
+    assert status == 0
+    assert out == 'Code "judges": spend cap $30.00 ($0.0000 spent), at most 10 devices (0 registered).\n'
+
+    status, out, _ = cli("set-code-cap", "judges", "--usd", "none")
+
+    assert status == 0
+    assert out == 'Code "judges": no spend cap ($0.0000 spent), at most 10 devices (0 registered).\n'
+    assert table(cli("list-codes")[1])[1] == ["judges", "active", "0/10", "$0.0000", "-"]
+
+    cli("set-code-cap", "judges", "--devices", "none")
+
+    row = conn.execute("SELECT cap_usd, max_devices FROM codes WHERE code = 'judges'").fetchone()
+    assert (row["cap_usd"], row["max_devices"]) == (None, None)
+
+
+def test_set_code_cap_on_an_unknown_code_or_without_a_limit_fails_and_changes_nothing(cli, conn):
+    cli("add-code", "testcode")
+
+    assert cli("set-code-cap", "nope", "--usd", "5") == (
+        1,
+        "",
+        'No code "nope". Codes are case-sensitive. Run list-codes to see them.\n',
+    )
+    assert cli("set-code-cap", "judges") == (1, "", "Give --usd, --devices or both. Use none to remove a limit.\n")
+    row = conn.execute("SELECT cap_usd, max_devices FROM codes WHERE code = 'judges'").fetchone()
+    assert (row["cap_usd"], row["max_devices"]) == (None, None)
+
+
+@pytest.mark.parametrize(
+    "option",
+    [["--usd", "-1"], ["--usd", "lots"], ["--usd", "nan"], ["--devices", "-1"], ["--devices", "2.5"]],
+    ids=["negative-usd", "not-usd", "nan-usd", "negative-devices", "fraction-devices"],
+)
+def test_set_code_cap_refuses_a_limit_no_code_could_have(cli, conn, option):
+    cli("add-code", "testcode")
+
+    with pytest.raises(SystemExit) as exit_info:
+        cli("set-code-cap", "judges", *option)
+
+    assert exit_info.value.code == 2
+    row = conn.execute("SELECT cap_usd, max_devices FROM codes WHERE code = 'judges'").fetchone()
+    assert (row["cap_usd"], row["max_devices"]) == (None, None)
