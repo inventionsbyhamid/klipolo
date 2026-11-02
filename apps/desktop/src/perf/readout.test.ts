@@ -52,10 +52,10 @@ describe('the render tally', () => {
 });
 
 describe('frame stats', () => {
-  it('says the median, the 95th percentile, the longest and the frames over budget', () => {
-    const s = frameStats([16, 17, 16, 50, 16, 34, 16, 16, 16, 16]);
-    expect(s).toMatchObject({ frames: 10, median: 16, longest: 50, over16: 3, over33: 2 });
-    expect(s.p95).toBe(50);
+  it('says the median, the 95th percentile, the longest and the frames late by more than vsync jitter', () => {
+    const s = frameStats([16.6, 17.4, 16.8, 55, 16.7, 34, 16.6, 16.7, 21, 16.7]);
+    expect(s).toMatchObject({ frames: 10, median: 17, longest: 55, late: 3, veryLate: 1 });
+    expect(s.p95).toBe(55);
     expect(frameStats([])).toMatchObject({ frames: 0, longest: 0 });
   });
 });
@@ -116,7 +116,7 @@ describe('the page perf readout', () => {
     expect(lines).toHaveLength(0);
     run(25);
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^timeline zoom: \d+ frames, median 16 ms, p95 \d+ ms, longest 40 ms, 1 over 16.7 ms/);
+    expect(lines[0]).toMatch(/^timeline zoom: \d+ frames, median 16 ms, p95 \d+ ms, longest 40 ms, 1 over 20 ms, 0 over 50 ms/);
     expect(lines[0]).toMatch(/1 commits, 4 renders \(timeline 3, preview 1\)/);
   });
 
