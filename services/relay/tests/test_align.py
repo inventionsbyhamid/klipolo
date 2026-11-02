@@ -3,6 +3,7 @@
 
 import json
 import os
+import statistics
 import subprocess
 import sys
 import time
@@ -82,7 +83,7 @@ def test_turn_ending_before_it_starts_is_skipped():
 
 
 def test_turn_without_alignable_words_is_skipped():
-    _, skipped = plan([Turn(0, 1000, "... — !"), Turn(0, 1000, "日本語")], seconds(5))
+    _, skipped = plan([Turn(0, 1000, "... — !"), Turn(0, 1000, "🙂 ♪")], seconds(5))
     assert [(s.turn, s.reason) for s in skipped] == [(0, NOTHING_TO_ALIGN), (1, NOTHING_TO_ALIGN)]
 
 
@@ -105,6 +106,16 @@ def test_turn_with_more_letters_than_its_audio_can_hold_is_skipped():
     assert [p.index for p in planned] == [0]
     assert [(s.turn, s.reason) for s in skipped] == [(1, TOO_SHORT)]
     assert align.MAX_LETTERS_PER_FRAME == 0.6
+
+
+def test_text_far_longer_than_its_audio_can_hold_is_skipped_before_it_is_normalized(monkeypatch):
+    normalized = []
+    monkeypatch.setattr(align, "normalize", lambda text: normalized.append(text) or [])
+    # A 1 s turn is a 1.5 s slice: 74 frames, room for 2.4 x 74 = 177.6 characters of raw text.
+    assert align.MAX_CHARACTERS_PER_FRAME * emission_frames(seconds(1.5)) == pytest.approx(177.6)
+    _, skipped = plan([Turn(2000, 3000, "न" * 177), Turn(2000, 3000, "न" * 178), Turn(0, 1000, "न" * 100_000)], seconds(10))
+    assert [(s.turn, s.reason) for s in skipped] == [(0, NOTHING_TO_ALIGN), (1, TOO_SHORT), (2, TOO_SHORT)]
+    assert normalized == ["न" * 177]
 
 
 def test_repeated_letters_need_a_frame_between_them():
@@ -130,6 +141,15 @@ def test_plan_keeps_every_word_and_its_aligner_form():
 def test_number_forms_become_one_aligner_word():
     (turn,), _ = plan([Turn(0, 3000, "42 cats")], seconds(5))
     assert turn.tokens == ["fortytwo", "cats"]
+
+
+def test_turns_in_other_scripts_get_one_aligner_word_per_word():
+    (hindi, arabic), skipped = plan(
+        [Turn(0, 2000, "नमस्ते, आज हम वीडियो बना रहे हैं।"), Turn(2000, 4000, "مرحبا، هذا سهل جدا.")], seconds(5)
+    )
+    assert skipped == []
+    assert hindi.tokens == ["namaste", "aaj", "ham", "viiddiyo", "banaa", "rahe", "haim"]
+    assert arabic.tokens == ["mrhba", "htha", "shl", "jda"]
 
 
 # Emission frames and windows.
@@ -309,6 +329,36 @@ def test_fixture_words_start_within_150ms_of_reference(mms):
     print(f"scores of the invented repeats {low}: {[w['score'] for w, r in zip(words, reference) if r['score'] < 0.05]}")
 
 
+def language_case(name):
+    case = json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+    with wave.open(str(FIXTURES / case["audio"])) as audio:
+        pcm = audio.readframes(audio.getnframes())
+    turns = [Turn(t["startMs"], t["endMs"], t["text"]) for t in case["turns"]]
+    return pcm, turns, case
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("name", ["fleurs_hi_pyramids.json", "fleurs_ar_pyramids.json"])
+def test_turns_in_other_scripts_time_every_word(mms, name):
+    pcm, turns, case = language_case(name)
+    result = align_pcm(mms, pcm, turns)
+    assert result.skipped == []
+    words, reference = result.words, case["reference"]
+    assert [w["text"] for w in words] == turns[0].text.split()
+    scores = [w["score"] for w in words]
+    print(f"\n{case['language']}: {len(words)} words, median score {statistics.median(scores):.3f}, min {min(scores):.3f}")
+    # The app drops words under 0.05 and times a whole turn roughly when its
+    # median is under 0.5 (MIN_SCORE and MATCH_MEDIAN in klipolo-analysis).
+    # A word with nothing alignable would score 0 here.
+    assert min(scores) >= 0.3
+    assert statistics.median(scores) >= 0.8
+    starts = [w["startMs"] for w in words]
+    assert starts == sorted(starts)
+    assert all(w["startMs"] < w["endMs"] <= turns[0].end_ms for w in words)
+    far = [(w["text"], w["startMs"], r["startMs"]) for w, r in zip(words, reference) if abs(w["startMs"] - r["startMs"]) > 150]
+    assert far == []
+
+
 @pytest.mark.slow
 def test_long_turns_aligned_in_windows_match_one_pass(mms):
     pcm, turns, case = fixture_case()
@@ -402,7 +452,7 @@ def test_odd_text_and_turns_never_give_a_500(mms_client):
         (5, NO_TEXT),
     ]
     assert {w["turn"] for w in body["words"]} == {1, 4}
-    assert [w["score"] for w in body["words"] if w["text"] in ("—", "日本")] == [0.0, 0.0]
+    assert [w["score"] for w in body["words"] if w["text"] == "—"] == [0.0]
     team = [w for w in body["words"] if w["turn"] == 4]
     print(f"\nclamped turn: {[(w['text'], w['startMs'], w['score']) for w in team]}")
     # The turn runs past the audio; its words are still found where they are

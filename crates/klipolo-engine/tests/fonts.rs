@@ -4,7 +4,7 @@
 
 use klipolo_engine::render::fonts::{
     self, AlreadyConfigured, FontDirs, configure_for_tests, family_for, test_fallback_face,
-    test_index, test_shape_face, test_system_fallback_face,
+    test_glyphs, test_index, test_shape_face, test_system_fallback_face,
 };
 use klipolo_fonts::cjk::CjkCover;
 use klipolo_model::font::{FontRef, FontSource};
@@ -85,9 +85,62 @@ fn cjk_without_its_noto_draws_notdefs_boxes_at_every_weight() {
     for script in klipolo_model::text_language::CjkScript::ALL {
         assert!(!fonts::cjk_registered(script), "{script:?}");
     }
-    // Other scripts never reach it: Thai keeps the system's fallback (none in this managed-only test system).
-    let (thai, _) = test_fallback_face("kl:b:inter", "สวัสดี", 400, false);
-    assert_ne!(thai, "kl:fallback:notdef");
+    // Other scripts never reach it: Ethiopic keeps the system's fallback (none in this managed-only test system).
+    let (ethiopic, _) = test_fallback_face("kl:b:inter", "ሰላም", 400, false);
+    assert_ne!(ethiopic, "kl:fallback:notdef");
+}
+
+/// Hindi, Arabic and the other bundled scripts draw in their own Noto Sans at every weight and style, with a real glyph
+/// for every letter (never .notdef's box), whatever face the text is in, and whatever language the project is in.
+#[test]
+fn indic_arabic_hebrew_and_thai_draw_in_their_bundled_noto_with_no_box() {
+    configure_for_tests();
+    let samples = [
+        ("नमस्ते दुनिया", "kl:fallback:devanagari"),
+        ("مرحبا بالعالم", "kl:fallback:arabic"),
+        ("শুভ সকাল", "kl:fallback:bengali"),
+        ("ਸਤ ਸ੍ਰੀ ਅਕਾਲ", "kl:fallback:gurmukhi"),
+        ("કેમ છો", "kl:fallback:gujarati"),
+        ("வணக்கம்", "kl:fallback:tamil"),
+        ("నమస్కారం", "kl:fallback:telugu"),
+        ("ನಮಸ್ಕಾರ", "kl:fallback:kannada"),
+        ("നമസ്കാരം", "kl:fallback:malayalam"),
+        ("שלום עולם", "kl:fallback:hebrew"),
+        ("สวัสดีครับ", "kl:fallback:thai"),
+    ];
+    for (text, alias) in samples {
+        for (primary, weight, italic) in [
+            ("kl:b:montserrat", 900, false),
+            ("kl:b:inter", 400, false),
+            // Italic: the Latin fallback is registered italic, as a family with italic faces is.
+            ("kl:fallback:latin", 700, true),
+        ] {
+            let glyphs = test_glyphs(primary, weight, italic, text);
+            assert!(!glyphs.is_empty(), "{text}");
+            for (family, glyph) in &glyphs {
+                assert_ne!(
+                    *glyph, 0,
+                    "{text} in {primary} {weight}: a .notdef box from {family}"
+                );
+            }
+            // Every letter's glyph comes from the script's Noto (a space may come from the text's own face).
+            let letters: Vec<&String> = glyphs
+                .iter()
+                .map(|(f, _)| f)
+                .filter(|f| *f != primary)
+                .collect();
+            assert!(!letters.is_empty(), "{text} in {primary}");
+            assert!(
+                letters.iter().all(|f| *f == alias),
+                "{text} in {primary} {weight}: {glyphs:?}"
+            );
+        }
+    }
+    // Hindi with an English word in it: the English in the text's face, the Hindi in Noto Sans Devanagari.
+    let mixed = test_glyphs("kl:b:montserrat", 900, false, "मेरा YouTube चैनल");
+    assert!(mixed.iter().all(|(_, g)| *g != 0), "{mixed:?}");
+    assert!(mixed.iter().any(|(f, _)| f == "kl:b:montserrat"));
+    assert!(mixed.iter().any(|(f, _)| f == "kl:fallback:devanagari"));
 }
 
 /// A download registered with the engine reaches the engine's own index, with its exact version and its coverage, and
@@ -181,7 +234,8 @@ fn installed_cjk_families_are_never_borrowed_as_fallbacks() {
 }
 
 /// Rubik ships only Black Italic. It is shaped upright (its faces are registered upright too),
-/// so the system's script faces, which are upright, still answer for the Thai it lacks; asked italic, none would.
+/// so the system's script faces, which are upright, still answer for the Ethiopic it lacks (a script with no bundled
+/// face); asked italic, none would.
 #[test]
 fn an_italic_only_face_keeps_the_systems_script_fallbacks() {
     configure_for_tests();
@@ -195,9 +249,12 @@ fn an_italic_only_face_keeps_the_systems_script_fallbacks() {
         "kl:b:rubik",
         "its upright twin draws its own letters"
     );
-    let (thai, _) = test_system_fallback_face("kl:b:rubik", "สวัสดี", 900, false);
-    assert_eq!(thai, "Test Thai", "the system's upright Thai face answers");
-    let (boxed, _) = test_system_fallback_face("kl:b:rubik", "สวัสดี", 900, true);
+    let (ethiopic, _) = test_system_fallback_face("kl:b:rubik", "ሰላም", 900, false);
+    assert_eq!(
+        ethiopic, "Test Thai",
+        "the system's upright script face answers"
+    );
+    let (boxed, _) = test_system_fallback_face("kl:b:rubik", "ሰላም", 900, true);
     assert_eq!(
         boxed, "kl:b:rubik",
         "asked italic, no system face answers: why it is asked upright"

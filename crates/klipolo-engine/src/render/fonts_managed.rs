@@ -16,7 +16,7 @@ use std::path::PathBuf;
 
 use glyphon::fontdb::{Database, FaceInfo, ID, Language, Source, Stretch, Style, Weight};
 use klipolo_fonts::bundled::{BUNDLED, Category};
-use klipolo_fonts::fallback::{Fallback, LATIN};
+use klipolo_fonts::fallback::{Fallback, LATIN, NotoScript};
 use klipolo_fonts::index::FontIndex;
 use klipolo_fonts::installed::NORMAL_WIDTH;
 use klipolo_fonts::resolve::resolve_fallback;
@@ -39,7 +39,8 @@ pub struct ManagedFace {
     pub index: u32,
 }
 
-/// Every face to register for `index`: the bundled faces (Adobe NotDef only as its fallback alias), the downloaded
+/// Every face to register for `index`: the bundled faces (Adobe NotDef and the scripts' Noto Sans only as their
+/// fallback aliases), the downloaded
 /// ones, the upright twins of italic-only families, then the fallback aliases at every weight × both styles.
 pub(crate) fn managed_faces(index: &FontIndex) -> Vec<ManagedFace> {
     let mut faces = Vec::new();
@@ -71,7 +72,8 @@ pub(crate) fn managed_faces(index: &FontIndex) -> Vec<ManagedFace> {
     let fallbacks = [Fallback::Latin]
         .into_iter()
         .chain(CjkScript::ALL.map(Fallback::Cjk))
-        .chain([Fallback::Notdef]);
+        .chain([Fallback::Notdef])
+        .chain(NotoScript::ALL.map(Fallback::Script));
     let weights = fallback_weights(index);
     faces.extend(emoji_weights(index, &weights));
     for which in fallbacks {

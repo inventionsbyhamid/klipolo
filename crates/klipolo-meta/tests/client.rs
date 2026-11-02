@@ -231,6 +231,7 @@ async fn transcribe_parses_a_real_answer() {
     assert_eq!(result.turns[8].speaker.as_deref(), Some("F"));
 }
 
+/// The request names no language (no `languageBias`): the model hears which one is spoken.
 #[tokio::test]
 async fn transcribe_sends_a_diarization_request_with_keywords() {
     let server = MockServer::start().await;
@@ -269,7 +270,6 @@ async fn transcribe_sends_a_diarization_request_with_keywords() {
             "mode": "DIARIZATION",
             "model": "muse-voice-transcribe-1.0",
             "audioEncoding": "WAV",
-            "languageBias": ["English"],
             "keywords": ["Kaiden", "Onishi"],
         })
     );

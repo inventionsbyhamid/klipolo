@@ -11,7 +11,9 @@
 //!   match its audio (median score under `MATCH_MEDIAN`) is left untimed. It never fails: what it can't time stays
 //!   untimed.
 //! - `finish`: one `Transcript`. A turn without times has its text spread across the turn by character count and
-//!   makes the result approximate. Fillers are tagged and a `Pause` word fills every gap of `PAUSE_US` or more.
+//!   makes the result approximate. Its language is the one its words are written in (`language::of_words`: the
+//!   transcriber is told no language and names none), that language's fillers are tagged, and a `Pause` word fills
+//!   every gap of `PAUSE_US` or more.
 //!
 //! Times: the WAV, its chunks, the turns and every word are the clip's SOUND time (`audio`'s module notes). Each
 //! chunk's start is added to its turns and each align request's start to its words; the asset's audio lead never is
@@ -31,7 +33,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use futures::stream::{self, StreamExt, TryStreamExt};
-use klipolo_model::speech::{PAUSE_US, Transcript, Word, WordKind};
+use klipolo_model::speech::{PAUSE_US, Transcript, Word, WordKind, spaced_words};
 use klipolo_model::time::{RangeUs, Us};
 use serde::{Deserialize, Serialize};
 
@@ -39,13 +41,15 @@ use crate::audio::{self, AudioError, MappedPcm, MonoPcm};
 use crate::chunks::{self, sample_at, us};
 use crate::error::AnalysisError;
 use crate::fillers::is_filler;
+use crate::language;
 use crate::providers::{
     AlignLimits, AlignTurn, Aligner, Alignment, ProviderError, ProviderErrorKind, SpeakerTurn,
     TimedWord, Transcriber, retry_busy,
 };
 
-/// The language Voice Transcribe is biased to, and whose fillers are tagged.
-pub const LANGUAGE: &str = "en";
+/// The language a transcript with no words is tagged with. One with words is tagged with theirs
+/// (`language::of_words`).
+pub const LANGUAGE: &str = language::DEFAULT;
 /// Aligned words scoring under this aren't in the audio (often a repeat the transcriber invented): dropped.
 pub const MIN_SCORE: f64 = 0.05;
 /// A turn whose kept words' median score is under this doesn't match its audio (text never spoken there scores about
@@ -342,7 +346,8 @@ fn turns_in(said: Vec<SpeakerTurn>, chunk: RangeUs, index: usize) -> Vec<Turn> {
             Turn {
                 start_us: start,
                 end_us: at(t.end_ms).max(start),
-                text: t.text.trim().to_owned(),
+                // Chinese and Japanese as one word per character, so captions and word timing have words.
+                text: spaced_words(t.text.trim()).into_owned(),
                 speaker: t.speaker,
                 chunk: index as u32,
                 aligned: false,
@@ -646,13 +651,14 @@ pub fn finish(
             None => words.extend(spread(turn)),
         }
     }
-    let words = assemble(words, duration_us);
+    let spoken = language::of_words(words.iter().map(|w| w.text.as_str()));
+    let words = assemble(words, duration_us, spoken);
     let approximate = turns.iter().any(|t| !t.aligned);
     TranscriptOut {
         empty_reason: words.is_empty().then(|| NO_SPEECH.to_owned()),
         transcript: Transcript {
             key: String::new(),
-            language: LANGUAGE.into(),
+            language: spoken.into(),
             model: model.into(),
             covered_us: duration_us,
             complete: true,
@@ -663,6 +669,30 @@ pub fn finish(
         cost_usd: cost_usd + align_cost,
         approximate_reason: approximate.then(|| note.unwrap_or_else(|| ROUGH_WORDS.to_owned())),
     }
+}
+
+/// `out` tagged again from its words, as `finish` tags a new transcript: its language (`language::of_words`) and that
+/// language's fillers. Whether anything changed. For a transcript cached before transcripts were tagged by their
+/// words (every one was tagged English).
+pub fn retag(out: &mut TranscriptOut) -> bool {
+    let words = &mut out.transcript.words;
+    let spoken = language::of_words(
+        (words.iter())
+            .filter(|w| w.kind != WordKind::Pause)
+            .map(|w| w.text.as_str()),
+    );
+    let mut changed = out.transcript.language != spoken;
+    out.transcript.language = spoken.into();
+    for w in words.iter_mut().filter(|w| w.kind != WordKind::Pause) {
+        let kind = if is_filler(spoken, &w.text) {
+            WordKind::Filler
+        } else {
+            WordKind::Word
+        };
+        changed |= w.kind != kind;
+        w.kind = kind;
+    }
+    changed
 }
 
 /// A turn's words spread across it by character count (punctuation counts), end to end. No model timed them, so
@@ -692,13 +722,13 @@ fn spread(turn: &Turn) -> Vec<Word> {
 }
 
 /// `words` as one transcript's: inside the clip, sorted by start, each ending by the next one's start (overlapping
-/// voices meet end to end), empty ones left out, fillers tagged, and a `Pause` word in every gap of `PAUSE_US` or
-/// more.
-fn assemble(mut words: Vec<Word>, duration_us: Us) -> Vec<Word> {
+/// voices meet end to end), empty ones left out, `language`'s fillers tagged, and a `Pause` word in every gap of
+/// `PAUSE_US` or more.
+fn assemble(mut words: Vec<Word>, duration_us: Us, language: &str) -> Vec<Word> {
     for w in &mut words {
         w.start_us = w.start_us.clamp(0, duration_us);
         w.end_us = w.end_us.clamp(0, duration_us);
-        w.kind = if is_filler(LANGUAGE, &w.text) {
+        w.kind = if is_filler(language, &w.text) {
             WordKind::Filler
         } else {
             WordKind::Word

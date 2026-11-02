@@ -1,0 +1,118 @@
+{
+ "audio": "fleurs_hi_pyramids_16k.wav",
+ "language": "hi",
+ "turns": [
+  {
+   "startMs": 0,
+   "endMs": 5580,
+   "text": "आप पिरामिड को शो शुरू होने से पहले अंधेरे में शांति से देख सकते हैं."
+  }
+ ],
+ "reference": [
+  {
+   "text": "आप",
+   "startMs": 260,
+   "endMs": 420,
+   "score": 0.985,
+   "turn": 0
+  },
+  {
+   "text": "पिरामिड",
+   "startMs": 540,
+   "endMs": 1080,
+   "score": 0.978,
+   "turn": 0
+  },
+  {
+   "text": "को",
+   "startMs": 1140,
+   "endMs": 1220,
+   "score": 0.978,
+   "turn": 0
+  },
+  {
+   "text": "शो",
+   "startMs": 1420,
+   "endMs": 1580,
+   "score": 0.871,
+   "turn": 0
+  },
+  {
+   "text": "शुरू",
+   "startMs": 2060,
+   "endMs": 2320,
+   "score": 0.973,
+   "turn": 0
+  },
+  {
+   "text": "होने",
+   "startMs": 2380,
+   "endMs": 2620,
+   "score": 0.999,
+   "turn": 0
+  },
+  {
+   "text": "से",
+   "startMs": 2700,
+   "endMs": 2780,
+   "score": 0.998,
+   "turn": 0
+  },
+  {
+   "text": "पहले",
+   "startMs": 2880,
+   "endMs": 3120,
+   "score": 0.985,
+   "turn": 0
+  },
+  {
+   "text": "अंधेरे",
+   "startMs": 3200,
+   "endMs": 3580,
+   "score": 0.911,
+   "turn": 0
+  },
+  {
+   "text": "में",
+   "startMs": 3640,
+   "endMs": 3740,
+   "score": 0.994,
+   "turn": 0
+  },
+  {
+   "text": "शांति",
+   "startMs": 3780,
+   "endMs": 4160,
+   "score": 0.973,
+   "turn": 0
+  },
+  {
+   "text": "से",
+   "startMs": 4240,
+   "endMs": 4320,
+   "score": 0.998,
+   "turn": 0
+  },
+  {
+   "text": "देख",
+   "startMs": 4400,
+   "endMs": 4660,
+   "score": 0.99,
+   "turn": 0
+  },
+  {
+   "text": "सकते",
+   "startMs": 4700,
+   "endMs": 5000,
+   "score": 0.999,
+   "turn": 0
+  },
+  {
+   "text": "हैं.",
+   "startMs": 5080,
+   "endMs": 5220,
+   "score": 0.995,
+   "turn": 0
+  }
+ ]
+}

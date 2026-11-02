@@ -39,7 +39,9 @@ pub struct AsrTurn {
 impl MetaClient {
     /// Transcribes one WAV (mono 16-bit PCM at 16 kHz, at most 600 s and
     /// 32 MB) with speaker labels. `keywords` (names, jargon) bias the
-    /// spelling; leave empty for none.
+    /// spelling; leave empty for none. No language is named: the model hears
+    /// which of its 25 languages is spoken (and a speaker who mixes two), and
+    /// a bias toward one only made other languages worse.
     pub async fn transcribe(
         &self,
         wav: Vec<u8>,
@@ -76,7 +78,6 @@ fn transcribe_request(keywords: &[String]) -> Value {
         "mode": "DIARIZATION",
         "model": TRANSCRIBE_MODEL,
         "audioEncoding": "WAV",
-        "languageBias": ["English"],
     });
     if !keywords.is_empty() {
         request["keywords"] = json!(keywords);

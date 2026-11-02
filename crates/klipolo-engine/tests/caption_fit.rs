@@ -43,6 +43,11 @@ fn style(key: &str) -> Arc<CaptionStyleDef> {
 
 /// `pages`' first page in `style` for a 1080 × 1920 frame, its lines at most 0.70 of the width.
 fn lay_out(style: &CaptionStyleDef, pages: &Pages) -> PageLayout {
+    lay_out_in(style, pages, "en")
+}
+
+/// `lay_out` in captions of `language`.
+fn lay_out_in(style: &CaptionStyleDef, pages: &Pages, language: &str) -> PageLayout {
     configure_for_tests();
     let font = &style.font;
     let face = family_for(
@@ -57,7 +62,7 @@ fn lay_out(style: &CaptionStyleDef, pages: &Pages) -> PageLayout {
         fonts.system(),
         style,
         &face,
-        "en",
+        language,
         pages,
         0,
         FormatKind::Portrait,
@@ -214,4 +219,36 @@ fn the_seam_is_where_a_portrait_splits_halves_meet() {
     });
     let bubble = ctx(p);
     assert_eq!(split_seam(&bubble, secs(1.0), FormatKind::Portrait), None);
+}
+
+/// An Arabic or Hebrew page reads from the right: its first word stands right of its second, and English words in it
+/// still read left to right, even when one starts the page. An English page reads from the left, Arabic words in it
+/// turned around.
+#[test]
+fn a_right_to_left_page_reads_from_the_right() {
+    let s = style("caption.bold");
+    let x = |layout: &PageLayout, k: usize| layout.words[k].centre[0];
+    let same_line =
+        |layout: &PageLayout, a: usize, b: usize| layout.words[a].line == layout.words[b].line;
+    let hebrew = lay_out(&s, &page(&["שלום", "עולם"]));
+    assert!(same_line(&hebrew, 0, 1));
+    assert!(x(&hebrew, 0) > x(&hebrew, 1), "{:?}", hebrew.words);
+    // Arabic captions: the English pair reads left to right, left of the Arabic word that starts the page.
+    let arabic = lay_out_in(&s, &page(&["سلام", "Hi", "Go"]), "ar");
+    assert!(same_line(&arabic, 0, 2), "{:?}", arabic.words);
+    assert!(x(&arabic, 1) < x(&arabic, 2), "{:?}", arabic.words);
+    assert!(x(&arabic, 0) > x(&arabic, 2), "{:?}", arabic.words);
+    // More Arabic words than English ones: from the right, though an English word starts the page.
+    let led = lay_out(&s, &page(&["TV", "على", "قناتي"]));
+    assert!(same_line(&led, 0, 2), "{:?}", led.words);
+    assert!(x(&led, 0) > x(&led, 1), "{:?}", led.words);
+    assert!(x(&led, 1) > x(&led, 2), "{:?}", led.words);
+    let english = lay_out(&s, &page(&["Hello", "world"]));
+    assert!(x(&english, 0) < x(&english, 1));
+    let mixed = lay_out(&s, &page(&["I", "said", "مرحبا", "بكم"]));
+    assert!(same_line(&mixed, 2, 3));
+    assert!(x(&mixed, 2) > x(&mixed, 3), "{:?}", mixed.words);
+    if same_line(&mixed, 1, 2) {
+        assert!(x(&mixed, 1) < x(&mixed, 3));
+    }
 }

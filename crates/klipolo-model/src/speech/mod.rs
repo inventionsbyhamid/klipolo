@@ -127,6 +127,36 @@ pub fn is_wide(c: char) -> bool {
     )
 }
 
+/// A combining mark that belongs to the letter before it: a vowel sign, virama, nukta or tone mark of the Indic, Thai,
+/// Lao, Myanmar and Khmer scripts, Hebrew points, Arabic vowel marks, or a combining accent. Many are not alphabetic to
+/// Rust (Tamil's pulli in "வணக்கம்", Thai's tone mark in "นี้", Hindi's nukta in "साफ़"), but trimming one off a word's
+/// edge changes the word. The scripts' own punctuation (the danda "।", Arabic's comma) is no mark.
+pub fn is_mark(c: char) -> bool {
+    match c as u32 {
+        0x0300..=0x036F | 0x0483..=0x0489 | 0x1AB0..=0x1AFF | 0x1DC0..=0x1DFF | 0x20D0..=0x20FF => {
+            true
+        }
+        // Hebrew points, less the maqaf, paseq and sof pasuq.
+        0x0591..=0x05C7 => !matches!(c as u32, 0x05BE | 0x05C0 | 0x05C3 | 0x05C6),
+        0x0610..=0x061A | 0x064B..=0x065F | 0x0670 | 0x06D6..=0x06DC | 0x06DF..=0x06E4 => true,
+        0x06E7..=0x06E8 | 0x06EA..=0x06ED | 0x08D3..=0x08FF => true,
+        // Devanagari to Sinhala: everything not a letter or digit, less the dandas and the abbreviation sign.
+        0x0900..=0x0DFF => {
+            !c.is_alphanumeric() && !matches!(c as u32, 0x0964 | 0x0965 | 0x0970 | 0x0DF4)
+        }
+        // Thai and Lao: their vowel signs and tone marks, not their punctuation (ฯ, ๏, ๚, ๛).
+        0x0E31 | 0x0E34..=0x0E3A | 0x0E47..=0x0E4E | 0x0EB1 | 0x0EB4..=0x0EBC | 0x0EC8..=0x0ECE => {
+            true
+        }
+        0x102B..=0x103E | 0x1056..=0x1059 | 0x105E..=0x1060 | 0x1062..=0x1064 | 0x1067..=0x106D => {
+            true
+        }
+        0x1071..=0x1074 | 0x1082..=0x108D | 0x108F | 0x109A..=0x109D => true,
+        0x17B4..=0x17D3 | 0x17DD => true,
+        _ => false,
+    }
+}
+
 /// Characters of scripts written without spaces between words (Han, kana and their punctuation and full-width forms:
 /// Chinese and Japanese): caption words that meet on two of them join without a space. Not Hangul: Korean separates
 /// its words with spaces.
@@ -143,6 +173,75 @@ pub fn joins_unspaced(c: char) -> bool {
             | 0xFE30..=0xFE4F
             | 0xFF00..=0xFF9F
             | 0x20000..=0x3FFFD
+    )
+}
+
+/// The byte ranges of `text`'s words, as captions show them: its runs between whitespace, with each Chinese or Japanese
+/// character (Han, kana) a word of its own (words of `joins_unspaced` characters meet without a space, so they read as
+/// written). A character's punctuation ("，", "。", a closing bracket), Japanese's small kana, long-vowel and repeat
+/// marks stay with the character before it; an opening bracket goes with the one after it; letters or digits of
+/// another script start a word of their own ("用Final" is "用", "Final"). Text with none of those characters is split
+/// on whitespace alone. O(characters).
+pub fn word_ranges(text: &str) -> Vec<std::ops::Range<usize>> {
+    let mut out = Vec::new();
+    let mut start: Option<usize> = None;
+    // The word being read holds a letter or digit (not only an opening bracket), and its last character was Chinese
+    // or Japanese (a character or its punctuation).
+    let (mut has_letter, mut after_unspaced) = (false, false);
+    for (i, c) in text.char_indices() {
+        if c.is_whitespace() {
+            if let Some(s) = start.take() {
+                out.push(s..i);
+            }
+            (has_letter, after_unspaced) = (false, false);
+            continue;
+        }
+        let unspaced = joins_unspaced(c);
+        let breaks = has_letter
+            && if unspaced {
+                (c.is_alphabetic() && !attaches_back(c)) || (OPENING.contains(&c) && after_unspaced)
+            } else {
+                after_unspaced && (c.is_alphanumeric() || OPENING.contains(&c))
+            };
+        if breaks {
+            if let Some(s) = start.replace(i) {
+                out.push(s..i);
+            }
+            has_letter = false;
+        }
+        start.get_or_insert(i);
+        has_letter |= c.is_alphanumeric();
+        after_unspaced = unspaced;
+    }
+    if let Some(s) = start {
+        out.push(s..text.len());
+    }
+    out
+}
+
+/// `text`'s words (`word_ranges`) with one space between each: a Chinese or Japanese sentence as one word per
+/// character. Text with no Chinese or Japanese character comes back as it was.
+pub fn spaced_words(text: &str) -> std::borrow::Cow<'_, str> {
+    if !text.chars().any(joins_unspaced) {
+        return std::borrow::Cow::Borrowed(text);
+    }
+    let words: Vec<&str> = word_ranges(text).into_iter().map(|r| &text[r]).collect();
+    std::borrow::Cow::Owned(words.join(" "))
+}
+
+/// Opening brackets and quotes: they go with the character after them.
+const OPENING: [char; 12] = [
+    '「', '『', '（', '【', '〈', '《', '〔', '〖', '“', '‘', '［', '｛',
+];
+
+/// Japanese's small kana, long-vowel mark and repeat marks: part of the sound of the character before them.
+fn attaches_back(c: char) -> bool {
+    matches!(
+        c as u32,
+        0x3041 | 0x3043 | 0x3045 | 0x3047 | 0x3049 | 0x3063 | 0x3083 | 0x3085 | 0x3087 | 0x308E | 0x3095 | 0x3096
+            | 0x30A1 | 0x30A3 | 0x30A5 | 0x30A7 | 0x30A9 | 0x30C3 | 0x30E3 | 0x30E5 | 0x30E7 | 0x30EE | 0x30F5
+            | 0x30F6 | 0x31F0..=0x31FF | 0x30FC | 0x309D | 0x309E | 0x30FD | 0x30FE | 0x3005 | 0xFF67..=0xFF70
+            | 0xFF9E | 0xFF9F
     )
 }
 

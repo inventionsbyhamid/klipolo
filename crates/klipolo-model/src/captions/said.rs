@@ -10,6 +10,8 @@
 use std::collections::HashMap;
 
 use crate::project::Project;
+use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
+
 use crate::speech::{
     is_wide, joins_unspaced, Speech, Spoken, SpokenWord, Transcript, Word, WordFix, WordKind,
 };
@@ -18,12 +20,20 @@ use crate::time::Us;
 /// A fix's later piece this far or further from the word it continues doesn't carry it on.
 pub const BREAK_GAP_US: Us = 500_000;
 
-/// A word's width in columns: wide characters (Han, kana, Hangul, full-width forms) take two.
+/// A word's width in columns: wide characters (Han, kana, Hangul, full-width forms) take two, and a non-spacing mark
+/// (a virama, a nukta, a vowel sign above or below its letter, a Thai tone mark) none, so "साफ़" is three. A spacing
+/// vowel sign ("ा", Tamil's "ா") takes one, as it is drawn beside its letter.
 pub(crate) fn columns(s: &str) -> usize {
     if s.is_ascii() {
         return s.len();
     }
-    s.chars().map(|c| if is_wide(c) { 2 } else { 1 }).sum()
+    s.chars()
+        .map(|c| match c.general_category() {
+            _ if is_wide(c) => 2,
+            GeneralCategory::NonspacingMark | GeneralCategory::EnclosingMark => 0,
+            _ => 1,
+        })
+        .sum()
 }
 
 /// `text` without the closing quotes and brackets after its last mark.
@@ -31,9 +41,9 @@ fn unquoted(text: &str) -> &str {
     text.trim_end_matches(['"', '\'', '”', '’', '»', ')', '」', '』', '）'])
 }
 
-/// Whether `text` ends a sentence (closing quotes and brackets aside), and whether it ends a clause: a comma, semicolon
-/// or colon (a page breaks after one once it has two words). A word ending in an ASCII letter or digit, the usual
-/// case, ends neither.
+/// Whether `text` ends a sentence (closing quotes and brackets aside; Hindi's danda and Arabic's question mark too), and
+/// whether it ends a clause: a comma, semicolon or colon, Arabic's too (a page breaks after one once it has two words).
+/// A word ending in an ASCII letter or digit, the usual case, ends neither.
 fn ends(text: &str) -> (bool, bool) {
     if text
         .as_bytes()
@@ -44,8 +54,8 @@ fn ends(text: &str) -> (bool, bool) {
     }
     let t = unquoted(text);
     (
-        t.ends_with(['.', '?', '!', '…', '。', '？', '！']),
-        t.ends_with([',', ';', ':', '，', '、', '；', '：']),
+        t.ends_with(['.', '?', '!', '…', '。', '？', '！', '।', '॥', '؟', '۔']),
+        t.ends_with([',', ';', ':', '，', '、', '；', '：', '،', '؛']),
     )
 }
 
@@ -258,5 +268,23 @@ pub(crate) fn walk(spoken: &Spoken, p: &Project, speech: &Speech, sink: &mut imp
         };
         sentence_start = said.ends_sentence;
         sink.add(&said);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::columns;
+
+    /// Non-spacing marks take no column; spacing vowel signs take one.
+    #[test]
+    fn a_letters_non_spacing_marks_take_no_column() {
+        assert_eq!(columns("साफ़"), 3);
+        assert_eq!(columns("दिखाऊंगी"), 7);
+        assert_eq!(columns("வணக்கம்"), 5);
+        assert_eq!(columns("தமிழா"), 5);
+        assert_eq!(columns("นี้"), 1);
+        assert_eq!(columns("今日"), 4);
+        assert_eq!(columns("café"), 4);
+        assert_eq!(columns("Hi"), 2);
     }
 }

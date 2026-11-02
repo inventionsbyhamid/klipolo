@@ -1086,6 +1086,55 @@ async fn finish_without_a_timing_keeps_every_word() {
     assert_well_formed(&rough);
 }
 
+/// A transcript is tagged with the language its words are written in, and that language's fillers are tagged: "हम्म"
+/// (a hum) in a Hindi take is a filler and "हम" ("we") a word, "äh" in a German one is a filler.
+#[tokio::test]
+async fn a_transcript_is_tagged_with_its_words_language() {
+    let words = |text: &'static str| {
+        let transcriber = FakeAsr::new(600, move |_| Ok(heard(vec![turn(1_000, 4_000, text)])));
+        async move {
+            let clip = clip(&[tone(6.0)]);
+            let sound = Sound::load(&clip.path, transcriber.max_audio_s())
+                .await
+                .unwrap();
+            let said = hear(&transcriber, &sound, &[]).await.unwrap();
+            finish(
+                transcriber.model(),
+                sound.duration_us,
+                said.turns,
+                None,
+                said.cost_usd,
+            )
+        }
+    };
+
+    let hindi = words("हम्म, आज हम वीडियो एडिटिंग सीखेंगे और कैप्शन भी ऐड करेंगे").await;
+    assert_eq!(hindi.transcript.language, "hi");
+    assert_eq!(spoken(&hindi)[0].kind, WordKind::Filler);
+    assert!(spoken(&hindi)[1..].iter().all(|w| w.kind == WordKind::Word));
+
+    let german =
+        words("Äh, heute zeige ich euch, wie man ein Video in weniger als einer Minute schneidet.")
+            .await;
+    assert_eq!(german.transcript.language, "de");
+    assert_eq!(spoken(&german)[0].kind, WordKind::Filler);
+
+    let english = words("Um, today I want to show you how to cut a video.").await;
+    assert_eq!(english.transcript.language, "en");
+    assert_eq!(spoken(&english)[0].kind, WordKind::Filler);
+
+    // Chinese is written without spaces: each character is a word, as captions and word timing need.
+    let chinese = words("大家好，今天我来教大家。").await;
+    assert_eq!(chinese.transcript.language, "zh");
+    assert_eq!(
+        texts(&chinese),
+        [
+            "大", "家", "好，", "今", "天", "我", "来", "教", "大", "家。"
+        ]
+    );
+    assert_eq!(chinese.turns[0].text, "大 家 好， 今 天 我 来 教 大 家。");
+}
+
 /// Alignment that failed runs again later on the cached turns (`Sound::load`, `align`, `finish`), with no new
 /// transcription.
 #[tokio::test]

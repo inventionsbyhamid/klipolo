@@ -18,7 +18,7 @@ import anyio
 import pytest
 from fastapi.testclient import TestClient
 
-from relay import db
+from relay import align, db
 from relay.align import FAILED, NO_TEXT, TOO_SHORT, emission_frames
 from relay.app import create_app
 from relay.config import load_settings
@@ -674,20 +674,27 @@ def test_the_model_gets_the_thread_setting(tmp_path):
 
 
 @pytest.mark.parametrize(("flag", "loads"), [("1", 1), ("0", 0)])
-def test_warmup_loads_the_model_at_startup_only_when_enabled(tmp_path, flag, loads):
+def test_warmup_loads_the_model_and_romanizer_at_startup_only_when_enabled(tmp_path, monkeypatch, flag, loads):
+    romanizer_loads = []
+    monkeypatch.setattr(align, "load_romanizer", lambda: romanizer_loads.append(1))
     settings = load_settings({"RELAY_DB_PATH": str(tmp_path / "relay.db"), "ALIGN_WARMUP": flag})
     app = create_app(settings)
     fake = FakeAligner()
     app.state.aligner = fake
     with TestClient(app) as client:
         deadline = time.monotonic() + 5
-        while fake.loads < loads and time.monotonic() < deadline:
+        while (fake.loads < loads or len(romanizer_loads) < loads) and time.monotonic() < deadline:
             time.sleep(0.01)
         assert client.get("/healthz").status_code == 200
     assert fake.loads == loads
+    assert len(romanizer_loads) == loads
 
 
-def test_a_failed_warmup_does_not_stop_the_server(tmp_path):
+def test_a_failed_warmup_does_not_stop_the_server(tmp_path, monkeypatch):
+    def fail():
+        raise RuntimeError("no tables")
+
+    monkeypatch.setattr(align, "load_romanizer", fail)
     settings = load_settings({"RELAY_DB_PATH": str(tmp_path / "relay.db"), "ALIGN_WARMUP": "1"})
     app = create_app(settings)
     fake = FakeAligner()

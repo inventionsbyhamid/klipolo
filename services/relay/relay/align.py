@@ -50,7 +50,7 @@ from relay.config import Settings
 from relay.deps import AppSettings, Conn
 from relay.devices import Device
 from relay.errors import RelayError, error_response
-from relay.text_norm import normalize
+from relay.text_norm import load_romanizer, normalize
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +72,11 @@ CONTEXT_FRAMES = 100
 # frame (30 a second; fast speech is about 20). More text than that is
 # skipped as too short for its audio.
 MAX_LETTERS_PER_FRAME = 0.6
+# A turn's raw text may hold at most this many characters a frame (120 a
+# second) before it is normalized, so the work of normalizing and romanizing
+# is bounded by the audio. Spaces, punctuation and marks take characters
+# without making letters, so it is well above MAX_LETTERS_PER_FRAME.
+MAX_CHARACTERS_PER_FRAME = 4 * MAX_LETTERS_PER_FRAME
 
 MAX_AUDIO_SECONDS = 600
 MAX_TURNS = 300
@@ -164,23 +169,27 @@ def plan(turns: Sequence[Turn], n_samples: int) -> tuple[list[PlannedTurn], list
     skipped: list[Skipped] = []
     duration_ms = n_samples * 1000 // SAMPLE_RATE
     for index, turn in enumerate(turns):
-        words = tuple(normalize(turn.text))
         start = max(0, turn.start_ms - PAD_MS) * SAMPLE_RATE // 1000
         end = min(n_samples, max(0, turn.end_ms + PAD_MS) * SAMPLE_RATE // 1000)
-        tokens = [form.replace(" ", "") for _, form in words if form]
-        if not words:
+        if not turn.text.split():
             reason = NO_TEXT
         elif turn.end_ms < turn.start_ms:
             reason = ENDS_BEFORE_START
         elif turn.start_ms >= duration_ms:
             reason = PAST_END
-        elif not tokens:
-            reason = NOTHING_TO_ALIGN
-        elif end <= start or frames_needed(tokens) > MAX_LETTERS_PER_FRAME * emission_frames(end - start):
+        elif len(turn.text) > MAX_CHARACTERS_PER_FRAME * emission_frames(max(0, end - start)):
+            # Checked before normalizing, so text the audio cannot hold costs nothing.
             reason = TOO_SHORT
         else:
-            planned.append(PlannedTurn(index, start, end, words))
-            continue
+            words = tuple(normalize(turn.text))
+            tokens = [form.replace(" ", "") for _, form in words if form]
+            if not tokens:
+                reason = NOTHING_TO_ALIGN
+            elif end <= start or frames_needed(tokens) > MAX_LETTERS_PER_FRAME * emission_frames(end - start):
+                reason = TOO_SHORT
+            else:
+                planned.append(PlannedTurn(index, start, end, words))
+                continue
         skipped.append(Skipped(index, reason))
     return planned, skipped
 
@@ -377,16 +386,21 @@ class MmsAligner:
 
 
 def warm_up(aligner: Aligner) -> None:
-    """Load the model in the background, so the server answers at once and
-    the first alignment does not wait for it."""
+    """Load the model and the romanizer in the background, each on its own
+    thread, so the server answers at once and the first alignment does not
+    wait for them."""
 
-    def load() -> None:
+    def load(what: str, loader: Callable[[], Any]) -> None:
         try:
-            aligner.load()
+            loader()
         except Exception:
-            logger.exception("alignment model could not load at startup; will retry on first use")
+            logger.exception("%s could not load at startup; will retry on first use", what)
 
-    threading.Thread(target=load, name="align-warmup", daemon=True).start()
+    for name, what, loader in (
+        ("align-warmup", "alignment model", aligner.load),
+        ("romanizer-warmup", "romanizer", load_romanizer),
+    ):
+        threading.Thread(target=load, args=(what, loader), name=name, daemon=True).start()
 
 
 # The endpoint.

@@ -44,6 +44,8 @@ pub(super) struct Words {
     /// The drawn words in one string, a space where the text has one, and each word's bytes in it.
     pub shown: String,
     pub ranges: ArrayVec<[u32; 2], MAX_WORDS>,
+    /// Each word's bidi level on the page (`word_levels`): odd reads right to left. Empty: all 0.
+    pub levels: ArrayVec<u8, MAX_WORDS>,
 }
 
 /// `page`'s drawn words measured in `faces[0]` (a Cyrillic one in the style's stand-in, pushed to `faces` when used),
@@ -109,6 +111,7 @@ pub(super) fn measure_words(
             .map(|r| runs_within(r, range, &primary.family))
             .unwrap_or_default();
         let px = font_px * words.scales[k];
+        let spacing = if joins_letters(text) { 0.0 } else { spacing };
         let (w, h) = measure(fs, &faces[which as usize], text, px, spacing, &word_runs);
         runs_out.extend(word_runs.into_iter().map(|(r, f)| (k as u8, r, f)));
         words.widths.push(w);
@@ -117,8 +120,121 @@ pub(super) fn measure_words(
         words.faces.push(which);
         words.ranges.push([range.start as u32, range.end as u32]);
     }
+    words.levels = word_levels(&shown, &ranges, language);
     words.shown = shown;
     words
+}
+
+/// Which way a word reads: by its first letter, else a number, else neither (punctuation, symbols).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Reads {
+    Ltr,
+    Rtl,
+    Number,
+    Neutral,
+}
+
+fn reads(word: &str) -> Reads {
+    let mut number = false;
+    for c in word.chars() {
+        if c.is_alphabetic() {
+            return if right_to_left(c.script()) {
+                Reads::Rtl
+            } else {
+                Reads::Ltr
+            };
+        }
+        number |= c.is_numeric();
+    }
+    if number {
+        Reads::Number
+    } else {
+        Reads::Neutral
+    }
+}
+
+/// The scripts written right to left.
+fn right_to_left(script: Script) -> bool {
+    matches!(
+        script,
+        Script::Arabic
+            | Script::Hebrew
+            | Script::Syriac
+            | Script::Thaana
+            | Script::Nko
+            | Script::Adlam
+            | Script::Samaritan
+            | Script::Mandaic
+    )
+}
+
+/// Each word's bidi level, a word taken as one unit. The page reads right to left when the captions' language is
+/// written that way (Arabic, Hebrew, Persian, Urdu ...), when more of its words read right to left than left to right,
+/// or, on a tie, when its first word with a letter does (Unicode's paragraph rule): so "YouTube على قناتي" reads from
+/// the right. On a right-to-left page (1) a word in Latin letters or a number is 2; on a left-to-right one (0) a word
+/// in Arabic or Hebrew letters is 1, and so is a number or a mark between two of them, which stays in their run. All 0
+/// on a page with no right-to-left letter, so nothing is reordered there.
+fn word_levels(shown: &str, ranges: &[Range<usize>], language: &str) -> ArrayVec<u8, MAX_WORDS> {
+    let read: ArrayVec<Reads, MAX_WORDS> = ranges
+        .iter()
+        .map(|r| reads(shown.get(r.clone()).unwrap_or_default()))
+        .collect();
+    if !read.contains(&Reads::Rtl) {
+        return ArrayVec::new();
+    }
+    let count = |want: Reads| read.iter().filter(|&&r| r == want).count();
+    let (rtl, ltr) = (count(Reads::Rtl), count(Reads::Ltr));
+    let first_rtl = read
+        .iter()
+        .find(|r| matches!(r, Reads::Ltr | Reads::Rtl))
+        .is_some_and(|r| *r == Reads::Rtl);
+    let rtl_page = right_to_left_language(language) || rtl > ltr || (rtl == ltr && first_rtl);
+    // Whether the nearest word with a letter before word `i`, and after it, reads right to left.
+    let lettered = |r: &&Reads| matches!(r, Reads::Ltr | Reads::Rtl);
+    let rtl_before = |i: usize| read[..i].iter().rev().find(lettered) == Some(&Reads::Rtl);
+    let rtl_after = |i: usize| read[i + 1..].iter().find(lettered) == Some(&Reads::Rtl);
+    (0..read.len())
+        .map(|i| match (rtl_page, read[i]) {
+            (true, Reads::Ltr | Reads::Number) => 2,
+            (true, _) => 1,
+            (false, Reads::Rtl) => 1,
+            (false, Reads::Number | Reads::Neutral) if rtl_before(i) && rtl_after(i) => 1,
+            (false, _) => 0,
+        })
+        .collect()
+}
+
+/// Languages written right to left, by their primary subtag.
+fn right_to_left_language(language: &str) -> bool {
+    let primary = language.split(['-', '_']).next().unwrap_or_default();
+    matches!(
+        primary.to_ascii_lowercase().as_str(),
+        "ar" | "he" | "iw" | "fa" | "ur" | "yi" | "ps" | "sd" | "ug" | "dv" | "ckb"
+    )
+}
+
+/// Whether `text` holds letters of a script that joins them (Arabic's cursive, the Indic scripts' headline and
+/// conjuncts): letter spacing would pull them apart, so such a word is drawn and measured with none.
+pub(super) fn joins_letters(text: &str) -> bool {
+    text.chars().any(|c| {
+        matches!(
+            c.script(),
+            Script::Arabic
+                | Script::Syriac
+                | Script::Nko
+                | Script::Mongolian
+                | Script::Devanagari
+                | Script::Bengali
+                | Script::Gurmukhi
+                | Script::Gujarati
+                | Script::Oriya
+                | Script::Tamil
+                | Script::Telugu
+                | Script::Kannada
+                | Script::Malayalam
+                | Script::Sinhala
+        )
+    })
 }
 
 /// Most of the word's letters are Cyrillic.
@@ -176,5 +292,47 @@ fn runs_within(
         Vec::new()
     } else {
         within
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{joins_letters, word_levels};
+
+    /// Each word's level for `text` split on spaces, in captions of `language`.
+    fn levels(text: &str, language: &str) -> Vec<u8> {
+        let mut at = 0;
+        let ranges: Vec<_> = text
+            .split(' ')
+            .map(|w| {
+                let r = at..at + w.len();
+                at = r.end + 1;
+                r
+            })
+            .collect();
+        word_levels(text, &ranges, language).to_vec()
+    }
+
+    /// A page of more Arabic words than English ones reads from the right though an English word starts it, and so
+    /// does any page in Arabic captions.
+    #[test]
+    fn more_arabic_words_or_arabic_captions_make_a_right_to_left_page() {
+        assert_eq!(levels("YouTube على قناتي", "en"), [2, 1, 1]);
+        assert_eq!(levels("Hello world مرحبا", "ar"), [2, 2, 1]);
+        assert_eq!(levels("Hello world مرحبا", "en"), [0, 0, 1]);
+        assert!(levels("Hello world", "ar").is_empty());
+    }
+
+    /// On a left-to-right page a number or a mark between two Arabic words stays in their run.
+    #[test]
+    fn a_number_between_arabic_words_stays_in_their_run() {
+        assert_eq!(levels("Hello مرحبا 5 بكم world", "en"), [0, 1, 1, 1, 0]);
+        assert_eq!(levels("Hello مرحبا 5 world", "en"), [0, 1, 0, 0]);
+    }
+
+    #[test]
+    fn arabic_and_indic_words_join_their_letters() {
+        assert!(joins_letters("مرحبا") && joins_letters("नमस्ते") && joins_letters("வணக்கம்"));
+        assert!(!joins_letters("Hello") && !joins_letters("שלום") && !joins_letters("สวัสดี"));
     }
 }

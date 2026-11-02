@@ -80,6 +80,33 @@ fn first_glyph_in(
     (face.families[0].0.clone(), face.weight.0)
 }
 
+/// Every glyph of `text` asked as `primary` at `weight` and `italic`, in the managed faces only: the family of the face
+/// that draws it, and its glyph id (0 is .notdef, a box).
+#[doc(hidden)]
+pub fn test_glyphs(primary: &str, weight: u16, italic: bool, text: &str) -> Vec<(String, u16)> {
+    let mut system = managed_system();
+    let mut buffer = Buffer::new(&mut system, Metrics::new(32.0, 40.0));
+    buffer.set_size(&mut system, Some(4000.0), None);
+    let attrs = Attrs::new()
+        .family(Family::Name(primary))
+        .weight(Weight(weight))
+        .style(if italic { Style::Italic } else { Style::Normal });
+    buffer.set_text(&mut system, text, &attrs, Shaping::Advanced);
+    buffer.shape_until_scroll(&mut system, false);
+    let glyphs: Vec<(glyphon::fontdb::ID, u16)> = buffer
+        .layout_runs()
+        .flat_map(|run| run.glyphs.iter())
+        .map(|g| (g.font_id, g.glyph_id))
+        .collect();
+    glyphs
+        .into_iter()
+        .map(|(id, glyph)| {
+            let face = system.db().face(id).expect("its face");
+            (face.families[0].0.clone(), glyph)
+        })
+        .collect()
+}
+
 /// The face cosmic-text shapes `text` with when asked exactly as `choice` says.
 #[doc(hidden)]
 pub fn test_shape_face(choice: &FaceChoice, text: &str) -> (String, u16) {

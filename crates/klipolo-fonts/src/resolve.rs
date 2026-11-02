@@ -156,6 +156,8 @@ pub fn resolve_fallback(
         }
         // The boxes both draw for CJK before a download: one file, declared at every weight and style.
         Fallback::Notdef => bundled_face(index, "Adobe NotDef", 400, false)?,
+        // The script's bundled Noto Sans, its nearest face (Regular or Bold).
+        Fallback::Script(script) => bundled_face(index, script.family(), weight, italic)?,
     };
     Some(Face {
         alias: which.alias().into(),

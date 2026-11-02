@@ -10,7 +10,7 @@ use super::casing::shown_into;
 use super::keywords::candidate;
 use super::looks::{LookCursor, WordLook, PLAIN_LOOK};
 use super::page_builder::{Cand, PageBuilder, Shown};
-use super::pages::{Captions, PageWord, Pages, NO_LOOK};
+use super::pages::{without_final_stop, Captions, PageWord, Pages, NO_LOOK};
 use super::said::{columns, ends_joining, starts_joining, walk, Said, Sink, BREAK_GAP_US};
 use super::style::{CaptionStyleDef, KeywordWords, Punctuation, TextCase};
 use super::styles::CaptionStyles;
@@ -204,7 +204,7 @@ impl Sink for Builders<'_> {
                 emphasis: look.emphasis,
                 hidden,
                 start_us: w.start_us,
-                period: self.shown.len() > 1 && self.shown.ends_with('.'),
+                period: without_final_stop(&self.shown).is_some(),
             },
         };
         let word = self.words.len() as u32;

@@ -7,17 +7,16 @@ fn dir() -> std::path::PathBuf {
 
 #[test]
 fn every_bundled_face_is_the_pinned_static_file_named_as_its_family() {
-    // Twelve families people pick, plus Adobe NotDef, the last CJK fallback.
-    assert_eq!(BUNDLED.len(), 18);
-    assert_eq!(bundled_families().count(), 13);
-    assert_eq!(
-        BUNDLED
-            .iter()
-            .filter(|f| f.category == Category::Fallback)
-            .map(|f| f.family)
-            .collect::<Vec<_>>(),
-        ["Adobe NotDef"]
-    );
+    // Twelve families people pick, plus Adobe NotDef, the last CJK fallback, and eleven scripts' Noto Sans (Regular and
+    // Bold each).
+    assert_eq!(BUNDLED.len(), 40);
+    assert_eq!(bundled_families().count(), 24);
+    let fallbacks: Vec<&str> = bundled_families()
+        .filter(|family| klipolo_fonts::bundled::fallback_only(family))
+        .collect();
+    let mut expected = vec!["Adobe NotDef"];
+    expected.extend(klipolo_fonts::fallback::NotoScript::ALL.map(|s| s.family()));
+    assert_eq!(fallbacks, expected);
     for f in BUNDLED {
         let bytes = std::fs::read(dir().join(f.file)).unwrap_or_else(|e| panic!("{}: {e}", f.file));
         assert_eq!(bytes.len() as u64, f.bytes, "{}", f.file);
@@ -60,6 +59,55 @@ fn adobe_notdef_maps_cjk_to_a_real_glyph() {
             .glyph_index(c)
             .unwrap_or_else(|| panic!("{c} has no glyph"));
         assert_ne!(glyph.0, 0, "{c}");
+    }
+}
+
+/// Each script's Noto Sans has a real glyph for its letters, in Regular and in Bold: the faces Indic, Arabic, Hebrew
+/// and Thai text falls back to.
+#[test]
+fn each_scripts_noto_maps_its_letters_in_both_weights() {
+    use klipolo_fonts::fallback::NotoScript;
+    let samples = |s: NotoScript| -> &'static str {
+        match s {
+            NotoScript::Devanagari => "नमस्ते क्ष",
+            NotoScript::Bengali => "শুভ সকাল",
+            NotoScript::Gurmukhi => "ਸਤ ਸ੍ਰੀ ਅਕਾਲ",
+            NotoScript::Gujarati => "કેમ છો",
+            NotoScript::Tamil => "வணக்கம்",
+            NotoScript::Telugu => "నమస్కారం",
+            NotoScript::Kannada => "ನಮಸ್ಕಾರ",
+            NotoScript::Malayalam => "നമസ്കാരം",
+            NotoScript::Arabic => "مرحبا بالعالم سلام",
+            NotoScript::Hebrew => "שלום עולם",
+            NotoScript::Thai => "สวัสดีครับ",
+        }
+    };
+    for script in NotoScript::ALL {
+        let faces: Vec<_> = BUNDLED
+            .iter()
+            .filter(|f| f.family == script.family())
+            .collect();
+        assert_eq!(
+            faces
+                .iter()
+                .map(|f| (f.weight, f.italic, f.category))
+                .collect::<Vec<_>>(),
+            [
+                (400, false, Category::Fallback),
+                (700, false, Category::Fallback)
+            ],
+            "{script:?}"
+        );
+        for f in faces {
+            let bytes = std::fs::read(dir().join(f.file)).unwrap();
+            let face = ttf_parser::Face::parse(&bytes, 0).unwrap();
+            for c in samples(script).chars().filter(|c| !c.is_whitespace()) {
+                let glyph = face
+                    .glyph_index(c)
+                    .unwrap_or_else(|| panic!("{}: {c} has no glyph", f.file));
+                assert_ne!(glyph.0, 0, "{}: {c}", f.file);
+            }
+        }
     }
 }
 

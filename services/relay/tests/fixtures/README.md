@@ -31,3 +31,36 @@ astronaut speaks in this excerpt.
   starts after a pause landed a median 19 ms after the rise in energy, 80%
   within 100 ms. Words scoring below 0.05 are the invented repeats; their
   times are not meaningful.
+
+## `fleurs_hi_pyramids_16k.wav`, `fleurs_ar_pyramids_16k.wav` and their `.json`
+
+The same sentence read in Hindi (5.58 s) and in Egyptian Arabic (5.16 s), one
+speaker each: "You can see the pyramids in the dark and in silence before the
+show starts."
+
+- **Source:** FLEURS (Conneau et al., 2022, "FLEURS: Few-shot Learning
+  Evaluation of Universal Representations of Speech"), the Hugging Face dataset
+  `google/fleurs` (https://huggingface.co/datasets/google/fleurs) at revision
+  `70bb2e84b976b7e960aa89f1c648e09c59f894dd`, dev
+  split, sentence id 1537: `data/hi_in/audio/dev.tar.gz` file
+  `14112322580063897119.wav` (sha256 `f4d34913...c112bc`) and
+  `data/ar_eg/audio/dev.tar.gz` file `2768129653097135459.wav` (sha256
+  `32d806ec...c6c541`).
+- **License:** the recordings are CC BY 4.0
+  (https://creativecommons.org/licenses/by/4.0/), as the dataset card states.
+  Attribution: Google, FLEURS.
+- **Transcript text:** the sentence in each `.json` is FLEURS's transcript,
+  which is FLoRes-101's sentence (Goyal et al., 2021, "The FLORES-101
+  Evaluation Benchmark for Low-Resource and Multilingual Machine Translation",
+  https://github.com/facebookresearch/flores), under CC BY-SA 4.0
+  (https://creativecommons.org/licenses/by-sa/4.0/). Attribution: Meta AI,
+  FLoRes-101.
+- **Format:** WAV, 16 kHz, mono, 16-bit PCM. The originals are 16 kHz mono
+  32-bit float; ffmpeg converted them to 16-bit PCM without other changes.
+
+Each `.json` holds one turn covering the whole clip, with the dataset's own
+transcript as its text, and `reference`: word times from an earlier run of
+this aligner (torchaudio MMS_FA 2.8.0) on the uroman-romanized words. As with
+the ISS answer, the test checks the relay reproduces that run. Every word
+scored at least 0.87 (Hindi) and 0.66 (Arabic), with medians of 0.985 and
+0.931.

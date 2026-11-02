@@ -23,6 +23,9 @@ schemars = "1.2"
 # SIMD substring search for the one-field read of projects saved before the cursor record (already in the tree through
 # serde_json).
 memchr = "2"
+# Unicode general categories, for a caption word's width in columns: a non-spacing mark takes none. Already in the tree
+# through the text shaper (rustybuzz).
+unicode-properties = { version = "0.1.4", default-features = false, features = ["general-category"] }
 
 [features]
 # Tests only, and only in debug builds (`debug_assertions`): after every op of a batch, `apply_ops` checks its settled

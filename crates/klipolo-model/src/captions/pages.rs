@@ -83,6 +83,15 @@ pub struct Page {
 /// `PageWord::look` of a word without a look.
 pub const NO_LOOK: u32 = u32::MAX;
 
+/// A sentence's full stops: the period, Hindi's danda, the Chinese and Japanese full stop and Urdu's.
+const FULL_STOPS: [char; 4] = ['.', '।', '。', '۔'];
+
+/// `text` without its final full stop (`FULL_STOPS`), when it ends with one and shows more than it.
+pub(crate) fn without_final_stop(text: &str) -> Option<&str> {
+    text.strip_suffix(FULL_STOPS)
+        .filter(|rest| !rest.is_empty())
+}
+
 fn no_look() -> u32 {
     NO_LOOK
 }
@@ -153,12 +162,12 @@ impl Pages {
             .find(|&i| self.words.get(i as usize).is_some_and(|w| !w.hidden))
     }
 
-    /// What word `i` of `page` shows there: its text, without its final period when it is the page's last visible word
-    /// and the page drops it.
+    /// What word `i` of `page` shows there: its text, without its final period (or danda, or "。") when it is the page's
+    /// last visible word and the page drops it.
     pub fn word_text(&self, page: &Page, i: u32) -> &str {
         let text = self.words.get(i as usize).map_or("", |w| self.text_of(w));
         if page.period_dropped && self.last_visible(page) == Some(i) {
-            text.strip_suffix('.').unwrap_or(text)
+            without_final_stop(text).unwrap_or(text)
         } else {
             text
         }
@@ -202,7 +211,7 @@ impl Pages {
             let text = self.text_of(w);
             // `strip_suffix`: a damaged `captions.json` that marks a period where there is none shows the word.
             out.push_str(if last == Some(i) {
-                text.strip_suffix('.').unwrap_or(text)
+                without_final_stop(text).unwrap_or(text)
             } else {
                 text
             });
