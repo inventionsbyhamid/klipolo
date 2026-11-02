@@ -210,28 +210,7 @@ impl TakeFixture {
     /// Take "take-1", set up as `recorded` says, its files not written yet.
     pub(super) fn new(recorded: Recorded, target: ImportTarget) -> Self {
         let root = tempfile::tempdir().unwrap();
-        let mut options: ArmOptions = options_screen();
-        if let Some(mirror) = recorded.camera {
-            options.camera = Some("camera-1".into());
-            options.mirror_camera = mirror;
-        }
-        if recorded.yourself {
-            options = options_yourself();
-            options.mirror_camera = recorded.camera.unwrap_or(true);
-        }
-        let choices = TakeChoices {
-            preset: PresetId::default(),
-            camera_preset: PresetId::Camera720,
-            cursor_caps: CursorCaps::none(),
-            created_ms: 0,
-            os: "test".into(),
-            target,
-            encoders: Vec::new(),
-            camera_encoders: Vec::new(),
-        };
-        let cfg = session_config(&options, "take-1", &choices);
-        let dir = SessionDir::create(root.path(), &cfg.id).unwrap();
-        session::write_config(&dir, &cfg).unwrap();
+        let (dir, cfg) = take_in(root.path(), "take-1", recorded, target, 0);
         Self {
             dir,
             cfg,
@@ -255,8 +234,43 @@ impl TakeFixture {
             project_file,
             recover,
             note: None,
+            earlier_run: false,
         }
     }
+}
+
+/// Take `id` in the recordings folder `root`, set up at `created_ms` as `recorded` says, landing in `target`: its
+/// folder and `session.json`, its files not written yet.
+pub(super) fn take_in(
+    root: &Path,
+    id: &str,
+    recorded: Recorded,
+    target: ImportTarget,
+    created_ms: u64,
+) -> (SessionDir, SessionConfig) {
+    let mut options: ArmOptions = options_screen();
+    if let Some(mirror) = recorded.camera {
+        options.camera = Some("camera-1".into());
+        options.mirror_camera = mirror;
+    }
+    if recorded.yourself {
+        options = options_yourself();
+        options.mirror_camera = recorded.camera.unwrap_or(true);
+    }
+    let choices = TakeChoices {
+        preset: PresetId::default(),
+        camera_preset: PresetId::Camera720,
+        cursor_caps: CursorCaps::none(),
+        created_ms,
+        os: "test".into(),
+        target,
+        encoders: Vec::new(),
+        camera_encoders: Vec::new(),
+    };
+    let cfg = session_config(&options, id, &choices);
+    let dir = SessionDir::create(root, &cfg.id).unwrap();
+    session::write_config(&dir, &cfg).unwrap();
+    (dir, cfg)
 }
 
 /// The run file of `source` (the take's first run).

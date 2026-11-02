@@ -40,6 +40,9 @@ pub struct Done {
     /// What the person is told about how it ended, with the landed take (`capture.note.savedFromFiles` when the worker
     /// stopped while saving), when nothing has said it already.
     pub note: Option<CodedError>,
+    /// An earlier run of Klipolo left it behind (it quit or crashed during the take), and it lands as Klipolo opens
+    /// again (`left`): the page says it is from the last session.
+    pub earlier_run: bool,
 }
 
 /// What the recorder works with.

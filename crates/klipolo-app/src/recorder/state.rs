@@ -4,8 +4,9 @@
 //! command refuses with it, before any worker or OS call.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::thread::JoinHandle;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use klipolo_capture::backend::{Backend, Permission};
@@ -19,6 +20,7 @@ use tauri::{AppHandle, Manager};
 
 use super::env::{Env, Sink};
 use super::launch::{Launch, ProcessLaunch, WorkerIo};
+use super::left;
 use super::permissions::{self, Open};
 use super::previews::PreviewWorkers;
 use super::relaunch::{REOPEN_EXIT_CODE, Relaunch};
@@ -104,6 +106,10 @@ struct On {
     back: Mutex<Option<Back>>,
     /// Screen Recording was refused in this run while the person chose what to record: remembered as Klipolo exits.
     screen_refused: Mutex<Option<ScreenRefused>>,
+    /// When this run's recorder was made, ms since 1970: takes set up before it are an earlier run's (`left`).
+    launched_ms: u64,
+    /// This run has looked for takes an earlier run left behind (`recover_left`).
+    looked: AtomicBool,
 }
 
 /// Screen Recording was refused while the person chose what to record (the Record dialog's step showed, Allow was
@@ -170,6 +176,8 @@ impl RecorderState {
                 previews,
                 back: Mutex::new(back),
                 screen_refused: Mutex::new(None),
+                launched_ms: now_ms(),
+                looked: AtomicBool::new(false),
             }),
             relaunch: Relaunch::default(),
         }
@@ -383,6 +391,30 @@ impl RecorderState {
             Some(on) => on.recorder.hold_quit(exit),
             None => false,
         }
+    }
+
+    /// Takes an earlier run left behind land now, each in a new project, and one an earlier run's worker still records
+    /// lands once it is saved (`left`), on a thread of their own: once per run, however often the page asks. The
+    /// thread, for tests to wait for; None when this run has looked already, in a test run and without a recordings
+    /// folder.
+    pub(super) fn recover_left(&self) -> Option<JoinHandle<usize>> {
+        let on = self.on.as_ref()?;
+        if on.looked.swap(true, Ordering::SeqCst) {
+            return None;
+        }
+        let root = on.root.clone()?;
+        let sink = on.recorder.env.sink.clone();
+        let before_ms = on.launched_ms;
+        let looking = std::thread::Builder::new()
+            .name("klipolo-left-takes".into())
+            .spawn(move || {
+                left::recover_left(&root, &*sink, before_ms, now_ms(), left::WATCH_EVERY)
+            });
+        looking
+            .inspect_err(|error| {
+                tracing::warn!(%error, "recorder: takes from an earlier run weren't looked for")
+            })
+            .ok()
     }
 
     /// Klipolo exits: a take that hasn't started is disarmed. True when one was.

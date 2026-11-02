@@ -122,6 +122,9 @@ pub struct TakeImport {
     pub notes: Vec<CodedError>,
     /// Auto zoom items added after it, as a step of their own.
     pub zooms: u32,
+    /// An earlier run of Klipolo left the take behind (it quit or crashed during it), and it landed as Klipolo opened
+    /// again, in a new project: "Recovered Recording 1 from your last session."
+    pub earlier_run: bool,
 }
 
 /// A privacy settings page of macOS's, which the recorder's permission steps open ("Open privacy settings").

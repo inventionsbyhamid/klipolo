@@ -13,6 +13,8 @@
 //!   background media work waits from arming until the take has landed.
 //! - **Quitting during a take** (`quitting`, `app_quit`): the exit is held, the take stopped, and Klipolo exits once it
 //!   has landed, or after 30 s.
+//! - **Takes left behind** (`left`): a take that outlived Klipolo (the Dock's Quit, a crash, a save past the quit's
+//!   wait) lands in a new project as Klipolo opens again, once the page asks, and the page says so.
 //! - **The Dock icon's menu** (`dock`): while a take records, Pause or Resume, "Mark this moment" and "Stop and save",
 //!   the menu-bar item's own, for when the item is hidden behind the notch.
 //! - **Setup** (`setup`, `config`): the Record dialog's data from the backend without capture or prompts, and a take's
@@ -39,6 +41,7 @@ mod events;
 mod frames;
 mod import;
 mod launch;
+mod left;
 mod live_view;
 mod outcomes;
 mod permissions;
@@ -76,6 +79,8 @@ mod tests_dock;
 mod tests_end;
 #[cfg(test)]
 mod tests_import;
+#[cfg(test)]
+mod tests_left;
 #[cfg(test)]
 mod tests_live_view;
 #[cfg(test)]

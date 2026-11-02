@@ -151,6 +151,7 @@ pub(super) fn done(take: &Take, recover: bool) -> Done {
         project_file: take.project_file.clone(),
         recover,
         note: None,
+        earlier_run: false,
     }
 }
 
