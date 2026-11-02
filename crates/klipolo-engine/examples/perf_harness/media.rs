@@ -1,4 +1,4 @@
-//! `… -- media <job> <file>... [--seconds <s>] [--cache <folder>]`: what one of a file's media jobs costs, run alone
+//! `… -- media <job> <file>... [--seconds <s>] [--cache <folder>] [--cold]`: what one of a file's media jobs costs, alone
 //! in this process so the peak memory is the job's. Jobs:
 //! - `probe`: what an import reads (`probe_media`);
 //! - `sound`: the sound cache and the waveform's peaks (`PcmStore::build`);
@@ -12,7 +12,9 @@
 //!   asks the preview's decoders (`spawn_decoder`): frames a second for each and together.
 //!
 //! Prints the wall and CPU time, the peak memory (resident on Linux, the footprint on a Mac) and what the job wrote
-//! (files and MB) into `--cache` (a temporary folder by default, removed at the end).
+//! (files and MB) into `--cache` (a temporary folder by default, removed at the end). First it prints how much of the
+//! file the system's file cache holds; `--cold` runs the job on a copy it doesn't hold at all (`cold_copy`), as a file
+//! not read since the computer started. `KLIPOLO_PERF_DIRECT=on|off` (`main`) forces how the sound pass reads an MP4.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -106,7 +108,7 @@ pub async fn run(args: &[String]) {
         .collect();
     let Some(file) = files.first().cloned() else {
         eprintln!(
-            "usage: media probe|sound|sound-decode|thumbs|poster|proxy|decode <file>... [--seconds <s>] [--cache <folder>]"
+            "usage: media probe|sound|sound-decode|thumbs|poster|proxy|decode <file>... [--seconds <s>] [--cache <folder>] [--cold]"
         );
         std::process::exit(2);
     };
@@ -116,6 +118,21 @@ pub async fn run(args: &[String]) {
     let temp = tempfile::tempdir().expect("a temporary folder");
     let cache = value("--cache").map_or_else(|| temp.path().to_path_buf(), PathBuf::from);
     std::fs::create_dir_all(&cache).expect("the cache folder");
+    // A copy the file cache doesn't hold (`--cold`), in a folder of its own; else the file as it is.
+    let cold = tempfile::tempdir().expect("a temporary folder");
+    let file = match args.iter().any(|a| a == "--cold") {
+        true => cold_copy(&file, cold.path()),
+        false => file,
+    };
+    println!(
+        "{}: {:.1}% of its pages cached before the job; sound reads {}",
+        Path::new(&file)
+            .file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().to_string()),
+        cached_share(Path::new(&file)) * 100.0,
+        std::env::var("KLIPOLO_PERF_DIRECT")
+            .map_or("as each file asks".into(), |v| format!("direct {v}")),
+    );
     let duration_us = probe_media(Path::new(&file)).map_or(0, |m| (m.duration * 1e6) as i64);
     let (cpu0, started) = (cpu_ms(), Instant::now());
     let note = match job.as_str() {
@@ -137,6 +154,10 @@ pub async fn run(args: &[String]) {
             pcm.set_thumbs(thumbs.clone());
             pcm.build(&PcmKey { path: file.clone() }).expect("builds");
             let sound_ms = started.elapsed().as_secs_f64() * 1e3;
+            let sound_cpu = (
+                cpu_ms().0 + cpu_ms().1 - cpu0.0 - cpu0.1,
+                cpu_ms().1 - cpu0.1,
+            );
             let scan = Instant::now();
             thumbs.want(vec![Want {
                 path: file.clone(),
@@ -152,7 +173,9 @@ pub async fn run(args: &[String]) {
             });
             let strip = klipolo_engine::media::thumbs::strip(&cache.join("thumbs"), &file);
             format!(
-                "sound first {sound_ms:.0} ms, then the scan {:.0} ms{}; {} chunks",
+                "sound first {sound_ms:.0} ms ({:.0} ms CPU, {:.0} ms system), then the scan {:.0} ms{}; {} chunks",
+                sound_cpu.0,
+                sound_cpu.1,
                 scan.elapsed().as_secs_f64() * 1e3,
                 if done { "" } else { " (timed out)" },
                 strip.map_or(0, |s| s.chunks.len())
@@ -255,4 +278,72 @@ async fn decode(files: &[String], seconds: f64) -> String {
         each.join(", "),
         total as f64 / wall
     )
+}
+
+/// The share of `path`'s pages in the system's file cache now, 0 to 1 (`mincore` over a mapping of it).
+fn cached_share(path: &Path) -> f64 {
+    let Ok(file) = std::fs::File::open(path) else {
+        return 0.0;
+    };
+    // SAFETY: a read-only mapping only measured, never read through; the file isn't changed meanwhile.
+    let Ok(map) = (unsafe { memmap2::Mmap::map(&file) }) else {
+        return 0.0;
+    };
+    // SAFETY: sysconf has no preconditions.
+    let page = usize::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }).unwrap_or(4096);
+    let mut pages = vec![0u8; map.len().div_ceil(page)];
+    // SAFETY: `pages` holds one byte per page of the mapping, as mincore writes.
+    let ok = unsafe {
+        libc::mincore(
+            map.as_ptr() as *mut libc::c_void,
+            map.len(),
+            pages.as_mut_ptr().cast(),
+        )
+    };
+    if ok != 0 || pages.is_empty() {
+        return 0.0;
+    }
+    pages.iter().filter(|p| **p & 1 != 0).count() as f64 / pages.len() as f64
+}
+
+/// A copy of `file` in `dir` that the system's file cache doesn't hold, as a file not read since the computer started:
+/// copied with the cache off for both files on a Mac (`F_NOCACHE`), or synced and then dropped from it on Linux
+/// (`POSIX_FADV_DONTNEED`). Its cached share is printed, to show it.
+fn cold_copy(file: &str, dir: &Path) -> String {
+    use std::io::{Read, Write};
+    #[cfg(unix)]
+    use std::os::unix::io::AsRawFd;
+    let name = Path::new(file)
+        .file_name()
+        .expect("a file name")
+        .to_string_lossy();
+    let copy = dir.join(format!("cold-{name}"));
+    let mut from = std::fs::File::open(file).expect("the file");
+    let mut to = std::fs::File::create(&copy).expect("the copy");
+    #[cfg(target_os = "macos")]
+    // SAFETY: plain fcntl calls on open files.
+    unsafe {
+        libc::fcntl(from.as_raw_fd(), libc::F_NOCACHE, 1);
+        libc::fcntl(to.as_raw_fd(), libc::F_NOCACHE, 1);
+    }
+    let mut buf = vec![0u8; 8 << 20];
+    loop {
+        let n = from.read(&mut buf).expect("reads the file");
+        if n == 0 {
+            break;
+        }
+        to.write_all(&buf[..n]).expect("writes the copy");
+    }
+    to.sync_all().expect("syncs the copy");
+    #[cfg(target_os = "linux")]
+    // SAFETY: a plain advice call on an open file.
+    unsafe {
+        libc::posix_fadvise(to.as_raw_fd(), 0, 0, libc::POSIX_FADV_DONTNEED);
+    }
+    println!(
+        "cold copy {}: {:.1}% of its pages cached",
+        copy.display(),
+        cached_share(&copy) * 100.0
+    );
+    copy.display().to_string()
 }
