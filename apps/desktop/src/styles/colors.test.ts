@@ -62,6 +62,15 @@ describe('colours', () => {
     expect(rule('.tl-range'), '.tl-range').not.toMatch(/repeating-linear-gradient|--color-cut/);
   });
 
+  it('a recording marker is grey, and red only while a proposal removes it', () => {
+    for (const selector of ['.tl-marker-flag', '.tl-marker-line']) {
+      expect(rule(selector), selector).toMatch(/--color-ink-soft/);
+      expect(rule(selector), selector).not.toMatch(/--color-(signal-ink|paper|cut)/);
+    }
+    const going = ALL.find(({ selector }) => selector.includes('.tl-marker[data-ghost] .tl-marker-flag'));
+    expect(going?.body).toMatch(/--color-cut/);
+  });
+
   it('the video and what is drawn over it stay dark in both themes', () => {
     // The layers' outlines, handles, snap guides and safe area over the preview; a caption style's sample and the
     // backdrop it is shown on (the frame's own ring, when the style is chosen, follows the panel); the Record dialog's

@@ -1284,9 +1284,9 @@
   pointer-events: none;
 }
 
-/* A recording's markers along the top of the Video row: a signal-ink flag (you put it there) with a line down
-   through the clips that takes no presses; red while a proposal removes it. Over the clips, under the playhead and the
-   marks. */
+/* A recording's markers along the top of the Video row: a grey flag (you put it there) with a line down through the
+   clips that takes no presses; red while a proposal removes it. Grey, not the accent red, so a marker's line never
+   passes for the playhead and the red of one going stays clear. Over the clips, under the playhead and the marks. */
 .tl-markers {
   position: absolute;
   inset: 0;
@@ -1315,7 +1315,7 @@
 .tl-marker-flag {
   position: absolute;
   inset: 0;
-  background: var(--color-signal-ink);
+  background: var(--color-ink-soft);
   clip-path: polygon(0 0, 100% 25%, 0 55%);
 }
 
@@ -1325,7 +1325,7 @@
   left: 0;
   width: 1px;
   height: 400px;
-  background: var(--color-signal-ink);
+  background: var(--color-ink-soft);
   opacity: 0.7;
   pointer-events: none;
 }
