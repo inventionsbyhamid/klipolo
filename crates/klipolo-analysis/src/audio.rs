@@ -21,6 +21,7 @@ use klipolo_engine::audio::decode::{self, DecodeError};
 use klipolo_engine::render::probe::probe_media;
 use klipolo_model::time::Us;
 use klipolo_platform::durable::{self, Durability};
+use memmap2::Mmap;
 use serde::{Deserialize, Serialize};
 
 /// What Voice Transcribe takes.
@@ -450,6 +451,85 @@ pub fn read_pcm(wav: &[u8]) -> Result<MonoPcm, AudioError> {
 /// the file's bytes are never held beside them, so a 25-minute clip takes 48 MB, not 96.
 pub fn read_pcm_file(path: &Path) -> Result<MonoPcm, AudioError> {
     let mut file = File::open(path)?;
+    let (rate, at, mut left) = pcm_layout(&mut file)?;
+    file.seek(SeekFrom::Start(at))?;
+    let mut samples = Vec::with_capacity(left / 2);
+    let mut piece = vec![0u8; 64 * 1024];
+    while left > 0 {
+        let n = left.min(piece.len());
+        file.read_exact(&mut piece[..n])?;
+        samples.extend(
+            piece[..n]
+                .chunks_exact(2)
+                .map(|b| i16::from_le_bytes([b[0], b[1]])),
+        );
+        left -= n;
+    }
+    Ok(MonoPcm { rate, samples })
+}
+
+/// A mono 16-bit WAV file's samples mapped from the file instead of read (`map_pcm_file`): the system brings them in
+/// as they are read and can let them go again, so a 2-hour clip's 230 MB of speech sound never sit in the app's own
+/// memory while it is transcribed.
+pub struct MappedPcm {
+    pub rate: u32,
+    map: Mmap,
+    /// The samples' byte offset in the file, and how many there are.
+    from: usize,
+    len: usize,
+}
+
+impl MappedPcm {
+    pub fn samples(&self) -> &[i16] {
+        if self.len == 0 {
+            return &[];
+        }
+        // SAFETY: `map_pcm_file` checked that `len` samples from `from` lie in the mapping, 2-byte aligned, and that
+        // this computer reads 16-bit values little-endian, as a WAV stores them.
+        unsafe {
+            std::slice::from_raw_parts(self.map.as_ptr().add(self.from).cast::<i16>(), self.len)
+        }
+    }
+}
+
+impl std::fmt::Debug for MappedPcm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MappedPcm")
+            .field("rate", &self.rate)
+            .field("samples", &self.len)
+            .finish()
+    }
+}
+
+/// `read_pcm_file`'s samples (the same rules and answers), mapped from the file in place: None where they can't be
+/// used in place (a big-endian computer), for the caller to read them instead. The WAVs analysis writes are written
+/// whole under another name and renamed into place (`extract_wav_16k`), never changed after, so what is mapped stays
+/// what it was.
+pub fn map_pcm_file(path: &Path) -> Result<Option<MappedPcm>, AudioError> {
+    let mut file = File::open(path)?;
+    let (rate, at, bytes) = pcm_layout(&mut file)?;
+    if cfg!(target_endian = "big") {
+        return Ok(None);
+    }
+    // SAFETY: see above: the file is never written again once it has its name.
+    let map = unsafe { Mmap::map(&file) }?;
+    let from = usize::try_from(at).map_err(|_| AudioError::NotWav)?;
+    let len = bytes / 2;
+    let fits = from.checked_add(bytes).is_some_and(|end| end <= map.len());
+    if !fits || !(map.as_ptr() as usize + from).is_multiple_of(2) {
+        return Ok(None);
+    }
+    Ok(Some(MappedPcm {
+        rate,
+        map,
+        from,
+        len,
+    }))
+}
+
+/// Where a mono 16-bit WAV file's samples are: its rate, the byte offset of its data and how many bytes of whole
+/// samples are there (a streamed file may state more than it holds, or 0xFFFFFFFF).
+fn pcm_layout(file: &mut File) -> Result<(u32, u64, usize), AudioError> {
     let len = file.metadata()?.len();
     let mut head = [0u8; 12];
     if file.read_exact(&mut head).is_err() || &head[0..4] != b"RIFF" || &head[8..12] != b"WAVE" {
@@ -480,20 +560,8 @@ pub fn read_pcm_file(path: &Path) -> Result<MonoPcm, AudioError> {
                 return Err(AudioError::NotMono);
             }
             // A streamed file may state more than it holds (or 0xFFFFFFFF): only what is there counts.
-            let mut left = (size.min(len.saturating_sub(body)) / 2 * 2) as usize;
-            let mut samples = Vec::with_capacity(left / 2);
-            let mut piece = vec![0u8; 64 * 1024];
-            while left > 0 {
-                let n = left.min(piece.len());
-                file.read_exact(&mut piece[..n])?;
-                samples.extend(
-                    piece[..n]
-                        .chunks_exact(2)
-                        .map(|b| i16::from_le_bytes([b[0], b[1]])),
-                );
-                left -= n;
-            }
-            return Ok(MonoPcm { rate, samples });
+            let bytes = (size.min(len.saturating_sub(body)) / 2 * 2) as usize;
+            return Ok((rate, body, bytes));
         }
         // Chunks are padded to an even length.
         at = body + size + (size & 1);
@@ -726,6 +794,58 @@ mod tests {
         assert_eq!(all.samples, samples);
         assert!(matches!(
             read_pcm_file(&dir.path().join("missing.wav")),
+            Err(AudioError::Io(_))
+        ));
+    }
+
+    /// Mapped instead of read, a file gives the same samples and the same refusals.
+    #[test]
+    fn mapping_a_file_matches_reading_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let body: Vec<u8> = (0..30_001i32)
+            .flat_map(|i| ((i * 7919 % 65_536 - 32_768) as i16).to_le_bytes())
+            .collect();
+        let plain = [
+            wav_header(16_000, 1, body.len() as u32).to_vec(),
+            body.clone(),
+        ]
+        .concat();
+        let mut listed = plain.clone();
+        listed.splice(
+            36..36,
+            [b'L', b'I', b'S', b'T', 3, 0, 0, 0, b'a', b'b', b'c', 0],
+        );
+        let mut streamed = plain.clone();
+        streamed[40..44].copy_from_slice(&u32::MAX.to_le_bytes());
+        streamed.push(9);
+        let cases: [(&str, Vec<u8>); 6] = [
+            ("plain", plain),
+            ("listed", listed),
+            ("streamed", streamed),
+            ("empty", wav_header(16_000, 1, 0).to_vec()),
+            (
+                "stereo",
+                [wav_header(16_000, 2, 4).to_vec(), vec![1, 0, 2, 0]].concat(),
+            ),
+            ("not a wav", b"RIFX0000WAVE".to_vec()),
+        ];
+        for (name, bytes) in cases {
+            let path = dir.path().join(format!("{name}.wav"));
+            std::fs::write(&path, &bytes).unwrap();
+            let read = read_pcm_file(&path).map_err(|e| e.to_string());
+            let mapped = map_pcm_file(&path)
+                .map(|m| {
+                    let m = m.expect("mapped in place");
+                    MonoPcm {
+                        rate: m.rate,
+                        samples: m.samples().to_vec(),
+                    }
+                })
+                .map_err(|e| e.to_string());
+            assert_eq!(mapped, read, "{name}");
+        }
+        assert!(matches!(
+            map_pcm_file(&dir.path().join("missing.wav")),
             Err(AudioError::Io(_))
         ));
     }

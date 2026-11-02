@@ -1,6 +1,6 @@
 //! A clip's words from its 16 kHz WAV (what `audio::extract_wav_16k` wrote), in four steps:
-//! - `Sound::load`: the WAV's samples read once, straight from the file, and cut into transcription requests at pauses
-//!   (`chunks::plan_with_loud_cuts`), planned one second under the transcriber's limit so a last chunk under
+//! - `Sound::load`: the WAV's samples mapped from the file (not held in memory), and cut into transcription requests at
+//!   pauses (`chunks::plan_with_loud_cuts`), planned one second under the transcriber's limit so a last chunk under
 //!   `MIN_CHUNK_US` can join the one before. Each request's WAV is made from the samples when it is sent. A chunk with
 //!   nothing louder than `SILENT_PEAK_DBFS` makes no request; a silent clip makes none at all.
 //! - `hear`: each chunk's speaker turns from the `Transcriber`, as many requests at once as it takes
@@ -35,7 +35,7 @@ use klipolo_model::speech::{PAUSE_US, Transcript, Word, WordKind};
 use klipolo_model::time::{RangeUs, Us};
 use serde::{Deserialize, Serialize};
 
-use crate::audio::{self, AudioError, MonoPcm};
+use crate::audio::{self, AudioError, MappedPcm, MonoPcm};
 use crate::chunks::{self, sample_at, us};
 use crate::error::AnalysisError;
 use crate::fillers::is_filler;
@@ -101,7 +101,7 @@ pub struct TranscriptOut {
 /// requests.
 #[derive(Clone, Debug)]
 pub struct Sound {
-    samples: Arc<Vec<i16>>,
+    samples: Arc<Samples>,
     rate: u32,
     /// The WAV's length.
     pub duration_us: Us,
@@ -111,13 +111,34 @@ pub struct Sound {
     pub loud_cuts: Vec<Us>,
 }
 
+/// A sound's samples: read into memory, or mapped from its WAV file (`audio::map_pcm_file`).
+#[derive(Debug)]
+enum Samples {
+    Read(Vec<i16>),
+    Mapped(MappedPcm),
+}
+
+impl std::ops::Deref for Samples {
+    type Target = [i16];
+
+    fn deref(&self) -> &[i16] {
+        match self {
+            Self::Read(samples) => samples,
+            Self::Mapped(map) => map.samples(),
+        }
+    }
+}
+
 impl Sound {
     /// `pcm` (mono 16-bit samples) cut into requests of at most `max_audio_s` each.
     pub fn from_pcm(pcm: MonoPcm, max_audio_s: u32) -> Self {
-        let MonoPcm { rate, samples } = pcm;
+        Self::from_samples(Samples::Read(pcm.samples), pcm.rate, max_audio_s)
+    }
+
+    fn from_samples(samples: Samples, rate: u32, max_audio_s: u32) -> Self {
         if rate == 0 {
             return Self {
-                samples: Arc::new(Vec::new()),
+                samples: Arc::new(Samples::Read(Vec::new())),
                 rate: 1,
                 duration_us: 0,
                 chunks: Vec::new(),
@@ -154,12 +175,17 @@ impl Sound {
         Ok(Self::from_pcm(audio::read_pcm(wav)?, max_audio_s))
     }
 
-    /// `from_pcm` of the WAV file at `path`, read on a blocking thread straight into its samples
-    /// (`audio::read_pcm_file`): the file's bytes are never held as well.
+    /// `from_pcm` of the WAV file at `path`, on a blocking thread: its samples mapped from the file
+    /// (`audio::map_pcm_file`), so a long clip's sound isn't held in memory while it is transcribed, or read straight
+    /// into memory where they can't be (`audio::read_pcm_file`).
     pub async fn load(path: &Path, max_audio_s: u32) -> Result<Self, AnalysisError> {
         let path = path.to_owned();
-        let sound = tokio::task::spawn_blocking(move || {
-            audio::read_pcm_file(&path).map(|pcm| Self::from_pcm(pcm, max_audio_s))
+        let sound = tokio::task::spawn_blocking(move || match audio::map_pcm_file(&path)? {
+            Some(map) => {
+                let rate = map.rate;
+                Ok(Self::from_samples(Samples::Mapped(map), rate, max_audio_s))
+            }
+            None => audio::read_pcm_file(&path).map(|pcm| Self::from_pcm(pcm, max_audio_s)),
         })
         .await
         .map_err(|e| AudioError::Io(std::io::Error::other(e.to_string())))??;
