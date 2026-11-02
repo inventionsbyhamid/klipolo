@@ -8,9 +8,9 @@ mod common;
 use std::path::PathBuf;
 
 use common::*;
-use klipolo_model::analysed::{analysed_assets, words_only};
+use klipolo_model::analysed::{analysed_assets, camera_footage, camera_footage_file, words_only};
 use klipolo_model::layout::{Anchor, BoxN, Layout};
-use klipolo_model::project::{Asset, AssetKind, RecordingSource, SourceMix};
+use klipolo_model::project::{Asset, AssetKind, RecordingKind, RecordingSource, SourceMix};
 use klipolo_model::speech::run_spans;
 use klipolo_model::timeline::{Clip, ClipSource, Item, ItemContent, Track, TrackKind};
 use klipolo_model::Project;
@@ -150,6 +150,49 @@ fn a_recordings_files_and_the_same_files_imported_again_are_words_only() {
     }
 }
 
+/// The fixture's take as a camera take ("Record yourself"): its camera (0.2 s late) and its mic, no screen.
+fn camera_take() -> Project {
+    let mut p = fixture();
+    let rec = &mut p.recordings[0];
+    rec.sources.retain(|s| s.id != "screen");
+    (rec.kind, rec.primary) = (RecordingKind::Camera, "camera".into());
+    p
+}
+
+/// A camera take's camera is its main footage: watched for a scene log as imported camera footage is, and so is the
+/// same file imported again. Its mic is heard for its words only, and a screen take's camera bubble stays words only.
+#[test]
+fn a_camera_take_s_footage_is_watched_and_its_mic_heard_for_words() {
+    let mut p = camera_take();
+    let mut again = p.asset("camera").unwrap().clone();
+    again.id = "camera-again".into();
+    p.assets.push(again);
+    for id in ["camera", "camera-again"] {
+        assert!(camera_footage_file(&p, id), "{id}");
+        assert!(!words_only(&p, id), "{id}");
+    }
+    assert!(words_only(&p, "mic"));
+    assert!(!camera_footage_file(&p, "mic"));
+    assert!(!camera_footage_file(&fixture(), "camera"), "a bubble");
+    assert!(words_only(&fixture(), "camera"));
+}
+
+/// A camera take's clip plays its camera's runs on the take's clock; any other clip has no camera footage.
+#[test]
+fn a_camera_take_s_clip_plays_its_camera_runs_on_the_take_s_clock() {
+    let p = camera_take();
+    let runs = camera_footage(&p, &p.timeline.main[0]);
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].asset_id(), "camera");
+    // The camera started 0.2 s into the take: its file's 0 is the clip's 0.2 s.
+    assert_eq!(runs[0].source_of(0), 200_000);
+    assert_eq!(runs[0].source_of(secs(1.0)), secs(1.2));
+    assert_eq!(runs[0].source_span(), (200_000, secs(60.0)));
+    assert_eq!(runs[0].file_of(secs(1.2)), secs(1.0));
+    assert!(camera_footage(&p, &p.timeline.main[1]).is_empty(), "b-roll");
+    assert!(camera_footage(&fixture(), &fixture().timeline.main[0]).is_empty(), "a screen take");
+}
+
 /// `p` with file `id`'s sound on or off.
 fn audio(p: &mut Project, id: &str, on: bool) {
     p.assets.iter_mut().find(|a| a.id == id).unwrap().has_audio = on;
@@ -243,6 +286,9 @@ fn voice_cases() -> Vec<(&'static str, Project)> {
         p.timeline.main.push(c);
     }
     cases.push(("a take's files placed on their own", p));
+
+    // "Record yourself": the camera is the footage, watched; the mic is its voice.
+    cases.push(("a camera take: its camera is the footage", camera_take()));
     cases
 }
 

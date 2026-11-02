@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import type { Asset } from '../../bindings/Asset';
 import type { Project } from '../../bindings/Project';
 import { openSettings, useAi, useNeedsKey } from '../../ai/aiStatus';
-import { recordingOf, voiceOf } from '../../lib/analysed';
+import { voiceOf, wordsOnly } from '../../lib/analysed';
 import { assetName, recordingName } from '../../lib/timeline';
 import {
   analyze,
@@ -285,9 +285,10 @@ export function AnalysisBanner() {
       </section>
     );
   }
-  // Footage is watched only for a video imported on its own: a recording's files are analysed for their words only.
+  // Footage is watched only for a video imported on its own or a camera take's camera: a recording's other files are
+  // analysed for their words only.
   const videos = clips.some(
-    (c) => c.kind === 'video' && !recordingOf({ assets, recordings }, c.id) && estimate.clips.includes(c.id),
+    (c) => c.kind === 'video' && !wordsOnly({ assets, recordings }, c.id) && estimate.clips.includes(c.id),
   );
   const refused = !!estimate.refusal;
   // Retry asks for the estimate again (the price may have changed), never starts a run unseen.
