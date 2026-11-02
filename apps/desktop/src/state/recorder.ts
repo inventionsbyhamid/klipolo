@@ -1,6 +1,7 @@
 import { t } from '@lingui/core/macro';
 import { create } from 'zustand';
 import type { BackFromReopen } from '../bindings/BackFromReopen';
+import type { LeftTake } from '../bindings/LeftTake';
 import type { PrivacyPage } from '../bindings/PrivacyPage';
 import type { Project } from '../bindings/Project';
 import type { RecorderSetup } from '../bindings/RecorderSetup';
@@ -245,18 +246,21 @@ export const useRecorder = create<RecorderStore>((set, get) => {
 
 /**
  * Follows the recorder once for the whole run: the Record dialog's previews' events, every take's events (only the
- * dialog's take is heard) and every take that lands. Resolves with the function that stops following.
+ * dialog's take is heard), every take that lands, and what became of takes the last run left behind that didn't.
+ * Resolves with the function that stops following.
  */
 export function followRecorder(): Promise<UnlistenFn> {
   if (following) return following;
   const mine: Promise<UnlistenFn> = Promise.all([
     recorder.onEvent((event) => void (hearPreview(event) || takePart.hear(event))),
     recorder.onImported((landed) => void onImported(landed)),
+    recorder.onLeft(leftToast),
   ]).then(
-    ([offEvents, offImported]) =>
+    ([offEvents, offImported, offLeft]) =>
       () => {
         offEvents();
         offImported();
+        offLeft();
         if (following === mine) following = null;
       },
     (error: unknown) => {
@@ -297,6 +301,31 @@ export async function recoverLeftTakes(): Promise<void> {
   } catch {
     // Nothing to land: the takes stay in their folders for the next launch.
   }
+}
+
+/**
+ * What the person hears about a take the last run left behind that didn't land: it couldn't be added, its new project
+ * couldn't be opened, or it is still recording. One toast for each of these, however many takes say it.
+ */
+export function leftToast(left: LeftTake): void {
+  const text = {
+    notAdded: t({
+      id: 'recorder.left.notAdded',
+      message: "A recording from your last session couldn't be added. Its files are in Movies / Klipolo / Recordings.",
+      comment: "At launch, a recording Klipolo closed during couldn't be added to a project",
+    }),
+    addedNotOpened: t({
+      id: 'recorder.left.addedNotOpened',
+      message: 'A recording from your last session was added to a new project. Open it from the start screen to see it.',
+      comment: "At launch, a recording Klipolo closed during was added to a new project, which couldn't be opened",
+    }),
+    stillRecording: t({
+      id: 'recorder.left.stillRecording',
+      message: 'A recording from your last session is still going. Stop it from the menu bar to add it here.',
+      comment: 'At launch, a recording Klipolo closed during still records, stopped from its menu bar item',
+    }),
+  }[left.outcome];
+  toast.info(text, { key: `recorder-left-${left.outcome}` });
 }
 
 /**
