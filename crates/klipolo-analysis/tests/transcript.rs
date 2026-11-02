@@ -1113,7 +1113,9 @@ async fn a_transcript_is_tagged_with_its_words_language() {
     assert_eq!(spoken(&hindi)[0].kind, WordKind::Filler);
     assert!(spoken(&hindi)[1..].iter().all(|w| w.kind == WordKind::Word));
 
-    let german = words("Äh, heute zeige ich euch, wie man ein Video schneidet.").await;
+    let german =
+        words("Äh, heute zeige ich euch, wie man ein Video in weniger als einer Minute schneidet.")
+            .await;
     assert_eq!(german.transcript.language, "de");
     assert_eq!(spoken(&german)[0].kind, WordKind::Filler);
 

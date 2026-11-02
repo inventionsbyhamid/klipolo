@@ -278,9 +278,13 @@ pub fn is_latin(language: &str) -> bool {
 }
 
 /// The Latin-script language whose common words `words` (bare, lowercased, hums left out) hold most of. English unless
-/// another language clearly wins: at least `LATIN_MIN` of its words, twice English's count, and `LATIN_SHARE_PCT` of
-/// all the words. A close call stays English.
+/// another language clearly wins: a take of at least `LATIN_MIN_WORDS` words, and at least `LATIN_MIN` of the other
+/// language's common words, twice English's count and `LATIN_SHARE_PCT` of all the words. A short or close call stays
+/// English: "Um, no, no. Do as I say." holds four Portuguese words and none of English's, but is English.
 fn latin_language(words: &[String]) -> &'static str {
+    if words.len() < LATIN_MIN_WORDS {
+        return DEFAULT;
+    }
     let mut best = ("en", 0usize);
     let english = count(words, LATIN_WORDS[0].1);
     for (language, list) in &LATIN_WORDS[1..] {
@@ -293,8 +297,10 @@ fn latin_language(words: &[String]) -> &'static str {
     best.0
 }
 
+/// The fewest Latin words (hums left out) that can be another language than English.
+const LATIN_MIN_WORDS: usize = 12;
 /// The fewest common words that make Latin letters another language than English.
-const LATIN_MIN: usize = 2;
+const LATIN_MIN: usize = 4;
 /// The share of a transcript's Latin words, in percent, another language's common words must reach.
 const LATIN_SHARE_PCT: usize = 8;
 
@@ -399,6 +405,14 @@ mod tests {
         assert_eq!(of("Hola"), "en");
     }
 
+    /// A short take of function words that another language shares stays English, so its hums are cut.
+    #[test]
+    fn a_short_take_stays_english() {
+        assert_eq!(of("Um, no, no. Do as I say."), "en");
+        assert_eq!(of("Look at it, at the top, at the end."), "en");
+        assert_eq!(of("Hoy les voy a enseñar cómo"), "en");
+    }
+
     #[test]
     fn marathi_words_make_devanagari_marathi() {
         assert_eq!(
@@ -431,10 +445,13 @@ mod tests {
                 "it",
             ),
             (
-                "Hoje eu vou mostrar como editar um vídeo em menos de um minuto.",
+                "Hoje eu vou mostrar para vocês como editar um vídeo em menos de um minuto.",
                 "pt",
             ),
-            ("Hôm nay tôi sẽ chỉ cho bạn cách chỉnh sửa video.", "vi"),
+            (
+                "Hôm nay tôi sẽ chỉ cho bạn cách chỉnh sửa video của bạn thật nhanh.",
+                "vi",
+            ),
         ] {
             assert_eq!(of(text), want, "{text}");
         }
