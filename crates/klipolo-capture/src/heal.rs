@@ -17,9 +17,9 @@
 //!
 //! After a fallback, the person's own mic's `DeviceBack` comes only once it has been listed for 3 s straight
 //! (`mic::Presence`, in the run controller's look, `run::own_mic`), and at most once per 30 s, so a flapping USB mic
-//! churns runs: the take stays on the fallback until it settles, with one mild `capture.note.micFlapping`. A mic back
-//! before any fallback (a blip) restarts at once. With nothing to fall back to, it restarts on every return, however
-//! often it drops (`mic_dropping`: lost voice is worse than extra runs).
+//! never churns runs: the take stays on the fallback until it settles, with one mild `capture.note.micFlapping`. A mic
+//! back before any fallback (a blip) restarts at once. With nothing to fall back to, it restarts on every return,
+//! however often it drops (`mic_dropping`: lost voice is worse than extra runs).
 //!
 //! Waits are polled: `device_still_missing` and `still_blank` once a second. Notes the policy can't word itself are
 //! the session's: `capture.health.appQuit` (the app's name), `capture.health.micFallback` (both mics' names),

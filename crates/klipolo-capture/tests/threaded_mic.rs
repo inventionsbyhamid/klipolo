@@ -134,7 +134,7 @@ fn a_flapping_usb_mic_never_churns_runs() {
 fn a_restart_that_fails_after_device_back_keeps_watching() {
     // A desktop with only the USB mic. It goes at 1 s and is listed again at 2 s a moment before it can stream (the
     // early `DeviceBack`), so the restart fails with NoDevice. The run controller keeps looking, and once the mic has
-    // listed for 3 s (from 4 s) the voice records again.
+    // been listed for 3 s (from 4 s) the voice records again.
     let root = tempfile::tempdir().unwrap();
     let dir = common::harness::session(root.path(), &[Src::Screen, Src::Mic]);
     let fixture =
