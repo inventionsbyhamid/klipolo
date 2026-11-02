@@ -47,6 +47,8 @@ function ChatOff() {
       <span>{notice}</span>
       <button
         type="button"
+        // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+        tabIndex={0}
         className="btn btn-secondary btn-sm"
         style={{ gridColumn: 2, justifySelf: 'start' }}
         onClick={openSettings}
@@ -81,7 +83,13 @@ function EmptyChat() {
       {allowed ? (
         <div className="suggestions">
           {SUGGESTIONS.map((s) => (
-            <button key={s} type="button" className="chip chip-outline" onClick={() => void useChat.getState().send(s)}>
+            <button
+              key={s}
+              type="button"
+              tabIndex={0}
+              className="chip chip-outline"
+              onClick={() => void useChat.getState().send(s)}
+            >
               {s}
             </button>
           ))}
@@ -120,6 +128,7 @@ function EmptyChat() {
             // The offer comes back in the analysis banner, with its price, even after "Not now".
             <button
               type="button"
+              tabIndex={0}
               className="btn btn-secondary btn-sm"
               style={{ gridColumn: 2, justifySelf: 'start' }}
               onClick={() => void offerAgain()}

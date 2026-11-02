@@ -17,7 +17,13 @@ export function NeedsKey() {
       </span>
       <h3>Add your Meta API key or access code in Settings</h3>
       <p>Chat, transcripts and captions use Meta's models. Editing and export work without them.</p>
-      <button type="button" className="btn btn-secondary btn-sm" onClick={openSettings}>
+      <button
+        type="button"
+        // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+        tabIndex={0}
+        className="btn btn-secondary btn-sm"
+        onClick={openSettings}
+      >
         Open Settings
       </button>
     </div>

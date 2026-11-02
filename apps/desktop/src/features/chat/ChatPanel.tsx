@@ -61,6 +61,8 @@ export function ChatPanel() {
           <button
             ref={strip}
             type="button"
+            // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+            tabIndex={0}
             className="icon-btn"
             aria-label={t({ id: 'chatPanel.open', message: 'Open chat' })}
             title={t({ id: 'chatPanel.open.tip', message: 'Open chat (Command K)' })}
@@ -72,6 +74,7 @@ export function ChatPanel() {
           </button>
           <button
             type="button"
+            tabIndex={0}
             className="icon-btn"
             aria-label={
               waiting
@@ -104,6 +107,7 @@ export function ChatPanel() {
           <h2>{t({ id: 'chatPanel.title', message: 'Chat' })}</h2>
           <button
             type="button"
+            tabIndex={0}
             className="icon-btn"
             aria-label={t({ id: 'chatPanel.new', message: 'New chat' })}
             title={t({ id: 'chatPanel.new', message: 'New chat' })}
@@ -116,6 +120,7 @@ export function ChatPanel() {
           </button>
           <button
             type="button"
+            tabIndex={0}
             className="icon-btn"
             aria-label={t({ id: 'chatPanel.collapse', message: 'Collapse chat' })}
             title={t({ id: 'chatPanel.collapse', message: 'Collapse chat' })}

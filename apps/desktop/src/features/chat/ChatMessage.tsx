@@ -35,11 +35,22 @@ export const ChatMessage = memo(function ChatMessage({ message: m }: { message: 
         <p>{m.text}</p>
         <div className="msg-row">
           {SETTINGS.has(m.failure) ? (
-            <button type="button" className="chip chip-outline" onClick={openSettings}>
+            <button
+              type="button"
+              // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+              tabIndex={0}
+              className="chip chip-outline"
+              onClick={openSettings}
+            >
               {t({ id: 'chatPanel.openSettings', message: 'Open Settings' })}
             </button>
           ) : m.failure === 'tooLong' || m.failure === 'declined' || m.retry === null ? null : (
-            <button type="button" className="chip chip-outline" onClick={() => void useChat.getState().retry(m.id)}>
+            <button
+              type="button"
+              tabIndex={0}
+              className="chip chip-outline"
+              onClick={() => void useChat.getState().retry(m.id)}
+            >
               <SpriteIcon name="retry" />
               {t({ id: 'chatPanel.retry', message: 'Retry' })}
             </button>
@@ -91,7 +102,7 @@ function AnalyzeOffer() {
   if (!offerable) return null;
   return (
     <div className="msg-row">
-      <button type="button" className="chip chip-outline" onClick={() => void offerAgain()}>
+      <button type="button" tabIndex={0} className="chip chip-outline" onClick={() => void offerAgain()}>
         {t({ id: 'chatPanel.analyze', message: 'Analyze' })}
       </button>
     </div>

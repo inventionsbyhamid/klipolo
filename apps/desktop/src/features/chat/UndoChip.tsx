@@ -68,6 +68,8 @@ export function UndoChip({ undo, revision, byApp = false }: { undo: CodedError; 
       <div className="msg-row" {...focusProps}>
         <button
           type="button"
+          // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+          tabIndex={0}
           className="chip chip-outline"
           aria-label={historyAction('redo', undo.code, undo.params)}
           aria-disabled={busy || undefined}
@@ -93,6 +95,7 @@ export function UndoChip({ undo, revision, byApp = false }: { undo: CodedError; 
   const chip = (
     <button
       type="button"
+      tabIndex={0}
       className="chip chip-outline"
       aria-label={name}
       aria-disabled={busy || state === 'buried' || undefined}
