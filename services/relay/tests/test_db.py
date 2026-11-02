@@ -27,7 +27,7 @@ def test_connect_creates_the_planned_tables(conn):
         "align_seconds_day",
         "align_day",
     ]
-    assert columns(conn, "codes") == ["code", "active", "note", "sam_off"]
+    assert columns(conn, "codes") == ["code", "active", "note", "sam_off", "cap_usd", "max_devices"]
     assert columns(conn, "ledger") == [
         "id",
         "device_id",
@@ -36,7 +36,100 @@ def test_connect_creates_the_planned_tables(conn):
         "model",
         "usage_json",
         "cost_usd",
+        "code",
     ]
+    assert columns(conn, "code_devices") == ["code", "device_id"]
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+
+
+def version_2_database(path):
+    """A database as the relay made it before per-code limits: schema version 2, with a code, two devices on it
+    (one has spent), a device with no code and their charges."""
+    conn = sqlite3.connect(path, isolation_level=None)
+    for statement in db._SCHEMA:
+        conn.execute(statement)
+    conn.execute("ALTER TABLE codes ADD COLUMN sam_off INTEGER NOT NULL DEFAULT 0")
+    conn.execute("PRAGMA user_version = 2")
+    conn.execute("INSERT INTO codes (code, note) VALUES ('judges', 'for the judges')")
+    for device_id, code, spent in [("d1", "judges", 0.75), ("d2", "judges", 0.0), ("d3", None, 0.25)]:
+        conn.execute(
+            "INSERT INTO devices (device_id, token_hash, code, created_at, spent_usd) VALUES (?, ?, ?, 'now', ?)",
+            (device_id, f"h{device_id}", code, spent),
+        )
+    for device_id, cost in [("d1", 0.5), ("d1", 0.25), ("d3", 0.25)]:
+        conn.execute(
+            "INSERT INTO ledger (device_id, at, endpoint, model, usage_json, cost_usd)"
+            " VALUES (?, 'now', 'responses', 'muse-spark-1.3', '{}', ?)",
+            (device_id, cost),
+        )
+    conn.close()
+
+
+def test_a_version_2_database_moves_to_version_3_keeping_everything(tmp_path):
+    path = tmp_path / "relay.db"
+    version_2_database(path)
+
+    conn = db.connect(path)
+
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    # No limits on any code until the owner sets them.
+    [code] = conn.execute("SELECT * FROM codes").fetchall()
+    assert dict(code) == {
+        "code": "judges",
+        "active": 1,
+        "note": "for the judges",
+        "sam_off": 0,
+        "cap_usd": None,
+        "max_devices": None,
+    }
+    # Each charge so far belongs to its device's code, and each device on a code counts as registered with it.
+    assert [tuple(row) for row in conn.execute("SELECT device_id, code, cost_usd FROM ledger ORDER BY id")] == [
+        ("d1", "judges", 0.5),
+        ("d1", "judges", 0.25),
+        ("d3", None, 0.25),
+    ]
+    assert [tuple(row) for row in conn.execute("SELECT code, device_id FROM code_devices ORDER BY device_id")] == [
+        ("judges", "d1"),
+        ("judges", "d2"),
+    ]
+    assert [row["spent_usd"] for row in conn.execute("SELECT spent_usd FROM devices ORDER BY device_id")] == [
+        0.75,
+        0.0,
+        0.25,
+    ]
+    conn.close()
+    # Opening it again changes nothing.
+    db.connect(path).close()
+    again = sqlite3.connect(path)
+    assert again.execute("SELECT count(*) FROM code_devices").fetchone()[0] == 2
+    again.close()
+
+
+def test_a_version_2_database_opened_by_many_at_once_moves_once(tmp_path):
+    # The server's requests and the admin CLI may open the live database at the same moment.
+    failures = []
+
+    def open_and_query(path):
+        try:
+            conn = db.connect(path)
+            conn.execute("SELECT count(*) FROM code_devices").fetchone()
+            conn.close()
+        except sqlite3.Error as exc:
+            failures.append(repr(exc))
+
+    for trial in range(10):
+        path = tmp_path / f"trial-{trial}.db"
+        version_2_database(path)
+        threads = [threading.Thread(target=open_and_query, args=(path,)) for _ in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        conn = sqlite3.connect(path)
+        assert conn.execute("SELECT count(*) FROM code_devices").fetchone()[0] == 2
+        conn.close()
+
+    assert failures == []
 
 
 def test_connect_uses_wal_mode(conn):

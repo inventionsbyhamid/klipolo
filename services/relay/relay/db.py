@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from os import PathLike
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 _BUSY_TIMEOUT_S = 10.0
 
 _SCHEMA = (
@@ -114,4 +114,30 @@ def _migrate(conn: sqlite3.Connection) -> None:
         if _user_version(conn) < 2:
             # SAM turned off for a code by the relay's breaker, until the owner turns it back on.
             conn.execute("ALTER TABLE codes ADD COLUMN sam_off INTEGER NOT NULL DEFAULT 0")
+        if _user_version(conn) < 3:
+            _add_code_limits(conn)
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+
+
+def _add_code_limits(conn: sqlite3.Connection) -> None:
+    """Version 3: limits per access code, none until the owner sets them (`admin set-code-cap`). Only adds columns
+    and a table, so a relay from before still runs on the database."""
+    # The most the code's devices may spend together, and how many devices may register with it. NULL: no limit.
+    conn.execute("ALTER TABLE codes ADD COLUMN cap_usd REAL")
+    conn.execute("ALTER TABLE codes ADD COLUMN max_devices INTEGER")
+    # The code a charge was made under, so a device that leaves its code takes none of the code's spend along.
+    # Charges from before belong to the code their device has now.
+    conn.execute("ALTER TABLE ledger ADD COLUMN code TEXT")
+    conn.execute("UPDATE ledger SET code = (SELECT code FROM devices WHERE devices.device_id = ledger.device_id)")
+    conn.execute("CREATE INDEX ledger_code ON ledger (code)")
+    # Every device that ever registered with a code, which its device limit counts: leaving the code frees no room.
+    conn.execute(
+        """
+        CREATE TABLE code_devices (
+            code TEXT NOT NULL REFERENCES codes (code),
+            device_id TEXT NOT NULL REFERENCES devices (device_id),
+            PRIMARY KEY (code, device_id)
+        )
+        """
+    )
+    conn.execute("INSERT INTO code_devices (code, device_id) SELECT code, device_id FROM devices WHERE code IS NOT NULL")
