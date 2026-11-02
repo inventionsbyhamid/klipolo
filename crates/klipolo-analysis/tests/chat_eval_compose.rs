@@ -163,7 +163,7 @@ async fn every_composed_edit_answered_as_it_should_be_passes() {
     let out = run(&env(&server), &["--cases", CASES]).await;
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stdout.contains("10/10 passed"), "{stdout}{stderr}");
+    assert!(stdout.contains("11/11 passed"), "{stdout}{stderr}");
     assert_eq!(out.status.code(), Some(0));
     assert!(!stdout.contains(KEY) && !stderr.contains(KEY));
 }
@@ -187,4 +187,35 @@ async fn a_preset_where_custom_motion_was_asked_fails_the_case() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("FAIL slide-title-overshoot"), "{stdout}");
     assert_eq!(out.status.code(), Some(1));
+}
+
+/// What a paid run answered, accepted where it is good behaviour: with captions on, asking whether "each word" means
+/// the title or the captions; ducking the music "while I'm talking", which is what ducking does. With captions off, the
+/// words to pop are the title's, so a question there fails. A stretch ("between 0:10 and 0:20") still wants volume keys.
+#[tokio::test]
+async fn a_question_about_captions_and_ducking_while_talking_pass_where_they_fit() {
+    let server = meta(|message| match message {
+        "make each word pop in one by one" => vec![(
+            "askUser",
+            json!({"question": "Do you mean the title Space station Q&A or the captions?"}),
+        )],
+        "fade the music down while I'm talking" | "duck the music between 0:10 and 0:20" => vec![(
+            "setLayer",
+            json!({"layer": "m1", "set": [pair("duck", json!(true))], "volumeKeys": null}),
+        )],
+        other => ideal(other),
+    })
+    .await;
+    let only = |id: &'static str| ["--cases", CASES, "--only", id];
+    for (id, passes) in [
+        ("word-pop", true),
+        ("word-pop-captions-off", false),
+        ("music-down-talking", true),
+        ("duck-music-stretch", false),
+    ] {
+        let out = run(&env(&server), &only(id)).await;
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let said = if passes { "PASS" } else { "FAIL" };
+        assert!(stdout.contains(&format!("{said} {id}")), "{id}: {stdout}");
+    }
 }

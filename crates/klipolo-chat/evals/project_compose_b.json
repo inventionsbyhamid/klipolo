@@ -1,0 +1,236 @@
+{
+ "version": 7,
+ "id": "space-station-compose-no-captions",
+ "name": "Space station Q&A with a title, a logo, a sticker and music, captions off",
+ "settings": {
+  "fps": 30,
+  "formats": [
+   "landscape"
+  ],
+  "primaryFormat": "landscape"
+ },
+ "assets": [
+  {
+   "id": "clip-a",
+   "kind": "video",
+   "path": "/media/astronauts.mp4",
+   "name": "astronauts.mp4",
+   "durationUs": 155040000,
+   "width": 1280,
+   "height": 720,
+   "fps": 29.97,
+   "hasAudio": true
+  },
+  {
+   "id": "lofi",
+   "kind": "audio",
+   "path": "/media/lofi-beat.mp3",
+   "name": "lofi-beat.mp3",
+   "durationUs": 200000000,
+   "width": 0,
+   "height": 0,
+   "fps": 0.0,
+   "hasAudio": true
+  },
+  {
+   "id": "logo",
+   "kind": "image",
+   "path": "/media/logo.png",
+   "name": "logo.png",
+   "durationUs": 5000000,
+   "width": 512,
+   "height": 512,
+   "fps": 0.0,
+   "hasAudio": false
+  },
+  {
+   "id": "sticker",
+   "kind": "image",
+   "path": "/media/rocket-sticker.png",
+   "name": "rocket-sticker.png",
+   "durationUs": 5000000,
+   "width": 512,
+   "height": 512,
+   "fps": 0.0,
+   "hasAudio": false
+  }
+ ],
+ "timeline": {
+  "main": [
+   {
+    "id": "clip-a1",
+    "source": {
+     "type": "asset",
+     "id": "clip-a"
+    },
+    "sourceInUs": 0,
+    "sourceOutUs": 155040000,
+    "speed": 1.0,
+    "volume": 1.0,
+    "muted": false,
+    "fadeInUs": 0,
+    "fadeOutUs": 0,
+    "look": {
+     "preset": null,
+     "strength": 1.0,
+     "lutId": null,
+     "lutStrength": 1.0
+    }
+   }
+  ],
+  "tracks": [
+   {
+    "id": "logo-track",
+    "kind": "overlay",
+    "name": "Logo",
+    "hidden": false,
+    "muted": false,
+    "locked": false,
+    "items": [
+     {
+      "id": "logo-1",
+      "startUs": 0,
+      "durationUs": 155040000,
+      "attach": null,
+      "layout": {
+       "anchor": "bottomRight",
+       "opacity": 1.0,
+       "overrides": {},
+       "radius": 0.0,
+       "rect": {
+        "x": 0.85,
+        "y": 0.78,
+        "w": 0.12,
+        "h": 0.2
+       },
+       "rotation": 0.0
+      },
+      "content": {
+       "type": "image",
+       "assetId": "logo"
+      },
+      "effects": []
+     }
+    ]
+   },
+   {
+    "id": "titles",
+    "kind": "overlay",
+    "name": "Titles",
+    "hidden": false,
+    "muted": false,
+    "locked": false,
+    "items": [
+     {
+      "id": "title-1",
+      "startUs": 0,
+      "durationUs": 4000000,
+      "attach": null,
+      "layout": {
+       "anchor": "topCenter",
+       "opacity": 1.0,
+       "overrides": {},
+       "radius": 0.0,
+       "rect": {
+        "x": 0.1,
+        "y": 0.06,
+        "w": 0.8,
+        "h": 0.14
+       },
+       "rotation": 0.0
+      },
+      "content": {
+       "type": "text",
+       "text": "Space station Q&A",
+       "style": {
+        "font": {
+         "family": "Inter",
+         "source": {
+          "type": "bundled"
+         }
+        },
+        "size": 96.0,
+        "weight": 700,
+        "italic": false,
+        "color": "#FFFFFF",
+        "background": null,
+        "outline": null,
+        "shadow": true,
+        "align": "center"
+       }
+      },
+      "effects": []
+     },
+     {
+      "id": "sticker-1",
+      "startUs": 20000000,
+      "durationUs": 5000000,
+      "attach": null,
+      "layout": {
+       "anchor": "topRight",
+       "opacity": 1.0,
+       "overrides": {},
+       "radius": 0.0,
+       "rect": {
+        "x": 0.7,
+        "y": 0.1,
+        "w": 0.2,
+        "h": 0.3
+       },
+       "rotation": 0.0
+      },
+      "content": {
+       "type": "image",
+       "assetId": "sticker"
+      },
+      "effects": []
+     }
+    ]
+   },
+   {
+    "id": "music",
+    "kind": "audio",
+    "name": "Music",
+    "hidden": false,
+    "muted": false,
+    "locked": false,
+    "items": [
+     {
+      "id": "lofi-1",
+      "startUs": 0,
+      "durationUs": 155040000,
+      "attach": null,
+      "layout": {
+       "anchor": "topLeft",
+       "opacity": 1.0,
+       "overrides": {},
+       "radius": 0.0,
+       "rect": {
+        "x": 0.05,
+        "y": 0.05,
+        "w": 0.4,
+        "h": 0.1
+       },
+       "rotation": 0.0
+      },
+      "content": {
+       "type": "audio",
+       "assetId": "lofi",
+       "sourceInUs": 0,
+       "volume": 0.5,
+       "fadeInUs": 1000000,
+       "fadeOutUs": 2000000,
+       "effect": null,
+       "duck": 0.0
+      },
+      "effects": []
+     }
+    ]
+   }
+  ]
+ },
+ "captions": {
+  "enabled": false,
+  "style": "klipolo.builtin/caption.clean"
+ }
+}
