@@ -2,7 +2,7 @@
 
 # The Developer ID Application identity's SHA-1, never its name, and never printed: KLIPOLO_SIGNING_IDENTITY when the
 # caller sets it, else the one such identity in the keychains (the login keychain on the Mac that signs releases),
-# APPLE_TEAM_ID when there are several.
+# narrowed by APPLE_TEAM_ID when there are several.
 developer_id() {
   if [ -n "${KLIPOLO_SIGNING_IDENTITY:-}" ]; then
     [[ "$KLIPOLO_SIGNING_IDENTITY" =~ ^[0-9A-F]{40}$ ]] || {
