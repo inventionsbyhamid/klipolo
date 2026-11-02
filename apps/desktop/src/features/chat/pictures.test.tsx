@@ -16,6 +16,7 @@ import { useChat, useChatStandIn } from '../../state/chat';
 import { beginCommit } from '../../state/commitQueue';
 import { historySteps } from '../../state/project';
 import { useProject } from '../../state/project';
+import { useReversing } from '../../state/reversing';
 import { fixturePatch, fixtureSnapshot } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
 import { ChatPanel } from './ChatPanel';
@@ -422,5 +423,17 @@ describe('pictures chat asks for', () => {
     await waitFor(() => expect(art(c)).toHaveAttribute('src', expect.stringContaining('paper-plane-2.png')));
     expect(c).not.toHaveFocus();
     expect(document.activeElement).toBe(document.body);
+  });
+});
+
+describe('a clip chat reverses', () => {
+  it('is written backward as the clip menu does, once the reply is in', async () => {
+    const asked: string[] = [];
+    useReversing.setState({ backward: (clipId) => void asked.push(clipId) });
+    chat({ reply: (r) => reply(r.id, 'The reversed copy is being made.', { reverse: ['clip-2'] }) });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'play the second clip backward{Enter}');
+    expect(await screen.findByText('The reversed copy is being made.')).toBeInTheDocument();
+    expect(asked).toEqual(['clip-2']);
   });
 });

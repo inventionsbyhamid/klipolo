@@ -45,6 +45,7 @@ describe('undo labels as message ids', () => {
       'setClip',
       'setClip.note',
       'setTransition',
+      'reverseClip',
       'setFormat',
       'setCaptions',
       'setBackground',

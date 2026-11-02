@@ -73,6 +73,11 @@ export const CHAT_LABELS: Record<string, MessageDescriptor> = {
       '{change, select, add {{count, plural, =1 {Add transition} other {Add # transitions}}} remove {{count, plural, =1 {Remove transition} other {Remove # transitions}}} length {{count, plural, =1 {Change transition length} other {Change # transition lengths}}} other {{count, plural, =1 {Change transition} other {Change # transitions}}}}',
     comment: 'Undo history entry: chat added, changed or removed the transitions at cuts',
   }),
+  'chat.reverseClip': msg({
+    id: 'chat.reverseClip',
+    message: 'Play forward',
+    comment: 'Undo history entry: chat played a reversed clip forward again, as Reverse on a reversed clip does',
+  }),
   'chat.addMusic': msg({ id: 'chat.addMusic', message: 'Add {file}', comment: 'Undo history entry: music added' }),
   'chat.addSound': msg({ id: 'chat.addSound', message: 'Add {name}', comment: 'Undo history entry: a sound added' }),
   'chat.addImage': msg({ id: 'chat.addImage', message: 'Add {file}', comment: 'Undo history entry: a picture added' }),

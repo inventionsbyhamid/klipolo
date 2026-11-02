@@ -19,6 +19,7 @@ import {
 } from './chatMessages';
 import { replaceOpen } from './chatProposals';
 import { useProject } from './project';
+import { useReversing } from './reversing';
 
 /**
  * Whether an app's reply is about the project as it is open now. Rust names the opening an app's change was made on
@@ -154,6 +155,8 @@ export function appActions(set: ChatSet, get: ChatGet): Pick<ChatStore, 'receive
     });
     // Drawn here (nothing else draws them); placed only by the person's Use, as their own step.
     for (const picture of r.pictures) void get().drawPicture(r.id, picture.id);
+    // Written backward here, as the clip menu's Reverse does.
+    for (const clipId of r.reverse) useReversing.getState().backward(clipId);
   };
 
   return {

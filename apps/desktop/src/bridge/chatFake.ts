@@ -109,6 +109,7 @@ export function reply(id: string, text: string, parts: Partial<ChatReply> = {}):
     moments: [],
     revision: -1,
     pictures: [],
+    reverse: [],
     analyze: false,
     ...parts,
   };
