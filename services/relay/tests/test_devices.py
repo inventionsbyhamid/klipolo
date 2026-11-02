@@ -9,6 +9,10 @@ INVALID_CODE = {
     "error": "invalid_code",
     "message": "This access code is not valid. Check the code or add your own Meta key in Settings.",
 }
+SHARED_CREDIT = {
+    "error": "budget",
+    "message": "Klipolo's shared AI credit is used up for now. Add your own Meta key in Settings.",
+}
 
 
 @pytest.fixture
@@ -106,6 +110,54 @@ def test_reregister_with_inactive_or_unknown_code_is_403_and_keeps_the_device(
     me = client.get("/v1/devices/me", headers=bearer(token))
     assert me.status_code == 200
     assert me.json()["relay_ai"] is True
+
+
+def devices_on(conn, code):
+    return conn.execute("SELECT count(*) FROM devices WHERE code = ?", (code,)).fetchone()[0]
+
+
+def test_a_code_takes_any_number_of_devices_until_the_owner_sets_a_limit(client, conn):
+    add_code(conn, "testcode")
+
+    responses = [register(client, access_code="testcode") for _ in range(30)]
+
+    assert {response.status_code for response in responses} == {200}
+    assert devices_on(conn, "testcode") == 30
+
+
+def test_a_code_at_its_device_limit_refuses_new_devices_but_not_its_own(client, conn):
+    add_code(conn, "testcode")
+    add_code(conn, "other")
+    conn.execute("UPDATE codes SET max_devices = 2 WHERE code = 'testcode'")
+    first, second = str(uuid.uuid4()), str(uuid.uuid4())
+    assert register(client, first, "testcode").status_code == 200
+    assert register(client, second, "testcode").status_code == 200
+
+    refused = register(client, access_code="testcode")
+
+    assert refused.status_code == 402
+    assert refused.json() == SHARED_CREDIT
+    assert devices_on(conn, "testcode") == 2
+    # Its own devices register again (a new token after a 401), and other codes are not affected.
+    again = register(client, first, "testcode")
+    assert again.status_code == 200
+    assert again.json()["relay_ai"] is True
+    assert register(client, access_code="other").status_code == 200
+
+
+def test_a_device_that_leaves_a_code_frees_no_room_on_it(client, conn):
+    add_code(conn, "testcode")
+    conn.execute("UPDATE codes SET max_devices = 1 WHERE code = 'testcode'")
+    device_id = str(uuid.uuid4())
+    register(client, device_id, "testcode")
+    assert register(client, device_id).json()["relay_ai"] is False
+
+    refused = register(client, access_code="testcode")
+
+    assert refused.status_code == 402
+    assert refused.json() == SHARED_CREDIT
+    # The device that registered with it before may come back.
+    assert register(client, device_id, "testcode").json()["relay_ai"] is True
 
 
 @pytest.mark.parametrize(

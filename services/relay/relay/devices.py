@@ -4,6 +4,10 @@ A device registers with its own UUID and, optionally, an access code. It gets
 an opaque token; only the token's SHA-256 is stored. Relay AI access is not
 stored on the device: it is read from the code's `active` flag on every
 request, so deactivating a code takes effect at once.
+
+A code may have a device limit (`admin set-code-cap --devices`): every device
+that ever registered with it counts, and once it is reached only those may
+register with it again.
 """
 
 import hashlib
@@ -19,7 +23,7 @@ from pydantic import BaseModel, Field
 from relay import db
 from relay.config import Settings
 from relay.deps import AppSettings, Conn
-from relay.errors import RelayError
+from relay.errors import GLOBAL_BUDGET_MESSAGE, RelayError
 
 router = APIRouter()
 
@@ -76,13 +80,14 @@ Device = Annotated[sqlite3.Row, Depends(current_device)]
 def register_device(body: Registration, conn: Conn, settings: AppSettings) -> dict[str, Any]:
     """Register or re-register a device. Re-registering rotates the token,
     replaces the stored code with the one sent (none clears it) and keeps
-    the spend."""
+    the spend. A device new to a code that has reached its device limit gets
+    402, worded as shared credit used up."""
     device_id = str(body.device_id)
     code = (body.access_code or "").strip() or None
     token = secrets.token_urlsafe(32)
     with db.transaction(conn):
         if code is not None:
-            row = conn.execute("SELECT active FROM codes WHERE code = ?", (code,)).fetchone()
+            row = conn.execute("SELECT active, max_devices FROM codes WHERE code = ?", (code,)).fetchone()
             if row is None or not row["active"]:
                 raise RelayError(
                     403,
@@ -90,6 +95,8 @@ def register_device(body: Registration, conn: Conn, settings: AppSettings) -> di
                     "This access code is not valid. "
                     "Check the code or add your own Meta key in Settings.",
                 )
+            if not _has_room(conn, code, device_id, row["max_devices"]):
+                raise RelayError(402, "budget", GLOBAL_BUDGET_MESSAGE)
         conn.execute(
             """
             INSERT INTO devices (device_id, token_hash, code, created_at)
@@ -99,11 +106,30 @@ def register_device(body: Registration, conn: Conn, settings: AppSettings) -> di
             """,
             (device_id, hash_token(token), code, datetime.now(UTC).isoformat(timespec="seconds")),
         )
+        if code is not None:
+            conn.execute(
+                "INSERT OR IGNORE INTO code_devices (code, device_id) VALUES (?, ?)", (code, device_id)
+            )
         device = conn.execute(
             "SELECT * FROM devices WHERE device_id = ?", (device_id,)
         ).fetchone()
         status = device_status(conn, device, settings)
     return {"token": token, **status}
+
+
+def _has_room(conn: sqlite3.Connection, code: str, device_id: str, max_devices: int | None) -> bool:
+    """Whether `device_id` may register with `code`: always without a device
+    limit, or when it registered with the code before; else while fewer than
+    `max_devices` devices ever did."""
+    if max_devices is None:
+        return True
+    known = conn.execute(
+        "SELECT 1 FROM code_devices WHERE code = ? AND device_id = ?", (code, device_id)
+    ).fetchone()
+    if known is not None:
+        return True
+    count = conn.execute("SELECT count(*) FROM code_devices WHERE code = ?", (code,)).fetchone()[0]
+    return count < max_devices
 
 
 @router.get("/v1/devices/me")
