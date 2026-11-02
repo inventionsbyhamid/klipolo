@@ -3,9 +3,10 @@
 //! paced like playback, 60 frames a second on the host clock, so the caption and title build threads work while
 //! frames wait.
 //!
-//! - Captions: `--seconds` (30) of speech, twelve words a second in six-word sentences, in three
+//! - Captions: `--seconds` (30) of speech, twelve words a second in six-word sentences, in four
 //!   per-word styles: Highlight (the box glides to the word said; outline, shadow), Arcade (the word said glows;
-//!   outline, the keyword "gaming") and Karaoke (the word said in its colour; outline, shadow). Portrait.
+//!   outline, the keyword "gaming"), Karaoke (the word said in its colour; outline, shadow) and Word pop (the word said
+//!   grows). Portrait.
 //! - Titles: three 30-character titles, plain and with a 4 px outline, entering in turn at 1, 2.5 and 4 s, a second
 //!   each. First with the playback lookahead's warm-up (`PreviewBackend::warm` with the titles of the plan at each
 //!   start, a second ahead, as `warm_ahead` calls it), then without it (a cold seek's path). Landscape.
@@ -131,7 +132,12 @@ pub async fn run(args: &[String]) {
         }
     );
     drop(probe);
-    for style in ["caption.highlight", "caption.arcade", "caption.karaoke"] {
+    for style in [
+        "caption.highlight",
+        "caption.arcade",
+        "caption.karaoke",
+        "caption.word-pop",
+    ] {
         let mut all = Vec::new();
         for _ in 0..runs {
             all.push(captions_case(style, (1080 * k, 1920 * k), seconds).await);
