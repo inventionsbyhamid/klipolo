@@ -15,13 +15,22 @@ letters never reach uroman, so their forms do not depend on it. Digits in
 other scripts come back as 0-9 and are spelled in English like any number.
 
 uroman takes about 10 s to load its tables, so it loads once: at the startup
-warm-up (`load_romanizer`) or on the first word that needs it.
+warm-up (`load_romanizer`) or on the first word that needs it. A failed load
+is tried again only after `RETRY_LOAD_AFTER_S`; until then those words have
+nothing alignable. Once loaded, its tables are frozen so that romanizing never
+adds to them (uroman stores an entry for every key it looks up), and words are
+romanized `ROMANIZE_PIECE` characters at a time (its work on one string grows
+with the square of the string's length).
 """
 
+import gc
 import logging
 import re
 import threading
+import time
 import unicodedata
+from collections import defaultdict
+from typing import Any, Iterator
 
 import regex
 import uroman
@@ -73,9 +82,47 @@ _NUMBER = re.compile(
 )
 
 
+# Words longer than this are romanized a piece at a time. A piece may run a
+# few marks longer, so a letter is never cut from its vowel sign or accents.
+ROMANIZE_PIECE = 64
+_MAX_MARKS_AT_A_CUT = 8
+RETRY_LOAD_AFTER_S = 300.0
+# What a loaded uroman must give for this word. With a data file missing it
+# loads anyway and only prints to stderr.
+_CHECK_WORD, _CHECK_ROMAN = "नमस्ते", "namaste"
+# uroman's own caches: with frozen tables they would only grow.
+_CACHES = ("stats", "abugida_cache", "hangul_rom", "float2fraction", "rom_cache")
+
 _romanizer: uroman.Uroman | None = None
-# uroman keeps caches it writes while romanizing, so one word at a time.
+_failed_at: float | None = None  # time.monotonic() of the last failed load
+# Loading, and uroman's state while romanizing, one thread at a time.
 _romanizer_lock = threading.Lock()
+
+
+class RomanizerUnavailable(Exception):
+    pass
+
+
+class _Frozen(dict):
+    """A uroman table after loading: a missing key gets a fresh default, as
+    from the defaultdict it replaces, but is not stored."""
+
+    def __init__(self, table: defaultdict) -> None:
+        super().__init__(table)
+        self.default_factory = table.default_factory
+
+    def __missing__(self, key: Any) -> Any:
+        return self.default_factory()
+
+
+class _Forgetful(dict):
+    """A uroman cache or count that keeps nothing: every lookup misses."""
+
+    def __missing__(self, key: Any) -> int:
+        return 0
+
+    def __setitem__(self, key: Any, value: Any) -> None:
+        pass
 
 
 def normalize(text: str) -> list[tuple[str, str]]:
@@ -84,25 +131,77 @@ def normalize(text: str) -> list[tuple[str, str]]:
 
 
 def load_romanizer() -> uroman.Uroman:
-    """uroman with its tables loaded, once (about 10 s)."""
-    global _romanizer
+    """uroman with its tables loaded and frozen, once (about 10 s). Raises
+    RomanizerUnavailable within RETRY_LOAD_AFTER_S of a failed load."""
+    global _romanizer, _failed_at
     with _romanizer_lock:
-        if _romanizer is None:
-            _romanizer = uroman.Uroman()
-        return _romanizer
+        if _romanizer is not None:
+            return _romanizer
+        if _failed_at is not None and time.monotonic() - _failed_at < RETRY_LOAD_AFTER_S:
+            raise RomanizerUnavailable("The romanizer failed to load a short while ago.")
+        started = time.monotonic()
+        try:
+            romanizer = _load()
+        except Exception:
+            _failed_at = time.monotonic()
+            raise
+        _romanizer, _failed_at = romanizer, None
+        logger.info("romanizer loaded in %.1f s", time.monotonic() - started)
+        return romanizer
+
+
+def _load() -> uroman.Uroman:
+    try:
+        romanizer = uroman.Uroman()
+    finally:
+        # uroman turns the garbage collector off while it loads and back on
+        # only when the load succeeds.
+        gc.enable()
+    for name, table in list(vars(romanizer).items()):
+        if name in _CACHES and isinstance(table, dict):
+            setattr(romanizer, name, _Forgetful())
+        elif isinstance(table, defaultdict):
+            setattr(romanizer, name, _Frozen(table))
+    if (rom := romanizer.romanize_string(_CHECK_WORD)) != _CHECK_ROMAN:
+        raise RomanizerUnavailable(f"uroman gave {rom!r} for its check word, not {_CHECK_ROMAN!r}: are its data files there?")
+    return romanizer
 
 
 def romanize(word: str) -> str:
-    """`word` in Latin letters, or the word itself if uroman fails on it (its
-    letters in other scripts are then dropped and it gets interpolated times)."""
+    """`word` in Latin letters. A piece uroman fails on (or all of it, while
+    uroman cannot load) stays as it is: its letters in other scripts are then
+    dropped, and a word left with none gets interpolated times."""
     try:
         romanizer = load_romanizer()
-        with _romanizer_lock:
-            return romanizer.romanize_string(word)
-    except Exception as exc:
-        # The text is never logged, not even in the error's message.
-        logger.error("could not romanize a word of %d characters: %s", len(word), type(exc).__name__)
+    except RomanizerUnavailable:
+        return word  # logged when the load failed
+    except Exception:
+        logger.exception("romanizer could not load; trying again in %d s", RETRY_LOAD_AFTER_S)
         return word
+    pieces = []
+    for piece in _pieces(word):
+        try:
+            # The lock is taken per piece, so a long word never holds it long.
+            with _romanizer_lock:
+                pieces.append(romanizer.romanize_string(piece))
+        except Exception as exc:
+            # The text is never logged, not even in the error's message.
+            logger.error("could not romanize %d characters of a word: %s", len(piece), type(exc).__name__)
+            pieces.append(piece)
+    return "".join(pieces)
+
+
+def _pieces(word: str) -> Iterator[str]:
+    """`word` in pieces of ROMANIZE_PIECE characters, each cut moved past any
+    marks (at most _MAX_MARKS_AT_A_CUT) so they stay with their letter."""
+    start = 0
+    while start < len(word):
+        end = min(len(word), start + ROMANIZE_PIECE)
+        limit = min(len(word), end + _MAX_MARKS_AT_A_CUT)
+        while end < limit and unicodedata.category(word[end]).startswith("M"):
+            end += 1
+        yield word[start:end]
+        start = end
 
 
 def _normalize_word(word: str) -> str:
