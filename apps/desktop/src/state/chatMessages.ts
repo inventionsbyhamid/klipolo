@@ -1,5 +1,4 @@
 import type { StoreApi } from 'zustand';
-import { refreshAiStatus, useAi } from '../ai/aiStatus';
 import type { ChatFailureKind } from '../bindings/ChatFailureKind';
 import type { ChatMoment } from '../bindings/ChatMoment';
 import type { ChatPicture } from '../bindings/ChatPicture';
@@ -211,14 +210,6 @@ export function staleMoments(messages: Message[], revision: number): Message[] |
     return { ...m, momentsStale: true };
   });
   return changed ? next : null;
-}
-
-/**
- * With an access code, the credit the top bar shows moved once a message or a picture was paid for: asked again. A
- * key's status has no credit to ask about.
- */
-export function creditMoved() {
-  if (useAi.getState().status?.mode === 'relay') void refreshAiStatus();
 }
 
 /** Each reset starts a new session: a reply or an apply that resolves after it belongs to the one before. */

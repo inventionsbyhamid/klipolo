@@ -1,10 +1,10 @@
 import { t } from '@lingui/core/macro';
 import type { ChatApplied } from '../bindings/ChatApplied';
 import type { ChatPicture } from '../bindings/ChatPicture';
+import { creditMoved } from '../ai/aiStatus';
 import { chatBridge } from '../bridge/chat';
 import { errorMessage } from '../lib/errors';
 import {
-  creditMoved,
   session,
   withMessages,
   type ChatGet,

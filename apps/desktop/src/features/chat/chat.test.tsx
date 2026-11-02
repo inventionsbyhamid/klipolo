@@ -36,6 +36,8 @@ function backend(extra: Record<string, (args: any) => unknown> = {}) {
   mockIPC((cmd, args) => {
     (calls[cmd] ??= []).push(args);
     if (extra[cmd]) return extra[cmd](args);
+    // Asked again once a paid message or picture ends: Rust says what the test set.
+    if (cmd === 'settings_get') return useAi.getState().status;
     return null;
   });
 }

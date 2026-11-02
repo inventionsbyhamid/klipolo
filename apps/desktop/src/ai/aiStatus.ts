@@ -50,6 +50,31 @@ export async function refreshAiStatus(): Promise<AiStatus | null> {
   return useAi.getState().status;
 }
 
+/** The credit ask under way, and whether another paid job ended while it was asked. */
+let asking = false;
+let movedAgain = false;
+
+/**
+ * A paid job ended, done or failed (analysis, chat, a picture, following the speaker): the credit the top bar and
+ * Settings show, and the session's spend, are asked for again. One ask at a time: jobs that end while it is asked make
+ * one more ask after it. Nothing to ask with no key and no code.
+ */
+export function creditMoved() {
+  if (useAi.getState().status?.mode === 'none') return;
+  if (asking) {
+    movedAgain = true;
+    return;
+  }
+  asking = true;
+  void refreshAiStatus().finally(() => {
+    asking = false;
+    if (movedAgain) {
+      movedAgain = false;
+      creditMoved();
+    }
+  });
+}
+
 /** Reads the status once and follows every change after it. */
 export async function followAiStatus(): Promise<UnlistenFn> {
   const unlisten = await aiBridge.onStatus(setAiStatus);
