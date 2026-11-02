@@ -32,6 +32,8 @@ export function FormatCards({ checked, files, locked, onToggle }: FormatCardsPro
             <button
               key={format}
               type="button"
+              // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+              tabIndex={0}
               role="checkbox"
               aria-checked={on}
               aria-disabled={locked || undefined}

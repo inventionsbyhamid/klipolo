@@ -26,7 +26,15 @@ export function ExportOutcome({ onClose }: { onClose: () => void }) {
           </h2>
           {folder && <p className="dialog-sub">Saved in {folder}.</p>}
         </div>
-        <button type="button" className="icon-btn" aria-label="Close" title="Close (Esc)" onClick={onClose}>
+        <button
+          type="button"
+          // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+          tabIndex={0}
+          className="icon-btn"
+          aria-label="Close"
+          title="Close (Esc)"
+          onClick={onClose}
+        >
           <ExportIcon name="x" />
         </button>
       </div>

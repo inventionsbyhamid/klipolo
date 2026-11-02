@@ -22,6 +22,8 @@ export function Moments({ moments, revision, stale }: { moments: ChatMoment[]; r
           <button
             key={i}
             type="button"
+            // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+            tabIndex={0}
             className="moment"
             aria-label={t({
               id: 'chatPanel.moment',
@@ -46,6 +48,7 @@ export function Moments({ moments, revision, stale }: { moments: ChatMoment[]; r
       <div className="msg-row">
         <button
           type="button"
+          tabIndex={0}
           className="chip chip-outline"
           disabled={stale}
           onClick={() =>

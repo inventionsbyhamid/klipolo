@@ -76,7 +76,7 @@ export function Library() {
   const looksLabel = t({ id: 'library.looks', message: 'Looks', comment: 'The left panel’s view of colour looks' });
   const viewLabels = { library: libraryLabel, captions: captionsLabel, looks: looksLabel };
   const viewTab = (to: LeftView, name: string) => (
-    <button className="view-tab" role="tab" aria-selected={view === to} onClick={() => setView(to)}>
+    <button tabIndex={0} className="view-tab" role="tab" aria-selected={view === to} onClick={() => setView(to)}>
       {name}
     </button>
   );

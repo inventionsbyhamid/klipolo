@@ -213,7 +213,15 @@ function Working({ view, onClose }: { view: Exclude<View, 'done'>; onClose: () =
             {name}, <span className="ex-tabular">{formatTime(durationUs)}</span>
           </p>
         </div>
-        <button type="button" className="icon-btn" aria-label="Close" title="Close (Esc)" onClick={onClose}>
+        <button
+          type="button"
+          // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+          tabIndex={0}
+          className="icon-btn"
+          aria-label="Close"
+          title="Close (Esc)"
+          onClick={onClose}
+        >
           <ExportIcon name="x" />
         </button>
       </div>

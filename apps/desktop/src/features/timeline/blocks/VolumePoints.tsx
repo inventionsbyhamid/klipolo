@@ -129,6 +129,8 @@ export const VolumePoints = memo(function VolumePoints({
         <button
           key={k.tUs}
           type="button"
+          // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+          tabIndex={0}
           className="tl-volume-key"
           style={{ left: xOf(k.tUs), top: pointY(points, k.tUs, height) }}
           data-picked={isPicked(picked, target.id, k.tUs) || undefined}

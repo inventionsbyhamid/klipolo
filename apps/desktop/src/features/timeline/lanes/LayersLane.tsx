@@ -122,6 +122,8 @@ export const LayersLane = memo(function LayersLane({ tracks, assets, recordings,
           >
             <button
               type="button"
+              // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+              tabIndex={0}
               data-more-from={fromUs}
               data-more-to={toUs}
               // The visible "+N" starts the name, so voice control can say what it sees (WCAG 2.5.3).

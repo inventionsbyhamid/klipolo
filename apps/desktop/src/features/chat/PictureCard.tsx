@@ -58,6 +58,8 @@ export function PictureCard({ messageId, part }: { messageId: string; part: Pict
   const tryAgain = (
     <button
       type="button"
+      // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+      tabIndex={0}
       className="btn btn-secondary btn-sm"
       onClick={() => void useChat.getState().drawPicture(messageId, picture.id)}
     >
@@ -127,6 +129,7 @@ export function PictureCard({ messageId, part }: { messageId: string; part: Pict
           <div className="p-actions">
             <button
               type="button"
+              tabIndex={0}
               className="btn btn-primary btn-sm"
               aria-disabled={state === 'placing' || undefined}
               onClick={() => void useChat.getState().usePicture(messageId, picture.id)}

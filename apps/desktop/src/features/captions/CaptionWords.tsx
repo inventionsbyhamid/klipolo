@@ -395,7 +395,13 @@ export function CaptionWords({ format }: { format: FormatKind }) {
       {hint && <p className="words-hint">{hint}</p>}
       {enabled && view !== null && total === 0 && noWords === 'notAnalysed' && (
         // The offer comes back in the analysis banner, with its price, even after "Not now".
-        <button type="button" className="btn btn-secondary btn-sm words-analyze" onClick={() => void offerAgain()}>
+        <button
+          type="button"
+          // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+          tabIndex={0}
+          className="btn btn-secondary btn-sm words-analyze"
+          onClick={() => void offerAgain()}
+        >
           {t({ id: 'captions.words.analyze', message: 'Analyze' })}
         </button>
       )}

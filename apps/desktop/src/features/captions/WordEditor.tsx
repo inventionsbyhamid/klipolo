@@ -220,6 +220,8 @@ export function WordEditor({
           {changed && many && (
             <button
               type="button"
+              // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+              tabIndex={0}
               className="btn btn-primary btn-sm"
               aria-disabled={!canFixAll || undefined}
               onMouseDown={keep}
@@ -231,6 +233,7 @@ export function WordEditor({
           {changed && (
             <button
               type="button"
+              tabIndex={0}
               className={many ? 'btn btn-secondary btn-sm' : 'btn btn-primary btn-sm'}
               onMouseDown={keep}
               onClick={justThis}
@@ -242,6 +245,7 @@ export function WordEditor({
           )}
           <button
             type="button"
+            tabIndex={0}
             className="btn btn-ghost btn-sm"
             onMouseDown={keep}
             onClick={() => {

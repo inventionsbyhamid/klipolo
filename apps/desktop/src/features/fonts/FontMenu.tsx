@@ -216,6 +216,8 @@ export function FontMenu({
       <PopoverTrigger asChild>
         <button
           type="button"
+          // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+          tabIndex={0}
           className="select font-trigger"
           aria-label={t({
             id: 'fontMenu.trigger',

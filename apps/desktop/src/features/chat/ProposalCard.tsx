@@ -172,7 +172,14 @@ function CutList({ proposal }: { proposal: ChatProposal }) {
   const hover = useProposal.getState().hover;
   return (
     <>
-      <button type="button" className="p-list-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button
+        type="button"
+        // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+        tabIndex={0}
+        className="p-list-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
         {open
           ? t({ id: 'chatPanel.proposal.hideCuts', message: 'Hide the cuts' })
           : t({ id: 'chatPanel.proposal.showCuts', message: plural(n, { one: 'Show the cut', other: 'Show all # cuts' }) })}
@@ -192,6 +199,7 @@ function CutList({ proposal }: { proposal: ChatProposal }) {
                 <Tooltip label={exact} describes>
                   <button
                     type="button"
+                    tabIndex={0}
                     className="p-cut"
                     aria-label={t({
                       id: 'chatPanel.proposal.cutAt',
@@ -344,6 +352,7 @@ export function ProposalCard({ message: m }: { message: ReplyMessage }) {
       <div className="p-actions">
         <button
           type="button"
+          tabIndex={0}
           className="btn btn-primary"
           aria-disabled={busy || undefined}
           onClick={() => !busy && void apply(m.id)}
@@ -356,6 +365,7 @@ export function ProposalCard({ message: m }: { message: ReplyMessage }) {
         </button>
         <button
           type="button"
+          tabIndex={0}
           className="btn btn-secondary"
           data-discard=""
           aria-disabled={busy || undefined}
