@@ -9,7 +9,6 @@
 //!   code); the take's files stay in its folder either way.
 
 use std::path::Path;
-use std::sync::{Mutex, PoisonError};
 
 use klipolo_app::analysis::holds::Holds;
 use klipolo_capture::protocol::Event;
@@ -30,17 +29,11 @@ pub(super) struct AppSink {
     app: AppHandle,
     /// The recorder's own files (`<app data>/recorder`).
     files: Option<Files>,
-    /// One take lands at a time: this run's, or one an earlier run left behind (`left`), each opening its project.
-    landing: Mutex<()>,
 }
 
 impl AppSink {
     pub(super) fn new(app: AppHandle, files: Option<Files>) -> Self {
-        Self {
-            app,
-            files,
-            landing: Mutex::new(()),
-        }
+        Self { app, files }
     }
 }
 
@@ -63,7 +56,6 @@ impl Sink for AppSink {
             );
             return;
         };
-        let _one_at_a_time = self.landing.lock().unwrap_or_else(PoisonError::into_inner);
         let mut probe = |path: &Path, _key: &str| crate::media::probe_asset(path);
         let landing = Landing {
             library: &library_dir,
