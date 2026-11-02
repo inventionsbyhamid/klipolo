@@ -20,7 +20,7 @@ use klipolo_model::project::Loudness;
 use super::mix::{Mixdown, RATE, duck_gain_at, fade_gain, to_frame};
 use super::pcm::energy::EnergyWriter;
 use super::pcm::{Effected, Energies, Pcm, WINDOW};
-use super::plan::{AudioPlan, AudioSource, Crossfade, Duck, Seam};
+use super::plan::{AudioPlan, AudioSource, Crossfade, Duck, Line, Seam};
 use crate::api::ExportQuality;
 
 /// Frames measured per block.
@@ -358,8 +358,9 @@ fn add_source(
     }
 }
 
-/// A source's gain over time: its volume, then its fades (linear to silence, or a crossfade's equal power) and its
-/// ducking under speech, as the mixer applies them (`Mixdown`), without its 3 ms edge ramps.
+/// A source's gain over time: its volume or its line of volume keys, then its fades (linear to silence, or a
+/// crossfade's equal power) and its ducking under speech, as the mixer applies them (`Mixdown`), without its 3 ms edge
+/// ramps.
 struct Fades {
     gain: f64,
     start: i64,
@@ -368,6 +369,7 @@ struct Fades {
     fade_out: i64,
     equal_power: (bool, bool),
     duck: Option<Duck>,
+    line: Option<Line>,
 }
 
 impl Fades {
@@ -380,6 +382,7 @@ impl Fades {
             fade_out: to_frame(s.fade_out_us),
             equal_power: (s.crossfade.fade_in, s.crossfade.fade_out),
             duck: s.duck.clone(),
+            line: s.line.clone(),
         }
     }
 
@@ -400,6 +403,9 @@ impl Fades {
         if let Some(duck) = &self.duck {
             g *= f64::from(duck_gain_at(duck, f as i64));
         }
+        if let Some(line) = &self.line {
+            g *= line.level_at_frame(f as i64);
+        }
         g
     }
 
@@ -415,10 +421,11 @@ impl Fades {
             / 4.0
     }
 
-    /// The mean of the squared gain over frames `[a, b)`: exact outside the fades of a source that doesn't duck, else
-    /// the mean of four samples.
+    /// The mean of the squared gain over frames `[a, b)`: exact outside the fades of a source that doesn't duck and has
+    /// no line, else the mean of four samples.
     fn mean_square(&self, a: i64, b: i64) -> f64 {
-        if self.duck.is_none() && a >= self.start + self.fade_in && b <= self.end - self.fade_out {
+        let steady = self.duck.is_none() && self.line.is_none();
+        if steady && a >= self.start + self.fade_in && b <= self.end - self.fade_out {
             return self.gain * self.gain;
         }
         let step = (b - a) as f64 / 4.0;
@@ -447,6 +454,7 @@ pub(crate) fn write_effected(
         fade_out_us: 0,
         crossfade: Crossfade::default(),
         duck: None,
+        line: None,
         seam: Seam::default(),
         ..s.clone()
     };

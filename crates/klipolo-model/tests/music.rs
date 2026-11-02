@@ -109,6 +109,7 @@ fn sound_layer(id: &str, start: f64, len: f64, duck: Option<f64>) -> Item {
             centre_from: None,
             tie: None,
             duck,
+            volume_keys: Vec::new(),
         },
         ..still_item(id, start, len)
     }
@@ -420,6 +421,7 @@ fn music_not_touching_the_end_is_left_alone() {
             centre_from: None,
             tie: None,
             duck: None,
+            volume_keys: Vec::new(),
         },
         ..still_item("whoosh", 25.0, 5.0)
     };
@@ -550,6 +552,7 @@ fn music_goes_on_an_audio_track_of_its_own() {
             centre_from: None,
             tie: None,
             duck: None,
+            volume_keys: Vec::new(),
         },
         ..still_item("ding", 26.0, 1.0)
     });
@@ -700,6 +703,7 @@ fn music_stops_at_the_next_layer_on_its_track() {
             centre_from: None,
             tie: None,
             duck: None,
+            volume_keys: Vec::new(),
         },
         ..still_item("tail", 37.0, 1.0)
     };

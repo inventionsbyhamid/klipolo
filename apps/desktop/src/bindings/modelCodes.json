@@ -1274,6 +1274,31 @@
     "params": []
   },
   {
+    "code": "model.volume.tooManyKeys",
+    "message": "A clip or sound can have at most 64 volume keys.",
+    "params": []
+  },
+  {
+    "code": "model.volume.badValue",
+    "message": "A volume key must be between 0 and 200 %.",
+    "params": []
+  },
+  {
+    "code": "model.volume.unsorted",
+    "message": "A clip's or sound's volume keys are out of order.",
+    "params": []
+  },
+  {
+    "code": "model.volume.outside",
+    "message": "A volume key is outside its clip or sound.",
+    "params": []
+  },
+  {
+    "code": "model.volume.badEase",
+    "message": "A volume key has an ease Klipolo can't use. A curve's y values stay from -2 to 3, steps go from 1 to 64, and a spring needs stiffness 1 to 1000, damping 0 to 100, mass 0.1 to 10 and enough damping to settle.",
+    "params": []
+  },
+  {
     "code": "model.cursor.size",
     "message": "The cursor size must be between 0.5× and 4×.",
     "params": []

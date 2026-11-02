@@ -95,6 +95,7 @@ export function AudioInspector({ item, content }: { item: Item; content: AudioCo
         volume={content.volume}
         noun="sound"
         volumeOps={(v) => runContentOps(item.id, content, { volume: v })}
+        line={{ target: { kind: 'sound', id: item.id }, keys: content.volumeKeys, startUs: item.startUs, lenUs: item.durationUs }}
         mute={{
           id: item.id,
           muted: !!content.muted,

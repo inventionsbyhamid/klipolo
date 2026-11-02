@@ -3,6 +3,7 @@ import { BUILTINS, contribLabel } from '../../lib/contrib';
 import { itemOp } from '../../lib/ops';
 import { contentNow } from '../../state/latest';
 import { TimingField } from './common';
+import { MotionField } from './MotionField';
 import { effectLabels } from './effectOps';
 import { EffectsButton } from './EffectsButton';
 import { ParamFields } from './ParamFields';
@@ -40,6 +41,7 @@ export function GeneratorInspector({ item, content }: { item: Item; content: Gen
         </p>
       )}
       <EffectsButton target={{ type: 'item', id: item.id }} effects={item.effects} />
+      <MotionField item={item} />
       <TimingField item={item} />
     </>
   );

@@ -108,6 +108,7 @@ fn a_canvas_exports_ten_seconds_of_frames_showing_its_layers() {
             centre_from: None,
             tie: None,
             duck: None,
+            volume_keys: Vec::new(),
         },
     ));
     p.timeline.tracks.push(music);

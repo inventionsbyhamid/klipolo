@@ -14,6 +14,7 @@ use crate::project::Project;
 use crate::query::{anchor_at, fits, locate_attach};
 use crate::time::{drifted, scaled, unscaled, Us, MIN_DURATION_US};
 use crate::timeline::{Attach, Clip, Item, ItemContent, Track, TrackKind};
+use crate::volume;
 
 use super::generator_pieces;
 use super::places::Places;
@@ -212,17 +213,41 @@ pub(super) fn add_item(
     add(p, target, item, places).map(|_| ())
 }
 
-/// Audio fades shrink to fit the layer (the fade-in keeps priority).
+/// Audio fades shrink to fit the layer (the fade-in keeps priority), and its volume keys fit it.
 pub(super) fn fit_fades(item: &mut Item) {
     let d = item.duration_us.max(0);
     if let ItemContent::Audio {
         fade_in_us,
         fade_out_us,
+        volume_keys,
         ..
     } = &mut item.content
     {
         *fade_in_us = (*fade_in_us).clamp(0, d);
         *fade_out_us = (*fade_out_us).clamp(0, d.saturating_sub(*fade_in_us));
+        volume::fit(volume_keys, d);
+    }
+}
+
+/// The layer's start moved `by` later (earlier when negative) and it is now `item.duration_us` long: its motion and
+/// volume keys keep their place on the content, and those before a later start become one key holding the value there.
+pub(super) fn start_moved(item: &mut Item, by: Us) {
+    let len = item.duration_us;
+    item.layout.motion = item.layout.motion.take().and_then(|mut m| {
+        if by >= 0 {
+            m.trim_start(by, len);
+        } else {
+            m.retime(|t| t.saturating_sub(by), len);
+        }
+        motion::kept(m)
+    });
+    if let Some(keys) = item.content.volume_keys_mut() {
+        if by >= 0 {
+            volume::trim_start(keys, by);
+        } else {
+            volume::extend_start(keys, by.saturating_neg());
+        }
+        volume::fit(keys, len);
     }
 }
 
@@ -273,6 +298,7 @@ pub(super) fn update_item(
         // Another file, or its file time slipped by hand, frees it from its source; a patch that ties it anew (Sync
         // lining it up) keeps the new tie; a patch that leaves the file time alone keeps the old one even when it
         // doesn't carry it.
+        follow_volume(&item.content, &mut content);
         let slipped = content.played() != item.content.played();
         if slipped && content.tie().is_some() && content.tie() == item.content.tie() {
             content.set_tie(None);
@@ -308,7 +334,7 @@ pub(super) fn update_item(
                 motion::kept(m)
             });
         }
-        _ if item.duration_us != old_duration => fit_motion(&mut item),
+        _ if item.duration_us != old_duration => fit_keys(&mut item),
         _ => {}
     }
     let items = &p.timeline.tracks[t].items;
@@ -326,13 +352,38 @@ pub(super) fn update_item(
     Ok(false)
 }
 
-/// The layer's motion fits its length (keys past the end go, presets shorten).
-pub(super) fn fit_motion(item: &mut Item) {
+/// A sound's whole volume changed by a patch that leaves its keys as they were: the keys' line moves with it
+/// (`volume::rescaled`), so a song-wide slider or chat's "turn it down" is heard on a sound with keys.
+fn follow_volume(was: &ItemContent, now: &mut ItemContent) {
+    if let (
+        ItemContent::Audio {
+            volume: old,
+            volume_keys: old_keys,
+            ..
+        },
+        ItemContent::Audio {
+            volume: new,
+            volume_keys: keys,
+            ..
+        },
+    ) = (was, now)
+    {
+        if *new != *old && keys == old_keys && !keys.is_empty() {
+            *keys = volume::rescaled(keys, *old, *new);
+        }
+    }
+}
+
+/// The layer's motion and volume keys fit its length (keys past the end go, presets shorten).
+pub(super) fn fit_keys(item: &mut Item) {
     let len = item.duration_us;
     item.layout.motion = item.layout.motion.take().and_then(|mut m| {
         m.fit(len);
         motion::kept(m)
     });
+    if let Some(keys) = item.content.volume_keys_mut() {
+        volume::fit(keys, len);
+    }
 }
 
 fn video_speed(content: &ItemContent) -> Option<f64> {
@@ -427,12 +478,8 @@ pub(super) fn trim_item(
                 .and_then(|a| shifted_anchor(&p.timeline.main, &a, offset, at_us));
             item.start_us = at_us;
             item.duration_us = end.saturating_sub(at_us);
-            // Keys keep their place on the timeline; those before the new start collapse into one.
-            let len = item.duration_us;
-            item.layout.motion = item.layout.motion.take().and_then(|mut m| {
-                m.trim_start(offset, len);
-                motion::kept(m)
-            });
+            // Keys keep their place on the content; those before a later start collapse into one.
+            start_moved(&mut item, offset);
         }
         Edge::End => {
             if at_us.saturating_sub(start) < MIN_DURATION_US {
@@ -452,7 +499,7 @@ pub(super) fn end_at(item: &mut Item, at_us: Us) {
     let end = item.end_us();
     item.duration_us = at_us.saturating_sub(item.start_us);
     generator_pieces::end_moved(&mut item.content, at_us.saturating_sub(end));
-    fit_motion(item);
+    fit_keys(item);
     fit_fades(item);
 }
 
@@ -495,9 +542,16 @@ pub(super) fn split_item(p: &mut Project, id: &str, at_us: Us, places: &mut Plac
     let (first_motion, second_motion) =
         pieces.map_or((None, None), |(a, b)| (motion::kept(a), motion::kept(b)));
     second.layout.motion = second_motion;
+    let (first_volume, second_volume) = volume::split(first.content.volume_keys(), offset);
+    if let Some(keys) = second.content.volume_keys_mut() {
+        *keys = second_volume;
+    }
     let first = &mut p.timeline.tracks[t].items[i];
     first.duration_us = offset;
     first.layout.motion = first_motion;
+    if let Some(keys) = first.content.volume_keys_mut() {
+        *keys = first_volume;
+    }
     generator_pieces::piece(&mut first.content, 0, whole, &first.id);
     if let ItemContent::Audio { fade_out_us, .. } = &mut first.content {
         *fade_out_us = 0;

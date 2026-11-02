@@ -52,6 +52,7 @@ fn sound(id: &str, start: f64, len: f64, fade: f64) -> Item {
             centre_from: None,
             tie: None,
             duck: None,
+            volume_keys: Vec::new(),
         },
         ..still_item(id, start, len)
     }

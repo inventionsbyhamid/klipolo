@@ -22,6 +22,7 @@ use crate::timeline::{
     ROUNDED_CAMERA_RADIUS,
 };
 use crate::transitions::split;
+use crate::volume;
 
 use super::fresh_id;
 use super::item_ops::{add, taken};
@@ -178,6 +179,7 @@ pub(super) fn detach_sound(p: &mut Project, clip_id: &str, places: &mut Places) 
             centre_from: None,
             tie: None,
             duck: None,
+            volume_keys: clip.volume_keys.clone(),
         },
         effects: Vec::new(),
     };
@@ -317,7 +319,7 @@ fn edge_fades(main: &[Clip], i: usize) -> (Us, Us) {
 
 /// A sound source's layers: its file as the clip played it, drifting as its run does. The clip played the source at
 /// `clip.volume × mix.volume`, and not at all when either was muted (the audio plan), so the layer takes that gain
-/// (within the model's 200 %) and mute, its mix's audio effects, all of them, in order, with their settings and whether
+/// (within the model's 200 %), the clip's volume keys over its span at the mix's volume, and mute, its mix's audio effects, all of them, in order, with their settings and whether
 /// each is on, and the channel it plays centred from: nothing heard changes. A layer that reaches one of the clip's
 /// edges takes the clip's fade there (`fades`) as its own (sync must hold), kept within the layer's length; a run that
 /// starts or ends inside the clip has none at that end, as in the audio plan.
@@ -357,6 +359,10 @@ fn sound_layers(
                     centre_from: mix.centre_from,
                     tie: None,
                     duck: None,
+                    volume_keys: volume::times(
+                        &volume::piece(&clip.volume_keys, span.start_us - start, duration),
+                        mix.volume,
+                    ),
                 },
                 effects: mix.effects.clone(),
             };

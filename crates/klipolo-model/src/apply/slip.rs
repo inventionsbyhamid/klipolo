@@ -11,12 +11,11 @@
 use crate::error::{invalid, invalid_with, Result};
 use crate::ids::Id;
 use crate::messages::{code, msg};
-use crate::motion;
 use crate::project::{Project, RecordingSource, SourceRun};
 use crate::time::{drifted, unscaled, Us, MIN_DURATION_US};
 use crate::timeline::{Item, ItemContent, Tie};
 
-use super::item_ops::{fit_fades, fit_motion, shifted_anchor};
+use super::item_ops::{fit_fades, fit_keys, shifted_anchor, start_moved};
 
 /// How a layer's file time runs against the timeline: a sound layer's at its device's rate, a video layer's at its
 /// speed.
@@ -228,7 +227,7 @@ fn apply(p: &mut Project, slips: Vec<Slip>) -> Vec<Id> {
         }
         item.start_us = slip.start_us;
         item.duration_us = slip.duration_us;
-        let video = match &mut item.content {
+        match &mut item.content {
             ItemContent::Audio {
                 source_in_us,
                 drift_ppm,
@@ -238,25 +237,17 @@ fn apply(p: &mut Project, slips: Vec<Slip>) -> Vec<Id> {
                 if let Some(ppm) = slip.drift_ppm {
                     *drift_ppm = ppm;
                 }
-                false
             }
             ItemContent::Video { source_in_us, .. } => {
                 *source_in_us = slip.source_in_us;
-                true
             }
-            _ => false,
-        };
-        if video {
-            // Keys keep their place on the timeline (as a trim keeps them); those past the end go.
-            if offset > 0 {
-                let len = item.duration_us;
-                item.layout.motion = item.layout.motion.take().and_then(|mut m| {
-                    m.trim_start(offset, len);
-                    motion::kept(m)
-                });
-            }
-            fit_motion(item);
+            _ => {}
         }
+        // Keys keep their place on the timeline (as a trim keeps them); those past the end go.
+        if offset > 0 {
+            start_moved(item, offset);
+        }
+        fit_keys(item);
         fit_fades(item);
     }
     cut

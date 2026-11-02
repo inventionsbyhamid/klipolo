@@ -29,6 +29,7 @@ import { muteLabel } from '../preview';
 import { separateCamera, separateSound, stepTrack, toggleAttach, toggleSoundMute } from './keys/layerActions';
 import { reverseClip } from './keys/reverseActions';
 import { addMarkerAtPlayhead } from './keys/sourceActions';
+import { clearMotionKeys } from '../../state/keyEdits';
 import { moveToNewTrack } from './keys/trackActions';
 import { freezeFrame, nothingToFreeze, split, trimToPlayhead } from './keys/timelineActions';
 import { clipIndexAt, mainIndex } from './model/index';
@@ -403,6 +404,15 @@ export function useTimelineCommands(): Command[] {
                   ? codedMessage({ code: 'reverse.busy', params: {} })
                   : undefined,
         run: () => reverseClip(id),
+      },
+      {
+        id: 'motion-keys-clear',
+        action: 'updateItem',
+        group: 'edit',
+        label: labelText('keys.clear.undo'),
+        // A layer moved by keys set by hand (its enter, exit and loop stay).
+        enabled: layer !== null && !!layer.item.layout.motion?.keys,
+        run: () => void clearMotionKeys(id),
       },
       {
         id: 'layer-new-track',

@@ -280,6 +280,7 @@ mod tests {
             centre_from: None,
             tie: None,
             duck: None,
+            volume_keys: Vec::new(),
         };
         p.timeline.tracks = vec![
             track("kept", TrackKind::Overlay, video("here")),

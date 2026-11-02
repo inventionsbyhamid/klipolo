@@ -248,3 +248,34 @@ fn captions_follow_a_mic_that_starts_inside_its_file() {
     assert!((span.at(word) - secs(10.0)).abs() <= 1, "{}", span.at(word));
     assert!((span.local_of(secs(10.0)) - word).abs() <= 1);
 }
+
+/// A clip moved onto a run whose clock drifts plays a hair shorter: its volume keys fit it, so a key at its end isn't
+/// left past it.
+#[test]
+fn use_recording_fits_a_clip_s_volume_keys_to_a_drifting_run() {
+    let mut p = common::imported();
+    let c1 = p.timeline.main.iter_mut().find(|c| c.id == "c1").unwrap();
+    let len = c1.duration_us();
+    c1.volume_keys = vec![
+        klipolo_model::motion::Key {
+            t_us: 0,
+            v: 1.0,
+            ease: None,
+        },
+        klipolo_model::motion::Key {
+            t_us: len,
+            v: 0.5,
+            ease: None,
+        },
+    ];
+    let mut r9 = synced();
+    r9.sources[0].runs[0].drift_ppm = 500.0;
+    let q = apply_ops(
+        &p,
+        &[Op::AddRecording { recording: r9 }, use_recording("c1")],
+    )
+    .unwrap();
+    let after = common::clip(&q, "c1");
+    assert!(after.duration_us() < len);
+    assert_eq!(after.volume_keys.last().unwrap().t_us, after.duration_us());
+}
