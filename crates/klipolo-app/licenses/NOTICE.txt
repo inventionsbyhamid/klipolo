@@ -22,7 +22,9 @@ Klipolo uses FFmpeg under the GNU Lesser General Public License, version 2.1 or 
 
 Archivo, which the caption style samples fall back to, is under the SIL Open Font License 1.1 (Archivo-OFL.txt).
 The interface uses the Mac's system font. The video fonts in Klipolo.app/Contents/Resources/fonts each come with
-their own licence file in their folder.
+their own licence file in their folder. Among them, the Noto Sans
+faces for Indic scripts, Arabic, Hebrew and Thai (Copyright 2022 The Noto Project Authors) are under the SIL Open Font
+License 1.1 (OFL.txt in each NotoSans folder).
 
 Klipolo also uses the Rust crates and JavaScript packages listed in THIRD-PARTY-NOTICES.txt, each under the licence
 given there.
