@@ -259,6 +259,18 @@ describe('the dialog and its choices', () => {
     });
   });
 
+  it('back_from_record_yourself_the_whole_screen_has_the_camera_it_had', async () => {
+    await openOn(recorderSetup({ cameras: [device('FaceTime HD Camera')] }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Record yourself' }));
+    expect(screen.getByRole('button', { name: 'Camera: FaceTime HD Camera' })).toBeInTheDocument();
+    // The whole screen had no camera: none comes back with it, and no bubble.
+    await userEvent.click(screen.getByRole('radio', { name: 'Whole screen' }));
+    expect(screen.getByRole('button', { name: 'Camera: No camera' })).toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: 'Show me on screen while recording' })).toBeNull();
+    await userEvent.click(recordButton());
+    expect(fake.armed[0]).toMatchObject({ camera: null, cameraBubble: false });
+  });
+
   it('record_yourself_needs_a_camera', async () => {
     const none = 'Klipolo found no camera. Connect one, then close Record and open it again.';
     await openOn(recorderSetup({ cameras: [] }));

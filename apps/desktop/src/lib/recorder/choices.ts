@@ -19,7 +19,17 @@ export interface Picks {
   showCamera: boolean;
   /** "Mirror my camera": the bubble and the take's camera layer show the camera as in a mirror. */
   mirror: boolean;
+  /**
+   * The camera each mode had when the person last left it (`kindPicks`): a screen take's (Whole screen and One app) and
+   * Record yourself's, so going back to one brings back its own camera, never the other's.
+   */
+  cameras: Record<CameraMode, string | null>;
 }
+
+/** Whose camera a kind of take keeps: a screen take's bubble, or Record yourself's picture. */
+type CameraMode = 'screen' | 'yourself';
+
+const modeOf = (kind: Picks['kind']): CameraMode => (kind === 'camera' ? 'yourself' : 'screen');
 
 /** The choices before the setup has been read: nothing to record yet. */
 export const NO_PICKS: Picks = {
@@ -30,6 +40,7 @@ export const NO_PICKS: Picks = {
   camera: null,
   showCamera: true,
   mirror: true,
+  cameras: { screen: null, yourself: null },
 };
 
 /**
@@ -44,14 +55,19 @@ export function defaultPicks(setup: RecorderSetup): Picks {
 }
 
 /**
- * The choices once "What to record" is `kind`. "Record yourself" with "No camera" chosen takes the camera the setup
- * offers (the person's last, else the first listed), as it records nothing without one.
+ * The choices once "What to record" is `kind`. Each mode keeps its own camera: going between a screen take (Whole
+ * screen, One app) and Record yourself puts away the camera of the mode left and brings back the one the other had, so
+ * no camera chosen for one turns up as a bubble in the other. Record yourself with no camera of its own takes the
+ * camera the setup offers (the person's last, else the first listed), as it records nothing without one.
  */
 export function kindPicks(setup: RecorderSetup, picks: Picks, kind: Picks['kind']): Partial<Picks> {
-  if (kind !== 'camera' || picks.camera !== null) return { kind };
-  const { cameras } = setup.devices;
-  const offered = cameras.some((c) => c.id === setup.camera) ? setup.camera : (cameras[0]?.id ?? null);
-  return { kind, camera: offered };
+  const [from, to] = [modeOf(picks.kind), modeOf(kind)];
+  if (from === to) return { kind };
+  const cameras = { ...picks.cameras, [from]: picks.camera };
+  const { cameras: listed } = setup.devices;
+  const offered = listed.some((c) => c.id === setup.camera) ? setup.camera : (listed[0]?.id ?? null);
+  const camera = cameras[to] ?? (to === 'yourself' ? offered : null);
+  return { kind, camera, cameras };
 }
 
 /**

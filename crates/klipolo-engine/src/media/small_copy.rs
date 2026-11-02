@@ -10,7 +10,8 @@
 //!   second (frames dropped evenly, never repeated), and encoded by the platform's H.264 encoder (`platform::encode`:
 //!   VideoToolbox's hardware encoder, then its software one; Linux has none yet, so the copy is a Mac feature).
 //! - **Sound:** the engine's own decode (`audio::decode`, 48 kHz), mixed to mono and encoded as AAC (Apple's encoder
-//!   where there is one), interleaved with the picture as it goes.
+//!   where there is one), interleaved with the picture as it goes. `write_beside` hears another file instead, lined up
+//!   with the picture by its lead (a camera take's mic beside its camera, which has no sound of its own).
 //! - **Every frame:** an `EveryFrame` caller sees each decoded frame of the source at its own rate, before the copy
 //!   thins it, as a grey picture (`luma_frames`'s): the scene log finds its cuts there, to the source's frame, whatever
 //!   frame rate the copy keeps.
@@ -142,6 +143,30 @@ pub fn write(
     out: &Path,
     spec: &SmallCopy,
     cancel: &AtomicBool,
+    every: Option<&mut dyn EveryFrame>,
+) -> Result<SmallCopyInfo, SmallCopyError> {
+    write_with(src, None, out, spec, cancel, every)
+}
+
+/// [`write`] with the sound of `sound`'s file (its path, and its lead: the sound file's own time plus the lead is
+/// `src`'s picture time) instead of `src`'s own: silence where it has none. Blocking; `cancel` is checked between
+/// packets.
+pub fn write_beside(
+    src: &Path,
+    sound: (&Path, Us),
+    out: &Path,
+    spec: &SmallCopy,
+    cancel: &AtomicBool,
+) -> Result<SmallCopyInfo, SmallCopyError> {
+    write_with(src, Some(sound), out, spec, cancel, None)
+}
+
+fn write_with(
+    src: &Path,
+    sound: Option<(&Path, Us)>,
+    out: &Path,
+    spec: &SmallCopy,
+    cancel: &AtomicBool,
     mut every: Option<&mut dyn EveryFrame>,
 ) -> Result<SmallCopyInfo, SmallCopyError> {
     let _ = ffmpeg::init();
@@ -150,7 +175,7 @@ pub fn write(
     }
     let tmp = partial_path(out);
     let mut written = write_to(
-        src,
+        (src, sound),
         &tmp,
         spec,
         cancel,
@@ -163,7 +188,7 @@ pub fn write(
         if let Some(every) = every.as_deref_mut() {
             every.again();
         }
-        written = write_to(src, &tmp, spec, cancel, false, every);
+        written = write_to((src, sound), &tmp, spec, cancel, false, every);
     }
     let finished = written.and_then(|info| {
         std::fs::rename(&tmp, out).map_err(|e| SmallCopyError::Failed(format!("rename: {e}")))?;
@@ -207,8 +232,9 @@ struct Writer<'a> {
     frames: u64,
 }
 
+/// One attempt: `src`'s picture, with the sound of `sound` (a file and its lead) or else `src`'s own.
 fn write_to(
-    src: &Path,
+    (src, sound): (&Path, Option<(&Path, Us)>),
     tmp: &Path,
     spec: &SmallCopy,
     cancel: &AtomicBool,
@@ -262,7 +288,9 @@ fn write_to(
         }
         Err(e) => return Err(failed("encoder", e)),
     };
-    let sound_decodes = probe.has_audio && spec.audio_bps > 0 && decode::probe(src).is_ok();
+    let (heard, lead) = sound.unwrap_or((src, probe.audio_lead_us));
+    let sound_decodes =
+        (sound.is_some() || probe.has_audio) && spec.audio_bps > 0 && decode::probe(heard).is_ok();
     let sound_encoder = if sound_decodes {
         let info = AudioInfo::new_raw(Sample::F32(SampleType::Packed), RATE, 1);
         Some(
@@ -287,10 +315,10 @@ fn write_to(
     let (feeder, sound) = match sound_encoder {
         Some(encoder) => {
             let (tx, rx) = sync_channel(4);
-            let (src, range, lead) = (src.to_path_buf(), spec.range, probe.audio_lead_us);
+            let (heard, range) = (heard.to_path_buf(), spec.range);
             let thread = std::thread::Builder::new()
                 .name("klipolo-small-copy-sound".into())
-                .spawn(move || feed_sound(&src, range, lead, &tx))
+                .spawn(move || feed_sound(&heard, range, lead, &tx))
                 .map_err(|e| failed("sound thread", e))?;
             (Some(thread), Some((encoder, rx, 0)))
         }
