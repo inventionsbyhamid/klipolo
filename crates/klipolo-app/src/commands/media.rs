@@ -460,17 +460,27 @@ pub(crate) fn pack_sound(pack: &Pack, id: &str) -> Result<PathBuf, String> {
 }
 
 /// The file behind `path`, a sound the open project uses, with every link followed: refused unless what it leads to is a
-/// regular file Klipolo imports and not a picture (a `song.mp3` linked to `~/.ssh/id_rsa` is not).
+/// regular file Klipolo imports, or a recording's own sound, and not a picture (a `song.mp3` linked to `~/.ssh/id_rsa`
+/// or to `logo.png` is not).
 pub(crate) fn sound_file(state: &ProjectSessionState, path: &str) -> Result<PathBuf, String> {
     if asset_kind(state, path) != Some(AssetKind::Audio) {
         return Err(NOT_IN_PROJECT.into());
     }
     let real = std::fs::canonicalize(path).map_err(|_| "That sound isn't there anymore.")?;
     let regular = std::fs::metadata(&real).is_ok_and(|meta| meta.is_file());
-    if !regular || !servable(&real.to_string_lossy()) || is_picture(&real) {
+    let media = servable(&real.to_string_lossy()) || is_recorded_sound(&real);
+    if !regular || !media || is_picture(&real) {
         return Err(NOT_IN_PROJECT.into());
     }
     Ok(real)
+}
+
+/// A recording's own sound, by its extension: a mic's runs are CAF files (`mic/run-01.caf`, a separated sound's file),
+/// which Klipolo makes but doesn't import.
+fn is_recorded_sound(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("caf"))
 }
 
 /// `file`'s sound from its start, decoded to 48 kHz (mono kept mono, more channels made stereo) for at most
@@ -641,11 +651,15 @@ mod tests {
         image::RgbaImage::from_pixel(4, 4, image::Rgba([255, 0, 0, 255]))
             .save(&picture)
             .unwrap();
+        // A sound by name that leads to a picture.
+        let pictured = dir.path().join("cover.mp3");
+        std::os::unix::fs::symlink(&picture, &pictured).unwrap();
         let state = open_using(
             dir.path(),
             &[
                 (&song, AssetKind::Audio),
                 (&sneaky, AssetKind::Audio),
+                (&pictured, AssetKind::Audio),
                 (&picture, AssetKind::Image),
             ],
         );
@@ -654,7 +668,13 @@ mod tests {
             sound_file(&state, &path(&song)).unwrap(),
             std::fs::canonicalize(&song).unwrap()
         );
-        for refused in [&secret, &sneaky, &picture, Path::new("/etc/passwd")] {
+        for refused in [
+            &secret,
+            &sneaky,
+            &pictured,
+            &picture,
+            Path::new("/etc/passwd"),
+        ] {
             assert_eq!(
                 sound_file(&state, &path(refused)).unwrap_err(),
                 NOT_IN_PROJECT,
@@ -666,6 +686,43 @@ mod tests {
         assert_eq!(
             sound_file(&ProjectSessionState::default(), &path(&song)).unwrap_err(),
             NOT_IN_PROJECT
+        );
+    }
+
+    /// `seconds` of the same tone as a CAF file of 16-bit little-endian PCM at 48 kHz, as a recording's mic writes.
+    fn caf_tone(seconds: u64) -> Vec<u8> {
+        let pcm = &tone(seconds)[44..];
+        let mut caf = b"caff\x00\x01\x00\x00desc".to_vec();
+        caf.extend_from_slice(&32i64.to_be_bytes());
+        caf.extend_from_slice(&48_000f64.to_be_bytes());
+        caf.extend_from_slice(b"lpcm");
+        // Flags (little-endian integers), bytes per packet, frames per packet, channels, bits per channel.
+        for field in [2u32, 2, 1, 1, 16] {
+            caf.extend_from_slice(&field.to_be_bytes());
+        }
+        caf.extend_from_slice(b"data");
+        caf.extend_from_slice(&(pcm.len() as i64 + 4).to_be_bytes());
+        caf.extend_from_slice(&0u32.to_be_bytes());
+        caf.extend_from_slice(pcm);
+        caf
+    }
+
+    /// A recording's separated sound, its mic's `mic/run-01.caf`, plays: Klipolo makes CAF files but doesn't import
+    /// them, and the project uses this one as a sound.
+    #[test]
+    fn a_recordings_mic_run_plays() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("mic")).unwrap();
+        let run = dir.path().join("mic/run-01.caf");
+        std::fs::write(&run, caf_tone(1)).unwrap();
+        let state = open_using(dir.path(), &[(&run, AssetKind::Audio)]);
+        let file = sound_file(&state, &run.to_string_lossy()).unwrap();
+        assert_eq!(file, std::fs::canonicalize(&run).unwrap());
+        let wav = sound_preview(&file).unwrap();
+        let data = u32::from_le_bytes(wav[40..44].try_into().unwrap());
+        assert_eq!(
+            (u16::from_le_bytes([wav[22], wav[23]]), data),
+            (1, 48_000 * 2)
         );
     }
 
