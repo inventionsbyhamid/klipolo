@@ -24,6 +24,7 @@ import {
   useSettledMarks,
 } from './marks';
 import { addImage, addMusic, addPackItem, addSound, dropPackItem } from './place';
+import { useRowBudget } from './rowBudget';
 import { searchLibrary, type Searchable } from './search';
 import {
   loadPack,
@@ -203,6 +204,8 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
   const pack = usePack((s) => s.items);
   const marks = useMarks((s) => s.marks);
   const order = useSettledMarks(`${tab}\n${query}`);
+  // A tab of hundreds of files draws its first rows, then the rest in the background.
+  const budget = useRowBudget(`${tab}\n${query}`);
   useEffect(loadPack, []);
   useEffect(loadMarks, []);
   if (!project) return null;
@@ -272,7 +275,7 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
       );
     return lists(
       <ul className="lib-list" aria-label={t({ id: 'library.clips', message: 'Your clips' })}>
-        {clips.map((clip) => {
+        {clips.slice(0, budget).map((clip) => {
           const { source, key } = clip;
           const recording = source.type === 'recording' ? source.id : undefined;
           const added = () => key && markUsed(key);
@@ -314,7 +317,7 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
               title={music ? t({ id: 'library.music.yours', message: 'Your music' }) : t({ id: 'library.sounds.yours', message: 'Your sounds' })}
             />
             <ul className="lib-list" aria-labelledby={`lib-${tab}-yours`}>
-              {mine.map((asset) =>
+              {mine.slice(0, budget).map((asset) =>
                 row(asset, music ? 'music' : 'sound', () => (music ? addMusic : addSound)({ type: 'asset', id: asset.id })),
               )}
             </ul>
@@ -368,7 +371,7 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
         <>
           <Group id="lib-images-yours" title={t({ id: 'library.images.yours', message: 'Your images' })} />
           <ul className="image-grid" aria-labelledby="lib-images-yours">
-            {images.map(picture)}
+            {images.slice(0, budget).map(picture)}
           </ul>
         </>
       )}
@@ -376,7 +379,7 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
         <>
           <Group id="lib-images-made" title={t({ id: 'library.images.made', message: 'Made with Muse Image' })} />
           <ul className="image-grid" aria-labelledby="lib-images-made">
-            {made.map(picture)}
+            {made.slice(0, budget).map(picture)}
           </ul>
         </>
       )}
