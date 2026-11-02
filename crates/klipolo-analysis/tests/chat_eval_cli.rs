@@ -86,7 +86,7 @@ async fn every_case_is_judged_and_the_cost_added_up_without_the_key() {
     assert!(stdout.contains("     reply: Undone."), "{stdout}");
     // Two model calls a case: the stub answers what came of its calls with the same calls, which ends the message.
     assert!(
-        stdout.contains("1/39 passed (target 37); 78 model calls; total $0.12"),
+        stdout.contains("1/39 passed (target 37); 78 model calls; total $0.13"),
         "{stdout}"
     );
     assert!(!stdout.contains(KEY) && !stderr.contains(KEY));
