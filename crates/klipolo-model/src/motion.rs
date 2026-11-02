@@ -460,7 +460,7 @@ fn held(keys: &[Key], t_us: Us, rest: f64, (lo, hi): (f64, f64)) -> Key {
 
 /// One property of a layer now ending at `len_us`: keys past the end go, and when any did, a key at the end holds the
 /// value there, so what is kept moves as it did.
-fn cut_end(keys: &mut Vec<Key>, len_us: Us, rest: f64, limits: (f64, f64)) {
+pub(crate) fn cut_end(keys: &mut Vec<Key>, len_us: Us, rest: f64, limits: (f64, f64)) {
     if keys.last().is_none_or(|k| k.t_us <= len_us) {
         return;
     }
@@ -473,7 +473,7 @@ fn cut_end(keys: &mut Vec<Key>, len_us: Us, rest: f64, limits: (f64, f64)) {
 
 /// One property of a layer that lost `by_us` at its start: keys keep their place on the content, and when any was at
 /// or before the new start, one key at 0 holds the value there (keys all after it already hold their first value).
-fn cut_start(keys: &mut Vec<Key>, by_us: Us, rest: f64, limits: (f64, f64)) {
+pub(crate) fn cut_start(keys: &mut Vec<Key>, by_us: Us, rest: f64, limits: (f64, f64)) {
     if by_us <= 0 || keys.is_empty() {
         return;
     }

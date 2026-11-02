@@ -9,6 +9,7 @@ import { paintBlock } from './paint';
 import { onThemeChange, themeVersion } from '../../../lib/resolveToken';
 import { wholeFile, type BlockRuns, type FileRuns } from './runs';
 import { ViewportContext, ZoomRestContext } from './ViewportContext';
+import type { Key } from '../../../bindings/Key';
 
 /** A video layer's filmstrip needs a row this tall; an overlay row (18 px) shows its colour. */
 const FILM_MIN_PX = 24;
@@ -44,6 +45,8 @@ interface BlockMediaProps {
   sourceInUs: number;
   speed: number;
   volume: number;
+  /** Its volume keys: the waveform follows their line (memo-stable: the project's own list). */
+  volumeKeys?: readonly Key[];
   fadeInUs: number;
   fadeOutUs: number;
   /** Silent: its sound draws as a flat line (a muted track, a muted video). */
@@ -81,6 +84,7 @@ export const BlockMedia = memo(function BlockMedia({
   sourceInUs,
   speed,
   volume,
+  volumeKeys,
   fadeInUs,
   fadeOutUs,
   muted,
@@ -127,7 +131,7 @@ export const BlockMedia = memo(function BlockMedia({
     const canvas = ref.current;
     if (!canvas || b <= a) return;
     const what = { kind, runs, filmVersions, soundVersions, a, b, spanUs, startUs, durationUs };
-    const how = { sourceInUs, speed, volume, fadeInUs, fadeOutUs, muted, pps, height, filmPx, wavePx, theme };
+    const how = { sourceInUs, speed, volume, volumeKeys, fadeInUs, fadeOutUs, muted, pps, height, filmPx, wavePx, theme };
     const look = { waveToken };
     return paintBlock(canvas, { ...what, ...how, ...look }, rest);
   }, [
@@ -143,6 +147,7 @@ export const BlockMedia = memo(function BlockMedia({
     sourceInUs,
     speed,
     volume,
+    volumeKeys,
     fadeInUs,
     fadeOutUs,
     muted,

@@ -195,6 +195,27 @@ fn trims_shift_collapse_and_drop_keys_and_shorten_presets() {
 }
 
 #[test]
+fn a_start_trimmed_out_again_keeps_the_keys_on_the_content() {
+    let trim = |p: &Project, at: f64| {
+        apply_ops(
+            p,
+            &[Op::TrimItem {
+                id: "t".into(),
+                edge: Edge::Start,
+                at_us: secs(at),
+            }],
+        )
+        .unwrap()
+    };
+    // In by 1 s, then out again by 1 s: the keys are back where they were on the timeline.
+    let p = trim(&trim(&moving(), 3.0), 2.0);
+    assert_eq!(
+        layout(&p, "t").motion.unwrap().keys.unwrap().x,
+        vec![key(1.0, 0.0), key(3.0, 0.2)]
+    );
+}
+
+#[test]
 fn validation_refuses_what_the_spec_rules_out() {
     let set = |m: Motion| {
         let mut p = moving();
@@ -320,6 +341,7 @@ fn validation_refuses_what_the_spec_rules_out() {
         centre_from: None,
         tie: None,
         duck: None,
+        volume_keys: Vec::new(),
     };
     music.layout.blend = Some(Blend::Multiply);
     let mut track = overlay_track("A", vec![music]);

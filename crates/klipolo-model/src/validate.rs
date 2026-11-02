@@ -526,6 +526,9 @@ fn validate_clip(p: &Project, c: &Clip) -> Result<()> {
     check(in_range(c.volume, 0.0, 2.0), code!("model.clip.volume"))?;
     let duration = c.duration_us();
     check(duration >= MIN_DURATION_US, code!("model.clip.tooShort"))?;
+    if let Some(code) = crate::volume::problem(&c.volume_keys, duration) {
+        return Err(invalid(code));
+    }
     check(
         valid_time(c.fade_in_us)
             && valid_time(c.fade_out_us)
@@ -752,9 +755,13 @@ fn validate_content(p: &Project, content: &ItemContent, duration: Us) -> Result<
             drift_ppm,
             centre_from,
             duck,
+            volume_keys,
             muted: _,
             tie: _,
         } => {
+            if let Some(code) = crate::volume::problem(volume_keys, duration) {
+                return Err(invalid(code));
+            }
             if let Some(id) = effect {
                 check_contrib(id, ContribKind::AudioEffect)?;
             }

@@ -46,6 +46,7 @@ pub(super) fn plan(keys: &[&PcmKey]) -> AudioPlan {
                 filter: None,
                 centre_from: None,
                 duck: None,
+                line: None,
             })
             .collect(),
         loudness: Loudness::Off,

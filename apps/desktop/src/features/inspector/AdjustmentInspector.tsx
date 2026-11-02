@@ -1,6 +1,7 @@
 import { useLingui } from '@lingui/react/macro';
 import type { Item } from '../../bindings/Item';
 import { TimingField } from './common';
+import { MotionField } from './MotionField';
 import { EffectsButton } from './EffectsButton';
 
 /** An adjustment layer's fields: it is its effects, applied to everything under it while it lasts; then its Timing. */
@@ -16,6 +17,7 @@ export function AdjustmentInspector({ item }: { item: Item }) {
         })}
       </p>
       <EffectsButton target={{ type: 'item', id: item.id }} effects={item.effects} />
+      <MotionField item={item} />
       <TimingField item={item} />
     </>
   );

@@ -31,6 +31,7 @@ fn plan(gain: f64) -> Arc<AudioPlan> {
             filter: None,
             centre_from: None,
             duck: None,
+            line: None,
         }],
         loudness: Loudness::Off,
     })

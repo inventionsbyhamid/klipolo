@@ -51,6 +51,7 @@ fn auto_placement_avoids_overlap() {
             centre_from: None,
             tie: None,
             duck: None,
+            volume_keys: Vec::new(),
         },
         ..still_item("m", 0.0, 30.0)
     };
@@ -279,6 +280,7 @@ fn update_item_patches_layout_and_text() {
         centre_from: None,
         tie: None,
         duck: None,
+        volume_keys: Vec::new(),
     };
     assert!(apply_ops(
         &p,
@@ -552,6 +554,7 @@ fn split_music_keeps_its_fades_at_the_outer_ends() {
             centre_from: None,
             tie: None,
             duck: None,
+            volume_keys: Vec::new(),
         },
         ..still_item("m", 0.0, 10.0)
     };

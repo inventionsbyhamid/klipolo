@@ -97,6 +97,7 @@ fn with_music(duck: Option<f64>) -> Project {
             centre_from: None,
             tie: None,
             duck,
+            volume_keys: Vec::new(),
         },
     ));
     p.timeline.tracks.push(track);

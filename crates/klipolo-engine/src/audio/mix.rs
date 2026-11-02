@@ -3,7 +3,8 @@
 //! resampled read at a drifting recording device's rate (`AudioSource::rate`), or a live `Stretch` (speed change and
 //! effect) fed from it. Rendering consecutive blocks streams; a jump re-seats the
 //! voices (with pre-roll for the filters). Every clip edge, hard cut and re-seat is ramped (3 ms) so nothing clicks. A
-//! source that ducks under speech follows its envelope sample by sample (`duck`), in the preview and export alike.
+//! source that ducks under speech follows its envelope sample by sample (`duck`), and one with volume keys its line
+//! (`AudioSource::line`), in the preview and export alike.
 //!
 //! A block touches only the sources sounding in it: the sources are kept in order of start,
 //! and consecutive blocks sweep a cursor through that order, holding an active set of what has started and not yet
@@ -358,6 +359,9 @@ impl Mixdown {
             }
             if let Some(envelope) = &mut duck {
                 g *= envelope.gain(f);
+            }
+            if let Some(line) = &s.line {
+                g *= line.level_at_frame(f) as f32;
             }
             o[0] += x[0] * g;
             o[1] += x[1] * g;

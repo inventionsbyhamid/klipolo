@@ -21,11 +21,13 @@ use crate::error::{invalid, ModelError, Result};
 use crate::ids::{new_id, Id};
 use crate::layout::{Anchor, BoxN, Layout};
 use crate::messages::code;
+use crate::motion::Key;
 use crate::ops::{ItemPatch, Op, TrackTarget};
 use crate::project::{Asset, Project};
 use crate::query::video_duration;
 use crate::time::{Us, MIN_DURATION_US, OVERLAP_TOLERANCE_US};
 use crate::timeline::{Item, ItemContent, Track, TrackKind};
+use crate::volume;
 
 /// 30 %: under a voice without hiding it.
 pub const MUSIC_VOLUME: f64 = 0.3;
@@ -119,6 +121,7 @@ pub fn add_music_ops(p: &Project, asset: &Asset, opts: MusicOpts) -> Result<Vec<
         centre_from: None,
         tie: None,
         duck: Some(opts.duck_db.unwrap_or(0.0)),
+        volume_keys: Vec::new(),
     };
     let template = Item {
         id: base.clone(),
@@ -500,19 +503,29 @@ fn update(piece: &Item, len: Us, fade_in: Us, fade_out: Us, ops: &mut Vec<Op>) {
 }
 
 /// A sound's file start (when given) and its fades, each within half of `len`, so the two never overlap
-/// (`model.audio.fades`).
+/// (`model.audio.fades`), and its volume keys fitted to `len`. A new piece (`from` given) holds the level its template
+/// ended at, so the song plays on at the level its line left it.
 fn set_sound(content: &mut ItemContent, from: Option<Us>, fade_in: Us, fade_out: Us, len: Us) {
     if let ItemContent::Audio {
         source_in_us,
         fade_in_us,
         fade_out_us,
+        volume_keys,
         ..
     } = content
     {
         if let Some(from) = from {
             *source_in_us = from;
+            if let Some(last) = volume_keys.last() {
+                *volume_keys = vec![Key {
+                    t_us: 0,
+                    v: last.v,
+                    ease: None,
+                }];
+            }
         }
         (*fade_in_us, *fade_out_us) = fit(fade_in, fade_out, len);
+        volume::fit(volume_keys, len);
     }
 }
 

@@ -25,6 +25,7 @@ fn with_music(duck: Option<f64>) -> Project {
             centre_from: None,
             tie: None,
             duck,
+            volume_keys: Vec::new(),
         },
         ..still_item("bed", 0.0, 30.0)
     });

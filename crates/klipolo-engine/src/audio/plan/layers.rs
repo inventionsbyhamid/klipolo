@@ -10,6 +10,7 @@ use std::sync::Arc;
 use klipolo_model::project::Project;
 use klipolo_model::time::{OVERLAP_TOLERANCE_US, RangeUs};
 use klipolo_model::timeline::{Item, ItemContent, Solo};
+use klipolo_model::volume;
 
 use super::{AudioSource, Crossfade, Duck, Seam, audible, chain, drift_rate, enabled};
 use crate::registry::Registry;
@@ -44,6 +45,7 @@ pub(super) fn layers(
                     centre_from: _,
                     tie: _,
                     duck: _,
+                    volume_keys: _,
                 } => (
                     asset_id,
                     *source_in_us,
@@ -72,9 +74,11 @@ pub(super) fn layers(
             let Some(asset) = audible(p, asset_id) else {
                 continue;
             };
-            if gain <= 0.0 || item.duration_us <= 0 {
+            let keys = item.content.volume_keys();
+            if volume::silent(keys, gain) || item.duration_us <= 0 {
                 continue;
             }
+            let (gain, line) = super::level(gain, keys, item.start_us);
             // A separated one-sided source plays from the channel its clip played it from; a sound layer may duck.
             let (centre_from, duck) = match &item.content {
                 ItemContent::Audio {
@@ -102,6 +106,7 @@ pub(super) fn layers(
                 filter,
                 centre_from,
                 duck,
+                line,
                 seam: Seam::default(),
             });
             let here = sources.len() - 1;
@@ -118,7 +123,8 @@ pub(super) fn layers(
 
 /// Whether sound layer `next` (playing as `b`) starts its file again where layer `was` (playing as `a`), just before it
 /// on its track, played the same file to its end: back to back, no fade out of `a` or into `b`, and the two the same
-/// sound otherwise (level, effect, rate, channel and ducking), so nothing changes but where the file is read. A loop's
+/// sound otherwise (the level where they meet, effect, rate, channel and ducking), so nothing changes but where the file is
+/// read. A loop's
 /// seam: the file joins itself there, so neither edge is ramped.
 fn loops_on(p: &Project, was: &Item, a: &AudioSource, next: &Item, b: &AudioSource) -> bool {
     let (
@@ -147,7 +153,7 @@ fn loops_on(p: &Project, was: &Item, a: &AudioSource, next: &Item, b: &AudioSour
         && next.start_us.abs_diff(was.end_us()) <= OVERLAP_TOLERANCE_US.unsigned_abs()
         && a.fade_out_us == 0
         && b.fade_in_us == 0
-        && a.gain == b.gain
+        && a.level_at(a.end_us) == b.level_at(b.start_us)
         && a.rate == b.rate
         && a.speed == b.speed
         && a.filter == b.filter

@@ -640,6 +640,7 @@ fn sound_item(
             centre_from: None,
             tie: None,
             duck,
+            volume_keys: Vec::new(),
         },
         effects: Vec::new(),
     }

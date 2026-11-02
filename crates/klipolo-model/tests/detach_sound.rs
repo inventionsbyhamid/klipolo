@@ -157,6 +157,7 @@ fn only_the_clip_s_own_sound_counts_as_already_separated() {
             centre_from: None,
             tie: None,
             duck: None,
+            volume_keys: Vec::new(),
         },
         ..still_item("bed", 18.0, 5.0)
     });
