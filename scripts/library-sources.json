@@ -395,16 +395,14 @@
         "fail",
         "no"
       ],
-      "title": "buzzer.wav",
-      "author": "guitarguy1985",
-      "source": "https://freesound.org/people/guitarguy1985/sounds/54047/",
+      "title": "error_006.ogg (Interface Sounds 1.0)",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/interface-sounds",
       "license": "CC0-1.0",
-      "from": "freesound/54047.ogg",
-      "length": 1.1,
-      "fade_out": 0.15,
-      "provenance": "Made by the uploader: \"Standard buzzer sound. Wrong answer, emergency alarm, etc. Synthesized by using very fast alternating tones.\" No sources.",
-      "download_sha256": "b80bf62e8e697e9c0af3648be37ba86c5e432d176907c8fc8b5ed672068027d8",
-      "sha256": "7ec7238fc6ee70b434dc105b94a8b4b839b293f3852fad89167a5fa5d3242c2b"
+      "from": "kenney/interface-sounds/Audio/error_006.ogg",
+      "provenance": "Kenney's own pack, CC0 (its License.txt: \"Created/distributed by Kenney\").",
+      "download_sha256": "a97513d7fd2b12b1210c423be943b4c1ab0e899b11db95855e9b74836e646ae0",
+      "sha256": "4e3de1132cbde72ec4970dabe9d17c9f8203bf0366d0f64abbebcb1f0b76661b"
     },
     {
       "id": "pop-high",

@@ -2017,7 +2017,7 @@ CC0-1.0 (35)
   sounds/typing.wav  by Trollarch2  https://freesound.org/people/Trollarch2/sounds/331656/
   sounds/notification.wav  by yfjesse  https://freesound.org/people/yfjesse/sounds/235911/
   sounds/success.wav  by FunWithSound  https://freesound.org/people/FunWithSound/sounds/456965/
-  sounds/error.wav  by guitarguy1985  https://freesound.org/people/guitarguy1985/sounds/54047/
+  sounds/error.wav  by Kenney  https://kenney.nl/assets/interface-sounds
   sounds/pop-high.wav  by AlaskaRobotics  https://freesound.org/people/AlaskaRobotics/sounds/221091/
   sounds/bubbles.wav  by OGMeek  https://freesound.org/people/OGMeek/sounds/59978/
   sounds/boing.wav  by magnuswaker  https://freesound.org/people/magnuswaker/sounds/540790/

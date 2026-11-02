@@ -355,7 +355,7 @@
       "name": "Error buzz",
       "category": "sound",
       "file": "sounds/error.wav",
-      "duration_ms": 1100,
+      "duration_ms": 240,
       "tags": [
         "error",
         "wrong",
@@ -363,10 +363,10 @@
         "fail",
         "no"
       ],
-      "sha256": "7ec7238fc6ee70b434dc105b94a8b4b839b293f3852fad89167a5fa5d3242c2b",
+      "sha256": "4e3de1132cbde72ec4970dabe9d17c9f8203bf0366d0f64abbebcb1f0b76661b",
       "license": "CC0-1.0",
-      "author": "guitarguy1985",
-      "source": "https://freesound.org/people/guitarguy1985/sounds/54047/"
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/interface-sounds"
     },
     {
       "id": "pop-high",
