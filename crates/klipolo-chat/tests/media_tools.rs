@@ -2240,7 +2240,7 @@ fn a_moment_quoted_from_the_transcript_starts_on_its_first_word() {
         .map(|l| l.start_us)
         .collect();
     assert_eq!(overlays, [secs(0.5), secs(1.3)]);
-    // Words and times together: each moment once, in the order given.
+    // With words, times only pick where they are said: no sound of their own.
     let both = compile(
         &p,
         &i,
@@ -2249,7 +2249,37 @@ fn a_moment_quoted_from_the_transcript_starts_on_its_first_word() {
             json!({"name": "whoosh", "atWords": ["flying"], "atSec": [12.1, 20.0]}),
         )],
     );
-    assert_eq!(sound_starts(&applied(&p, &both)), [secs(12.0), secs(20.0)]);
+    assert_eq!(sound_starts(&applied(&p, &both)), [secs(12.0)]);
+}
+
+#[test]
+fn a_time_given_beside_words_said_twice_picks_the_nearer() {
+    let p = twice();
+    let i = inputs(&p, "a whoosh when we go flying the second time");
+    let out = compile(
+        &p,
+        &i,
+        &[
+            call(
+                "addSound",
+                json!({"name": "whoosh", "atWords": ["flying", "Lisbon"], "atSec": [40.0, 1.0]}),
+            ),
+            call(
+                "addImage",
+                json!({"file": "Heart", "size": null, "position": null, "atSec": 50.0, "atWords": "went flying",
+                       "durationSec": 2.0}),
+            ),
+        ],
+    );
+    let after = applied(&p, &out);
+    // One time each, in order: "flying" near 40.0 s, "Lisbon" near 1.0 s.
+    assert_eq!(sound_starts(&after), [secs(1.5), secs(42.0)]);
+    assert_eq!(
+        (layers(&after, TrackKind::Overlay).iter())
+            .map(|l| l.start_us)
+            .collect::<Vec<_>>(),
+        [secs(40.6)]
+    );
 }
 
 #[test]
@@ -2273,8 +2303,8 @@ fn a_quote_not_said_or_said_twice_is_refused_back_with_what_is_said() {
     );
     assert_eq!(
         refused_to_model(&sound("flying"), 0),
-        "addSound: atWords[0] \"flying\" is said 2 times. Quote more of the words to say which: \"flying today. Day\" \
-         (12.0 s), \"flying today.\" (42.0 s)."
+        "addSound: atWords[0] \"flying\" is said 2 times: \"flying today. Day\" (12.0 s), \"flying today.\" (42.0 s). \
+         Quote words said only once, or give atSec too to pick one."
     );
     // More words say which.
     assert_eq!(
@@ -2333,8 +2363,8 @@ fn a_quote_lands_on_its_word_whether_the_cut_comes_before_or_after_it() {
     let out = compile(&p, &i, &[keep, lisbon]);
     assert_eq!(
         refused_to_model(&out, 1),
-        "addSound: atWords[0] \"Lisbon\" is said only where this answer cuts: \"Lisbon.\" (1.5 s). Quote words in the \
-         parts you keep."
+        "addSound: atWords[0] \"Lisbon\" is said only in parts this answer cuts: \"Lisbon.\" (1.5 s). Quote words in \
+         the parts you keep."
     );
 }
 
@@ -2377,4 +2407,147 @@ fn a_time_snaps_to_the_nearest_word_start_or_cut_within_half_a_second() {
         )],
     );
     assert_eq!(sound_starts(&applied(&p2, &out)), [secs(30.0)]);
+}
+
+#[test]
+fn a_time_in_a_part_the_answer_cuts_is_refused_and_snaps_only_to_what_is_kept() {
+    let p = project();
+    let i = inputs(&p, "keep we went flying today, with a whoosh and a title");
+    let keep = call(
+        "keepOnly",
+        json!({"ranges": [{"startSec": 10.3, "endSec": 13.0}]}),
+    );
+    // 10.1 s: the topic change (10.0) and "So" (9.85) are cut, so it lands on "we" (10.3), kept.
+    let whoosh = call(
+        "addSound",
+        json!({"name": "whoosh", "atWords": null, "atSec": [10.1]}),
+    );
+    let out = compile(&p, &i, &[keep.clone(), whoosh]);
+    assert_eq!(out.refusals, vec![]);
+    let short = &out.proposal.as_ref().expect("the cut").review.after;
+    let kept_from = short.timeline.main[0].source_in_us;
+    assert_eq!(sound_starts(short), [secs(10.3) - kept_from]);
+    // A time with nothing kept near, or the playhead, in a part the answer cuts: refused, not dropped by the cut.
+    let inside = call(
+        "addSound",
+        json!({"name": "whoosh", "atWords": null, "atSec": [5.0]}),
+    );
+    assert_eq!(
+        refused_to_model(&compile(&p, &i, &[keep.clone(), inside]), 1),
+        "addSound: atSec[0] 5.0 is in a part this answer cuts. Quote words in the parts you keep."
+    );
+    let title = call(
+        "addText",
+        json!({"text": "we went flying", "preset": "title", "atSec": null, "atWords": null, "durationSec": null}),
+    );
+    assert_eq!(
+        refused_to_model(&compile(&p, &i, &[title, keep]), 0),
+        "addText: the playhead (0.0 s) is in a part this answer cuts. Quote words in the parts you keep."
+    );
+}
+
+#[test]
+fn the_same_sound_twice_on_one_word_plays_once() {
+    let p = project();
+    let i = inputs(
+        &p,
+        "a heart that whooshes in when we go flying, and a whoosh there",
+    );
+    let picture = call(
+        "addImage",
+        json!({"file": "Heart", "size": null, "position": "top-right", "atSec": null, "atWords": "flying",
+               "durationSec": 2.0}),
+    );
+    let animate = call(
+        "animate",
+        json!({"layer": "last", "enter": "pop", "exit": null, "emphasis": null, "sound": "Whoosh"}),
+    );
+    let whoosh = call(
+        "addSound",
+        json!({"name": "whoosh", "atWords": ["flying"], "atSec": null}),
+    );
+    for calls in [
+        vec![picture.clone(), animate.clone(), whoosh.clone()],
+        vec![whoosh.clone(), picture.clone(), animate.clone()],
+    ] {
+        let out = compile(&p, &i, &calls);
+        let after = applied(&p, &out);
+        assert_eq!(sound_starts(&after), [secs(12.0)], "{calls:?}");
+        // The picture still pops in.
+        let picture = &layers(&after, TrackKind::Overlay)[0];
+        assert!(
+            picture
+                .layout
+                .motion
+                .as_ref()
+                .is_some_and(|m| m.enter.is_some())
+        );
+    }
+    // A drawn sticker's sound is left out where the answer's own whoosh plays already.
+    let sticker = call(
+        "makeSticker",
+        json!({"prompt": "paper plane", "position": "top-right", "atSec": null, "atWords": "flying",
+               "durationSec": 2.0}),
+    );
+    let out = compile(&p, &i, &[sticker, animate, whoosh]);
+    let after = applied(&p, &out);
+    let [Job::MakeSticker(job)] = &out.jobs[..] else {
+        panic!("{:?}", out.jobs)
+    };
+    assert!(job.sound.is_some());
+    let ops = sticker_ops(&after, job, &heart()).expect("placed");
+    let with_sticker = apply_ops(&after, &ops).unwrap();
+    assert_eq!(sound_starts(&with_sticker), [secs(12.0)]);
+}
+
+#[test]
+fn quotes_are_read_as_models_write_them() {
+    use ToolCall::*;
+    // A list written as JSON inside the text, as a model wrote it: its first item, or all of them for a sound.
+    let read = call(
+        "addText",
+        json!({"text": "Day one", "preset": "title", "atSec": null, "atWords": "[\"Day one\"]", "durationSec": null}),
+    );
+    assert!(
+        matches!(read, AddText { at_words: Some(ref w), .. } if w == "Day one"),
+        "{read:?}"
+    );
+    let read = call(
+        "addImage",
+        json!({"file": "Heart", "size": null, "position": null, "atSec": null, "atWords": ["in Lisbon", "today"],
+               "durationSec": null}),
+    );
+    assert!(
+        matches!(read, AddImage { at_words: Some(ref w), .. } if w == "in Lisbon"),
+        "{read:?}"
+    );
+    let read = call(
+        "addSound",
+        json!({"name": "whoosh", "atWords": "[\"went flying\", \"today\"]", "atSec": null}),
+    );
+    assert!(
+        matches!(read, AddSound { ref at_words, .. } if at_words == &["went flying", "today"]),
+        "{read:?}"
+    );
+    // One text where a sound takes a list: a list of it.
+    let read = call(
+        "addSound",
+        json!({"name": "whoosh", "atWords": "went flying", "atSec": null}),
+    );
+    assert!(
+        matches!(read, AddSound { ref at_words, .. } if at_words == &["went flying"]),
+        "{read:?}"
+    );
+    // Compiled, the JSON list inside the text places the words where they are said.
+    let p = project();
+    let i = inputs(&p, "Day one as a title");
+    let out = compile(
+        &p,
+        &i,
+        &[call(
+            "addText",
+            json!({"text": "Day one", "preset": "title", "atSec": null, "atWords": "[\"Day one\"]", "durationSec": null}),
+        )],
+    );
+    assert_eq!(the_layer(&p, &out).start_us, secs(0.5));
 }
