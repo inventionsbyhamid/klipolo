@@ -806,12 +806,28 @@ fn removing_transitions_is_proposed_as_the_cards_remove() {
             ("count", ErrorParam::from(1usize)),
         ])
     );
-    // None to remove.
-    let out = run(
-        &clips(),
-        &[("setTransition", set_transition("all", "none", json!(null)))],
-    );
+    // None to remove, asked by the person: said.
+    let p = clips();
+    let calls = [parse("setTransition", set_transition("all", "none", json!(null))).unwrap()];
+    let asked = Inputs {
+        message: "remove the transitions".into(),
+        ..inputs(&p)
+    };
+    let out = compile(&p, &asked, &calls);
     assert_eq!(person_refusal(&out), NO_TRANSITIONS);
+    // None to remove, the model's own tidying (a short's plan): nothing happens and nothing is said.
+    let out = compile(
+        &p,
+        &Inputs {
+            message: "make a 60 s short".into(),
+            ..inputs(&p)
+        },
+        &calls,
+    );
+    assert_eq!(out.refusals, vec![]);
+    assert_eq!(out.additions, None);
+    assert_eq!(out.proposal, None);
+    assert_eq!(out.unchanged, vec![0]);
     let out = run(
         &clips(),
         &[("setTransition", set_transition("c1", "none", json!(null)))],

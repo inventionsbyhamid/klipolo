@@ -543,8 +543,11 @@ pub(super) fn set_transition(
     }
     if ops.is_empty() {
         let none_there = main.iter().all(|clip| clip.transition_out.is_none());
+        // Nothing to take away is said when the person asked about transitions (or another app did); the model's own
+        // tidying, as a short's plan clearing transitions there never were, changes nothing and says nothing.
+        let person_asked = c.by_app || c.inputs.message.to_lowercase().contains("transition");
         match (kind, after) {
-            (None, ClipRef::All) if none_there => {
+            (None, ClipRef::All) if none_there && person_asked => {
                 return Err(to_person(NO_TRANSITIONS.to_owned()));
             }
             (None, ClipRef::One(short)) => {

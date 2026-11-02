@@ -1502,3 +1502,28 @@ fn the_model_is_asked_to_close_on_what_was_done_and_never_promise_more() {
         assert!(request.system.contains(rule), "{}", request.system);
     }
 }
+
+#[test]
+fn clearing_transitions_that_are_not_there_is_silent() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let model = Fake::new(vec![
+        answer(
+            "",
+            vec![
+                square_call("call_1"),
+                fc(
+                    "call_2",
+                    "setTransition",
+                    r#"{"after": "all", "kind": "none", "durationSec": null}"#,
+                ),
+            ],
+            0.001,
+        ),
+        answer("Made it square.", vec![], 0.001),
+    ]);
+    let out = send(&model, &[], "make a square short", &i, &p).unwrap();
+    assert_eq!(output_for(&model.seen()[1], "call_2"), DONE_OUTPUT);
+    assert_eq!(out.compiled.refusals, vec![]);
+    assert_eq!(out.reply, "Made it square.");
+}
