@@ -1,4 +1,5 @@
 import { t } from '@lingui/core/macro';
+import { creditMoved } from '../ai/aiStatus';
 import type { CodedError } from '../bindings/CodedError';
 import type { ExternalReply } from '../bindings/ExternalReply';
 import type { SnapshotPatch } from '../bindings/SnapshotPatch';
@@ -107,6 +108,8 @@ export function appActions(set: ChatSet, get: ChatGet): Pick<ChatStore, 'receive
     if (r.applied) {
       await adoptNew(r.applied.change);
       applied = { undo: r.applied.undo, revision: r.applied.change.history.revision };
+      // An app's change may be a paid job's (following a subject): the credit is asked for again.
+      creditMoved();
     }
     if (r.undone) await adoptNew(r.undone);
     // New chat or another project meanwhile: the change is merged (Rust made it), but the conversation it was for is

@@ -31,5 +31,6 @@ export { deleteBlock, deleteRange, markRange } from './keys/timelineActions';
 export { reversingName, stopReversing } from './keys/reverseActions';
 export { speedNote } from './model/refit';
 export { removeTransition, transitionName, transitionNow, transitionOp } from './keys/transitionActions';
+export { useClipActions } from './blocks/blockActions';
 export { useTimelineCommands } from './useTimelineCommands';
 export { useZoomTarget, zoomRange, zoomTo, zoomViewUs } from './zoomControl';

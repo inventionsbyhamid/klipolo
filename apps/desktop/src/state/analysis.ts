@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { Asset } from '../bindings/Asset';
 import type { AssetState } from '../bindings/AssetState';
 import type { Estimate } from '../bindings/Estimate';
-import { refreshAiStatus, useAi } from '../ai/aiStatus';
+import { creditMoved, useAi } from '../ai/aiStatus';
 import { analysisBridge, type AnalysisEvent, type UnlistenFn } from '../bridge/analysis';
 import { analysable, voices } from '../lib/analysed';
 import { useProject } from './project';
@@ -62,7 +62,7 @@ export function applyEvent(event: AnalysisEvent) {
       break;
   }
   useAnalysis.setState((s) => ({ states: { ...s.states, [assetId]: next } }));
-  if (event.kind === 'done' || event.kind === 'failed') void refreshAiStatus();
+  if (event.kind === 'done' || event.kind === 'failed') creditMoved();
 }
 
 /** Reads every clip's state once and follows every change after it. */
