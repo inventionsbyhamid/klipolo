@@ -102,6 +102,8 @@ describe('colour tokens', () => {
     expectContrast('lane-sfx', ['bay'], 4.5);
     // A clip's name over its own colour.
     expectContrast('ink', ['clip-deep'], 4.5);
+    // A font that isn't on this Mac: warning amber on the panels and cards it shows on.
+    expectContrast('warning', ['bay', 'bay-raised', 'dialog'], 4.5);
   });
 
   it('the focus ring and the borders of controls reach 3:1 in both themes', () => {

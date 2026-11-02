@@ -337,7 +337,7 @@
 .font-missing svg {
   flex: none;
   margin-top: 2px;
-  color: var(--color-signal-ink);
+  color: var(--color-warning);
 }
 
 .font-missing span {
@@ -366,7 +366,7 @@
 
 .missing-fonts-icon {
   flex: none;
-  color: var(--color-signal-ink);
+  color: var(--color-warning);
 }
 
 .missing-fonts-text {
