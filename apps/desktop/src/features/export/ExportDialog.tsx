@@ -555,7 +555,7 @@ function Paused() {
   );
 }
 
-/** What went wrong, and which formats weren't saved (failed); the files in place stay listed. */
+/** A failed export: what went wrong, and which formats weren't saved; the files in place stay listed. */
 function Failed() {
   const message = useExport((s) => s.message);
   const lost = useExport(
