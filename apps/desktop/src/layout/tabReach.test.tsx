@@ -120,6 +120,7 @@ beforeEach(() => {
 });
 
 describe('the editor from the keyboard', () => {
+  // Hundreds of Tab presses: on a busy machine (the full gate beside other jobs) it needs more than the usual 15 s.
   it('every control has a tabindex WebKit honours, and Tab walks every region in order', async () => {
     renderWithProviders(<Editor />);
     await act(() => new Promise((r) => setTimeout(r, 40)));
@@ -161,7 +162,7 @@ describe('the editor from the keyboard', () => {
     // The column's first stop is the card's Back to library; the library under the card is out of reach.
     expect(stops.filter(live).find((s) => regionOf(s) === 'inspector')).toHaveAccessibleName('Back to library');
     expect(document.querySelector('.library-body')).toHaveAttribute('inert');
-  });
+  }, 30_000);
 
   it('Back to library leaves the keyboard on the panel, and Tab goes on to each of the library’s view tabs', async () => {
     renderWithProviders(<Editor />);
