@@ -61,6 +61,11 @@ pub(crate) enum Unfounded {
     Empty(Us),
 }
 
+/// Whether `t` lies in one of `cut`'s ranges (each from its start, up to but not at its end).
+pub(crate) fn in_cut(cut: &[RangeUs], t: Us) -> bool {
+    cut.iter().any(|r| r.start <= t && t < r.end)
+}
+
 /// Every edge the model may name in one message's snapshot.
 pub(crate) struct Evidence {
     /// Sorted by time, then by `Source`.
@@ -161,10 +166,10 @@ impl Evidence {
     }
 
     /// The nearest of what the person pointed at (the selection's ends, a time they typed, the playhead) within
-    /// `TOLERANCE_US` of `t`.
-    fn pointed(&self, t: Us) -> Option<Us> {
+    /// `TOLERANCE_US` of `t`, outside `cut`.
+    fn pointed(&self, t: Us, cut: &[RangeUs]) -> Option<Us> {
         (self.near(t))
-            .filter(|(_, source)| *source <= Source::Playhead)
+            .filter(|&&(at, source)| source <= Source::Playhead && !in_cut(cut, at))
             .min_by_key(|&&(at, source)| (at.abs_diff(t), source))
             .map(|&(at, _)| at)
     }
@@ -178,18 +183,20 @@ impl Evidence {
             .take_while(|&&at| at <= t.saturating_add(TOLERANCE_US))
             .min_by_key(|&&at| at.abs_diff(t))
             .copied();
-        (self.pointed(t))
+        (self.pointed(t, &[]))
             .or(change)
             .or_else(|| self.snap(t).map(|(at, _)| at))
     }
 
     /// Where something placed at `t` lands: what the person pointed at (`pointed`), else the nearest word start or cut
-    /// within `PLACE_US` (the earlier on a tie), else `t` as given.
-    pub(crate) fn place(&self, t: Us) -> Us {
-        let pointed = self.pointed(t);
+    /// within `PLACE_US` (the earlier on a tie), else `t` as given; neither in `cut`, the footage the answer's removals
+    /// take out (where a time left as given may still lie).
+    pub(crate) fn place(&self, t: Us, cut: &[RangeUs]) -> Us {
+        let pointed = self.pointed(t, cut);
         let from = (self.starts).partition_point(|&at| at < t.saturating_sub(PLACE_US));
         let start = (self.starts[from..].iter())
             .take_while(|&&at| at <= t.saturating_add(PLACE_US))
+            .filter(|&&at| !in_cut(cut, at))
             .min_by_key(|&&at| at.abs_diff(t))
             .copied();
         pointed.or(start).unwrap_or(t)
