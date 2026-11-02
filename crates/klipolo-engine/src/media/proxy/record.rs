@@ -37,8 +37,8 @@ pub struct CopyRecord {
     pub width: u32,
     pub height: u32,
     pub frames: u64,
-    /// Made with the source's frames numbered from its video stream's start, as every decoder numbers them now
-    /// (false in an older record: such a copy of a source whose picture starts late shows its frames late).
+    /// Made with the source's frames numbered from its video stream's start, as every decoder numbers them (false in an
+    /// older record: such a copy of a source whose picture starts late shows its frames late).
     #[serde(default)]
     pub from_stream_start: bool,
 }
