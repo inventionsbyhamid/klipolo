@@ -161,7 +161,7 @@ mod tests {
             21,
             "0.35 s: 30 frames would be 93 MiB"
         );
-        assert_eq!(pool_frames(2560, 1600, 60), 10, "the test Mac's display");
+        assert_eq!(pool_frames(2560, 1600, 60), 10, "the test Mac's native size");
         assert_eq!(pool_frames(1920, 1080, 30), 15, "half a second fits");
         assert_eq!(pool_frames(1280, 720, 30), 15);
         assert_eq!(pool_frames(3840, 2160, 60), 5);

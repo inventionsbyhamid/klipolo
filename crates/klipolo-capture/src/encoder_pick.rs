@@ -1,6 +1,6 @@
 //! A video pipe's encoder at start: the take's `VideoSpec::encoders` are tried in order, so an
 //! encoder that won't start (its id gone, or HEVC refused after the probe cached it, as on an Intel Mac with a T2)
-//! leaves the take without video while another one works. Only an encoder's own refusal moves on to the next; a
+//! never leaves the take without video while another one works. Only an encoder's own refusal moves on to the next; a
 //! permission, a missing display or the OS's error ends the start as it is. Recording on any but the first, the pipe
 //! sends the mild `capture.note.encoderFallback` once.
 
