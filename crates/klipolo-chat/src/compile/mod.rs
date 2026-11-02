@@ -58,6 +58,7 @@ mod layer;
 mod map;
 mod media;
 mod motion;
+mod quote;
 mod recorded;
 mod removals;
 mod sources;
@@ -66,6 +67,7 @@ mod text_motion;
 mod trim;
 mod zooms;
 
+use std::cell::OnceCell;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -77,9 +79,10 @@ use klipolo_model::media::music::refit_music_ops;
 use klipolo_model::motion::Motion;
 use klipolo_model::ops::{EffectTarget, Op, Origin, Transaction};
 use klipolo_model::project::{Asset, AssetKind, FormatKind, Recording};
+use klipolo_model::query::main_track_duration;
 use klipolo_model::risk::{Review, removals};
 use klipolo_model::speech::{Speech, run_spans};
-use klipolo_model::time::{RangeUs, Us};
+use klipolo_model::time::{RangeUs, Us, kept_parts, merge_ranges};
 use klipolo_model::timeline::{Attach, ClipSource};
 use klipolo_model::{ModelError, Project, finish_parts};
 
@@ -93,6 +96,7 @@ use crate::tools::{
 pub(crate) use cameras::every_camera;
 pub use clips::{NO_ROOM, NO_ROOM_ANYWHERE, NO_TRANSITIONS, REVERSING};
 use map::Map;
+use media::At;
 pub use media::{sticker_ops, sticker_placement};
 pub(crate) use recorded::recording_name;
 pub(crate) use sources::{OwnTrack, kind_of};
@@ -337,14 +341,14 @@ pub enum Audience {
 
 /// Compiles `calls` against `project`, the snapshot `inputs` come from.
 pub fn compile(project: &Project, inputs: &Inputs, calls: &[ToolCall]) -> Compiled {
-    Compiler::new(project, inputs, false).run(calls)
+    Compiler::new(project, inputs, false, calls).run(calls)
 }
 
 /// Compiles another app's `calls` (over MCP) as `compile` does chat's, but for the words they put on screen: an app
 /// acts for its own person, so `addText`'s words and `makeTitleCard`'s title are taken as it gave them, cleaned and
 /// within what a text layer holds (`media::apps_words`), where chat's model may only quote the person.
 pub fn compile_for_app(project: &Project, inputs: &Inputs, calls: &[ToolCall]) -> Compiled {
-    Compiler::new(project, inputs, true).run(calls)
+    Compiler::new(project, inputs, true, calls).run(calls)
 }
 
 /// One call's ops and its undo label.
@@ -582,11 +586,20 @@ struct Compiler<'a> {
     map: Map<'a>,
     /// The calls are another app's (`compile_for_app`), not chat's model's.
     by_app: bool,
+    /// The snapshot's words, for the moments named by what is said there (`atWords`): made when a call first quotes.
+    said: OnceCell<quote::Said>,
+    /// The snapshot footage the answer's removals take out (`cut_by`): a quote said there and elsewhere is elsewhere.
+    cut: Vec<RangeUs>,
 }
 
 impl<'a> Compiler<'a> {
-    fn new(snapshot: &'a Project, inputs: &'a Inputs, by_app: bool) -> Compiler<'a> {
-        Compiler {
+    fn new(
+        snapshot: &'a Project,
+        inputs: &'a Inputs,
+        by_app: bool,
+        calls: &[ToolCall],
+    ) -> Compiler<'a> {
+        let mut c = Compiler {
             snapshot,
             inputs,
             evidence: Evidence::new(
@@ -598,7 +611,45 @@ impl<'a> Compiler<'a> {
             ),
             map: Map::new(snapshot),
             by_app,
+            said: OnceCell::new(),
+            cut: Vec::new(),
+        };
+        c.cut = c.cut_by(calls);
+        c
+    }
+
+    /// The snapshot's words, as Transcript shows them, for quotes.
+    fn said(&self) -> &quote::Said {
+        self.said.get_or_init(|| {
+            quote::Said::new(self.snapshot, &self.inputs.speech, self.evidence.spoken())
+        })
+    }
+
+    /// The snapshot footage `calls` take out: outside what the last `keepOnly` keeps, and each `cutRange`, as the
+    /// evidence snaps them (a range that stands on nothing takes nothing out). Merged.
+    fn cut_by(&self, calls: &[ToolCall]) -> Vec<RangeUs> {
+        let duration = main_track_duration(&self.snapshot.timeline.main);
+        let mut cut = Vec::new();
+        let keep = (calls.iter()).rev().find_map(|call| match call {
+            ToolCall::KeepOnly { ranges } => Some(ranges),
+            _ => None,
+        });
+        if let Some(ranges) = keep {
+            let kept: Vec<RangeUs> = (ranges.iter())
+                .filter_map(|&r| self.evidence.range(r).ok())
+                .collect();
+            if !kept.is_empty() {
+                cut.extend(kept_parts(0, duration, &merge_ranges(&kept, duration)));
+            }
         }
+        for call in calls {
+            if let ToolCall::CutRange { range } = call
+                && let Ok(r) = self.evidence.range(*range)
+            {
+                cut.push(r);
+            }
+        }
+        merge_ranges(&cut, duration)
     }
 }
 
@@ -995,12 +1046,13 @@ impl Compiler<'_> {
                 prompt,
                 position,
                 at_us,
+                at_words,
                 duration_us,
             } = call
             else {
                 continue;
             };
-            let times = (*at_us, *duration_us);
+            let times = (At::of(*at_us, at_words.as_deref()), *duration_us);
             match media::make_sticker(self, &with_additions, prompt, *position, times) {
                 Ok(mut job) => {
                     if let (Job::MakeSticker(sticker), Some(a)) = (&mut job, animated.remove(&i)) {
@@ -1372,11 +1424,16 @@ impl Compiler<'_> {
                 duck,
                 at_us,
             } => media::add_music(self, work, file, (*volume, *duck), *at_us),
-            ToolCall::AddSound { name, at_us } => media::add_sound(self, work, name, at_us),
+            ToolCall::AddSound {
+                name,
+                at_us,
+                at_words,
+            } => media::add_sound(self, work, name, (at_words, at_us)),
             ToolCall::AddText {
                 text,
                 preset,
                 at_us,
+                at_words,
                 duration_us,
                 animation,
                 font,
@@ -1385,7 +1442,7 @@ impl Compiler<'_> {
                 work,
                 text,
                 *preset,
-                (*at_us, *duration_us),
+                (At::of(*at_us, at_words.as_deref()), *duration_us),
                 *animation,
                 font.as_deref(),
             ),
@@ -1394,8 +1451,15 @@ impl Compiler<'_> {
                 size,
                 position,
                 at_us,
+                at_words,
                 duration_us,
-            } => media::add_image(self, work, file, (*size, *position), (*at_us, *duration_us)),
+            } => media::add_image(
+                self,
+                work,
+                file,
+                (*size, *position),
+                (At::of(*at_us, at_words.as_deref()), *duration_us),
+            ),
             ToolCall::SetClip {
                 clip,
                 speed,

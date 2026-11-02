@@ -210,6 +210,46 @@ impl Args {
         Ok(out)
     }
 
+    /// A list of timeline times as `times` reads them, or none when it is null, left out or empty.
+    pub(super) fn nullable_times(&mut self, key: &str) -> Result<Vec<Us>, ToolError> {
+        match self.map.get(key) {
+            None | Some(Value::Null) => {
+                self.map.remove(key);
+                Ok(Vec::new())
+            }
+            Some(Value::Array(items)) if items.is_empty() => {
+                self.map.remove(key);
+                Ok(Vec::new())
+            }
+            Some(_) => self.times(key),
+        }
+    }
+
+    /// A list of texts, each as `text` reads it and named by its place (`atWords[1]`) when it is wrong; none when it is
+    /// null or left out.
+    pub(super) fn nullable_texts(&mut self, key: &str) -> Result<Vec<String>, ToolError> {
+        let value = match self.map.remove(key) {
+            None | Some(Value::Null) => return Ok(Vec::new()),
+            Some(value) => value,
+        };
+        let Value::Array(items) = value else {
+            return Err(self.error(
+                key,
+                Problem::WrongType {
+                    expected: "a list",
+                    got: kind(&value),
+                },
+            ));
+        };
+        let mut out = Vec::with_capacity(items.len());
+        for (i, item) in items.into_iter().enumerate() {
+            let at = format!("{key}[{i}]");
+            self.map.insert(at.clone(), item);
+            out.push(self.text(&at)?);
+        }
+        Ok(out)
+    }
+
     /// `removeSilences`' pause length: null, or seconds within `PAUSE_SECS`.
     pub(super) fn nullable_pause(&mut self, key: &str) -> Result<Option<Us>, ToolError> {
         let Some(value) = self.take_nullable(key) else {

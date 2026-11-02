@@ -226,32 +226,41 @@ pub enum ToolCall {
         duck: Option<bool>,
         at_us: Option<Us>,
     },
-    /// Play the library's sound `name` at each of `at_us` (at least one).
-    AddSound { name: String, at_us: Vec<Us> },
-    /// Show `text` in text preset `preset` from `at_us` (None: the playhead) for `duration_us` (None: the default),
-    /// coming in as `animation` says (None: a fade).
+    /// Play the library's sound `name` where each of `at_words` is said and at each of `at_us` (at least one of
+    /// either).
+    AddSound {
+        name: String,
+        at_us: Vec<Us>,
+        at_words: Vec<String>,
+    },
+    /// Show `text` in text preset `preset` from where `at_words` are said, else from `at_us` (None: the playhead), for
+    /// `duration_us` (None: the default), coming in as `animation` says (None: a fade).
     AddText {
         text: String,
         preset: TextPreset,
         at_us: Option<Us>,
+        /// A few words in a row as Transcript shows them: the layer starts where the first is said.
+        at_words: Option<String>,
         duration_us: Option<Us>,
         animation: Option<Entrance>,
         /// A font by name; None: the preset's.
         font: Option<String>,
     },
-    /// Show the library's picture `file`; None for what the person left unsaid.
+    /// Show the library's picture `file`; None for what the person left unsaid. `at_words` as `AddText`'s.
     AddImage {
         file: String,
         size: Option<PictureSize>,
         position: Option<Position>,
         at_us: Option<Us>,
+        at_words: Option<String>,
         duration_us: Option<Us>,
     },
-    /// Have a sticker of `prompt` drawn, to place once it exists.
+    /// Have a sticker of `prompt` drawn, to place once it exists. `at_words` as `AddText`'s.
     MakeSticker {
         prompt: String,
         position: Option<Position>,
         at_us: Option<Us>,
+        at_words: Option<String>,
         duration_us: Option<Us>,
     },
     /// Show `title` in the full-frame title card template, over a background of `prompt` drawn for it.
@@ -466,8 +475,9 @@ impl ToolCall {
 
     /// Whether the call names a timeline time or a clip ref, which hold only while the main track's clips stay where
     /// the context put them (`context::timeline_key`): a range, a split, a trim, a moment, a clip tool's ref (not
-    /// `all`), a media tool's start when it gives one (None is the playhead), or a recording tool's clips when it names
-    /// them (None is every clip). Every tool is listed, so a new one must say.
+    /// `all`), a media tool's start when it gives one in seconds (None is the playhead; words said there hold wherever
+    /// they play), or a recording tool's clips when it names them (None is every clip). Every tool is listed, so a new
+    /// one must say.
     pub fn names_timeline(&self) -> bool {
         match self {
             ToolCall::CutRange { .. }
@@ -475,8 +485,8 @@ impl ToolCall {
             | ToolCall::TrimClip { .. }
             | ToolCall::SplitAt { .. }
             | ToolCall::FindMoments { .. }
-            | ToolCall::ReverseClip { .. }
-            | ToolCall::AddSound { .. } => true,
+            | ToolCall::ReverseClip { .. } => true,
+            ToolCall::AddSound { at_us, .. } => !at_us.is_empty(),
             ToolCall::SetClip { clip: target, .. }
             | ToolCall::SetTransition { after: target, .. } => *target != ClipRef::All,
             ToolCall::AddMusic { at_us, .. }

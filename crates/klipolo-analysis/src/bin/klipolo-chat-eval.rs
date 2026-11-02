@@ -892,13 +892,20 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
             duck,
             at_us,
         } => json!({"file": file, "volume": volume, "duck": duck, "atSec": at_us.map(s)}),
-        ToolCall::AddSound { name, at_us } => {
-            json!({"name": name, "atSec": at_us.iter().map(|&t| s(t)).collect::<Vec<_>>()})
-        }
+        ToolCall::AddSound {
+            name,
+            at_us,
+            at_words,
+        } => json!({
+            "name": name,
+            "atWords": (!at_words.is_empty()).then_some(at_words),
+            "atSec": (!at_us.is_empty()).then(|| at_us.iter().map(|&t| s(t)).collect::<Vec<_>>()),
+        }),
         ToolCall::AddText {
             text,
             preset,
             at_us,
+            at_words,
             duration_us,
             animation,
             font,
@@ -906,6 +913,7 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
             "text": text,
             "preset": preset.key(),
             "atSec": at_us.map(s),
+            "atWords": at_words,
             "durationSec": duration_us.map(s),
             "animation": animation.map(|x| x.key()),
             "font": font,
@@ -931,23 +939,27 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
             size,
             position,
             at_us,
+            at_words,
             duration_us,
         } => json!({
             "file": file,
             "size": size.map(|x| x.key()),
             "position": position.map(|x| x.key()),
             "atSec": at_us.map(s),
+            "atWords": at_words,
             "durationSec": duration_us.map(s),
         }),
         ToolCall::MakeSticker {
             prompt,
             position,
             at_us,
+            at_words,
             duration_us,
         } => json!({
             "prompt": prompt,
             "position": position.map(|x| x.key()),
             "atSec": at_us.map(s),
+            "atWords": at_words,
             "durationSec": duration_us.map(s),
         }),
         ToolCall::MakeTitleCard {
