@@ -628,8 +628,9 @@ impl<'a> Compiler<'a> {
         })
     }
 
-    /// The snapshot footage `calls` take out: outside what the last `keepOnly` keeps, and each `cutRange`, as the
-    /// evidence snaps them (a range that stands on nothing takes nothing out). Merged.
+    /// The snapshot footage `calls` take out: outside what the last `keepOnly` keeps, each `cutRange`, and what each
+    /// trim that shortens a clip takes, as the evidence snaps them. A call refused takes nothing out: a `keepOnly`
+    /// counts only when each of its ranges stands, as it is refused otherwise. Merged.
     fn cut_by(&self, calls: &[ToolCall]) -> Vec<RangeUs> {
         let duration = main_track_duration(&self.snapshot.timeline.main);
         let mut cut = Vec::new();
@@ -637,19 +638,22 @@ impl<'a> Compiler<'a> {
             ToolCall::KeepOnly { ranges } => Some(ranges),
             _ => None,
         });
-        if let Some(ranges) = keep {
-            let kept: Vec<RangeUs> = (ranges.iter())
-                .filter_map(|&r| self.evidence.range(r).ok())
-                .collect();
-            if !kept.is_empty() {
-                cut.extend(kept_parts(0, duration, &merge_ranges(&kept, duration)));
-            }
+        let kept: Option<Vec<RangeUs>> = keep.and_then(|ranges| {
+            (ranges.iter())
+                .map(|&r| self.evidence.range(r).ok())
+                .collect()
+        });
+        if let Some(kept) = kept.filter(|k| !k.is_empty()) {
+            cut.extend(kept_parts(0, duration, &merge_ranges(&kept, duration)));
         }
         for call in calls {
-            if let ToolCall::CutRange { range } = call
-                && let Ok(r) = self.evidence.range(*range)
-            {
-                cut.push(r);
+            match call {
+                ToolCall::CutRange { range } => cut.extend(self.evidence.range(*range).ok()),
+                ToolCall::TrimClip { clip, edge, to_us } => {
+                    let shorter = trim::plan(self, clip, *edge, *to_us).ok();
+                    cut.extend(shorter.and_then(|t| t.removed));
+                }
+                _ => {}
             }
         }
         merge_ranges(&cut, duration)
@@ -1055,7 +1059,7 @@ impl Compiler<'_> {
             else {
                 continue;
             };
-            let times = (At::of(*at_us, at_words.as_deref()), *duration_us);
+            let times = (At::of(at_us, at_words.as_deref()), *duration_us);
             match media::make_sticker(self, &with_additions, prompt, *position, times) {
                 Ok(mut job) => {
                     if let (Job::MakeSticker(sticker), Some(a)) = (&mut job, animated.remove(&i)) {
@@ -1445,7 +1449,7 @@ impl Compiler<'_> {
                 work,
                 text,
                 *preset,
-                (At::of(*at_us, at_words.as_deref()), *duration_us),
+                (At::of(at_us, at_words.as_deref()), *duration_us),
                 *animation,
                 font.as_deref(),
             ),
@@ -1461,7 +1465,7 @@ impl Compiler<'_> {
                 work,
                 file,
                 (*size, *position),
-                (At::of(*at_us, at_words.as_deref()), *duration_us),
+                (At::of(at_us, at_words.as_deref()), *duration_us),
             ),
             ToolCall::SetClip {
                 clip,
