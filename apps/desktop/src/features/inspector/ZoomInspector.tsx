@@ -51,7 +51,11 @@ export function ZoomInspector({ item, content }: { item: Item; content: ZoomCont
   const op = (next: ZoomContent) => [itemOp(item, { content: next })];
   /** The content as the project has it when a change goes in, so a quick second change keeps the first. */
   const now = () => contentNow(item.id, content);
-  const rectOf = (c: ZoomContent) => (c.target.type === 'rect' ? c.target.rect : null);
+  /** The area an Area zoom, or a slow push-in chat made, goes to. */
+  const rectOf = (c: ZoomContent) => (c.target.type === 'rect' || c.target.type === 'push' ? c.target.rect : null);
+  /** `c`'s target with its area moved to `rect`: a push stays a push, with its ramp. */
+  const withRect = (c: ZoomContent, rect: BoxN): ZoomTarget =>
+    c.target.type === 'push' ? { ...c.target, rect } : { type: 'rect', rect };
   const rect = rectOf(content);
   /** The smart target this zoom had last (chat may have narrowed what it plans from): Smart puts it back. */
   const lastSmart = useRef<ZoomTarget>({ type: 'auto' });
@@ -60,14 +64,14 @@ export function ZoomInspector({ item, content }: { item: Item; content: ZoomCont
   /** The area kept round its centre at the new scale. */
   const scaled = (c: ZoomContent, scale: number): ZoomTarget => {
     const area = rectOf(c);
-    return area ? { type: 'rect', rect: zoomArea(scale, ...centre(area)) } : c.target;
+    return area ? withRect(c, zoomArea(scale, ...centre(area))) : c.target;
   };
   const along = (axis: 'x' | 'y', value: number): ZoomContent => {
     const c = now();
     const area = rectOf(c);
     if (!area) return c;
     const side = axis === 'x' ? area.w : area.h;
-    return { ...c, target: { type: 'rect', rect: { ...area, [axis]: value * Math.max(0, 1 - side) } } };
+    return { ...c, target: withRect(c, { ...area, [axis]: value * Math.max(0, 1 - side) }) };
   };
   const zoom = t({ id: 'zoom.scale', message: 'Zoom', comment: 'How far a zoom layer zooms in' });
   const target = t({ id: 'zoom.target', message: 'Target', comment: 'Where a zoom layer zooms to' });

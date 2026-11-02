@@ -99,6 +99,18 @@ describe("a zoom layer's card", () => {
     });
   });
 
+  it("a slow push-in chat made shows its area, which moves and stays a push with its ramp", async () => {
+    withZoom({ type: 'push', rect: { x: 0.25, y: 0.25, w: 0.5, h: 0.5 }, rampUs: 5_000_000 });
+    renderWithProviders(<Inspector format="landscape" />);
+    expect(screen.getByRole('slider', { name: 'Area across' })).toHaveAttribute('aria-valuetext', '50%');
+    releaseSlider('Area across', 100);
+    await act(async () => undefined);
+    expect(lastTx()).toEqual({
+      label: 'zoom.undo',
+      ops: [zoomOp({ scale: 2, target: { type: 'push', rect: { x: 0.5, y: 0.25, w: 0.5, h: 0.5 }, rampUs: 5_000_000 } })],
+    });
+  });
+
   it('a smart zoom chat made from some kinds of action alone says so', () => {
     withZoom({ type: 'auto', using: ['clicks', 'typing'] });
     renderWithProviders(<Inspector format="landscape" />);
