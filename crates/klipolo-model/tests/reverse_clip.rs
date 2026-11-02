@@ -3,6 +3,7 @@
 mod common;
 use common::*;
 use klipolo_model::history::Document;
+use klipolo_model::motion::Key;
 use klipolo_model::ops::{op_risk, Op, OpRisk};
 use klipolo_model::project::{Asset, AssetKind, Project};
 use klipolo_model::query::anchor_at;
@@ -157,6 +158,39 @@ fn playing_forward_never_starts_before_the_file() {
     let p = apply_ops(&p, &[reverse("b", None)]).unwrap();
     let b = &p.timeline.main[1];
     assert_eq!((b.source_in_us, b.source_out_us), (0, secs(10.0)));
+}
+
+/// A reversed clip trimmed out into its copy's extra length, with a volume key and a fade out at its end: played
+/// forward it is shorter, and its fade and keys fit what is left instead of the turn being refused.
+#[test]
+fn playing_forward_fits_fades_and_volume_keys_to_the_shorter_clip() {
+    let mut copy = copy_asset();
+    copy.duration_us = secs(10.5);
+    let p = apply_ops(&fixture(), &[Op::AddAssets { assets: vec![copy] }]).unwrap();
+    let mut p = apply_ops(&p, &[reverse("b", Some((0.0, 10.0)))]).unwrap();
+    let b = &mut p.timeline.main[1];
+    b.source_out_us = secs(10.5);
+    b.fade_out_us = secs(10.5);
+    b.volume_keys = vec![
+        Key {
+            t_us: secs(2.0),
+            v: 1.0,
+            ease: None,
+        },
+        Key {
+            t_us: secs(10.5),
+            v: 0.0,
+            ease: None,
+        },
+    ];
+    // As it is, it is a clip the model takes.
+    let p = apply_ops(&p, &[]).unwrap();
+    let p = apply_ops(&p, &[reverse("b", None)]).unwrap();
+    let b = &p.timeline.main[1];
+    assert_eq!((b.source_in_us, b.source_out_us), (0, secs(10.0)));
+    assert_eq!((b.fade_in_us, b.fade_out_us), (0, secs(10.0)));
+    assert_eq!(b.volume_keys.first().map(|k| k.t_us), Some(secs(2.0)));
+    assert!(b.volume_keys.iter().all(|k| k.t_us <= secs(10.0)));
 }
 
 /// A clip whose sound plays in its own layer (Separate sound) is not reversed: the layer would keep playing forward.
