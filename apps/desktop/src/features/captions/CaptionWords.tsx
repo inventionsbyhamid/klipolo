@@ -1,5 +1,16 @@
 import { useLingui } from '@lingui/react/macro';
-import { memo, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import {
+  memo,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import type { FormatKind } from '../../bindings/FormatKind';
 import type { PageView } from '../../bindings/PageView';
 import type { WordView } from '../../bindings/WordView';
@@ -12,6 +23,7 @@ import { offerAgain, useAnalysedClips, useAnalysis, useTakes, whyNoWords } from 
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { pageAt, useAllCaptionPages } from './useCaptionPages';
+import { CHUNK, useLineWindow } from './useLineWindow';
 import { lookedNow, usePressQueue } from './usePressQueue';
 import { fileWordKey, useWordSelection, wordKey, type Listed } from './useWordSelection';
 import { WordColor } from './WordColor';
@@ -265,12 +277,23 @@ export function CaptionWords({ format }: { format: FormatKind }) {
     press({ hidden: undefined });
   }, [showing, words, press]);
 
+  /** A word the keys moved to, brought into view once its line is drawn (a long list draws the lines near the view). */
+  const reveal = useRef<string | null>(null);
   /** Makes `l` the active word and brings it into view. */
   const move = (l: Listed | undefined) => {
     if (!l) return;
     pick(l, false);
-    document.getElementById(chipId(idPrefix, l.key))?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    const chip = document.getElementById(chipId(idPrefix, l.key));
+    reveal.current = chip ? null : l.key;
+    chip?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   };
+  useLayoutEffect(() => {
+    if (reveal.current === null) return;
+    const chip = document.getElementById(chipId(idPrefix, reveal.current));
+    if (!chip) return;
+    reveal.current = null;
+    chip.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  });
   /** The first word of the page `by` rows from the active word's. */
   const rowStep = (by: number) => {
     const row = (focus === undefined ? (list[0]?.row ?? 0) : list[focus].row) + by;
@@ -314,6 +337,22 @@ export function CaptionWords({ format }: { format: FormatKind }) {
     const page = pageAt(view, s.playheadUs);
     return page && view ? view.pages.indexOf(page) : -1;
   });
+  // The lines shown (every page, or those a search finds), drawn near the view only: a 2-hour talk has thousands.
+  const rows = useMemo(
+    () => (shownRows ? pages.flatMap((_, i) => (shownRows.has(i) ? [i] : [])) : null),
+    [pages, shownRows],
+  );
+  const lineCount = rows ? rows.length : pages.length;
+  const rowOf = (k: number) => (rows ? rows[k] : k);
+  const placeOf = (row: number) => (row < 0 ? -1 : rows ? rows.indexOf(row) : row);
+  const lineWindow = useLineWindow(
+    listRef,
+    lineCount,
+    [placeOf(sel?.focusRow ?? -1), placeOf(nowRow), placeOf(editRow)],
+    (k) => document.getElementById(`${idPrefix}-line-${rowOf(k)}`),
+    `${q}:${lineCount}`,
+  );
+
   /** The list follows the playhead until the person scrolls it, and again once playback starts or a word is clicked. */
   const following = useRef(true);
   useEffect(() => {
@@ -357,6 +396,44 @@ export function CaptionWords({ format }: { format: FormatKind }) {
   const active = sel ? sel.focus : null;
   /** The active word's chip is on screen: a search may have filtered its line out. */
   const activeShown = active !== null && (!shownRows || (sel !== null && shownRows.has(sel.focusRow)));
+
+  /** The lines in the window, with a gap the height of each run of lines not drawn. */
+  const drawLines = () => {
+    const out: ReactNode[] = [];
+    let gap = 0;
+    const flush = (key: string) => {
+      if (gap > 0) out.push(<div key={key} className="lines-gap" style={{ height: gap }} aria-hidden />);
+      gap = 0;
+    };
+    for (let c = 0; c * CHUNK < lineCount; c++) {
+      if (!lineWindow.drawn.has(c)) {
+        gap += lineWindow.heightOf(c);
+        continue;
+      }
+      flush(`gap-${c}`);
+      for (let k = c * CHUNK; k < Math.min(lineCount, (c + 1) * CHUNK); k++) {
+        const i = rowOf(k);
+        const page = pages[i];
+        out.push(
+          <Line
+            key={page.index}
+            page={page}
+            row={i}
+            now={i === nowRow}
+            idPrefix={idPrefix}
+            selected={byRow.get(i)?.join('\n') ?? null}
+            active={active && sel?.focusRow === i ? active : null}
+            edit={i === editRow && edit && editKey ? { ...edit, key: editKey } : null}
+            busy={i === editRow && busy}
+            editor={editor}
+            onPress={onPress}
+          />,
+        );
+      }
+    }
+    flush('gap-end');
+    return out;
+  };
 
   let hint: string | null = null;
   if (!enabled)
@@ -432,23 +509,7 @@ export function CaptionWords({ format }: { format: FormatKind }) {
         onKeyDown={onKey}
         className="word-lines"
       >
-        {pages.map((page, i) =>
-          shownRows && !shownRows.has(i) ? null : (
-            <Line
-              key={page.index}
-              page={page}
-              row={i}
-              now={i === nowRow}
-              idPrefix={idPrefix}
-              selected={byRow.get(i)?.join('\n') ?? null}
-              active={active && sel?.focusRow === i ? active : null}
-              edit={i === editRow && edit && editKey ? { ...edit, key: editKey } : null}
-              busy={i === editRow && busy}
-              editor={editor}
-              onPress={onPress}
-            />
-          ),
-        )}
+        {drawLines()}
       </div>
     </section>
   );

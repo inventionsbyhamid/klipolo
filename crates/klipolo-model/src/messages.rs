@@ -221,7 +221,7 @@ pub const MESSAGES: Messages = &[
     ("model.image.notImage", "That file isn't a picture."),
     ("model.layer.zoom", "Zoom must be between 1× and 5×."),
     ("model.layer.zoomArea", "The zoom area is invalid."),
-    ("model.layer.zoomRamp", "A slow zoom must reach its size within the zoom."),
+    ("model.layer.zoomRamp", "A slow zoom needs a length to reach its size over."),
     // params.rs: `label` is the setting's label (English). Also sent, outside the sentence: `contribution` and `key`,
     // so the UI words the label in the language shown.
     ("model.param.range", "{label} must be between {min} and {max}."),

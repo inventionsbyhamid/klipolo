@@ -26,7 +26,14 @@ pub const BUILTIN_PLUGIN: &str = "klipolo.builtin";
 /// `pack://<plugin>@<version>/<path>`: a file inside an installed pack.
 pub const PACK_SCHEME: &str = "pack://";
 /// Project features (`Project::requires`) this build reads and writes without losing anything.
-pub const FEATURES: &[&str] = &["effects@1", "transitions@1", "scenes@1", "freeze@1"];
+pub const FEATURES: &[&str] = &[
+    "effects@1",
+    "transitions@1",
+    "scenes@1",
+    "freeze@1",
+    "captions-look@1",
+    "push@1",
+];
 
 /// `<plugin>/<contribution>`.
 #[derive(

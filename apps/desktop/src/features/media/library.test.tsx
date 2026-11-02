@@ -5,6 +5,7 @@ import type { Asset } from '../../bindings/Asset';
 import type { ItemContent } from '../../bindings/ItemContent';
 import type { PackItem } from '../../bindings/PackItem';
 import type { SnapshotPatch } from '../../bindings/SnapshotPatch';
+import { renderCounts } from '../../lib/renderCount';
 import { fixturePatch, fixtureSnapshot, revisionPatch } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
 
@@ -636,5 +637,41 @@ describe('the Library', () => {
     await userEvent.type(search, 'boom');
     fireEvent.keyDown(search, { key: 'Escape', isComposing: true });
     expect(search).toHaveValue('boom');
+  });
+});
+
+describe('a library of hundreds of clips', () => {
+  it('an edit draws again only the rows it changes', () => {
+    const snapshot = useProject.getState().snapshot!;
+    const broll = snapshot.project.assets.find((a) => a.id === 'broll')!;
+    for (let i = 0; i < 200; i++) snapshot.project.assets.push({ ...broll, id: `take${i}`, name: `take${i}.mp4` });
+    // The first rows at once, the rest a few a frame.
+    vi.useFakeTimers();
+    try {
+      renderWithProviders(<Library />);
+      expect(screen.queryByText('take199.mp4')).toBeNull();
+      for (let frame = 0; frame < 20 && !screen.queryByText('take199.mp4'); frame++)
+        act(() => vi.advanceTimersByTime(20));
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(screen.getByText('take199.mp4')).toBeInTheDocument();
+    renderCounts.clear();
+    // The title moves: no row shows anything else.
+    act(() => {
+      const s = useProject.getState().snapshot!;
+      const [overlay, ...rest] = s.project.timeline.tracks;
+      const title = { ...overlay.items[0], startUs: overlay.items[0].startUs + 500_000 };
+      const tracks = [{ ...overlay, items: [title] }, ...rest];
+      useProject.setState({ snapshot: { ...s, project: { ...s.project, timeline: { ...s.project.timeline, tracks } } } });
+    });
+    expect([...renderCounts.keys()].filter((k) => k.startsWith('row:'))).toEqual([]);
+    // Take 7 goes on the timeline: its row alone says so.
+    act(() => {
+      const s = useProject.getState().snapshot!;
+      const main = [...s.project.timeline.main, { ...s.project.timeline.main[1], id: 'c7', source: { type: 'asset' as const, id: 'take7' } }];
+      useProject.setState({ snapshot: { ...s, project: { ...s.project, timeline: { ...s.project.timeline, main } } } });
+    });
+    expect([...renderCounts.keys()].filter((k) => k.startsWith('row:'))).toEqual(['row:take7']);
   });
 });

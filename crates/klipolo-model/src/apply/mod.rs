@@ -25,10 +25,12 @@ use crate::error::{invalid, Result};
 use crate::ids::Id;
 use crate::messages::code;
 use crate::ops::Op;
-use crate::project::{Asset, ColorLut, Project, Recording};
+use crate::project::{Asset, ColorLut, Project, Recording, CAPTIONS_LOOK_FEATURE};
 use crate::query::{fits, locate_one, MainIndex};
 use crate::time::{Us, MAX_TIME_US, OVERLAP_TOLERANCE_US};
-use crate::timeline::{Clip, Item, Timeline, Track, TrackKind};
+use crate::timeline::{
+    Clip, Item, ItemContent, Timeline, Track, TrackKind, ZoomTarget, PUSH_FEATURE,
+};
 use crate::validate::validate;
 
 /// Batch applications on this thread (feature `count-applies`, tests only): each [`apply_part`], which every
@@ -177,7 +179,37 @@ pub fn finish_parts(next: &mut Project) -> Result<()> {
     crate::transitions::normalize(next);
     generator_pieces::sync_scene_requirement(next);
     main_ops::sync_freeze_requirement(next);
+    sync_look_and_push_requirements(next);
     validate(next)
+}
+
+/// After every applied batch: `requires` holds [`CAPTIONS_LOOK_FEATURE`] exactly while the person's caption size, words'
+/// colour or case is set, and [`PUSH_FEATURE`] exactly while a zoom layer is a push, so a build without them opens the
+/// project read-only rather than draw the style's own look and drop it on save, or fail to read a push. O(layers);
+/// allocates only when it adds a requirement.
+fn sync_look_and_push_requirements(p: &mut Project) {
+    let c = &p.captions;
+    let looked = c.size.is_some() || c.color.is_some() || c.upper.is_some();
+    keep_requirement(p, CAPTIONS_LOOK_FEATURE, looked);
+    let pushed = (p.timeline.tracks.iter()).flat_map(|t| &t.items).any(|i| {
+        matches!(
+            i.content,
+            ItemContent::Zoom {
+                target: ZoomTarget::Push { .. },
+                ..
+            }
+        )
+    });
+    keep_requirement(p, PUSH_FEATURE, pushed);
+}
+
+/// `requires` holds `feature` exactly while `needed`.
+fn keep_requirement(p: &mut Project, feature: &str, needed: bool) {
+    if !needed {
+        p.requires.remove(feature);
+    } else if !p.requires.contains(feature) {
+        p.requires.insert(feature.to_owned());
+    }
 }
 
 /// What an op changed that [`normalize`] reads. From the end of a batch's first op every track is in order, and an op

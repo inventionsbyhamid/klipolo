@@ -1,6 +1,6 @@
 import { useLingui } from '@lingui/react/macro';
 import { Eye, EyeOff, Headphones, Lock, LockOpen, Volume2, VolumeX, type LucideIcon } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { memo, useEffect, useId, useRef, useState } from 'react';
 import type { Track } from '../../bindings/Track';
 import { cn } from '../../design/cn';
 import { IconButton } from '../../design/IconButton';
@@ -63,7 +63,7 @@ function restState(track: Track): { icons: LucideIcon[]; state: TrackState } | n
  * toggle is in the track's options too. A toggle is always the same element, so it keeps focus as it flips. Each
  * control runs a track action (`trackActions`), one undo step.
  */
-export function TrackHeader({ track }: { track: Track }) {
+function TrackHeaderView({ track }: { track: Track }) {
   // The toggles' names come from `trackToggleName` (the core `t`): a language switch re-renders the header.
   useLocale();
   const renaming = useTrackRename((s) => s.id === track.id);
@@ -143,6 +143,9 @@ export function TrackHeader({ track }: { track: Track }) {
     </div>
   );
 }
+
+/** Drawn again only when its track changes, not for a zoom, a scroll or a selection. */
+export const TrackHeader = memo(TrackHeaderView);
 
 /**
  * The name as a field: Enter or leaving it renames the track (a trimmed, changed, non-empty name), Escape keeps the old

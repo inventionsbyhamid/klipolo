@@ -1,3 +1,5 @@
+// First, before React loads: with the perf readout on (`KLIPOLO_PAGE_PERF=1`), its render count hears React's commits.
+import './perf/renders';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
