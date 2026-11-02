@@ -946,3 +946,31 @@ fn a_hook_may_paraphrase_a_line_in_six_words_or_fewer() {
             .contains("at most 6 punchy words")
     );
 }
+
+#[test]
+fn a_later_keep_only_in_the_same_message_replaces_the_earlier_one() {
+    let p = project();
+    let first = json!({"ranges": [{"startSec": 0.5, "endSec": 2.0}]});
+    // The correction keeps more than the first did: the first's cut doesn't stand under it.
+    let later =
+        json!({"ranges": [{"startSec": 0.5, "endSec": 2.0}, {"startSec": 9.85, "endSec": 13.0}]});
+    let out = run(
+        &p,
+        "make a short",
+        &[("keepOnly", first), ("keepOnly", later.clone())],
+    );
+    assert_eq!(out.refusals, vec![], "{:#?}", out.refusals);
+    assert_eq!(
+        out.proposed_calls,
+        vec![1],
+        "only the later one is proposed"
+    );
+    let alone = run(&p, "make a short", &[("keepOnly", later)]);
+    let kept = |out: &Compiled| {
+        klipolo_model::query::video_duration(
+            &out.proposal.as_ref().expect("a cut").review.after.timeline,
+        )
+    };
+    assert_eq!(kept(&out), kept(&alone));
+    assert!(kept(&out) > secs(4.0), "{}", kept(&out));
+}

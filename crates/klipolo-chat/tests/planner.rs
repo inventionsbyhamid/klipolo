@@ -1527,3 +1527,38 @@ fn clearing_transitions_that_are_not_there_is_silent() {
     assert_eq!(out.compiled.refusals, vec![]);
     assert_eq!(out.reply, "Made it square.");
 }
+
+#[test]
+fn a_corrective_keep_only_replaces_the_one_before() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let keep = |id: &str, ranges: &str| fc(id, "keepOnly", &format!(r#"{{"ranges": {ranges}}}"#));
+    // First the module part (0.9 to 4.0 s), then, corrected, that and the end (6.3 to 7.8 s).
+    let model = Fake::new(vec![
+        answer(
+            "",
+            vec![keep("call_1", r#"[{"startSec": 0.9, "endSec": 4.0}]"#)],
+            0.001,
+        ),
+        answer(
+            "",
+            vec![keep(
+                "call_2",
+                r#"[{"startSec": 0.9, "endSec": 4.0}, {"startSec": 6.3, "endSec": 7.8}]"#,
+            )],
+            0.001,
+        ),
+        answer("Kept the module part and the end.", vec![], 0.001),
+    ]);
+    let out = send(&model, &[], "keep the module part and the end", &i, &p).unwrap();
+    assert_eq!(out.compiled.refusals, vec![]);
+    assert_eq!(
+        out.compiled.proposed_calls,
+        vec![1],
+        "the later one stands alone"
+    );
+    let proposal = out.compiled.proposal.as_ref().expect("the cut");
+    let kept = klipolo_model::query::video_duration(&proposal.review.after.timeline);
+    // Both parts, each snapped to the words it stands on: more than the first part alone (about 3.4 s).
+    assert!((secs(4.4)..secs(5.3)).contains(&kept), "{kept}");
+}
