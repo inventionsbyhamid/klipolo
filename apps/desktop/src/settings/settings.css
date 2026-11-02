@@ -226,7 +226,7 @@
   font-size: var(--text-md);
   letter-spacing: 0.04em;
   font-variant-numeric: tabular-nums;
-  /* Text inputs have their own focus ring: the 2 px inset signal-ink ring below replaces the outline. */
+  /* Text inputs have their own focus ring: the 2 px inset paper below replaces the outline. */
   outline: none;
   /* The window doesn't select text; a field must, to paste a key and fix a typo. */
   -webkit-user-select: text;
