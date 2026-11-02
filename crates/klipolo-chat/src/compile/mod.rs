@@ -33,7 +33,10 @@
 //!
 //! The model's times are the snapshot's timeline, as its context showed them. A range must stand on the context or the
 //! message (`evidence`), else it is refused; it snaps to what it stands on, and is then mapped into the working copy by
-//! content (`map`), so an earlier call in the answer never shifts what a later one names. A clip ref resolves through
+//! content (`map`), so an earlier call in the answer never shifts what a later one names. A moment a media tool places
+//! something at may instead be the words said there (`quote`: refused back when said nowhere, or in several places
+//! the answer's removals leave); its seconds snap to a word's start or a cut near them, else stay as given
+//! (`Evidence::place`). A clip ref resolves through
 //! the `Refs` the context was built with, never through the project's own order. `undo` doesn't mix with edits: the
 //! edits were compiled against the project before it, so they are refused back to the model.
 //!
@@ -44,7 +47,7 @@
 //! `clips` (a clip's speed, volume, mute and framing, and the transitions at its cuts), `background` (what shows
 //! behind the video), `recorded` (a recording's camera, in `cameras` and `bubble`, and its sounds, in `sources`),
 //! `animate` (a layer's animation, with its sound), `zooms` (a recording's clicks as auto zooms), `clear` (a picture in
-//! 9:16 kept off the person on screen), `map`.
+//! 9:16 kept off the person on screen), `quote` (a moment by the words said there), `map`.
 
 mod additions;
 mod animate;
