@@ -149,6 +149,7 @@
   /* ---------- Layout ---------- */
   --gutter: 8px;                 /* between panels and around the workspace */
   --topbar-h: 52px;
+  --stage-head-h: 56px;          /* the preview's head: format pills, Add title, Full screen */
   --playerbar-h: 76px;
   --traffic-lights-w: 76px;      /* space kept clear for the macOS window controls */
 
