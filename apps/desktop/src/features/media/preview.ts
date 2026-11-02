@@ -65,11 +65,13 @@ function forgetSounds() {
   sounds.clear();
 }
 
-/** Stops the preview playing, if one is. */
+/** Stops the preview playing, if one is, and lets its element's sound go at once (not when it is collected). */
 export function stopPreview() {
   turn += 1;
   if (audio) {
     audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
     audio = null;
   }
   if (usePreview.getState().key !== null) usePreview.setState({ key: null, sounding: false });
