@@ -677,7 +677,7 @@
         "additionalProperties": false,
         "properties": {
           "atSec": {
-            "description": "Or times, from the context.",
+            "description": "Or times, from the context. With atWords, they pick where each is said.",
             "items": {
               "description": "A time it plays, timeline seconds.",
               "type": "number"
@@ -743,14 +743,14 @@
             ]
           },
           "atSec": {
-            "description": "Start. Null for the playhead.",
+            "description": "Start. With atWords, picks where they are said. Both null: the playhead.",
             "type": [
               "number",
               "null"
             ]
           },
           "atWords": {
-            "description": "Or 1 to 4 words said there, exactly as in Transcript; it starts on the first. Null: atSec.",
+            "description": "Or 1 to 4 words said there, exactly as in Transcript; it starts on the first.",
             "type": [
               "string",
               "null"
@@ -807,14 +807,14 @@
         "additionalProperties": false,
         "properties": {
           "atSec": {
-            "description": "Start. Null for the playhead.",
+            "description": "Start. With atWords, picks where they are said. Both null: the playhead.",
             "type": [
               "number",
               "null"
             ]
           },
           "atWords": {
-            "description": "Or 1 to 4 words said there, exactly as in Transcript; it starts on the first. Null: atSec.",
+            "description": "Or 1 to 4 words said there, exactly as in Transcript; it starts on the first.",
             "type": [
               "string",
               "null"
@@ -881,14 +881,14 @@
         "additionalProperties": false,
         "properties": {
           "atSec": {
-            "description": "Start. Null for the playhead.",
+            "description": "Start. With atWords, picks where they are said. Both null: the playhead.",
             "type": [
               "number",
               "null"
             ]
           },
           "atWords": {
-            "description": "Or 1 to 4 words said there, exactly as in Transcript; it starts on the first. Null: atSec.",
+            "description": "Or 1 to 4 words said there, exactly as in Transcript; it starts on the first.",
             "type": [
               "string",
               "null"

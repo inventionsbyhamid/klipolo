@@ -226,10 +226,15 @@ impl Args {
     }
 
     /// A list of texts, each as `text` reads it and named by its place (`atWords[1]`) when it is wrong; none when it is
-    /// null or left out.
+    /// null or left out. Read leniently, as models write a list: one text is a list of it, and a list written as JSON
+    /// inside a text (`"[\"Hi, my name is\"]"`) is that list.
     pub(super) fn nullable_texts(&mut self, key: &str) -> Result<Vec<String>, ToolError> {
         let value = match self.map.remove(key) {
             None | Some(Value::Null) => return Ok(Vec::new()),
+            Some(Value::String(text)) => match serde_json::from_str::<Vec<String>>(text.trim()) {
+                Ok(items) => Value::from(items),
+                Err(_) => Value::Array(vec![Value::String(text)]),
+            },
             Some(value) => value,
         };
         let Value::Array(items) = value else {
@@ -248,6 +253,13 @@ impl Args {
             out.push(self.text(&at)?);
         }
         Ok(out)
+    }
+
+    /// One quote of words said (`atWords`), as `text` reads it, or None when it is null or left out. Read as
+    /// `nullable_texts` reads a list, as models write one where one text is asked for: a list, or a list written as
+    /// JSON inside the text, is its first item.
+    pub(super) fn nullable_quote(&mut self, key: &str) -> Result<Option<String>, ToolError> {
+        Ok(self.nullable_texts(key)?.into_iter().next())
     }
 
     /// `removeSilences`' pause length: null, or seconds within `PAUSE_SECS`.
