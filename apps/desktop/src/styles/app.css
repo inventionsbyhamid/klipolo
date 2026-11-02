@@ -3428,7 +3428,7 @@
 
 /* A checked swatch's gap takes the popover's surface, not the card's. */
 .popover .swatch[aria-checked="true"] {
-  box-shadow: 0 0 0 2px var(--color-dialog), 0 0 0 4px var(--color-signal-ink);
+  box-shadow: 0 0 0 2px var(--color-bay-raised), 0 0 0 4px var(--color-signal-ink);
 }
 
 .field-note {
