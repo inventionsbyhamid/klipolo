@@ -193,11 +193,12 @@ impl Pack {
 /// Fits the timeline's pieces of sound asset `id` to its file, now `now` long where it was `was`. A piece that would play
 /// past the file's end ends at it (from the file's start, if it started past it), its fades and volume keys fitted too,
 /// so the project stays valid. A layer that played the whole of the file to its end plays the whole of the longer one,
-/// as far as the next layer on its track lets it. Main-track clips only shorten: lengthening one would move everything
-/// after it.
+/// as far as the next layer on its track lets it, unless its track is locked. Main-track clips only shorten: lengthening
+/// one would move everything after it.
 fn fit_to_file(project: &mut Project, id: &str, was: Us, now: Us) {
     for track in &mut project.timeline.tracks {
         let starts: Vec<Us> = track.items.iter().map(|item| item.start_us).collect();
+        let locked = track.locked;
         for (k, item) in track.items.iter_mut().enumerate() {
             let ItemContent::Audio {
                 asset_id,
@@ -228,7 +229,7 @@ fn fit_to_file(project: &mut Project, id: &str, was: Us, now: Us) {
                     *source_in_us = 0;
                 }
                 item.duration_us.min(timeline(now - *source_in_us))
-            } else if *source_in_us == 0 && end + 1_000 >= was && now > was {
+            } else if !locked && *source_in_us == 0 && end + 1_000 >= was && now > was {
                 let room = starts
                     .get(k + 1)
                     .map_or(Us::MAX, |next| next - item.start_us);

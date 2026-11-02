@@ -982,7 +982,8 @@ fn pack_of(dir: &Path, whoosh_ms: i64, bubbles_ms: i64) -> Pack {
 
 /// A project saved with an older pack, whose whoosh was longer and whose bubbles were shorter than this pack's, opens
 /// valid with this pack's lengths: the whoosh ends where its file does now (its fade and volume keys with it), and the
-/// bubbles that played the whole old file play the whole new one, as far as the next layer lets them.
+/// bubbles that played the whole old file play the whole new one, as far as the next layer lets them. On a locked track
+/// the whoosh still ends with its file, but the bubbles keep their length.
 #[test]
 fn a_project_from_an_older_pack_opens_with_this_packs_sound_lengths() {
     use klipolo_model::layout::Layout;
@@ -1054,7 +1055,20 @@ fn a_project_from_an_older_pack_opens_with_this_packs_sound_lengths() {
             Vec::new(),
         ),
     ];
-    project.timeline.tracks = vec![sounds];
+    let mut locked = Track::new(TrackKind::Audio, "Locked sounds");
+    locked.locked = true;
+    locked.items = vec![
+        layer("lw", "klipolo-pack-whoosh", 0, 900_000, 0, Vec::new()),
+        layer(
+            "lb",
+            "klipolo-pack-bubbles",
+            2_000_000,
+            410_000,
+            0,
+            Vec::new(),
+        ),
+    ];
+    project.timeline.tracks = vec![sounds, locked];
     klipolo_model::Document::new(project.clone()).expect("valid with the old pack");
     let file = dir.path().join("Old pack.klipolo");
     save(&file, &project, Durability::Full).unwrap();
@@ -1086,4 +1100,8 @@ fn a_project_from_an_older_pack_opens_with_this_packs_sound_lengths() {
         ]
     );
     assert_eq!(items[0].content.volume_keys().last().unwrap().t_us, 426_000);
+    let locked: Vec<i64> = (opened.timeline.tracks[1].items.iter())
+        .map(|item| item.duration_us)
+        .collect();
+    assert_eq!(locked, [426_000, 410_000]);
 }
