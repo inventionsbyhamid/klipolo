@@ -40,13 +40,21 @@ show starts."
 
 - **Source:** FLEURS (Conneau et al., 2022, "FLEURS: Few-shot Learning
   Evaluation of Universal Representations of Speech"), the Hugging Face dataset
-  `google/fleurs` at revision `70bb2e84b976b7e960aa89f1c648e09c59f894dd`, dev
+  `google/fleurs` (https://huggingface.co/datasets/google/fleurs) at revision
+  `70bb2e84b976b7e960aa89f1c648e09c59f894dd`, dev
   split, sentence id 1537: `data/hi_in/audio/dev.tar.gz` file
   `14112322580063897119.wav` (sha256 `f4d34913...c112bc`) and
   `data/ar_eg/audio/dev.tar.gz` file `2768129653097135459.wav` (sha256
   `32d806ec...c6c541`).
-- **License:** CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), as
-  the dataset card states. Attribution: Google, FLEURS.
+- **License:** the recordings are CC BY 4.0
+  (https://creativecommons.org/licenses/by/4.0/), as the dataset card states.
+  Attribution: Google, FLEURS.
+- **Transcript text:** the sentence in each `.json` is FLEURS's transcript,
+  which is FLoRes-101's sentence (Goyal et al., 2021, "The FLORES-101
+  Evaluation Benchmark for Low-Resource and Multilingual Machine Translation",
+  https://github.com/facebookresearch/flores), under CC BY-SA 4.0
+  (https://creativecommons.org/licenses/by-sa/4.0/). Attribution: Meta AI,
+  FLoRes-101.
 - **Format:** WAV, 16 kHz, mono, 16-bit PCM. The originals are 16 kHz mono
   32-bit float; ffmpeg converted them to 16-bit PCM without other changes.
 
