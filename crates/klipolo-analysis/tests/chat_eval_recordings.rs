@@ -109,7 +109,8 @@ async fn ideal_answers_pass_every_recording_case() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        stdout.contains("8/8 passed (target 8); 8 model calls"),
+        // Two model calls a case: the stub answers what came of its calls with the same calls, which ends it.
+        stdout.contains("8/8 passed (target 8); 16 model calls"),
         "{stdout}{stderr}"
     );
     assert_eq!(out.status.code(), Some(0));

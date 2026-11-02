@@ -1032,7 +1032,7 @@ fn several_recording_changes_are_one_undo_step() {
 
 // ---- The reply.
 
-/// A model that answers once, from a script.
+/// A model that answers from a script; past it, it is done: no words, no call.
 struct Once(Mutex<VecDeque<ModelResponse>>);
 
 impl LanguageModel for Once {
@@ -1040,9 +1040,12 @@ impl LanguageModel for Once {
         &'a self,
         _request: &'a ModelRequest,
     ) -> BoxFuture<'a, Result<ModelResponse, ModelError>> {
-        let answer =
-            (self.0.lock().unwrap().pop_front()).ok_or_else(|| ModelError::other("no more"));
-        Box::pin(async move { answer })
+        let answer = (self.0.lock().unwrap().pop_front()).unwrap_or(ModelResponse {
+            text: String::new(),
+            calls: Vec::new(),
+            usage_usd: 0.0,
+        });
+        Box::pin(async move { Ok(answer) })
     }
 }
 

@@ -5,40 +5,35 @@
 //! message on one project revision, so a provider's prompt cache reuses them; then the conversation (`Turn`s, the last
 //! `KEPT_TURNS`), then the new message last.
 //!
-//! At most `MAX_STEPS` model calls a message. An answer that only looks (`findMoments`), or says what it will do with no
-//! call ("I will turn this into a short"), gets what it found back (or `GO_ON`) and is asked again, while a step is left
-//! for the edits; what it found is still shown. When the call after a look fails (the spend cap, the network), the look
-//! is the answer. The answer with the edits is the "first answer" below.
+//! The agent loop, at most `MAX_STEPS` model calls a message. Each answer with calls gets what came of each call back:
+//! the whole input is sent again with nothing stored at the provider, then the answer's text and calls, then one output
+//! per call (what a `findMoments` found, `DONE_OUTPUT` or `PROPOSED_OUTPUT`, the reason for one refused back to the
+//! model: its arguments unreadable, or the compiler's `Audience::Model` refusal such as a time that stands on nothing;
+//! `TOLD_PERSON` for one refused for the person, whose reason is never sent back). It goes on until an answer has no
+//! call: those closing words are the reply. An answer with no call that says what it will do ("I will turn this into a
+//! short") is told `GO_ON` instead. An answer that only repeats calls already made ends it too.
 //!
-//! One refusal round. When a call of the first answer is refused back to the
-//! model (its arguments unreadable, or the compiler's `Audience::Model` refusal, such as a time that stands on
-//! nothing), the whole input is sent again with nothing stored at the provider: the first answer's text and calls, then
-//! one output per call (the reason for a refused one, `DONE_OUTPUT` or `PROPOSED_OUTPUT` for the others, and
-//! `TOLD_PERSON` for one refused for the person, whose reason is never sent back). The calls of the second answer
-//! replace the refused ones: the first answer's other calls and the second's (a repeat of what was done dropped) are
-//! compiled once, in that order, against the same snapshot and inputs, so the message still makes one additions
-//! transaction and one proposal. A call refused back to the model again stays undone, and the reply says so; so does a
-//! call refused in the first answer that the second answer lets go (no new call of its tool for it, counted call by
-//! call, and no question or `cannotDo` instead).
+//! The calls kept (all but those refused back, a repeat dropped) are compiled once, in the order made, against the same
+//! snapshot and inputs, so the message makes one additions transaction and one proposal. A call refused back that no
+//! later call of its tool made good (counted call by call, and no question or `cannotDo` instead) stays undone, and the
+//! reply says so. When a model call after the first fails (the spend cap, the network), what was done stands and the
+//! reply says it stopped (`STOPPED`).
 //!
-//! The reply is the model's text, then Klipolo's own notes on what the edits did or left as they were
-//! (`Compiled::notes` and `waits`: a speed that shortens a transition, or waits for the person as it leaves one no
-//! room, a camera that is its own layer), then the sentences of refusals meant for the person, then what couldn't be
-//! done; all of it without em or en dashes (`sanitize::reply`). When a call was refused for the person beside others
-//! that went through, the model's text, written before that refusal, may claim it: it is left out, and what went
-//! through is said plainly instead ("The music is in."). When nothing came of the answer and a call of it was refused
-//! after the model wrote its text (still refused back, or refused for the person, `cannotDo` aside), that text, which
-//! may claim the edit, is left out. With none of these, the reply is `askUser`'s questions, else a short sentence on
-//! what was done (or, for only work handed to a runner, that it is under way); otherwise the questions are only in
-//! `Compiled::questions`.
+//! The reply is the model's closing words, then the sentences of refusals meant for the person that they don't say yet.
+//! Without closing words (the steps ran out, a call failed, or they were empty), it is built from the model's last
+//! text: that text, then Klipolo's own notes on what the edits did or left as they were (`Compiled::notes` and `waits`:
+//! a speed that shortens a transition, or waits for the person as it leaves one no room, a camera that is its own
+//! layer), then the sentences of refusals meant for the person, then what couldn't be done; all of it without em or en
+//! dashes (`sanitize::reply`). When a call was refused for the person beside others that went through, the model's
+//! text, written before that refusal, may claim it: it is left out, and what went through is said plainly instead ("The
+//! music is in."). When nothing came of the message and a call was refused (still refused back, or refused for the
+//! person, `cannotDo` aside), that text, which may claim the edit, is left out. With none of these, the reply is
+//! `askUser`'s questions, else a short sentence on what was done (or, for only work handed to a runner, that it is
+//! under way); otherwise the questions are only in `Compiled::questions`.
 //!
-//! A big plan (several changes at once, or changes beside a cut, as a short is) with a step left gets one more call: the
-//! model is told what came of its calls (`note`, the sentences for the person, the edits' notes) and its short reply
-//! (`SUM_UP`) is the reply, then what needs the person (a clip to analyze) that it doesn't say, each once. When that
-//! call fails or says nothing, the reply is built as above.
-//!
-//! Errors leave the project untouched: nothing is compiled, and each is one plain sentence (`ChatError`). A project
-//! whose context is over budget (`ChatContext::fits`) is refused before any model call.
+//! An error before anything was done leaves the project untouched: nothing is compiled, and each is one plain
+//! sentence (`ChatError`). A project whose context is over budget (`ChatContext::fits`) is refused before any model
+//! call.
 
 use std::fmt;
 
@@ -55,14 +50,13 @@ use crate::tools::{FunctionCall, ToolCall, tools};
 
 /// The exchanges the conversation keeps.
 pub const KEPT_TURNS: usize = 6;
-/// The most model calls one message makes: looking around first (`findMoments`) or saying what it will do, the edits,
-/// a refusal round, and a big plan's closing words.
-pub const MAX_STEPS: usize = 4;
+/// The most model calls one message makes: each answer with calls gets what came of them and is asked again, until
+/// one answers in words alone.
+pub const MAX_STEPS: usize = 5;
 /// Sent back when an answer says what it will do but calls no tool.
-pub const GO_ON: &str = "Go on: make the calls now, all in this answer.";
-/// Asked after a big plan lands, for the reply.
-pub const SUM_UP: &str = "Now tell the person in one or two short, plain, friendly sentences what you made and \
-                          anything they need to do, such as reviewing the cut. Call no tools.";
+pub const GO_ON: &str = "Go on: make the calls now.";
+/// Said after what was done when a model call failed before the model was done.
+pub const STOPPED: &str = "I couldn't finish the rest of it.";
 
 /// A call's output for the model: it is done (applied, started or asked).
 pub const DONE_OUTPUT: &str = "done";
@@ -117,7 +111,7 @@ pub struct PlanOut {
     pub note: String,
     /// The calls compiled into `compiled`, in order (`compiled`'s call indexes are into this).
     pub calls: Vec<ToolCall>,
-    /// Each model answer's calls as it made them: one answer, or two after a refusal round.
+    /// Each model answer's calls as it made them, one entry per answer.
     pub answers: Vec<Vec<FunctionCall>>,
 }
 
@@ -240,199 +234,129 @@ pub async fn plan(
     let mut spent = 0.0;
     let mut steps = 0;
     let mut answers: Vec<Vec<FunctionCall>> = Vec::new();
-    // The calls of answers that only looked (`findMoments`), kept before the edits.
-    let mut looked: Vec<ToolCall> = Vec::new();
-    // The last look, its calls and where the request stood before it: its answer stands when the next call fails.
-    let mut last_look: Option<(ModelResponse, usize, usize)> = None;
-    let first = loop {
+    // Every call kept so far, in the order made: compiled once at the end, as one additions step and one proposal.
+    let mut calls: Vec<ToolCall> = Vec::new();
+    // The tools of calls refused back to the model, one entry per call, until a new call of the tool goes through.
+    let mut pending: Vec<String> = Vec::new();
+    // The last words the model wrote, and its closing words: an answer with no call after what came of its calls.
+    let mut said = String::new();
+    let mut closing: Option<String> = None;
+    let mut stopped: Option<ChatError> = None;
+    loop {
         steps += 1;
         let answer = match ask(model, &request, spent, steps).await {
             Ok(answer) => answer,
-            Err(e) => match last_look.take() {
-                Some(look) => {
-                    spent = e.usage_usd;
-                    break back_to(look, &mut looked, &mut answers, &mut request.input);
-                }
-                None => return Err(e),
-            },
+            // Nothing done yet: the message failed.
+            Err(e) if calls.is_empty() => return Err(e),
+            // What was done stands, and the reply says it stopped.
+            Err(e) => {
+                spent = e.usage_usd;
+                stopped = Some(e);
+                break;
+            }
         };
         spent += answer.usage_usd;
-        let read = Read::of(&answer.calls);
-        let looks = !read.calls.is_empty()
-            && read.unreadable.is_empty()
-            && read.calls.iter().all(only_looks);
-        // The same look again: the look before is the answer.
-        if looks
-            && read.calls.iter().all(|c| looked.contains(c))
-            && let Some(look) = last_look.take()
-        {
-            break back_to(look, &mut looked, &mut answers, &mut request.input);
-        }
-        let promises = answer.calls.is_empty() && promises_more(&answer.text);
-        // Room for the edits' answer after this one.
-        if !(looks || promises) || steps + 1 >= MAX_STEPS {
-            break answer;
-        }
-        let input = request.input.len();
+        answers.push(answer.calls.clone());
         let text = answer.text.trim();
+        if !text.is_empty() {
+            said = text.to_owned();
+        }
+        if answer.calls.is_empty() {
+            // It says what it will do but did nothing: told to go on.
+            if promises_more(text) && steps < MAX_STEPS {
+                request.input.push(Item::Assistant {
+                    text: text.to_owned(),
+                });
+                request.input.push(Item::User {
+                    text: GO_ON.to_owned(),
+                });
+                continue;
+            }
+            closing = Some(text.to_owned());
+            break;
+        }
+        // Its calls on top of those kept, compiled to tell it what came of each. A repeat of a call kept adds nothing.
+        let read = Read::of(&answer.calls);
+        let fresh: Vec<ToolCall> = (read.calls.iter())
+            .filter(|c| !calls.contains(c))
+            .cloned()
+            .collect();
+        if fresh.is_empty() && read.unreadable.is_empty() {
+            // Only what it already did: it has nothing more.
+            break;
+        }
+        let trial: Vec<ToolCall> = calls.iter().chain(&fresh).cloned().collect();
+        let compiled = compile(project, inputs, &trial);
+        let outcomes = read.outcomes(&compiled, &calls);
         if !text.is_empty() {
             request.input.push(Item::Assistant {
                 text: text.to_owned(),
             });
         }
-        for (call, parsed) in answer.calls.iter().zip(&read.calls) {
-            request.input.push(Item::FunctionCall(call.clone()));
+        (request.input).extend(answer.calls.iter().cloned().map(Item::FunctionCall));
+        for ((call, parsed), outcome) in answer.calls.iter().zip(&read.parsed).zip(&outcomes) {
+            let output = match (parsed, outcome) {
+                (Ok(look @ ToolCall::FindMoments { .. }), Outcome::Done) => {
+                    looked_output(project, inputs, look)
+                }
+                _ => outcome.output().to_owned(),
+            };
             request.input.push(Item::FunctionCallOutput {
                 call_id: call.call_id.clone(),
-                output: looked_output(project, inputs, parsed),
+                output,
             });
         }
-        if promises {
-            request.input.push(Item::User {
-                text: GO_ON.to_owned(),
-            });
+        // A question or `cannotDo` deals with what was refused; a new call of a refused tool that goes through, with
+        // one of its refusals.
+        if (read.calls.iter())
+            .any(|c| matches!(c, ToolCall::AskUser { .. } | ToolCall::CannotDo { .. }))
+        {
+            pending.clear();
         }
-        let calls = read.calls.len();
-        looked.extend(read.calls);
-        answers.push(answer.calls.clone());
-        last_look = Some((answer, calls, input));
-    };
-    let read = Read::of(&first.calls);
-    let compiled = compile(project, inputs, &read.calls);
-    let outcomes = read.outcomes(&compiled);
-    if !outcomes.iter().any(Outcome::is_back) || steps >= MAX_STEPS {
-        // Still refused back with no step left: as after a refusal round, named as not done.
-        let unfinished: Vec<String> = (read.calls.iter().enumerate())
-            .filter(|(i, _)| {
-                (compiled.refusals.iter())
-                    .any(|r| r.call_index == *i && r.audience == Audience::Model)
-            })
-            .map(|(_, c)| c.name().to_owned())
-            .chain(read.unreadable.iter().cloned())
-            .collect();
-        let calls: Vec<ToolCall> = looked.iter().cloned().chain(read.calls).collect();
-        let compiled = compile(project, inputs, &calls);
-        answers.push(first.calls);
-        let text = sum_up(
-            model,
-            &mut request,
-            &first.text,
-            (&calls, &compiled),
-            (steps, &mut spent, &mut answers),
-        )
-        .await;
-        let summed = text.is_some();
-        return Ok(finish(
-            text.as_deref().unwrap_or(&first.text),
-            calls,
-            compiled,
-            (&unfinished, &[]),
-            (spent, summed),
-            answers,
-        ));
-    }
-
-    // The refusal round: everything again, then the first answer and what came of each of its calls.
-    let text = first.text.trim();
-    if !text.is_empty() {
-        request.input.push(Item::Assistant {
-            text: text.to_owned(),
-        });
-    }
-    (request.input).extend(first.calls.iter().cloned().map(Item::FunctionCall));
-    for (call, outcome) in first.calls.iter().zip(&outcomes) {
-        request.input.push(Item::FunctionCallOutput {
-            call_id: call.call_id.clone(),
-            output: outcome.output().to_owned(),
-        });
-    }
-    steps += 1;
-    let second = ask(model, &request, spent, steps).await?;
-    spent += second.usage_usd;
-
-    // The first answer's calls not sent back, then the second's, compiled once. The second answer redoes only what was
-    // refused: a call of a tool the first answer already did (and had none of refused) is dropped, as is an exact
-    // repeat of a call done.
-    let mut calls: Vec<ToolCall> = (read.parsed.iter().zip(&outcomes))
-        .filter(|(_, outcome)| !outcome.is_back())
-        .filter_map(|(parsed, _)| parsed.as_ref().ok().cloned())
-        .collect();
-    let kept = calls.len();
-    let done: Vec<&str> = calls.iter().map(ToolCall::name).collect();
-    let refused: Vec<&str> = (first.calls.iter().zip(&outcomes))
-        .filter(|(_, outcome)| outcome.is_back())
-        .map(|(call, _)| call.name.as_str())
-        .collect();
-    let again = Read::of(&second.calls);
-    let dealt_with = (again.calls.iter())
-        .any(|c| matches!(c, ToolCall::AskUser { .. } | ToolCall::CannotDo { .. }));
-    // The tools of the second answer's new calls, one entry per call (unreadable ones too: they are named anyway).
-    let mut retried: Vec<String> = again.unreadable.clone();
-    for call in again.calls {
-        let repeat = calls[..kept].contains(&call);
-        let redone = done.contains(&call.name()) && !refused.contains(&call.name());
-        if !repeat && !redone {
-            retried.push(call.name().to_owned());
-            calls.push(call);
-        }
-    }
-    // Each refused call of the first answer needs a new call of its tool in the second, or a question or `cannotDo`
-    // instead: one without is still not done, even when another call of that tool was only repeated.
-    let mut dropped: Vec<String> = Vec::new();
-    for name in refused.iter().filter(|_| !dealt_with) {
-        match retried.iter().position(|r| r == name) {
-            Some(k) => {
-                retried.swap_remove(k);
+        for (k, parsed) in read.parsed.iter().enumerate() {
+            match (parsed, &outcomes[k]) {
+                (Ok(call), Outcome::Back(_)) => pending.push(call.name().to_owned()),
+                (Err(_), _) => pending.push(answer.calls[k].name.clone()),
+                (Ok(call), _) if fresh.contains(call) => {
+                    if let Some(at) = pending.iter().position(|p| p == call.name()) {
+                        pending.remove(at);
+                    }
+                }
+                _ => {}
             }
-            None if !dropped.iter().any(|d| d == name) => dropped.push((*name).to_owned()),
-            None => {}
+        }
+        let kept: Vec<ToolCall> = (read.parsed.iter().zip(&outcomes))
+            .filter(|(_, outcome)| !outcome.is_back())
+            .filter_map(|(parsed, _)| parsed.as_ref().ok())
+            .filter(|c| !calls.contains(c))
+            .cloned()
+            .collect();
+        calls.extend(kept);
+        if steps >= MAX_STEPS {
+            break;
         }
     }
-    let calls: Vec<ToolCall> = looked.into_iter().chain(calls).collect();
     let compiled = compile(project, inputs, &calls);
-    // Still refused back to the model: by name, as the model called them.
-    let mut unfinished: Vec<String> = (compiled.refusals.iter())
-        .filter(|r| r.audience == Audience::Model)
-        .map(|r| calls[r.call_index].name().to_owned())
-        .collect();
-    unfinished.extend(again.unreadable);
-    answers.push(first.calls);
-    answers.push(second.calls);
-    let text = sum_up(
-        model,
-        &mut request,
-        &second.text,
-        (&calls, &compiled),
-        (steps, &mut spent, &mut answers),
-    )
-    .await;
-    let summed = text.is_some();
-    Ok(finish(
-        text.as_deref().unwrap_or(&second.text),
+    // Closing words, when it had them, are the reply: written knowing what came of every call.
+    let (text, summed) = match closing.filter(|c| !c.is_empty()) {
+        Some(closing) => (closing, stopped.is_none()),
+        None => (said, false),
+    };
+    let mut out = finish(
+        &text,
         calls,
         compiled,
-        (&unfinished, &dropped),
+        &pending,
         (spent, summed),
         answers,
-    ))
-}
-
-/// Whether `call` only looks at the video: it changes nothing, and what it finds goes back to the model.
-fn only_looks(call: &ToolCall) -> bool {
-    matches!(call, ToolCall::FindMoments { .. })
-}
-
-/// The last look's answer as the answer: its calls, its answer and what the request got since taken back.
-fn back_to(
-    (answer, calls, input): (ModelResponse, usize, usize),
-    looked: &mut Vec<ToolCall>,
-    answers: &mut Vec<Vec<FunctionCall>>,
-    request: &mut Vec<Item>,
-) -> ModelResponse {
-    looked.truncate(looked.len() - calls);
-    answers.pop();
-    request.truncate(input);
-    answer
+        stopped.as_ref().map(|e| e.message.as_str()),
+    );
+    if let Some(e) = stopped {
+        out.note = format!("{} Stopped early: {}.", out.note, e.detail)
+            .trim()
+            .to_owned();
+    }
+    Ok(out)
 }
 
 /// Whether `text`, an answer with no tool call, says the model will do something it hasn't yet ("I will turn this
@@ -476,61 +400,6 @@ fn looked_output(project: &Project, inputs: &Inputs, call: &ToolCall) -> String 
         })
         .collect();
     format!("Shown to the person: {}.", found.join("; "))
-}
-
-/// Whether what `compiled` holds is a big plan, as a short is: several changes at once, or changes beside a cut.
-fn big_plan(compiled: &Compiled) -> bool {
-    compiled.additions.is_some() && (compiled.proposal.is_some() || compiled.changes.len() >= 3)
-}
-
-/// For a big plan with a step left, the model's own short reply once it knows what came of its calls: one more call,
-/// told the message's note and anything refused for the person, its calls (if any) never compiled. None when there is
-/// no step left, the plan isn't big, or the call fails or says nothing (the plan still lands; what it cost counts).
-async fn sum_up(
-    model: &dyn LanguageModel,
-    request: &mut ModelRequest,
-    said: &str,
-    (calls, compiled): (&[ToolCall], &Compiled),
-    (steps, spent, answers): (usize, &mut f64, &mut Vec<Vec<FunctionCall>>),
-) -> Option<String> {
-    if steps >= MAX_STEPS || !big_plan(compiled) {
-        return None;
-    }
-    let said = said.trim();
-    if !said.is_empty() {
-        request.input.push(Item::Assistant {
-            text: said.to_owned(),
-        });
-    }
-    let mut report = format!("What came of your calls: {}", note(calls, compiled, &[]));
-    for r in compiled
-        .refusals
-        .iter()
-        .filter(|r| r.audience == Audience::Person)
-    {
-        report.push_str(&format!(
-            " Shown after your words: {}",
-            full_stop(r.reason.trim())
-        ));
-    }
-    for n in compiled.notes.iter().chain(&compiled.waits) {
-        report.push_str(&format!(" {}", full_stop(n.trim())));
-    }
-    request.input.push(Item::User {
-        text: format!("{report} {SUM_UP}"),
-    });
-    match model.respond(request).await {
-        Ok(answer) => {
-            *spent += answer.usage_usd;
-            answers.push(answer.calls);
-            let text = answer.text.trim();
-            (!text.is_empty()).then(|| text.to_owned())
-        }
-        Err(e) => {
-            *spent += e.usage_usd();
-            None
-        }
-    }
 }
 
 /// The first request's input: the context, the conversation, the new message. An exchange with neither a reply nor a
@@ -597,28 +466,30 @@ impl Read {
         }
     }
 
-    /// What came of each call of the answer, `compiled` being its calls read.
-    fn outcomes(&self, compiled: &Compiled) -> Vec<Outcome> {
-        let mut at = 0;
+    /// What came of each call of the answer, `compiled` being the calls `kept` before it, then its calls read that
+    /// repeat none of them. A repeat of a call kept is done already.
+    fn outcomes(&self, compiled: &Compiled, kept: &[ToolCall]) -> Vec<Outcome> {
+        let mut at = kept.len();
         (self.parsed.iter())
-            .map(|parsed| {
-                let Err(reason) = parsed else {
+            .map(|parsed| match parsed {
+                Err(reason) => Outcome::Back(reason.clone()),
+                Ok(call) if kept.contains(call) => Outcome::Done,
+                Ok(_) => {
                     let i = at;
                     at += 1;
-                    return match compiled.refusals.iter().find(|r| r.call_index == i) {
+                    match compiled.refusals.iter().find(|r| r.call_index == i) {
                         Some(r) if r.audience == Audience::Model => Outcome::Back(r.reason.clone()),
                         Some(_) => Outcome::Told,
                         None if compiled.proposed_calls.contains(&i) => Outcome::Proposed,
                         None => Outcome::Done,
-                    };
-                };
-                Outcome::Back(reason.clone())
+                    }
+                }
             })
             .collect()
     }
 }
 
-/// What came of one call of the first answer.
+/// What came of one call of an answer.
 enum Outcome {
     /// Refused back to the model, with the reason.
     Back(String),
@@ -633,7 +504,7 @@ impl Outcome {
         matches!(self, Outcome::Back(_))
     }
 
-    /// The call's output for the model in the refusal round.
+    /// The call's output for the model.
     fn output(&self) -> &str {
         match self {
             Outcome::Back(reason) => reason,
@@ -644,20 +515,26 @@ impl Outcome {
     }
 }
 
-/// The message's result from the last answer's `text` and what `calls` compiled to. `unfinished` names the calls still
-/// refused back to the model after the last answer, whose text may claim them; `dropped` the tools refused in the first
-/// answer that the second let go, which its text was written knowing. `summed`: `text` is the model's closing words on a
-/// big plan, written knowing what came of every call, then what the person has to do (a clip to analyze) that they
-/// don't say yet, each once.
+/// The message's result from the model's `text` and what `calls` compiled to. `unfinished` names the calls refused back
+/// to the model that no later call made good, which its text may claim. `summed`: `text` is the model's closing words,
+/// written knowing what came of every call, then what the person has to do (a clip to analyze) that it doesn't say
+/// yet, each once. `stopped`: why a model call failed before the model was done, said last with `STOPPED`.
 fn finish(
     text: &str,
     calls: Vec<ToolCall>,
     compiled: Compiled,
-    (unfinished, dropped): (&[String], &[String]),
+    unfinished: &[String],
     (usage_usd, summed): (f64, bool),
     answers: Vec<Vec<FunctionCall>>,
+    stopped: Option<&str>,
 ) -> PlanOut {
-    // The model's own words, written knowing what came of every call (`sum_up`), then what needs the person.
+    let came_of_it = compiled.additions.is_some()
+        || compiled.proposal.is_some()
+        || !compiled.moments.is_empty()
+        || !compiled.jobs.is_empty()
+        || !compiled.questions.is_empty()
+        || compiled.undo;
+    // The model's own closing words, then what needs the person, then what couldn't be done.
     if summed {
         let mut reply = text.trim().to_owned();
         for r in compiled
@@ -670,8 +547,11 @@ fn finish(
                 reply = format!("{reply} {said}").trim().to_owned();
             }
         }
+        if !unfinished.is_empty() {
+            reply = format!("{reply} {}", could_not(unfinished, came_of_it));
+        }
         return PlanOut {
-            note: note(&calls, &compiled, dropped),
+            note: note(&calls, &compiled, unfinished),
             reply: sanitize::reply(&reply),
             compiled,
             usage_usd,
@@ -679,12 +559,6 @@ fn finish(
             answers,
         };
     }
-    let came_of_it = compiled.additions.is_some()
-        || compiled.proposal.is_some()
-        || !compiled.moments.is_empty()
-        || !compiled.jobs.is_empty()
-        || !compiled.questions.is_empty()
-        || compiled.undo;
     // An edit refused for the person (nothing to remove, a clip not analyzed yet): the text was written before it, and
     // may say it was done. It is left out; what else was done is said plainly instead.
     let told_undone = (compiled.refusals.iter()).any(|r| {
@@ -708,9 +582,8 @@ fn finish(
             }
         }
     }
-    let not_done: Vec<String> = unfinished.iter().chain(dropped).cloned().collect();
-    if !not_done.is_empty() {
-        parts.push(could_not(&not_done, came_of_it));
+    if !unfinished.is_empty() {
+        parts.push(could_not(unfinished, came_of_it));
     }
     if parts.is_empty() {
         parts.extend(compiled.questions.iter().map(|q| full_stop(q.trim())));
@@ -739,9 +612,12 @@ fn finish(
         .cloned()
         .collect();
     parts.splice(at..at, notes);
+    if let Some(why) = stopped {
+        parts.push(format!("{} {STOPPED}", full_stop(why.trim())));
+    }
     let reply = sanitize::reply(&parts.join(" "));
     PlanOut {
-        note: note(&calls, &compiled, dropped),
+        note: note(&calls, &compiled, unfinished),
         reply,
         compiled,
         usage_usd,
@@ -893,8 +769,8 @@ fn could_not(tools: &[String], else_done: bool) -> String {
     format!("I couldn't {list}, {left}. Try asking in other words.")
 }
 
-/// One line on what `calls` came to, with the tools `dropped` in a refusal round: "Applied setFormat. Proposed cutRange
-/// (10.0 s). Asked: Which part? Not done: trimClip."
+/// One line on what `calls` came to, with the tools refused back and never made good (`dropped`): "Applied setFormat.
+/// Proposed cutRange (10.0 s). Asked: Which part? Not done: trimClip."
 fn note(calls: &[ToolCall], compiled: &Compiled, dropped: &[String]) -> String {
     let refused = |i: usize| compiled.refusals.iter().any(|r| r.call_index == i);
     let mut applied: Vec<&str> = Vec::new();

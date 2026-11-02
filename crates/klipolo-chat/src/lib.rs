@@ -3,8 +3,8 @@
 //! tools it may call, and its calls read into typed edits. `compile`: those edits checked against the project and
 //! turned into ops, additions to apply at once and removals to propose, and jobs for pictures to draw, with `evidence`
 //! holding the model's times to what the context showed. `sanitize`: the model's text for the person without em or en
-//! dashes. `model`: the language model as an interface this crate owns. `planner`: one message sent to it, with at most
-//! one refusal round, out as a reply and compiled edits.
+//! dashes. `model`: the language model as an interface this crate owns. `planner`: one message sent to it, step by step
+//! with what came of each step's calls until it answers in words, out as a reply and compiled edits.
 
 pub mod compile;
 pub mod context;
@@ -30,7 +30,7 @@ pub use library::{Library, LibraryItem, MediaKind};
 pub use model::{BoxFuture, Item, LanguageModel, ModelError, ModelRequest, ModelResponse};
 pub use planner::{
     ChatError, ChatErrorKind, DONE_OUTPUT, GO_ON, KEPT_TURNS, MAX_STEPS, PROPOSED_OUTPUT, PlanOut,
-    SUM_UP, TOLD_PERSON, TOO_LONG, Turn, plan, remember,
+    STOPPED, TOLD_PERSON, TOO_LONG, Turn, plan, remember,
 };
 pub use prompt::system_prompt;
 pub use tools::{FollowFocus, FunctionCall, Moment, Problem, ToolCall, ToolError, tools};

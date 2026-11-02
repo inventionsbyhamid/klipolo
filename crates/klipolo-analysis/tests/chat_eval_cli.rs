@@ -84,12 +84,13 @@ async fn every_case_is_judged_and_the_cost_added_up_without_the_key() {
     assert!(stdout.contains("PASS undo"), "{stdout}");
     assert!(stdout.contains("FAIL vertical"), "{stdout}");
     assert!(stdout.contains("     reply: Undone."), "{stdout}");
+    // Two model calls a case: the stub answers what came of its calls with the same calls, which ends the message.
     assert!(
-        stdout.contains("1/38 passed (target 36); 38 model calls; total $0.06"),
+        stdout.contains("1/38 passed (target 36); 76 model calls; total $0.12"),
         "{stdout}"
     );
     assert!(!stdout.contains(KEY) && !stderr.contains(KEY));
-    assert_eq!(server.received_requests().await.unwrap().len(), 38);
+    assert_eq!(server.received_requests().await.unwrap().len(), 76);
 
     // One case on its own must pass.
     let out = run(&env, &["--only", "undo"]).await;
@@ -294,9 +295,9 @@ async fn ideal_answers_pass_every_case() {
     assert_eq!(stdout.matches("     passed on alternative ").count(), 4);
     assert_eq!(stdout.matches("     passed on alternative #0").count(), 4);
     assert_eq!(out.status.code(), Some(0));
-    // One call each, and one more for each of the two cases that only look (the stub answers the same look again,
-    // which ends it): clip A's missing filler words are told to the person, with no refusal round.
-    assert!(stdout.contains("40 model calls"), "{stdout}");
+    // Two calls each (the stub answers what came of its calls with the same calls, which ends the message): clip A's
+    // missing filler words are told to the person, never sent back.
+    assert!(stdout.contains("76 model calls"), "{stdout}");
     assert!(
         stdout.contains("     reply: There are no filler words to remove."),
         "{stdout}"

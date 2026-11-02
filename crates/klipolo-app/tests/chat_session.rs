@@ -26,7 +26,7 @@ use klipolo_app::chat::{
     MemoryProjects, Models, Projects, Readiness,
 };
 use klipolo_chat::{
-    AnalysisState, BoxFuture, FunctionCall, Item, LanguageModel, LibraryItem, MediaKind,
+    AnalysisState, BoxFuture, FunctionCall, GO_ON, Item, LanguageModel, LibraryItem, MediaKind,
     ModelError, ModelRequest, ModelResponse,
 };
 use klipolo_model::media::music::{MUSIC_FADE_OUT_US, is_music};
@@ -230,7 +230,9 @@ impl Findings for Found {
     }
 }
 
-/// A model that answers from a script, in order, keeps every request, and can be held before it answers.
+/// A model that answers each message's first request from a script, in order, keeps those requests (`seen`), and can be
+/// held before it answers one. A request after it, with what came of its calls, is answered at once as a model that is
+/// done: no words, no call, nothing spent; so is a first request past the script.
 #[derive(Default)]
 struct Script {
     answers: Mutex<VecDeque<Result<ModelResponse, ModelError>>>,
@@ -271,15 +273,29 @@ impl LanguageModel for Script {
         Box::pin(async move {
             let now = self.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
             self.most_at_once.fetch_max(now, Ordering::SeqCst);
-            self.seen.lock().unwrap().push(request.clone());
-            self.arrived.notify_one();
-            let gate = self.hold.lock().unwrap().clone();
-            if let Some(gate) = gate {
-                gate.notified().await;
+            let opening =
+                matches!(request.input.last(), Some(Item::User { text }) if text != GO_ON);
+            if opening {
+                self.seen.lock().unwrap().push(request.clone());
+                self.arrived.notify_one();
+                let gate = self.hold.lock().unwrap().clone();
+                if let Some(gate) = gate {
+                    gate.notified().await;
+                }
             }
             self.in_flight.fetch_sub(1, Ordering::SeqCst);
-            (self.answers.lock().unwrap().pop_front())
-                .unwrap_or_else(|| Err(ModelError::other("the script ran out")))
+            let scripted = if opening {
+                self.answers.lock().unwrap().pop_front()
+            } else {
+                None
+            };
+            scripted.unwrap_or_else(|| {
+                Ok(ModelResponse {
+                    text: String::new(),
+                    calls: Vec::new(),
+                    usage_usd: 0.0,
+                })
+            })
         })
     }
 }
@@ -1758,10 +1774,8 @@ fn find_intro() -> FunctionCall {
 async fn a_reply_names_the_revision_its_moments_are_on() {
     let mut calls = vertical_karaoke();
     calls.push(find_intro());
-    // A look is answered again with what it found: the second answer is the reply.
     let chat = chat(vec![
-        answer("", vec![find_intro()]),
-        answer("Here it is.", vec![]),
+        answer("Here it is.", vec![find_intro()]),
         answer("", calls),
     ]);
     let r = reply(&chat.session.send(request("find the intro")).await.unwrap());
@@ -1781,10 +1795,10 @@ async fn a_reply_names_the_revision_its_moments_are_on() {
 
 #[tokio::test]
 async fn moments_found_while_the_project_changed_are_left_out() {
-    let model = Script::new(vec![
-        answer("", vec![find_intro()]),
-        answer("The intro is at the start.", vec![]),
-    ]);
+    let model = Script::new(vec![answer(
+        "The intro is at the start.",
+        vec![find_intro()],
+    )]);
     let gate = model.hold();
     let chat = chat_with(model.clone(), Found::done(), Paying::key(model.clone()));
     let sent = tokio::spawn({
@@ -1793,9 +1807,6 @@ async fn moments_found_while_the_project_changed_are_left_out() {
     });
     model.arrived.notified().await;
     chat.project.hand_edit(&rename("Mine")).unwrap();
-    gate.notify_one();
-    // Told what it found, it answers again.
-    model.arrived.notified().await;
     gate.notify_one();
     let r = reply(&sent.await.unwrap());
     assert_eq!(r["moments"], serde_json::json!([]), "{r:#}");
@@ -2003,8 +2014,6 @@ async fn a_project_switch_while_the_model_answers_leaves_the_new_project_alone()
         });
         model.arrived.notified().await;
         chat.project.switch(Some(talk())).unwrap();
-        // Only the plan waits: the summary a big plan asks for (the script has none) comes at once.
-        *model.hold.lock().unwrap() = None;
         gate.notify_one();
         let r = reply(&sent.await.unwrap());
         assert_eq!(r["text"], MOVED, "{r:#}");
@@ -2383,7 +2392,6 @@ async fn ums_are_cut_while_the_scene_log_is_made_and_moments_wait() {
                 r#"{"query": "the module", "ranges": []}"#,
             )],
         ),
-        answer("", vec![]),
     ]);
     let chat = chat_with(
         model.clone(),
