@@ -1359,7 +1359,7 @@ ol {
   margin: 0;
 }
 
-/* Four models, 2 by 2: four in a row would squeeze the longer names */
+/* Five models: 2 a row, then 3 on wide screens. More in a row would squeeze the longer names */
 @media (min-width: 860px) {
   .model-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1370,6 +1370,12 @@ ol {
   .model {
     grid-row: span 2;
     grid-template-rows: subgrid;
+  }
+}
+
+@media (min-width: 1080px) {
+  .model-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
