@@ -11,6 +11,10 @@
 //! `… -- reverse [<file>]` what shuttle playback costs, backward and at 2× (`reverse.rs`); `… -- copy <file> [<copy>]`
 //! what an editing copy saves while the preview plays, with and without a picture-in-picture layer (`copy.rs`);
 //! `… -- analysis <video> <clip>` what analysis's decoding of a clip costs playback beside it (`analysis.rs`);
+//! `… -- long [<video>]` what a 2-hour talk's project costs to save, open and edit, and the engine's work per edit
+//! (`long.rs`); `… -- media <job> <file>...` what one media job costs a file, alone in the process (`media.rs`);
+//! `… -- layers [1080|4k] <main> <video>...` what four cropped, moving video layers over a blurred background cost
+//! (`layers.rs`);
 //! `… -- --export-worker <job.json>` is the export worker itself (as the app runs it), and `… -- --proxy-worker
 //! <proxy.json>` the editing-copy worker.
 //!
@@ -39,7 +43,10 @@ mod export;
 #[path = "../../tests/support/fixture_set.rs"]
 mod fixture_set;
 mod fontstart;
+mod layers;
+mod long;
 mod measure;
+mod media;
 mod motion;
 mod project;
 mod reverse;
@@ -173,6 +180,9 @@ async fn harness() {
         Some("vt-memory") => return vt_memory::run(&args[1..]).await,
         Some("fontstart") => return fontstart::run(&args[1..]),
         Some("fontstart-child") => return fontstart::child(&args[1..]),
+        Some("long") => return long::run(&args[1..]),
+        Some("layers") => return layers::run(&args[1..]).await,
+        Some("media") => return media::run(&args[1..]).await,
         _ => {}
     }
     let scratch = tempfile::tempdir().unwrap();
