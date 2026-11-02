@@ -967,7 +967,8 @@ main > section:not(.hero) {
   .js .problem.is-on .pile li:nth-child(3) { transition-delay: .75s; }
   .js .problem.is-on .pile li:nth-child(4) { transition-delay: 1s; }
   .js .problem.is-on .pile li:nth-child(5) { transition-delay: 1.25s; }
-  .js .problem.is-on .problem__after > .say { transition: opacity .9s var(--ease-out) 1.9s, transform .9s var(--ease-out) 1.9s; }
+  .js .problem.is-on .pile li:nth-child(6) { transition-delay: 1.5s; }
+  .js .problem.is-on .problem__after > .say { transition: opacity .9s var(--ease-out) 2.15s, transform .9s var(--ease-out) 2.15s; }
   .js .problem .cmd--answer { display: flex; opacity: 0; transition: opacity .3s; }
   .js .problem.is-asking .cmd--answer { opacity: 1; }
   .js .problem.is-struck .pile li::after { transform: none; transition: transform .26s var(--ease-out); }
@@ -975,6 +976,7 @@ main > section:not(.hero) {
   .js .problem.is-struck .pile li:nth-child(3)::after { transition-delay: .24s; }
   .js .problem.is-struck .pile li:nth-child(4)::after { transition-delay: .36s; }
   .js .problem.is-struck .pile li:nth-child(5)::after { transition-delay: .48s; }
+  .js .problem.is-struck .pile li:nth-child(6)::after { transition-delay: .6s; }
   .js .problem.is-folded .pile li { opacity: 0; transition: opacity .4s var(--ease-out); }
   .problem__after { transition: transform .8s var(--ease-edit) .15s; }
   .js .problem.is-folded .problem__after { transform: translateY(calc(-1 * var(--fold, 0px))); }

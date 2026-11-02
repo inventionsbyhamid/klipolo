@@ -124,7 +124,7 @@ const moments = {
     await hold(el, 3000);
     el.classList.add('is-asking');
     await hold(el, 300);
-    await typeInto(line, 'make it a short', el);
+    await typeInto(line, 'make it polished', el);
     await hold(el, 420);
     el.classList.add('is-struck');
     await hold(el, 1100);
