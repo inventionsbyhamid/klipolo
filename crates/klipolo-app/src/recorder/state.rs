@@ -248,7 +248,7 @@ impl RecorderState {
         on.previews.setup_read(&shown.setup.devices);
         let setup = shown.setup.clone();
         *lock(&on.last_setup) = Some(shown);
-        // The dialog shows its Screen Recording step while it isn't allowed: every take records the screen.
+        // The dialog shows its Screen Recording step while it isn't allowed, for every take but "Record yourself".
         on.note_screen(setup.permissions.screen != Permission::Granted);
         Ok(setup)
     }
