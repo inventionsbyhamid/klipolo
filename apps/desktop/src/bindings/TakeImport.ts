@@ -28,4 +28,9 @@ notes: Array<CodedError>,
 /**
  * Auto zoom items added after it, as a step of their own.
  */
-zooms: number, };
+zooms: number, 
+/**
+ * An earlier run of Klipolo left the take behind (it quit or crashed during it), and it landed as Klipolo opened
+ * again, in a new project: "Recovered Recording 1 from your last session."
+ */
+earlierRun: boolean, };

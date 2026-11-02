@@ -285,6 +285,7 @@ pub(super) fn after_landing(
         snapshot,
         notes,
         zooms,
+        earlier_run: done.earlier_run,
     })
 }
 

@@ -42,7 +42,7 @@ import { followPosters } from './state/posters';
 import { useProject } from './state/project';
 import { clearProposalOnProjectSwitch } from './state/proposal';
 import { clearRangeOnProjectSwitch } from './state/range';
-import { followRecorder, recordYourScreen, reopenWhereLeft } from './state/recorder';
+import { followRecorder, recordYourScreen, recoverLeftTakes, reopenWhereLeft } from './state/recorder';
 import { followSaves } from './state/saving';
 import { toast } from './state/toasts';
 import { keepPlayheadInVideo, keepPlayheadOnReload, restorePlayhead } from './state/transport';
@@ -175,10 +175,14 @@ export function App() {
     if (import.meta.env.DEV) void import('./dev/devChat').then((dev) => dev.listenForDevKeys());
     // Until a clip's analysis feeds speech: Control Shift S shows sample speech under the music (development only).
     if (import.meta.env.DEV) void import('./dev/sampleSpeech').then((dev) => dev.listenForSampleSpeech());
-    // Back from Reopen Klipolo, the project the person had open opens again, with the Record dialog.
+    // Back from Reopen Klipolo, the project the person had open opens again, with the Record dialog. Then takes the
+    // last run left behind (Klipolo quit or crashed during them) land, each in a new project.
     void loadOpenProject()
       .then(reopenWhereLeft)
-      .finally(() => setAsked(true));
+      .finally(() => {
+        setAsked(true);
+        void recoverLeftTakes();
+      });
   }, []);
   // Settings' Appearance on the page and the window, from before the first paint.
   useThemeSync();

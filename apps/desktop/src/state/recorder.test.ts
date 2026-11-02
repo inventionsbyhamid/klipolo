@@ -8,6 +8,7 @@ import type { Previews } from '../bindings/Previews';
 import type { RecorderSetup } from '../bindings/RecorderSetup';
 import type { Snapshot } from '../bindings/Snapshot';
 import type { WorkerState } from '../bindings/WorkerState';
+import { appWindow } from '../bridge/appWindow';
 import { tauriRecorder } from '../bridge/recorder';
 import { deviceDenied, screenStage, screenStep } from '../lib/recorder/permission';
 import { phaseOf } from '../lib/recorder/phase';
@@ -186,6 +187,35 @@ describe('record', () => {
     // Pressed again while it counts down: still one take.
     await rec().record();
     expect(fake.armed).toHaveLength(1);
+  });
+
+  it('record_takes_a_full_screen_window_out_of_full_screen_before_it_arms', async () => {
+    // Klipolo's window hides for the take: from macOS full screen it would leave its own black Space showing, and the
+    // screen would record that. It leaves full screen first, while the countdown covers the animation.
+    vi.spyOn(appWindow, 'isFullScreen').mockResolvedValue(true);
+    const fullScreen = vi.spyOn(appWindow, 'fullScreen').mockImplementation((on) => {
+      fake.log.push(`fullScreen:${on}`);
+      return Promise.resolve(true);
+    });
+    await pressed();
+    expect(fullScreen).toHaveBeenCalledTimes(1);
+    expect(fake.log.slice(fake.log.indexOf('fullScreen:false'))).toEqual(['fullScreen:false', 'arm', 'send:start']);
+  });
+
+  it('record_leaves_a_window_that_isn_t_full_screen_as_it_is', async () => {
+    vi.spyOn(appWindow, 'isFullScreen').mockResolvedValue(false);
+    const fullScreen = vi.spyOn(appWindow, 'fullScreen');
+    await pressed();
+    expect(fullScreen).not.toHaveBeenCalled();
+    expect(fake.calls).toEqual(['setup', 'arm', 'send:start']);
+  });
+
+  it('record_still_arms_when_the_window_can_t_say_whether_it_is_full_screen', async () => {
+    vi.spyOn(appWindow, 'isFullScreen').mockRejectedValue(new Error('no window'));
+    const fullScreen = vi.spyOn(appWindow, 'fullScreen');
+    await pressed();
+    expect(fullScreen).not.toHaveBeenCalled();
+    expect(fake.calls).toEqual(['setup', 'arm', 'send:start']);
   });
 
   it('record_sends_the_choices_as_the_take_s_options', async () => {

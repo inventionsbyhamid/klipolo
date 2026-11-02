@@ -4,6 +4,7 @@ import type { CaptureEvent } from '../bindings/CaptureEvent';
 import type { CaptureLevel } from '../bindings/CaptureLevel';
 import type { CodedError } from '../bindings/CodedError';
 import type { RecorderEvent } from '../bindings/RecorderEvent';
+import { appWindow } from '../bridge/appWindow';
 import { codedMessage, isCode, saidOf } from '../bridge/call';
 import { recorder } from '../bridge/recorder';
 import { errorMessage } from '../lib/errors';
@@ -71,6 +72,19 @@ const LANDING_TOAST = 'recorder-landing';
 /** A note of this kind is said as Klipolo comes back from a take, so a landed take's own notes leave it out. */
 export function saidOnReturn(code: string): boolean {
   return KEPT_NOTES.has(code);
+}
+
+/**
+ * Klipolo's window leaves macOS full screen before a take: it hides while the take records, and hidden from full screen
+ * it would leave its own black Space showing, which the screen would record. The countdown covers the animation. A
+ * window that can't say stays as it is, and the take goes ahead.
+ */
+async function leaveFullScreen(): Promise<void> {
+  try {
+    if (await appWindow.isFullScreen()) await appWindow.fullScreen(false);
+  } catch {
+    // The take records all the same.
+  }
 }
 
 /** One Record press, from the press until its Start has been sent. */
@@ -348,6 +362,8 @@ export function takeSlice(set: Set, get: Get, went: () => void): TakeSlice {
     noteAdded = false;
     set({ ...NO_TAKE, ...NO_ERROR, worker: 'starting', note: null });
     await lastTakeGone();
+    if (mine.cancelled) return;
+    await leaveFullScreen();
     if (mine.cancelled) return;
     let id: string;
     try {

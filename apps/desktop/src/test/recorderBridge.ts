@@ -118,7 +118,7 @@ export function deferred<T>() {
 
 /** A take that went into the project `snapshot`, its clip `clipId`. */
 export function takeImport(snapshot: Snapshot, clipId: string, over: Partial<TakeImport> = {}): TakeImport {
-  return { take: 'take-1', recordingId: 'rec-1', clipId, snapshot, notes: [], zooms: 0, ...over };
+  return { take: 'take-1', recordingId: 'rec-1', clipId, snapshot, notes: [], zooms: 0, earlierRun: false, ...over };
 }
 
 /** An answer, or the Error it is refused with. */
@@ -137,6 +137,8 @@ export interface FakeRecorderScript {
   reopen?: () => Answer<void> | undefined;
   /** What the app says at launch about a Reopen Klipolo just before; null (an ordinary launch) by default. */
   backFromReopen?: () => Answer<BackFromReopen | null>;
+  /** The launch's look for takes an earlier run left behind; taken by default (the test lands them with `land`). */
+  recoverLeft?: () => Answer<void> | undefined;
   openPrivacy?: () => Answer<void> | undefined;
   /** The previews, as wanted: run by default. */
   previews?: (want: Previews) => Answer<void> | undefined;
@@ -152,7 +154,7 @@ export type FakeRecorder = RecorderBridge & {
   script: FakeRecorderScript;
   /**
    * Every call in order: `setup`, `arm`, `send:start`, `stopRunning`, `allowScreen`, `reopen`, `backFromReopen`,
-   * `openPrivacy:mic`.
+   * `recoverLeft`, `openPrivacy:mic`.
    */
   calls: string[];
   /** What each arming asked for. */
@@ -235,6 +237,10 @@ export function fakeRecorder(script: FakeRecorderScript = {}): FakeRecorder {
     backFromReopen: () => {
       record('backFromReopen');
       return answer(fake.script.backFromReopen?.(), () => null);
+    },
+    recoverLeft: () => {
+      record('recoverLeft');
+      return answer(fake.script.recoverLeft?.(), () => undefined);
     },
     openPrivacy: (page) => {
       record(`openPrivacy:${page}`);

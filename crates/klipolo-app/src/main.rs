@@ -320,6 +320,7 @@ fn main() {
             recorder::commands::recorder_allow_screen,
             recorder::commands::recorder_reopen,
             recorder::commands::recorder_back_from_reopen,
+            recorder::commands::recorder_recover_left,
             recorder::commands::recorder_open_privacy,
             recorder::commands::recorder_previews,
             recorder::commands::recorder_previews_off,

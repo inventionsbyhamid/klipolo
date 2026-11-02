@@ -103,6 +103,19 @@ pub async fn recorder_back_from_reopen(app: AppHandle) -> Result<Option<BackFrom
     blocking(app, |_, state| Ok(state.back_from_reopen())).await
 }
 
+/// Takes an earlier run of Klipolo left behind (it quit or crashed during them) land now, each in a new project, on a
+/// thread of their own, and one an earlier run's worker still records lands once it is saved: the page hears each as
+/// `recorder-imported`, told as from the last session. The page asks once it follows the recorder; Klipolo looks once
+/// per run. Nothing in a test run.
+#[tauri::command]
+pub async fn recorder_recover_left(app: AppHandle) -> Result<(), Said> {
+    blocking(app, |_, state| {
+        state.recover_left();
+        Ok(())
+    })
+    .await
+}
+
 /// "Open privacy settings": Screen Recording's, the camera's or the microphone's page.
 #[tauri::command]
 pub async fn recorder_open_privacy(app: AppHandle, page: PrivacyPage) -> Result<(), Said> {
