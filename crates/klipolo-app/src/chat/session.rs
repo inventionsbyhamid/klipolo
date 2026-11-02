@@ -84,6 +84,10 @@ pub const MOVED: &str =
 /// Said when the answer's changes couldn't be applied (they don't fit the project any more).
 pub const NOT_APPLIED: &str =
     "I couldn't make those changes, so I left the project as it was. Ask me again.";
+/// Said when the model's undo would take back a step that isn't chat's own last change (the person's, or another
+/// app's): nothing of the answer was applied or proposed.
+pub const NOT_CHATS: &str =
+    "I can only undo my own last change. Use Undo in the top bar for the rest.";
 /// Said beside the additions applied when the removals of the same answer couldn't be proposed.
 pub const NOT_PROPOSED: &str = "I couldn't get the removals ready, so I left them out.";
 /// Said beside the additions applied when the project changed before the removals could be proposed.
@@ -104,6 +108,8 @@ pub const KEEP_ONLY_MOVED: &str =
 /// What a message's turn note says when nothing of it landed.
 const MOVED_NOTE: &str = "Nothing was applied: the person changed the project meanwhile.";
 const NOT_APPLIED_NOTE: &str = "Nothing was applied: the changes no longer fit the project.";
+const NOT_CHATS_NOTE: &str =
+    "Nothing was applied: the last change was not chat's, so it was not undone.";
 const APPLIED_NOTE: &str = "The person applied the proposal.";
 const DISCARDED_NOTE: &str = "The person discarded the proposal.";
 const REPLACED_NOTE: &str = "Replaced by a newer proposal.";
@@ -136,7 +142,8 @@ struct Talk {
     owner: Option<At>,
     /// Oldest first, at most `KEPT_EXCHANGES`.
     exchanges: Vec<Exchange>,
-    /// Where the project stood right after chat's last change: `undo_last` takes it back only from there.
+    /// Where the project stood right after chat's last change: `undo_last` and the model's undo take it back only from
+    /// there.
     last_change: Option<At>,
 }
 
@@ -768,10 +775,10 @@ impl ChatSession {
         if let Some(lost) = landed.lost {
             // Nothing of the answer landed: its words, and the note, may claim it did.
             out.reply = lost.to_owned();
-            note = (if lost == MOVED {
-                MOVED_NOTE
-            } else {
-                NOT_APPLIED_NOTE
+            note = (match lost {
+                MOVED => MOVED_NOTE,
+                NOT_CHATS => NOT_CHATS_NOTE,
+                _ => NOT_APPLIED_NOTE,
             })
             .to_owned();
         } else if !jobs.coming.is_empty() {
@@ -821,7 +828,7 @@ impl ChatSession {
     }
 
     /// The model's undo, then the additions, then the proposal, each on the revision the one before left. The first
-    /// that finds the project moved on stops the rest.
+    /// that finds the project moved on stops the rest, as does an undo of a step that isn't chat's own last change.
     fn commit(&self, now: &ProjectNow, inputs: &Inputs, out: &PlanOut) -> Landed {
         let compiled = &out.compiled;
         let mut landed = Landed {
@@ -842,8 +849,14 @@ impl ChatSession {
             CommitError::Moved | CommitError::NoProject => MOVED,
         };
         if compiled.undo {
+            // Only chat's own last change, as its Undo chip (`undo_last`): never the person's step or another app's.
+            if lock(&self.talk).last_change.as_ref() != Some(&at) {
+                landed.lost = Some(NOT_CHATS);
+                return landed;
+            }
             match self.projects.undo(&at) {
                 Ok(c) => {
+                    lock(&self.talk).last_change = None;
                     landed.undone = Some(c.patch);
                     (at, base) = (c.at, c.project);
                     landed.at = at.clone();
