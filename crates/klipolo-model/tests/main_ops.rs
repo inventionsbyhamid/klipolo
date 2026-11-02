@@ -687,7 +687,7 @@ fn main_op_json_shapes() {
     );
 }
 
-// --- Fix 1: layers are re-anchored in source time, so speed rounding never changes their clip ---
+// --- Layers are re-anchored in source time, so speed rounding never changes their clip ---
 
 /// Fixture with clip a at `speed` and a title attached at the very start of clip b.
 fn title_on_b(speed: f64) -> Project {
@@ -781,7 +781,7 @@ fn layer_ownership_survives_cut_sweeps() {
     }
 }
 
-// --- Fix 1 minors ---
+// --- Fades on a speed change, anchors a split leaves alone, a separated clip's speed ---
 
 #[test]
 fn speeding_up_clamps_fades_unless_the_patch_sets_them() {
