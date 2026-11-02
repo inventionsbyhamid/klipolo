@@ -1,0 +1,97 @@
+{
+ "audio": "fleurs_ar_pyramids_16k.wav",
+ "language": "ar",
+ "turns": [
+  {
+   "startMs": 0,
+   "endMs": 5160,
+   "text": "بإمكانك أن ترى الأهرام في الظلام وفي صمت قبل أن يبدأ العرض."
+  }
+ ],
+ "reference": [
+  {
+   "text": "بإمكانك",
+   "startMs": 680,
+   "endMs": 1200,
+   "score": 0.931,
+   "turn": 0
+  },
+  {
+   "text": "أن",
+   "startMs": 1260,
+   "endMs": 1340,
+   "score": 0.992,
+   "turn": 0
+  },
+  {
+   "text": "ترى",
+   "startMs": 1380,
+   "endMs": 1540,
+   "score": 0.854,
+   "turn": 0
+  },
+  {
+   "text": "الأهرام",
+   "startMs": 1580,
+   "endMs": 2080,
+   "score": 0.931,
+   "turn": 0
+  },
+  {
+   "text": "في",
+   "startMs": 2140,
+   "endMs": 2220,
+   "score": 0.869,
+   "turn": 0
+  },
+  {
+   "text": "الظلام",
+   "startMs": 2220,
+   "endMs": 2600,
+   "score": 0.846,
+   "turn": 0
+  },
+  {
+   "text": "وفي",
+   "startMs": 2640,
+   "endMs": 2920,
+   "score": 0.933,
+   "turn": 0
+  },
+  {
+   "text": "صمت",
+   "startMs": 3060,
+   "endMs": 3360,
+   "score": 0.668,
+   "turn": 0
+  },
+  {
+   "text": "قبل",
+   "startMs": 3480,
+   "endMs": 3700,
+   "score": 0.999,
+   "turn": 0
+  },
+  {
+   "text": "أن",
+   "startMs": 3800,
+   "endMs": 3880,
+   "score": 0.877,
+   "turn": 0
+  },
+  {
+   "text": "يبدأ",
+   "startMs": 3900,
+   "endMs": 4140,
+   "score": 0.93,
+   "turn": 0
+  },
+  {
+   "text": "العرض.",
+   "startMs": 4200,
+   "endMs": 4560,
+   "score": 0.983,
+   "turn": 0
+  }
+ ]
+}

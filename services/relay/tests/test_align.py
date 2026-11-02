@@ -3,6 +3,7 @@
 
 import json
 import os
+import statistics
 import subprocess
 import sys
 import time
@@ -316,6 +317,36 @@ def test_fixture_words_start_within_150ms_of_reference(mms):
     assert len(checked) >= 0.9 * len(words)
     low = [w["text"] for w, r in zip(words, reference) if r["score"] < 0.05]
     print(f"scores of the invented repeats {low}: {[w['score'] for w, r in zip(words, reference) if r['score'] < 0.05]}")
+
+
+def language_case(name):
+    case = json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+    with wave.open(str(FIXTURES / case["audio"])) as audio:
+        pcm = audio.readframes(audio.getnframes())
+    turns = [Turn(t["startMs"], t["endMs"], t["text"]) for t in case["turns"]]
+    return pcm, turns, case
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("name", ["fleurs_hi_pyramids.json", "fleurs_ar_pyramids.json"])
+def test_turns_in_other_scripts_time_every_word(mms, name):
+    pcm, turns, case = language_case(name)
+    result = align_pcm(mms, pcm, turns)
+    assert result.skipped == []
+    words, reference = result.words, case["reference"]
+    assert [w["text"] for w in words] == turns[0].text.split()
+    scores = [w["score"] for w in words]
+    print(f"\n{case['language']}: {len(words)} words, median score {statistics.median(scores):.3f}, min {min(scores):.3f}")
+    # The app drops words under 0.05 and times a whole turn roughly when its
+    # median is under 0.5 (MIN_SCORE and MATCH_MEDIAN in klipolo-analysis).
+    # A word with nothing alignable would score 0 here.
+    assert min(scores) >= 0.3
+    assert statistics.median(scores) >= 0.8
+    starts = [w["startMs"] for w in words]
+    assert starts == sorted(starts)
+    assert all(w["startMs"] < w["endMs"] <= turns[0].end_ms for w in words)
+    far = [(w["text"], w["startMs"], r["startMs"]) for w, r in zip(words, reference) if abs(w["startMs"] - r["startMs"]) > 150]
+    assert far == []
 
 
 @pytest.mark.slow
