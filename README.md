@@ -235,8 +235,10 @@ open http://localhost:8000. Its two download links are in the
   `scripts/library-sources.json` lists where each one came from.
 - Each font in `assets/fonts` comes with its own licence file. Schibsted
   Grotesk, the site font, is under the SIL Open Font License
-  (`site/assets/fonts/OFL.txt`); Archivo, the interface font, is under the SIL
-  Open Font License (`apps/desktop/src/styles/fonts/OFL.txt`).
+  (`site/assets/fonts/OFL.txt`); Archivo, which the caption style samples fall
+  back to, is under the SIL Open Font License
+  (`apps/desktop/src/styles/fonts/OFL.txt`). The interface uses the Mac's system
+  font.
 - The Rust crates and JavaScript packages the app uses are listed with their
   licences in `crates/klipolo-app/licenses/THIRD-PARTY-NOTICES.txt`.
 - The relay (`services/relay`) romanizes words in other scripts for word
