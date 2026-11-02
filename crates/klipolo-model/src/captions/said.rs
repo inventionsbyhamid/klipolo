@@ -31,9 +31,9 @@ fn unquoted(text: &str) -> &str {
     text.trim_end_matches(['"', '\'', '”', '’', '»', ')', '」', '』', '）'])
 }
 
-/// Whether `text` ends a sentence (closing quotes and brackets aside), and whether it ends a clause: a comma, semicolon
-/// or colon (a page breaks after one once it has two words). A word ending in an ASCII letter or digit, the usual
-/// case, ends neither.
+/// Whether `text` ends a sentence (closing quotes and brackets aside; Hindi's danda and Arabic's question mark too), and
+/// whether it ends a clause: a comma, semicolon or colon, Arabic's too (a page breaks after one once it has two words).
+/// A word ending in an ASCII letter or digit, the usual case, ends neither.
 fn ends(text: &str) -> (bool, bool) {
     if text
         .as_bytes()
@@ -44,8 +44,8 @@ fn ends(text: &str) -> (bool, bool) {
     }
     let t = unquoted(text);
     (
-        t.ends_with(['.', '?', '!', '…', '。', '？', '！']),
-        t.ends_with([',', ';', ':', '，', '、', '；', '：']),
+        t.ends_with(['.', '?', '!', '…', '。', '？', '！', '।', '॥', '؟', '۔']),
+        t.ends_with([',', ';', ':', '，', '、', '；', '：', '،', '؛']),
     )
 }
 

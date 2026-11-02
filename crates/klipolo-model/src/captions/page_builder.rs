@@ -77,7 +77,7 @@ pub(super) struct Cand {
     pub(super) emphasis: Option<bool>,
     pub(super) hidden: bool,
     pub(super) start_us: Us,
-    /// It shows more than a final period, and ends with one (`dropFinalPeriod`).
+    /// It shows more than a final period (or danda, or "。"), and ends with one (`dropFinalPeriod`).
     pub(super) period: bool,
 }
 

@@ -138,6 +138,19 @@ fn boxed_drops_a_pages_final_period() {
     assert_eq!(shown, ["It works", "v1.5 ships today"]);
 }
 
+/// Hindi's danda and Chinese's "。" end a sentence and a page like a period, and Boxed drops them the same way; a danda
+/// alone is no word to drop it from.
+#[test]
+fn boxed_drops_a_danda_or_a_chinese_full_stop() {
+    let (p, sp) = project_with_words(
+        "caption.boxed",
+        &words_at(0.0, "यह काम करता है। अब देखो। 今 天 好。"),
+    );
+    let pages = &captions(&p, &sp).pages[&FormatKind::Portrait];
+    let shown: Vec<String> = pages.pages.iter().map(|pg| pages.shown_text(pg)).collect();
+    assert_eq!(shown, ["यह काम करता है", "अब देखो", "今天好"]);
+}
+
 /// Only a real cut ends a hold. A split left in place (c2 goes on from source 20 s, at any speed) is
 /// no cut, so "Done." holds its 833 ms, though the next words come 0.6 s of source after the split.
 #[test]
