@@ -1484,3 +1484,81 @@ fn closing_words_are_followed_once_by_what_the_person_has_to_do() {
     let out = send(&model, &[], "square, cut the end and the ums", &i, &p).unwrap();
     assert_eq!(out.reply.matches(ANALYZE_FIRST).count(), 1, "{}", out.reply);
 }
+
+#[test]
+fn the_model_is_asked_to_close_on_what_was_done_and_never_promise_more() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let model = Fake::new(vec![
+        answer("", vec![square_call("call_1")], 0.001),
+        answer("Made it square.", vec![], 0.001),
+    ]);
+    send(&model, &[], "make it square", &i, &p).unwrap();
+    let rule = concat!(
+        "Your last words say what you did and what waits for their approval; ",
+        "never promise more work later"
+    );
+    for request in model.seen() {
+        assert!(request.system.contains(rule), "{}", request.system);
+    }
+}
+
+#[test]
+fn clearing_transitions_that_are_not_there_is_silent() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let model = Fake::new(vec![
+        answer(
+            "",
+            vec![
+                square_call("call_1"),
+                fc(
+                    "call_2",
+                    "setTransition",
+                    r#"{"after": "all", "kind": "none", "durationSec": null}"#,
+                ),
+            ],
+            0.001,
+        ),
+        answer("Made it square.", vec![], 0.001),
+    ]);
+    let out = send(&model, &[], "make a square short", &i, &p).unwrap();
+    assert_eq!(output_for(&model.seen()[1], "call_2"), DONE_OUTPUT);
+    assert_eq!(out.compiled.refusals, vec![]);
+    assert_eq!(out.reply, "Made it square.");
+}
+
+#[test]
+fn a_corrective_keep_only_replaces_the_one_before() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let keep = |id: &str, ranges: &str| fc(id, "keepOnly", &format!(r#"{{"ranges": {ranges}}}"#));
+    // First the module part (0.9 to 4.0 s), then, corrected, that and the end (6.3 to 7.8 s).
+    let model = Fake::new(vec![
+        answer(
+            "",
+            vec![keep("call_1", r#"[{"startSec": 0.9, "endSec": 4.0}]"#)],
+            0.001,
+        ),
+        answer(
+            "",
+            vec![keep(
+                "call_2",
+                r#"[{"startSec": 0.9, "endSec": 4.0}, {"startSec": 6.3, "endSec": 7.8}]"#,
+            )],
+            0.001,
+        ),
+        answer("Kept the module part and the end.", vec![], 0.001),
+    ]);
+    let out = send(&model, &[], "keep the module part and the end", &i, &p).unwrap();
+    assert_eq!(out.compiled.refusals, vec![]);
+    assert_eq!(
+        out.compiled.proposed_calls,
+        vec![1],
+        "the later one stands alone"
+    );
+    let proposal = out.compiled.proposal.as_ref().expect("the cut");
+    let kept = klipolo_model::query::video_duration(&proposal.review.after.timeline);
+    // Both parts, each snapped to the words it stands on: more than the first part alone (about 3.4 s).
+    assert!((secs(4.4)..secs(5.3)).contains(&kept), "{kept}");
+}

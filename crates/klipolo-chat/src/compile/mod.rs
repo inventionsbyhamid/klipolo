@@ -11,7 +11,8 @@
 //!   own, so that is applied at once too.
 //! - Removals (`cutRange`, `keepOnly`, `removeSilences`, `removeFillers`, a trim that makes a clip shorter) are one
 //!   `Proposal`: a `Transaction` for the project as the additions leave it, judged by the model's own review (what it
-//!   takes away, on the timeline), applied as one undo step when the person says so.
+//!   takes away, on the timeline), applied as one undo step when the person says so. A later `keepOnly` in the
+//!   message replaces an earlier one, which changes nothing.
 //! - `findMoments` gives moments, `followSubject` and `blurObjects` jobs for their runners, `makeSticker` and
 //!   `makeTitleCard`'s background jobs for a picture to be drawn (never an op until it exists), `askUser` questions,
 //!   `undo` a flag. `cannotDo` is a refusal shown to the person, as is a tool that needs an analysis the clip doesn't
@@ -648,6 +649,13 @@ impl Compiler<'_> {
             }
             if format_proposed && matches!(call, ToolCall::SetFormat { .. }) {
                 waiting.push((i, Removal::Moved(call)));
+                continue;
+            }
+            // A keepOnly that a later one in the message corrects: the later stands alone, and this one changes nothing.
+            if matches!(call, ToolCall::KeepOnly { .. })
+                && (calls[i + 1..].iter()).any(|later| matches!(later, ToolCall::KeepOnly { .. }))
+            {
+                adding.unchanged.push(i);
                 continue;
             }
             // A sentence on what the edit did beyond what was asked, said once its edit is in: `setTransition`'s cuts
