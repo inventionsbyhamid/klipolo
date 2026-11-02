@@ -48,7 +48,13 @@ export function RoughCaptionsNote() {
         {reason && <span className="analysis-rough-reason">{reason}</span>}
       </span>
       {again && !needsKey && (
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => void retry(again.split(' '))}>
+        <button
+          type="button"
+          // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+          tabIndex={0}
+          className="btn btn-ghost btn-sm"
+          onClick={() => void retry(again.split(' '))}
+        >
           Time words again
         </button>
       )}
