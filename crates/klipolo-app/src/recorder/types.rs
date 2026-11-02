@@ -127,6 +127,32 @@ pub struct TakeImport {
     pub earlier_run: bool,
 }
 
+/// The `recorder-left` payload: what the person is told about take `take`, which an earlier run of Klipolo left behind,
+/// when it doesn't land as a `recorder-imported`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct LeftTake {
+    pub take: String,
+    pub outcome: LeftOutcome,
+}
+
+/// What became of a take an earlier run left behind, when it didn't land as a `recorder-imported`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum LeftOutcome {
+    /// It couldn't be added: "A recording from your last session couldn't be added. Its files are in
+    /// Movies / Klipolo / Recordings."
+    NotAdded,
+    /// It was added to a new project, which then couldn't be opened: "A recording from your last session was added to
+    /// a new project. Open it from the start screen to see it."
+    AddedNotOpened,
+    /// An earlier run's worker records it still, and it lands once saved: "A recording from your last session is still
+    /// going. Stop it from the menu bar to add it here."
+    StillRecording,
+}
+
 /// A privacy settings page of macOS's, which the recorder's permission steps open ("Open privacy settings").
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]

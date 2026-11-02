@@ -11,6 +11,7 @@ use klipolo_model::coded::CodedError;
 use klipolo_platform::clock::Clock;
 
 use super::launch::Launch;
+use super::types::LeftOutcome;
 use super::window::Window;
 
 /// Where the recorder's outcomes go: the page and the take's landing, or a test's record.
@@ -19,7 +20,12 @@ pub trait Sink: Send + Sync {
     fn event(&self, take: &str, ev: &Event);
     /// The take is complete in its folder (`recover`: finish it from its files first): it lands. Runs on the worker's
     /// reader thread, while the take is still the recorder's: no other take arms, and quitting waits, until it returns.
-    fn finished(&self, done: &Done);
+    /// Err with what the person is told when it didn't land in full (`capture.*`): for a take of this run, said on
+    /// `recorder-event` already; for one an earlier run left behind (`Done.earlier_run`), left to `left` to say.
+    fn finished(&self, done: &Done) -> Result<(), CodedError>;
+    /// What became of take `take`, which an earlier run left behind, when it didn't land as a `recorder-imported`: for
+    /// the page (`recorder-left`).
+    fn left(&self, take: &str, outcome: LeftOutcome);
     /// A take is the recorder's (`held`, from arming until it has landed or ended) or none is: the engine's background
     /// media work waits meanwhile (`Hold::Recording`), so it never competes with the take.
     fn hold_media(&self, held: bool);
