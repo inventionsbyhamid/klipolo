@@ -6,7 +6,7 @@
 //!
 //! - `key`: the file's content key (`cache::content_key`);
 //! - `wav`: the 16 kHz WAV for speech (`audio::extract_wav_16k`), into `--out` (a temporary folder by default);
-//! - `chunks`: the WAV made as `wav` does, then read and cut into transcription requests (`transcript::Sound`), as
+//! - `chunks`: the WAV made as `wav` does, then loaded and cut into transcription requests (`transcript::Sound::load`), as
 //!   transcribing does before its first request: the requests and what the read sound holds;
 //! - `cuts`: the file's hard cuts from every frame (`cuts::detect`), the decoding the small copy's cut finder does.
 //!
@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 
-use klipolo_analysis::audio::{extract_wav_16k, read_pcm_file};
+use klipolo_analysis::audio::extract_wav_16k;
 use klipolo_analysis::cache::content_key;
 use klipolo_analysis::cuts;
 use klipolo_analysis::transcript::Sound;
@@ -78,15 +78,19 @@ fn main() {
             extract_wav_16k(video, &wav).expect("a WAV");
             let made = started.elapsed().as_secs_f64() * 1e3;
             let read = Instant::now();
-            let pcm = read_pcm_file(&wav).expect("reads the WAV");
-            let held = pcm.samples.len() * 2;
-            let sound = Sound::from_pcm(pcm, MAX_AUDIO_S);
+            // As transcribing loads it, on a blocking thread.
+            let sound = tokio::runtime::Builder::new_current_thread()
+                .build()
+                .expect("a runtime")
+                .block_on(Sound::load(&wav, MAX_AUDIO_S))
+                .expect("loads the WAV");
             format!(
-                "WAV {made:.0} ms, then read and cut {:.0} ms: {} requests over {:.0} s, {:.1} MB of sound held",
+                "WAV {made:.0} ms, then loaded and cut {:.0} ms: {} requests over {:.0} s; {:.0} MB of the process's own \
+                 memory with the sound loaded (Linux)",
                 read.elapsed().as_secs_f64() * 1e3,
                 sound.chunks.len(),
                 sound.duration_us as f64 / 1e6,
-                held as f64 / 1e6
+                own_mb()
             )
         }
         "cuts" => {
@@ -106,4 +110,17 @@ fn main() {
             .map_or_else(String::new, |n| n.to_string_lossy().to_string()),
         started.elapsed().as_secs_f64() * 1e3,
     );
+}
+
+/// The process's own memory now, MB (anonymous resident pages: not a mapped file's; Linux, else 0).
+fn own_mb() -> f64 {
+    std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|s| {
+            s.lines()
+                .find(|l| l.starts_with("RssAnon:"))
+                .and_then(|l| l.split_whitespace().nth(1))
+                .and_then(|kb| kb.parse::<f64>().ok())
+        })
+        .map_or(0.0, |kb| kb / 1024.0)
 }
