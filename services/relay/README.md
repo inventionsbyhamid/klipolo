@@ -46,7 +46,7 @@ All settings come from the environment.
 | `META_API_KEY` | empty | The server's own Meta key. Never logged. |
 | `DEVICE_CAP_USD` | `2.00` | Most a device can spend, all time. |
 | `GLOBAL_CAP_USD` | `40.00` | Most the whole relay can spend, all time. |
-| `ALLOWED_MODELS` | `muse-spark-1.3,muse-spark-1.2,muse-voice-transcribe-1.0,muse-image-1.0,sam-3.1` | Models the proxy forwards. SAM's video calls must stream, on a video the relay made (`POST /meta/v1/sam/videos`): its frames are reserved (at least 50 a video) and charged as Meta bills them. If Meta bills more frames than were reserved, SAM goes off for that access code until `enable-sam`. Muse Wonder and the contributor tiers are refused even when listed. |
+| `ALLOWED_MODELS` | `muse-spark-1.3,muse-spark-1.2,muse-voice-transcribe-1.0,muse-image-1.0,sam-3.1` | Models the proxy forwards. SAM's video calls must stream, on a video the relay made (`POST /meta/v1/sam/videos`): its frames are reserved (at least 50 a video) and charged as Meta bills them. If Meta bills more frames than were reserved (past 2% and 2 frames of slack), SAM goes off for that access code until `enable-sam`. Muse Wonder and the contributor tiers are refused even when listed. |
 | `SAM_DAILY_CAP_USD` | `5.00` | Most SAM may cost in a day (UTC), across every device, on top of the other caps. |
 | `SAM_WORK_DIR` | `sam-work` beside the database | Where SAM's uploads and copies are made (not `/tmp`, which word timing uses). Below 192 MB free, SAM uploads get 503. |
 | `ALIGN_MINUTES_PER_DEVICE_PER_DAY` | `120` | Word timing per device per UTC day. |

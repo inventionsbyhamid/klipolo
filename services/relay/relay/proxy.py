@@ -54,9 +54,9 @@ at admission writes it.
 
 SAM is held to what the relay made: its requests may name video only in
 `input`, only by a file id the relay made for that device, with no `fps` and
-no links but data URLs. If Meta ever bills more frames than were reserved, SAM
-is turned off for the device's access code (logged) until the owner turns it
-back on (`admin enable-sam`). SAM also has its own daily cap
+no links but data URLs. If Meta ever bills more frames than were reserved
+(past 2% and 2 frames of slack), SAM is turned off for the device's access code
+(logged) until the owner turns it back on (`admin enable-sam`). SAM also has its own daily cap
 (SAM_DAILY_CAP_USD), on top of the device and global caps.
 
 Nothing from a proxied request is stored except the ledger row and, in
@@ -187,8 +187,10 @@ SAM_BUSY_MESSAGE = "Klipolo's server is preparing other videos. Try again in a m
 SAM_NO_SPACE_MESSAGE = "Klipolo's server is short of space for video right now. Try again in a few minutes."
 # Room a SAM upload needs in its folder: the upload and the relay's copy, with some to spare.
 SAM_ROOM_BYTES = 3 * SAM_UPLOAD_BYTES
-# Meta may bill a frame or two more than the copy holds; past this share over the reservation, SAM is turned off.
+# Meta may bill a frame or two more than the copy holds; past this share over the reservation, and these frames on
+# top (a short copy's 2% is a single frame), SAM is turned off. The frames are still charged as Meta bills them.
 SAM_OVERBILL_MARGIN = 1.02
+SAM_OVERBILL_FRAMES = 2
 DEVICE_BUSY_MESSAGE = "Other AI requests from this device are still running. Try again when they finish."
 GLOBAL_BUSY_MESSAGE = "Klipolo AI is busy. Try again in a moment."
 BUSY_RETRY_AFTER_S = 5
@@ -539,9 +541,9 @@ async def _check_sam_billing(settings: Settings, slot: Slot, meter: Meter, usage
     if meter.model != SAM_MODEL or usage.get("reserved"):
         return
     billed = usage.get("video_frames_processed")
-    # A call with no video reserved no frames: any it is billed for trip the breaker.
+    # A call with no video reserved no frames: more than the slack billed for it trips the breaker.
     reserved = max(meter.video_frames, SAM_MIN_FRAMES) if meter.has_video else 0
-    if not isinstance(billed, int | float) or billed <= reserved * SAM_OVERBILL_MARGIN:
+    if not isinstance(billed, int | float) or billed <= reserved * SAM_OVERBILL_MARGIN + SAM_OVERBILL_FRAMES:
         return
     logger.error(
         "Meta billed %s SAM frames against %s reserved for device %s: SAM is off for its code",

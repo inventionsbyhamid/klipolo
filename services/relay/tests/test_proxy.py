@@ -2950,6 +2950,23 @@ def test_meta_billing_more_frames_than_reserved_turns_sam_off_for_the_code(clien
     assert meta.calls.call_count == sent
 
 
+@pytest.mark.parametrize(("billed", "sam_off"), [(52, 0), (53, 0), (54, 1)])
+def test_the_breaker_allows_a_couple_of_frames_over_a_small_copy(client, conn, meta, billed, sam_off):
+    # A 50-frame copy: 2% is a single frame, so 2 frames more are allowed on top (50 * 1.02 + 2 = 53).
+    device = add_device(conn)
+    counted(client.app, device, "file-1", 50)
+    done = {"type": "response.completed", "response": {"status": "completed", "usage": {"video_frames_processed": billed}}}
+    stream_from_meta(meta, MetaStream([sse(CREATED), sse(done)]))
+
+    response = client.post("/meta/v1/responses", json=sam_on("file-1"), headers=device.headers)
+
+    # Charged what Meta billed either way.
+    assert response.status_code == 200
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(billed * 0.20 / 1000)
+    assert conn.execute("SELECT sam_off FROM codes WHERE code = 'testcode'").fetchone()[0] == sam_off
+
+
 def test_sam_has_its_own_daily_cap(client, conn, meta):
     # $4.99 of SAM today on one device: another device's 120 frames ($0.024) would pass the $5.00 a day.
     spender = add_device(conn)
@@ -3134,7 +3151,7 @@ def shutil_usage(free):
 
 
 def test_the_breaker_counts_every_sam_call_and_sam_takes_only_known_parts_and_picture_data(client, conn, meta):
-    # A call with no video reserves no frames: any video frames Meta bills for it trip the breaker.
+    # A call with no video reserves no frames: more than the 2 frames of slack billed for it trip the breaker.
     device = add_device(conn)
     image = {"type": "input_image", "image_url": "data:image/png;base64,AAAA"}
     body = {"model": "sam-3.1", "input": [{"role": "user", "content": [{"type": "input_text", "text": "face"}, image]}]}
