@@ -1,11 +1,12 @@
 import { t } from '@lingui/core/macro';
 import { memo, useCallback, useRef, type KeyboardEvent, type PointerEvent } from 'react';
 import type { Motion } from '../../../bindings/Motion';
-import { motionKeyTimes } from '../../../lib/keys';
+import type { MotionKeys } from '../../../bindings/MotionKeys';
+import { landedAt, motionKeyTimes, movedKeysAt } from '../../../lib/keys';
 import { formatPrecise } from '../../../lib/time';
 import { deleteKeysAt, moveKeysAt } from '../../../state/keyEdits';
 import { itemNow } from '../../../state/latest';
-import { isPicked, useKeyPick } from '../../../state/keyPick';
+import { isPicked, pickMoved, useKeyPick } from '../../../state/keyPick';
 import { usePlayback } from '../../../state/playback';
 import { useSelection } from '../../../state/selection';
 import { registerFollower } from '../drag/registry';
@@ -87,7 +88,12 @@ export const KeyDiamonds = memo(function KeyDiamonds({
     const toUs = dragged(p, e.clientX);
     e.currentTarget.style.left = `${at(p.fromUs)}px`;
     const item = itemNow(id);
-    if (item && toUs !== p.fromUs) void moveKeysAt(item, p.fromUs, toUs, e.altKey);
+    if (!item || toUs === p.fromUs) return;
+    // Delete straight after takes the keys where they went (stopping short of a key in the way), not the layer.
+    const keys: MotionKeys = { x: [], y: [], scale: [], rotation: [], opacity: [], ...item.layout.motion?.keys };
+    const goesTo = landedAt(keys, movedKeysAt(keys, p.fromUs, toUs, item.durationUs, e.altKey)) ?? p.fromUs;
+    const landed = moveKeysAt(item, p.fromUs, toUs, e.altKey);
+    pickMoved({ kind: 'motion', itemId: id, tUs: goesTo }, p.fromUs, landed);
   };
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>, us: number) => {
     if (e.key === 'Enter' || e.key === ' ') {

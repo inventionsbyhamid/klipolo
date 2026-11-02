@@ -1,5 +1,6 @@
 import { act, fireEvent } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Item } from '../../bindings/Item';
 import type { ItemContent } from '../../bindings/ItemContent';
 import type { Key } from '../../bindings/Key';
 import type { Layout } from '../../bindings/Layout';
@@ -29,6 +30,7 @@ const { usePlayback } = await import('../../state/playback');
 const { useSpeech } = await import('./media/speech');
 const { Timeline } = await import('./Timeline');
 const { clearMotionKeys } = await import('../../state/keyEdits');
+const { deletePickedKey, useKeyPick } = await import('../../state/keyPick');
 
 type AudioContent = Extract<ItemContent, { type: 'audio' }>;
 const S = 1_000_000;
@@ -50,12 +52,32 @@ const layoutOf = (call: Parameters<typeof apply>) =>
   (call[1][0] as unknown as { patch: { layout: Layout } }).patch.layout;
 const diamonds = () => [...document.querySelectorAll<HTMLButtonElement>('.tl-key')];
 
+/** An apply that lands as Rust's does for the layer patches here: the changed layer is in the project afterwards. */
+function landing(_label: string, ops: Op[]): Promise<boolean> {
+  const snapshot = structuredClone(useProject.getState().snapshot!);
+  for (const op of ops) {
+    if (op.type !== 'updateItem') continue;
+    for (const track of snapshot.project.timeline.tracks)
+      track.items = track.items.map((item) => (item.id === op.id ? ({ ...item, ...op.patch } as Item) : item));
+  }
+  useProject.setState({ snapshot });
+  return Promise.resolve(true);
+}
+
+/** A drag of `el` from `fromX` to `toX` (and down by `dy`) that lets go there. */
+function drag(el: Element, fromX: number, toX: number, dy = 0) {
+  fireEvent.pointerDown(el, { button: 0, pointerId: 9, clientX: fromX, clientY: 20 });
+  fireEvent.pointerMove(el, { pointerId: 9, clientX: toX, clientY: 20 + dy });
+  fireEvent.pointerUp(el, { pointerId: 9, clientX: toX, clientY: 20 + dy });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   useUi.setState({ pxPerSecond: 100 });
   useSpeech.setState({ ranges: [] });
   useSelection.setState({ selectedId: null, selectedIds: [] });
   usePlayback.setState({ playheadUs: 0, playing: false });
+  useKeyPick.getState().clear();
 });
 
 describe('motion keys on the timeline', () => {
@@ -112,6 +134,28 @@ describe('motion keys on the timeline', () => {
     const cleared = layoutOf(apply.mock.calls[1]).motion!;
     expect(cleared.keys).toBeUndefined();
     expect(cleared.enter).toBeDefined();
+  });
+
+  it('Delete straight after a drag takes the moved keys, not the layer', async () => {
+    moving();
+    const lands = vi.fn(landing);
+    useProject.setState({ apply: lands });
+    renderWithProviders(<Timeline />);
+    const [, later] = diamonds();
+    // Picked first, then dragged from 2 s to 2.5 s into the layer.
+    fireEvent.pointerDown(later, { button: 0, pointerId: 1, clientX: 300 });
+    fireEvent.pointerUp(later, { pointerId: 1, clientX: 300 });
+    drag(later, 300, 350);
+    await act(async () => undefined);
+    expect(lands.mock.calls[0][0]).toBe('keys.move.undo');
+    expect(useKeyPick.getState().picked).toEqual({ kind: 'motion', itemId: 'title', tUs: 2.5 * S });
+    expect(deletePickedKey()).toBe(true);
+    await act(async () => undefined);
+    expect(lands.mock.calls[1][0]).toBe('keys.delete.undo');
+    const left = layoutOf(lands.mock.calls[1]).motion!.keys!;
+    expect(left.x).toEqual([key(0.5, 0)]);
+    expect(left.opacity).toEqual([]);
+    expect(lands.mock.calls.flatMap(([, ops]) => ops.map((op) => op.type))).not.toContain('removeItem');
   });
 });
 
@@ -188,11 +232,29 @@ describe('volume keys on the timeline', () => {
     expect(louder[0].v).toBeGreaterThan(0.5);
     expect(louder[1].v).toBeGreaterThan(1);
   });
+
+  it('Delete straight after a drag takes the moved point, not the sound', async () => {
+    const id = sound([key(2, 0.5), key(6, 1)]);
+    const lands = vi.fn(landing);
+    useProject.setState({ apply: lands });
+    renderWithProviders(<Timeline />);
+    const [first] = document.querySelectorAll('.tl-volume-key');
+    // From 2 s to 3 s into the sound, at its level.
+    drag(first, 200, 300);
+    await act(async () => undefined);
+    expect(lands.mock.calls[0][0]).toBe('volumeKeys.move.undo');
+    expect(contentOf(lands.mock.calls[0]).volumeKeys).toEqual([key(3, 0.5), key(6, 1)]);
+    expect(useKeyPick.getState().picked).toEqual({ kind: 'volume', target: { kind: 'sound', id }, tUs: 3 * S });
+    expect(deletePickedKey()).toBe(true);
+    await act(async () => undefined);
+    expect(lands.mock.calls[1][0]).toBe('volumeKeys.remove.undo');
+    expect(contentOf(lands.mock.calls[1]).volumeKeys).toEqual([key(6, 1)]);
+    expect(lands.mock.calls.flatMap(([, ops]) => ops.map((op) => op.type))).not.toContain('removeItem');
+  });
 });
 
 describe('a picked key', () => {
   it('Delete takes the picked key away, and after a press elsewhere the selection again', async () => {
-    const { deletePickedKey, useKeyPick } = await import('../../state/keyPick');
     moving();
     renderWithProviders(<Timeline />);
     const [first] = diamonds();
@@ -209,11 +271,38 @@ describe('a picked key', () => {
     fireEvent.pointerDown(document.body, { button: 0, pointerId: 3 });
     expect(useKeyPick.getState().picked).toBeNull();
     expect(deletePickedKey()).toBe(false);
-    // A pick of a key that is gone does nothing, and another selection lets a pick go.
+    // A pick of a key that is gone does nothing, yet spends the Delete: its layer stays. Another selection lets a
+    // pick go.
+    const before = apply.mock.calls.length;
     useKeyPick.getState().pick({ kind: 'motion', itemId: 'title', tUs: 7 * S });
-    expect(deletePickedKey()).toBe(false);
+    expect(deletePickedKey()).toBe(true);
+    await act(async () => undefined);
+    expect(apply.mock.calls.slice(before).flatMap(([, ops]) => ops)).toEqual([]);
+    expect(useKeyPick.getState().picked).toBeNull();
     useKeyPick.getState().pick({ kind: 'motion', itemId: 'title', tUs: 2 * S });
     act(() => useSelection.getState().select('b'));
     expect(useKeyPick.getState().picked).toBeNull();
+  });
+
+  it('a Delete pressed before a drag has landed takes the key once it is there', async () => {
+    moving();
+    let land!: () => void;
+    const slow = vi.fn((label: string, ops: Op[]) =>
+      label === 'keys.move.undo'
+        ? new Promise<boolean>((done) => (land = () => void landing(label, ops).then(done)))
+        : landing(label, ops),
+    );
+    useProject.setState({ apply: slow });
+    renderWithProviders(<Timeline />);
+    const [first] = diamonds();
+    // From 0.5 s to 1 s into the layer; Delete before the move is in.
+    drag(first, 150, 200);
+    await act(async () => undefined);
+    expect(slow).toHaveBeenCalledTimes(1);
+    expect(deletePickedKey()).toBe(true);
+    await act(async () => land());
+    await vi.waitFor(() => expect(slow).toHaveBeenCalledTimes(2));
+    expect(slow.mock.calls[1][0]).toBe('keys.delete.undo');
+    expect(layoutOf(slow.mock.calls[1]).motion!.keys!.x).toEqual([key(2, 0.2)]);
   });
 });

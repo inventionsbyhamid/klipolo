@@ -9,6 +9,7 @@ import {
   REST,
   VOLUME_LIMITS,
   keyIndexAt,
+  landedAt,
   levelAt,
   movedKey,
   movedKeysAt,
@@ -97,19 +98,32 @@ export function setKeyEase(item: Item, prop: MotionProperty, tUs: number, ease: 
 
 const ALL = Object.keys(REST) as (keyof MotionKeys)[];
 
-/** Every motion key at `fromUs` (a timeline diamond) moved to `toUs`, or copied there (Option drag). */
-export function moveKeysAt(item: Item, fromUs: number, toUs: number, copy: boolean) {
-  return commitLatest(copy ? 'keys.copy.undo' : 'keys.move.undo', () => {
+/**
+ * Every motion key at `fromUs` (a timeline diamond) moved to `toUs`, or copied there (Option drag). Resolves with the
+ * time they went to (a move stops short of a key in its way), or null when they didn't go.
+ */
+export async function moveKeysAt(item: Item, fromUs: number, toUs: number, copy: boolean): Promise<number | null> {
+  let landed = null as number | null;
+  const ok = await commitLatest(copy ? 'keys.copy.undo' : 'keys.move.undo', () => {
     const len = itemNow(item.id)?.durationUs ?? item.durationUs;
-    return motionOps(item, (keys) => movedKeysAt(keys, fromUs, toUs, len, copy));
+    return motionOps(item, (keys) => {
+      const next = movedKeysAt(keys, fromUs, toUs, len, copy);
+      landed = landedAt(keys, next);
+      return next;
+    });
   });
+  return ok ? landed : null;
 }
 
-/** Every motion key at `tUs` (a timeline diamond) taken away. */
+/** Every motion key at `tUs` (a timeline diamond) taken away; nothing when the layer has none there by its turn. */
 export function deleteKeysAt(item: Item, tUs: number) {
-  return commitLatest('keys.delete.undo', () =>
-    motionOps(item, (keys) => Object.fromEntries(ALL.map((name) => [name, keys[name].filter((k) => k.tUs !== tUs)]))),
-  );
+  return commitLatest('keys.delete.undo', () => {
+    const keys = motionNow(item)?.keys;
+    if (!keys || !ALL.some((name) => (keys[name] ?? []).some((k) => k.tUs === tUs))) return [];
+    return motionOps(item, (now) =>
+      Object.fromEntries(ALL.map((name) => [name, now[name].filter((k) => k.tUs !== tUs)])),
+    );
+  });
 }
 
 /** Every motion key of layer `id` taken away; its enter, exit and loop stay. */
@@ -178,18 +192,26 @@ export function levelValue(v: number): number {
   return within(VOLUME_LIMITS, Math.round(v * 100) / 100);
 }
 
-/** The volume line's key at `fromUs` moved to `toUs` at level `v` (a drag of a point). */
-export function moveVolumeKey(target: Leveled, fromUs: number, toUs: number, v: number) {
-  return editVolumeKeys('volumeKeys.move.undo', target, (keys, _volume, lenUs) => {
+/**
+ * The volume line's key at `fromUs` moved to `toUs` at level `v` (a drag of a point). Resolves with the time it went to
+ * (it stops short of a key in its way), or null when it didn't go.
+ */
+export async function moveVolumeKey(target: Leveled, fromUs: number, toUs: number, v: number): Promise<number | null> {
+  let landed = null as number | null;
+  const ok = await editVolumeKeys('volumeKeys.move.undo', target, (keys, _volume, lenUs) => {
     // The moved key is the one new object in the list: the others are kept as they were.
     const moved = movedKey(keys, fromUs, toUs, lenUs);
+    landed = moved.find((k) => !keys.includes(k))?.tUs ?? null;
     return moved.map((k) => (keys.includes(k) ? k : { ...k, v: levelValue(v) }));
   });
+  return ok ? landed : null;
 }
 
-/** The volume key at `tUs` taken away. */
+/** The volume key at `tUs` taken away; nothing when there is none there by its turn. */
 export function deleteVolumeKey(target: Leveled, tUs: number) {
-  return editVolumeKeys('volumeKeys.remove.undo', target, (keys) => keys.filter((k) => k.tUs !== tUs));
+  return editVolumeKeys('volumeKeys.remove.undo', target, (keys) =>
+    keys.some((k) => k.tUs === tUs) ? keys.filter((k) => k.tUs !== tUs) : null,
+  );
 }
 
 /** A key of level `v` at `tUs` (a click on the volume line). */
