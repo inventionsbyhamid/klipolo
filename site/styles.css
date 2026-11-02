@@ -1372,6 +1372,13 @@ ol {
   }
 }
 
+/* Seven styles: 4 and 3 where the row is wide enough */
+@media (min-width: 1080px) {
+  .cap-styles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 .cap-styles li {
   display: grid;
   gap: 0.4rem;
@@ -1457,6 +1464,35 @@ ol {
   border-radius: 0.2em;
   background: rgb(8 12 24 / 0.88);
   font-weight: 600;
+}
+
+/* The two made for shorts */
+.cap-wordpop {
+  font-weight: 900;
+  font-stretch: 75%;
+  text-transform: uppercase;
+  text-shadow:
+    0.05em 0 0 #0D1222,
+    -0.05em 0 0 #0D1222,
+    0 0.05em 0 #0D1222,
+    0 -0.05em 0 #0D1222,
+    0.04em 0.08em 0 #0D1222;
+}
+
+.cap-wordpop b {
+  display: inline-block;
+  color: #39E508;
+  transform: scale(1.1);
+}
+
+.cap-boldbox {
+  padding: 0.12em 0.4em;
+  border-radius: 0.3em;
+  background: #FFFFFF;
+  color: #0D1222;
+  font-weight: 900;
+  font-stretch: 75%;
+  text-transform: uppercase;
 }
 
 .cap-name {
