@@ -33,18 +33,20 @@ again by the relay, `samvideo`), at least 50 a video, and SAM is refused on any
 other video; for transcription, the
 audio's data at 32,000 bytes a second, the lowest rate Meta takes; for Muse
 Image, two images ($0.02), the most a call may ask for. The call
-is refused with 402 when the spend alone leaves the device or the relay no
-room for it (final), with 429 when only what calls in flight have reserved
-is in the way (retry later), or with 413 if it could cost more than a
-device's whole cap. A device with no room left is refused before its body is
-read, and bodies have a deadline (408).
+is refused with 402 when the spend alone leaves the device, its access code
+(when the owner gave the code a cap: what all its devices spent together) or
+the relay no room for it (final), with 429 when only what calls in flight
+have reserved is in the way (retry later), or with 413 if it could cost more
+than a device's whole cap. A device with no room left is refused before its
+body is read, and bodies have a deadline (408).
 
 After Meta answers, the call is charged from Meta's own `usage` (Muse Image:
 $0.01 for each image in its answer, at most the `n` asked for): the ledger row and the device's
 `spent_usd` are written in one transaction, and only then is the reservation
-freed. Failed calls (non-2xx) are not charged. A client
-hanging up never makes a call cheaper: a non-streamed call still waits for
-Meta's answer, and a streamed one is read to its final event. When the real
+freed. The ledger row names the code the call came under, which that code's
+cap counts. Failed calls (non-2xx) are not charged. A client hanging up
+never makes a call cheaper: a non-streamed call still waits for Meta's
+answer, and a streamed one is read to its final event. When the real
 usage can't be read (no usage, missing counters, a parse failure, a timeout
 after the request reached Meta, a stream without a final event), the call is
 charged its reservation, or the usage seen if that is higher. A streaming
@@ -91,7 +93,7 @@ from relay import db
 from relay.config import Settings
 from relay.deps import AppSettings, Conn
 from relay.devices import Device, has_relay_ai
-from relay.errors import RelayError, error_response
+from relay.errors import GLOBAL_BUDGET_MESSAGE, RelayError, error_response
 from relay import samvideo
 from relay.pricing import (
     DEFAULT_MAX_OUTPUT_TOKENS,
@@ -169,7 +171,6 @@ BUDGET_MESSAGE = "This device has used its Klipolo credit. Add your own Meta key
 NOT_ENOUGH_CREDIT_MESSAGE = (
     "This device does not have enough Klipolo credit left for this request. Add your own Meta key in Settings."
 )
-GLOBAL_BUDGET_MESSAGE = "Klipolo's shared AI credit is used up for now. Add your own Meta key in Settings."
 SAM_TODAY_MESSAGE = (
     "Klipolo's video tracking is used up for today. Try again tomorrow, or add your own Meta key in Settings."
 )
@@ -208,7 +209,8 @@ def meta_client() -> httpx.AsyncClient:
 
 class InFlight:
     """The proxied calls in progress: how many, per device and in total, and
-    how much each has reserved against the caps.
+    how much each has reserved against the caps, by device, by access code and
+    in total.
 
     A call reserves its worst-case cost at admission and keeps it until its
     charge is written, so calls running at once can't together pass a cap.
@@ -223,6 +225,9 @@ class InFlight:
         self._count = 0
         self._reserved_by_device: dict[str, float] = {}
         self._reserved_total = 0.0
+        # Calls and reservations by access code, for a code's cap.
+        self._by_code: dict[str, int] = {}
+        self._reserved_by_code: dict[str, float] = {}
         # What SAM calls in flight have reserved, for SAM's daily cap.
         self.sam_reserved = 0.0
         # Admissions run one at a time, so two can't both claim the same room.
@@ -232,7 +237,7 @@ class InFlight:
         # recorded.
         self.unwritten: list[Charge] = []
 
-    def acquire(self, device_id: str) -> "Slot":
+    def acquire(self, device_id: str, code: str | None = None) -> "Slot":
         if self._by_device.get(device_id, 0) >= self.per_device:
             raise RelayError(
                 429,
@@ -244,7 +249,9 @@ class InFlight:
             raise RelayError(429, "busy", "The relay is busy. Try again in a moment.", headers={"Retry-After": "1"})
         self._by_device[device_id] = self._by_device.get(device_id, 0) + 1
         self._count += 1
-        return Slot(self, device_id)
+        if code is not None:
+            self._by_code[code] = self._by_code.get(code, 0) + 1
+        return Slot(self, device_id, code)
 
     def count(self, device_id: str | None = None) -> int:
         return self._count if device_id is None else self._by_device.get(device_id, 0)
@@ -253,11 +260,17 @@ class InFlight:
         """What calls in flight have reserved: for this device, and in total."""
         return self._reserved_by_device.get(device_id, 0.0), self._reserved_total
 
-    def _reserve(self, device_id: str, amount: float) -> None:
+    def code_reserved(self, code: str | None) -> float:
+        """What calls in flight on access code `code` have reserved, from all its devices."""
+        return 0.0 if code is None else self._reserved_by_code.get(code, 0.0)
+
+    def _reserve(self, device_id: str, amount: float, code: str | None = None) -> None:
         self._reserved_by_device[device_id] = self._reserved_by_device.get(device_id, 0.0) + amount
         self._reserved_total += amount
+        if code is not None:
+            self._reserved_by_code[code] = self._reserved_by_code.get(code, 0.0) + amount
 
-    def _release(self, device_id: str, reserved: float) -> None:
+    def _release(self, device_id: str, reserved: float, code: str | None = None) -> None:
         left = self._by_device[device_id] - 1
         if left:
             self._by_device[device_id] = left
@@ -270,21 +283,33 @@ class InFlight:
         self._count -= 1
         # Back to exactly zero when idle, so float sums never drift.
         self._reserved_total = self._reserved_total - reserved if self._count else 0.0
+        if code is not None:
+            # The same for the code: zero once its last call is done.
+            left = self._by_code[code] - 1
+            if left:
+                self._by_code[code] = left
+                if reserved:
+                    self._reserved_by_code[code] -= reserved
+            else:
+                del self._by_code[code]
+                self._reserved_by_code.pop(code, None)
 
 
 class Slot:
     """One call's place in flight and its reservation, freed together once
     the call is charged."""
 
-    def __init__(self, owner: InFlight, device_id: str) -> None:
+    def __init__(self, owner: InFlight, device_id: str, code: str | None = None) -> None:
         self.owner = owner
         self.device_id = device_id
+        # The device's access code when the call came: its reservation and its charge count against that code.
+        self.code = code
         self.reserved = 0.0
         self.sam_reserved = 0.0
         self._released = False
 
     def reserve(self, amount: float, *, sam: bool = False) -> None:
-        self.owner._reserve(self.device_id, amount)
+        self.owner._reserve(self.device_id, amount, self.code)
         self.reserved += amount
         if sam:
             self.owner.sam_reserved += amount
@@ -293,7 +318,7 @@ class Slot:
     def release(self) -> None:
         if not self._released:
             self._released = True
-            self.owner._release(self.device_id, self.reserved)
+            self.owner._release(self.device_id, self.reserved, self.code)
             self.owner.sam_reserved = max(self.owner.sam_reserved - self.sam_reserved, 0.0)
 
 
@@ -314,19 +339,37 @@ def relay_device(device: Device, conn: Conn, settings: AppSettings) -> sqlite3.R
 RelayDevice = Annotated[sqlite3.Row, Depends(relay_device)]
 
 
-def _spend(conn: sqlite3.Connection, device_id: str) -> tuple[float, float]:
-    """The device's spend and the relay's all-time total. The global cap is
-    all-time: Meta's credits are granted once."""
+@dataclass(frozen=True)
+class Spend:
+    """What the caps are checked against, read together: the device's spend,
+    the relay's all-time total, and the access code's cap with what was
+    charged under the code (by all its devices)."""
+
+    device: float
+    total: float
+    code: float = 0.0
+    code_cap: float | None = None
+
+
+def _spend(conn: sqlite3.Connection, device_id: str, code: str | None = None) -> Spend:
+    """The spend the caps are checked against. The global cap and a code's cap
+    are all-time: Meta's credits are granted once."""
     row = conn.execute("SELECT spent_usd FROM devices WHERE device_id = ?", (device_id,)).fetchone()
     total = conn.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM ledger").fetchone()[0]
-    return (math.inf if row is None else row["spent_usd"]), total
+    device = math.inf if row is None else row["spent_usd"]
+    cap = None if code is None else conn.execute("SELECT cap_usd FROM codes WHERE code = ?", (code,)).fetchone()
+    if cap is None or cap["cap_usd"] is None:
+        return Spend(device, total)
+    spent = conn.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM ledger WHERE code = ?", (code,)).fetchone()[0]
+    return Spend(device, total, spent, cap["cap_usd"])
 
 
 async def admit(conn: sqlite3.Connection, slot: Slot, settings: Settings, amount: float, *, sam: bool = False) -> None:
-    """Reserve `amount` for the call, or refuse it when the device or the relay
-    has no room for it on top of what is spent and what calls in flight have
-    reserved: 402 when the spend alone leaves no room, 429 when the calls in
-    flight do. With `amount` 0 this only checks that any room is left."""
+    """Reserve `amount` for the call, or refuse it when the device, its access
+    code (with a cap) or the relay has no room for it on top of what is spent
+    and what calls in flight have reserved: 402 when the spend alone leaves no
+    room, 429 when the calls in flight do. With `amount` 0 this only checks
+    that any room is left."""
     if amount > settings.device_cap_usd:
         # No device could ever have room for it: say so, not "used its credit".
         raise RelayError(
@@ -347,8 +390,9 @@ async def admit(conn: sqlite3.Connection, slot: Slot, settings: Settings, amount
         # reservations by the time the spend is read is in that spend, so no
         # call is ever missed from both.
         device_reserved, total_reserved = in_flight.reserved(slot.device_id)
-        spent, total = await run_in_threadpool(_spend, conn, slot.device_id)
-        _check_room(spent, device_reserved, total, total_reserved, amount, settings)
+        code_reserved = in_flight.code_reserved(slot.code)
+        spend = await run_in_threadpool(_spend, conn, slot.device_id, slot.code)
+        _check_room(spend, device_reserved, total_reserved, code_reserved, amount, settings)
         if sam:
             # SAM's own daily cap, on top: what it cost today and what its calls in flight hold.
             today = await run_in_threadpool(_sam_today, conn)
@@ -362,13 +406,17 @@ def _no_room(used: float, cap: float, amount: float) -> bool:
 
 
 def _check_room(
-    spent: float, device_reserved: float, total: float, total_reserved: float, amount: float, settings: Settings
+    spend: Spend, device_reserved: float, total_reserved: float, code_reserved: float, amount: float, settings: Settings
 ) -> None:
     """Refuse a call the caps have no room for, saying why. The spend alone
     decides the final answers (402); what is left is only held by calls in
-    flight, which free it when they finish (429)."""
-    device_cap, global_cap = settings.device_cap_usd, settings.global_cap_usd
+    flight, which free it when they finish (429). A code's cap is shared
+    credit, like the relay's, and is said the same way."""
+    device_cap, global_cap, code_cap = settings.device_cap_usd, settings.global_cap_usd, spend.code_cap
+    spent, total = spend.device, spend.total
     if _no_room(total, global_cap, amount):
+        raise RelayError(402, "budget", GLOBAL_BUDGET_MESSAGE)
+    if code_cap is not None and _no_room(spend.code, code_cap, amount):
         raise RelayError(402, "budget", GLOBAL_BUDGET_MESSAGE)
     if spent >= device_cap:
         raise RelayError(402, "budget", BUDGET_MESSAGE)
@@ -378,6 +426,8 @@ def _check_room(
     if _no_room(spent + device_reserved, device_cap, amount):
         raise RelayError(429, "busy", DEVICE_BUSY_MESSAGE, headers=retry)
     if _no_room(total + total_reserved, global_cap, amount):
+        raise RelayError(429, "busy", GLOBAL_BUSY_MESSAGE, headers=retry)
+    if code_cap is not None and _no_room(spend.code + code_reserved, code_cap, amount):
         raise RelayError(429, "busy", GLOBAL_BUSY_MESSAGE, headers=retry)
 
 
@@ -389,6 +439,8 @@ class Charge:
     usage: dict[str, Any]
     cost: float
     at: str = field(default_factory=lambda: datetime.now(UTC).isoformat(timespec="seconds"))
+    # The access code the call was admitted under.
+    code: str | None = None
 
 
 def record_charge(db_path: Path, charge: Charge, *, attempts: int = 3, busy_timeout_s: float | None = None) -> None:
@@ -397,7 +449,8 @@ def record_charge(db_path: Path, charge: Charge, *, attempts: int = 3, busy_time
     never drift. Uses its own connection: a streamed response outlives the
     request's."""
     device_id, cost = charge.device_id, charge.cost
-    row = (device_id, charge.at, charge.endpoint, charge.model, json.dumps(charge.usage, sort_keys=True), cost)
+    usage = json.dumps(charge.usage, sort_keys=True)
+    row = (device_id, charge.at, charge.endpoint, charge.model, usage, cost, charge.code)
     for attempt in range(attempts):
         try:
             conn = db.connect(db_path)
@@ -406,8 +459,8 @@ def record_charge(db_path: Path, charge: Charge, *, attempts: int = 3, busy_time
                     conn.execute(f"PRAGMA busy_timeout = {int(busy_timeout_s * 1000)}")
                 with db.transaction(conn):
                     conn.execute(
-                        "INSERT INTO ledger (device_id, at, endpoint, model, usage_json, cost_usd)"
-                        " VALUES (?, ?, ?, ?, ?, ?)",
+                        "INSERT INTO ledger (device_id, at, endpoint, model, usage_json, cost_usd, code)"
+                        " VALUES (?, ?, ?, ?, ?, ?, ?)",
                         row,
                     )
                     conn.execute(
@@ -515,7 +568,7 @@ async def charge(settings: Settings, slot: Slot, meter: Meter, candidates: list[
         # Whatever goes wrong reading the usage, the call is still charged.
         logger.warning("Could not price Meta's usage for %s, charging the reservation", meter.endpoint, exc_info=True)
         usage, cost = meter.reservation()
-    entry = Charge(slot.device_id, meter.endpoint, meter.model, usage, cost)
+    entry = Charge(slot.device_id, meter.endpoint, meter.model, usage, cost, code=slot.code)
     await _check_sam_billing(settings, slot, meter, usage)
     try:
         await anyio.to_thread.run_sync(record_charge, settings.db_path, entry)
@@ -801,7 +854,7 @@ async def _proxy(
 ) -> Response:
     device_id = device["device_id"]
     params = _query_params(request, query_keys)
-    slot = request.app.state.in_flight.acquire(device_id)
+    slot = request.app.state.in_flight.acquire(device_id, device["code"])
     handed_off = False
     try:
         if capped:
