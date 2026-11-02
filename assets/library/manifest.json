@@ -83,7 +83,7 @@
       "name": "Ding",
       "category": "sound",
       "file": "sounds/ding.wav",
-      "duration_ms": 2154,
+      "duration_ms": 2836,
       "tags": [
         "ding",
         "bell",
@@ -92,10 +92,10 @@
         "bright",
         "alert"
       ],
-      "sha256": "e6eca5b5a935cd6bcf5d5f310c41e13b1f60a10e6f63d32703af89c51f6ef8c7",
+      "sha256": "43c38edc26059f8509bb22f0e6244121ef27493e7ddf02e036edd2b2d567004c",
       "license": "CC0-1.0",
-      "author": "Saya13",
-      "source": "https://freesound.org/people/Saya13/sounds/407258/"
+      "author": "AlaskaRobotics",
+      "source": "https://freesound.org/people/AlaskaRobotics/sounds/221515/"
     },
     {
       "id": "chime",
@@ -265,7 +265,7 @@
       "name": "Record scratch",
       "category": "sound",
       "file": "sounds/record-scratch.wav",
-      "duration_ms": 1265,
+      "duration_ms": 447,
       "tags": [
         "record scratch",
         "scratch",
@@ -273,10 +273,10 @@
         "freeze",
         "funny"
       ],
-      "sha256": "cf2c5e88f804fa7af65dabfe0d6513832c4dcfdc8f888dae5ba43629209ade21",
+      "sha256": "b4a0261b5fc6d22662093f4e7bc10ce35a741291e65ba848d9f227a223673078",
       "license": "CC0-1.0",
-      "author": "simkiott",
-      "source": "https://freesound.org/people/simkiott/sounds/43404/"
+      "author": "ludvique",
+      "source": "https://freesound.org/people/ludvique/sounds/71853/"
     },
     {
       "id": "shutter",
@@ -355,7 +355,7 @@
       "name": "Error buzz",
       "category": "sound",
       "file": "sounds/error.wav",
-      "duration_ms": 1061,
+      "duration_ms": 1100,
       "tags": [
         "error",
         "wrong",
@@ -363,10 +363,10 @@
         "fail",
         "no"
       ],
-      "sha256": "10022477670aa11891cef42b5829af3475d950504ae50c938de64838eaf5aa2a",
+      "sha256": "7ec7238fc6ee70b434dc105b94a8b4b839b293f3852fad89167a5fa5d3242c2b",
       "license": "CC0-1.0",
-      "author": "-Andreas",
-      "source": "https://freesound.org/people/-Andreas/sounds/648462/"
+      "author": "guitarguy1985",
+      "source": "https://freesound.org/people/guitarguy1985/sounds/54047/"
     },
     {
       "id": "pop-high",
@@ -517,7 +517,7 @@
       "name": "Cash register",
       "category": "sound",
       "file": "sounds/cash-register.wav",
-      "duration_ms": 1964,
+      "duration_ms": 1444,
       "tags": [
         "cash register",
         "money",
@@ -525,10 +525,10 @@
         "cha ching",
         "price"
       ],
-      "sha256": "9df49517d2781783256642b139d2fac796f04e18f395fc5dcec2e696e4dc325d",
+      "sha256": "05cb159b4ddfe95200531a756d0400766146500da9e08722e533d7f97be30e15",
       "license": "CC0-1.0",
-      "author": "Zott820",
-      "source": "https://freesound.org/people/Zott820/sounds/209578/"
+      "author": "CapsLok",
+      "source": "https://freesound.org/people/CapsLok/sounds/184438/"
     },
     {
       "id": "heartbeat",

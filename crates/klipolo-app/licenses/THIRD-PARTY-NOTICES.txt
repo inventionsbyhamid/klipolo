@@ -2002,7 +2002,7 @@ CC0-1.0 (35)
   sounds/swoosh.wav  by lesaucisson  https://freesound.org/people/lesaucisson/sounds/585257/
   sounds/pop.wav  by deraj  https://freesound.org/people/deraj/sounds/202230/
   sounds/click.wav  by Kenney  https://kenney.nl/assets/interface-sounds
-  sounds/ding.wav  by Saya13  https://freesound.org/people/Saya13/sounds/407258/
+  sounds/ding.wav  by AlaskaRobotics  https://freesound.org/people/AlaskaRobotics/sounds/221515/
   sounds/chime.wav  by newagesoup  https://freesound.org/people/newagesoup/sounds/351408/
   sounds/rise.wav  by syntheffects  https://freesound.org/people/syntheffects/sounds/685256/
   sounds/sparkle.wav  by MLaudio  https://freesound.org/people/MLaudio/sounds/511485/
@@ -2012,12 +2012,12 @@ CC0-1.0 (35)
   sounds/swipe-left.wav  by mrickey13  https://freesound.org/people/mrickey13/sounds/515625/
   sounds/swipe-right.wav  by qubodup  https://freesound.org/people/qubodup/sounds/60007/
   sounds/glitch.wav  by tadaizm  https://freesound.org/people/tadaizm/sounds/458065/
-  sounds/record-scratch.wav  by simkiott  https://freesound.org/people/simkiott/sounds/43404/
+  sounds/record-scratch.wav  by ludvique  https://freesound.org/people/ludvique/sounds/71853/
   sounds/shutter.wav  by roachpowder  https://freesound.org/people/roachpowder/sounds/170229/
   sounds/typing.wav  by Trollarch2  https://freesound.org/people/Trollarch2/sounds/331656/
   sounds/notification.wav  by yfjesse  https://freesound.org/people/yfjesse/sounds/235911/
   sounds/success.wav  by FunWithSound  https://freesound.org/people/FunWithSound/sounds/456965/
-  sounds/error.wav  by -Andreas  https://freesound.org/people/-Andreas/sounds/648462/
+  sounds/error.wav  by guitarguy1985  https://freesound.org/people/guitarguy1985/sounds/54047/
   sounds/pop-high.wav  by AlaskaRobotics  https://freesound.org/people/AlaskaRobotics/sounds/221091/
   sounds/bubbles.wav  by OGMeek  https://freesound.org/people/OGMeek/sounds/59978/
   sounds/boing.wav  by magnuswaker  https://freesound.org/people/magnuswaker/sounds/540790/
@@ -2026,7 +2026,7 @@ CC0-1.0 (35)
   sounds/applause.wav  by AlaskaRobotics  https://freesound.org/people/AlaskaRobotics/sounds/221567/
   sounds/crowd-laugh.wav  by snakebarney  https://freesound.org/people/snakebarney/sounds/138112/
   sounds/crowd-wow.wav  by noah0189  https://freesound.org/people/noah0189/sounds/264499/
-  sounds/cash-register.wav  by Zott820  https://freesound.org/people/Zott820/sounds/209578/
+  sounds/cash-register.wav  by CapsLok  https://freesound.org/people/CapsLok/sounds/184438/
   sounds/heartbeat.wav  by michorvath  https://freesound.org/people/michorvath/sounds/273150/
   sounds/deep-boom.wav  by rhapsodize  https://freesound.org/people/rhapsodize/sounds/255111/
   sounds/cartoon-fall.wav  by plasterbrain  https://freesound.org/people/plasterbrain/sounds/395443/

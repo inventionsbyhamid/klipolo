@@ -15,7 +15,7 @@ trimmed its silence, faded it in and out, matched its loudness to the others and
   sounds/swoosh.wav: "swoosh-1.mp3" by lesaucisson, https://freesound.org/people/lesaucisson/sounds/585257/
   sounds/pop.wav: "Pop sound" by deraj, https://freesound.org/people/deraj/sounds/202230/
   sounds/click.wav: "click_001.ogg (Interface Sounds 1.0)" by Kenney, https://kenney.nl/assets/interface-sounds
-  sounds/ding.wav: "Ding! idea.mp3" by Saya13, https://freesound.org/people/Saya13/sounds/407258/
+  sounds/ding.wav: "service bell ring" by AlaskaRobotics, https://freesound.org/people/AlaskaRobotics/sounds/221515/
   sounds/chime.wav: "GLEAM-GLOW-SFX-CHIME.wav" by newagesoup, https://freesound.org/people/newagesoup/sounds/351408/
   sounds/rise.wav: "Riser sound effect short.wav" by syntheffects, https://freesound.org/people/syntheffects/sounds/685256/
   sounds/sparkle.wav: "cartoon_wink_magic_sparkle.wav" by MLaudio, https://freesound.org/people/MLaudio/sounds/511485/
@@ -25,12 +25,12 @@ trimmed its silence, faded it in and out, matched its loudness to the others and
   sounds/swipe-left.wav: "Throw/Swipe" by mrickey13, https://freesound.org/people/mrickey13/sounds/515625/
   sounds/swipe-right.wav: "Swipe Whoosh" by qubodup, https://freesound.org/people/qubodup/sounds/60007/
   sounds/glitch.wav: "Digital Glitch_v1.wav" by tadaizm, https://freesound.org/people/tadaizm/sounds/458065/
-  sounds/record-scratch.wav: "record_scratch.wav" by simkiott, https://freesound.org/people/simkiott/sounds/43404/
+  sounds/record-scratch.wav: "record_scratch.wav" by ludvique, https://freesound.org/people/ludvique/sounds/71853/
   sounds/shutter.wav: "Camera Shutter" by roachpowder, https://freesound.org/people/roachpowder/sounds/170229/
   sounds/typing.wav: "Keyboard Typing" by Trollarch2, https://freesound.org/people/Trollarch2/sounds/331656/
   sounds/notification.wav: "Notification Sound" by yfjesse, https://freesound.org/people/yfjesse/sounds/235911/
   sounds/success.wav: "Short Success Sound Glockenspiel Treasure Video Game.mp3" by FunWithSound, https://freesound.org/people/FunWithSound/sounds/456965/
-  sounds/error.wav: "Wrong Answer" by -Andreas, https://freesound.org/people/-Andreas/sounds/648462/
+  sounds/error.wav: "buzzer.wav" by guitarguy1985, https://freesound.org/people/guitarguy1985/sounds/54047/
   sounds/pop-high.wav: "cartoon pop or drip" by AlaskaRobotics, https://freesound.org/people/AlaskaRobotics/sounds/221091/
   sounds/bubbles.wav: "Bubble Pop.wav" by OGMeek, https://freesound.org/people/OGMeek/sounds/59978/
   sounds/boing.wav: "Boing 2" by magnuswaker, https://freesound.org/people/magnuswaker/sounds/540790/
@@ -39,7 +39,7 @@ trimmed its silence, faded it in and out, matched its loudness to the others and
   sounds/applause.wav: "cheering and clapping crowd 2" by AlaskaRobotics, https://freesound.org/people/AlaskaRobotics/sounds/221567/
   sounds/crowd-laugh.wav: "Small Crowd Laughing" by snakebarney, https://freesound.org/people/snakebarney/sounds/138112/
   sounds/crowd-wow.wav: "Crowd Ooohs and Ahhhs in Excitement" by noah0189, https://freesound.org/people/noah0189/sounds/264499/
-  sounds/cash-register.wav: "Cash Register Purchase" by Zott820, https://freesound.org/people/Zott820/sounds/209578/
+  sounds/cash-register.wav: "Cash Register Fake.wav" by CapsLok, https://freesound.org/people/CapsLok/sounds/184438/
   sounds/heartbeat.wav: "Heart Beating" by michorvath, https://freesound.org/people/michorvath/sounds/273150/
   sounds/deep-boom.wav: "Cinematic_Boom_Rhapsodize.wav" by rhapsodize, https://freesound.org/people/rhapsodize/sounds/255111/
   sounds/cartoon-fall.wav: "Cartoon Fall" by plasterbrain, https://freesound.org/people/plasterbrain/sounds/395443/
