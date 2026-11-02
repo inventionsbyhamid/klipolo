@@ -238,6 +238,8 @@ const TAPS: usize = 95;
 // At least 63 (the stopband the test below checks needs about 90).
 const _: () = assert!(TAPS >= 63 && TAPS % 2 == 1);
 const HALF: usize = (TAPS - 1) / 2;
+/// Outputs the decimator sums side by side.
+const LANES: usize = 16;
 /// Where the gain is half (-6 dB): below the 8 kHz Nyquist of 16 kHz, leaving room for the transition.
 const CUTOFF_HZ: f64 = 7_000.0;
 /// Kaiser β for about 72 dB of stopband attenuation (β = 0.1102 (A - 8.7)); with 95 taps the transition runs from about
@@ -284,6 +286,8 @@ struct Decimator {
     base: i64,
     /// The input index the next output is centred on.
     next: i64,
+    /// The input under a run of outputs dealt into its `FACTOR` phases (`drain`).
+    phases: [Vec<f32>; FACTOR],
 }
 
 impl Decimator {
@@ -293,6 +297,7 @@ impl Decimator {
             buf: vec![0.0; HALF],
             base: -(HALF as i64),
             next: 0,
+            phases: Default::default(),
         }
     }
 
@@ -311,6 +316,31 @@ impl Decimator {
     /// Every output whose input is all in the buffer, then drops the input no later output needs.
     fn drain(&mut self, out: &mut Vec<f32>) {
         let end = self.base + self.buf.len() as i64;
+        // `LANES` outputs at a time, each summed over its taps in order as below: a sum waits for the add before it,
+        // so one output at a time spends most of its time waiting, while side by side they overlap (the same sums,
+        // bit for bit). Dealt into its phases, the input a tap reads for the outputs side by side lies side by side.
+        let ready = (end - 1 - HALF as i64 - self.next).div_euclid(FACTOR as i64) + 1;
+        let groups = ready.max(0) as usize / LANES;
+        if groups > 0 {
+            let from = (self.next - HALF as i64 - self.base) as usize;
+            let past = from + (groups * LANES - 1) * FACTOR + TAPS;
+            for (r, phase) in self.phases.iter_mut().enumerate() {
+                phase.clear();
+                phase.extend(self.buf[from + r..past].iter().step_by(FACTOR));
+            }
+            for g in 0..groups {
+                let mut sums = [-0.0f32; LANES];
+                for (i, h) in self.taps.iter().enumerate() {
+                    let at = i / FACTOR + g * LANES;
+                    let xs = &self.phases[i % FACTOR][at..at + LANES];
+                    for (sum, x) in sums.iter_mut().zip(xs) {
+                        *sum += x * h;
+                    }
+                }
+                out.extend_from_slice(&sums);
+            }
+            self.next += (groups * LANES * FACTOR) as i64;
+        }
         while self.next + (HALF as i64) < end {
             let from = (self.next - HALF as i64 - self.base) as usize;
             let window = &self.buf[from..from + TAPS];
@@ -557,6 +587,48 @@ mod tests {
         assert_eq!(whole.len(), input.len().div_ceil(3));
         for block in [1, 2, 7, 4096] {
             assert!(run(block) == whole, "blocks of {block}");
+        }
+    }
+
+    #[test]
+    fn each_output_is_its_windows_sum_in_tap_order() {
+        // Output m is Σ x[3m - HALF + i] · h[i] over the taps in order (silence outside the input), bit for bit,
+        // whatever the blocks: however the work is laid out, no sum is reordered.
+        let mut x = 0x9e37_79b9_7f4a_7c15u64;
+        let input: Vec<f32> = (0..5_003)
+            .map(|_| {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                (x >> 40) as f32 / (1u64 << 24) as f32 * 2.0 - 1.0
+            })
+            .collect();
+        let taps = lowpass();
+        let at = |k: i64| {
+            usize::try_from(k)
+                .ok()
+                .and_then(|k| input.get(k))
+                .copied()
+                .unwrap_or(0.0)
+        };
+        let expected: Vec<u32> = (0..input.len().div_ceil(FACTOR) as i64)
+            .map(|m| {
+                let from = m * FACTOR as i64 - HALF as i64;
+                (0..TAPS)
+                    .map(|i| at(from + i as i64) * taps[i])
+                    .sum::<f32>()
+                    .to_bits()
+            })
+            .collect();
+        for block in [1, 5, 64, 1_000, input.len()] {
+            let mut d = Decimator::new();
+            let mut out = Vec::new();
+            for part in input.chunks(block) {
+                d.push(part, &mut out);
+            }
+            d.finish(&mut out);
+            let got: Vec<u32> = out.iter().map(|s| s.to_bits()).collect();
+            assert!(got == expected, "blocks of {block}");
         }
     }
 
