@@ -1562,3 +1562,105 @@ fn a_corrective_keep_only_replaces_the_one_before() {
     // Both parts, each snapped to the words it stands on: more than the first part alone (about 3.4 s).
     assert!((secs(4.4)..secs(5.3)).contains(&kept), "{kept}");
 }
+
+#[test]
+fn a_short_places_its_sticker_and_sounds_on_the_words_said() {
+    use klipolo_model::query::video_duration;
+    use klipolo_model::timeline::{ItemContent, TrackKind};
+    let (p, speech) = talk();
+    let i = with_pack(inputs(&p, speech));
+    // As the recipe asks: the cut, then a sticker on the word that names a thing, popping in with its sound, and a
+    // ding on the key point, each by the words said there. The ding's first quote is misheard and comes back with
+    // what is said most like it; the next step quotes it as said.
+    let batch = vec![
+        fc(
+            "call_2",
+            "keepOnly",
+            r#"{"ranges": [{"startSec": 2.9, "endSec": 7.8}]}"#,
+        ),
+        fc(
+            "call_3",
+            "addImage",
+            r#"{"file": "Star", "size": "medium", "position": "top-right", "atSec": null, "atWords": "the new module", "durationSec": 2.0}"#,
+        ),
+        fc(
+            "call_4",
+            "animate",
+            r#"{"layer": "last", "enter": "pop", "exit": null, "emphasis": null, "sound": "Pop"}"#,
+        ),
+        fc(
+            "call_5",
+            "addSound",
+            r#"{"name": "Ding", "atWords": ["a long tme"], "atSec": null}"#,
+        ),
+    ];
+    let fixed = fc(
+        "call_6",
+        "addSound",
+        r#"{"name": "Ding", "atWords": ["a long time."], "atSec": null}"#,
+    );
+    let model = Fake::new(vec![
+        answer("", vec![find_call("call_1")], 0.001),
+        answer("", batch, 0.002),
+        answer("", vec![fixed], 0.001),
+        answer("Here is your short. Review the cut below.", vec![], 0.001),
+    ]);
+    let mut i = i;
+    let ding = serde_json::from_value(serde_json::json!({
+        "id": "klipolo-pack-ding", "kind": "audio", "path": "/pack/ding", "name": "Ding", "durationUs": 800_000,
+        "width": 0, "height": 0, "fps": 0.0, "hasAudio": true,
+    }))
+    .unwrap();
+    i.library.items.push(LibraryItem {
+        name: "Ding".into(),
+        kind: MediaKind::Sound,
+        asset: ding,
+        pack: true,
+        tags: Vec::new(),
+    });
+    let out = send(&model, &[], "make a short with stickers and sounds", &i, &p).unwrap();
+    let seen = model.seen();
+    assert_eq!(seen.len(), 4);
+    // The tools offer the words said there, and the prompt asks for them.
+    let tools_text = serde_json::to_string(&seen[0].tools).unwrap();
+    assert!(tools_text.contains("atWords"), "{tools_text}");
+    assert!(seen[0].system.contains("atWords"));
+    assert_eq!(
+        output_for(&seen[2], "call_5"),
+        "addSound: atWords[0] \"a long tme\" is not said in the video. Said most like it: \"a long time.\" (6.7 s). \
+         Quote 1 to 4 words exactly as Transcript shows them."
+    );
+    assert_eq!(out.compiled.refusals, vec![], "{:?}", out.compiled.refusals);
+    // In the short as the cut leaves it (from "the" at 2.9 s, padded), the sticker starts on "the" with its pop, and
+    // the ding on "a".
+    let short = &out
+        .compiled
+        .proposal
+        .as_ref()
+        .expect("the cut")
+        .review
+        .after;
+    let from = short.timeline.main[0].source_in_us;
+    let starts = |kind: TrackKind, asset: Option<&str>| -> Vec<Us> {
+        (short.timeline.tracks.iter())
+            .filter(|t| t.kind == kind)
+            .flat_map(|t| t.items.iter())
+            .filter(|item| match (&item.content, asset) {
+                (ItemContent::Audio { asset_id, .. }, Some(a)) => asset_id == a,
+                (_, None) => true,
+                _ => false,
+            })
+            .map(|item| item.start_us)
+            .collect()
+    };
+    assert_eq!(starts(TrackKind::Overlay, None), [secs(2.9) - from]);
+    assert_eq!(
+        starts(TrackKind::Audio, Some("klipolo-pack-pop")),
+        [secs(2.9) - from]
+    );
+    assert_eq!(
+        starts(TrackKind::Audio, Some("klipolo-pack-ding")),
+        [secs(6.7) - from]
+    );
+    assert!(video_duration(&short.timeline) < secs(6.0));
+}
