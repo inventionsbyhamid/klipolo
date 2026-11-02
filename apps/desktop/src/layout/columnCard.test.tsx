@@ -1,4 +1,4 @@
-import { act, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -98,6 +98,8 @@ describe('the card in the left column', () => {
     await userEvent.type(screen.getByLabelText('Search music'), 'mus');
     const list = document.querySelector<HTMLElement>('.lib-scroll')!;
     list.scrollTop = 120;
+    // A press on the timeline picks the clip there.
+    fireEvent.pointerDown(document.body);
     select('a');
     expect(card()).toHaveAccessibleName('Recording 1 settings');
     select(null);
@@ -180,6 +182,36 @@ describe('back to the library', () => {
     // A folded library opens for it.
     expect(useLibraryPanel.getState().collapsed).toBe(false);
     expect(useSelection.getState().selectedId).toBe('b');
+  });
+});
+
+describe('a pick from the library', () => {
+  it('keeps the library: a file added from it is selected with its card aside, and a pick elsewhere shows its card', () => {
+    renderWithProviders(<Library />);
+    const row = within(screen.getByRole('list', { name: 'Your clips' })).getAllByRole('listitem')[0];
+    fireEvent.pointerDown(row);
+    // The add lands and selects its new clip.
+    select('b');
+    expect(useSelection.getState().selectedId).toBe('b');
+    expect(card()).toBeNull();
+    expect(body()).not.toHaveAttribute('inert');
+    // A press on the timeline, then a pick there: its card.
+    fireEvent.pointerDown(document.body);
+    select('a');
+    expect(card()).toHaveAccessibleName('Recording 1 settings');
+  });
+
+  it('a key in the library counts too; a press in the card or a key elsewhere doesn’t', () => {
+    renderWithProviders(<Library />);
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Clips' }), { key: 'Enter' });
+    select('b');
+    expect(card()).toBeNull();
+    fireEvent.keyDown(document.body, { key: 'ArrowRight' });
+    select('b');
+    expect(card()).toHaveAccessibleName('broll.mp4 settings');
+    fireEvent.pointerDown(card()!.querySelector('h3')!);
+    select('title');
+    expect(card()).toHaveAccessibleName('Title settings');
   });
 });
 

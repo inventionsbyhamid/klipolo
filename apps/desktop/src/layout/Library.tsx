@@ -13,7 +13,7 @@ import { useCaptionsView, type LeftView } from '../state/captionsView';
 import { useLibraryPanel } from '../state/libraryPanel';
 import { recordYourScreen } from '../state/recorder';
 import { useUi, type LibraryTab } from '../state/ui';
-import { useColumnCard } from './columnCard';
+import { useColumnCard, useLibraryKeepsItsPicks } from './columnCard';
 import { Icon } from './Icon';
 
 const TABS: LibraryTab[] = ['clips', 'music', 'sounds', 'images'];
@@ -41,7 +41,8 @@ function ColumnInspector() {
  * changes size on a click: the card fills the panel, and the library stays mounted under it, hidden and `inert`, with
  * its view, tab, search and scroll kept for when the card goes. A folded library opens for the card and folds again
  * after. A card that leaves with the keyboard in it (Close, Escape, Back to library) leaves the keyboard on the panel,
- * where Space still plays and Tab goes on into the library.
+ * where Space still plays and Tab goes on into the library. A pick made from the library itself (adding a file, a
+ * caption or a look) keeps the library (`useLibraryKeepsItsPicks`).
  */
 export function Library() {
   const { t } = useLingui();
@@ -56,6 +57,7 @@ export function Library() {
   const panel = useRef<HTMLElement>(null);
   /** The keyboard was in the card last: when the card goes, it stays on the panel. */
   const inCard = useRef(false);
+  useLibraryKeepsItsPicks(panel);
   const rail = useRef<HTMLButtonElement>(null);
   const body = useRef<HTMLDivElement>(null);
   /** The keyboard was in the library as it folded: it goes to the rail. */

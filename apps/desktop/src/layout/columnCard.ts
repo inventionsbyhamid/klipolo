@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState, type RefObject } from 'react';
 import type { Project } from '../bindings/Project';
 import { inspectedOf } from '../features/inspector/Inspector';
 import { inspectedTransition } from '../features/inspector/TransitionInspector';
@@ -43,4 +43,33 @@ export function useColumnCard(): boolean {
   // Full screen is for watching: the card stays out of the way until it ends.
   const full = useFullScreen((s) => s.on);
   return useSteady(bySelection && byProject) && !full;
+}
+
+/**
+ * A pick made from the library's own column (a file added or dropped from it, a caption or a look picked there) leaves
+ * the library in place: the card steps aside as the pick lands, so working through the library never sends it away.
+ * The pick is the library's when the last press or key before it went to the library (never to its card, nor to the
+ * panel itself, where the keyboard waits after a card). A press anywhere else, or a key there, lets the next pick show
+ * its card again.
+ */
+export function useLibraryKeepsItsPicks(panel: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    let fromLibrary = false;
+    const mark = (e: Event) => {
+      const el = e.target instanceof Element ? e.target : null;
+      const own = panel.current;
+      fromLibrary = !!el && !!own && el !== own && own.contains(el) && el.closest('.inspector') === null;
+    };
+    window.addEventListener('pointerdown', mark, true);
+    window.addEventListener('keydown', mark, true);
+    const off = useSelection.subscribe((s, prev) => {
+      const picked = s.selectedId !== null && (s.selectedIds !== prev.selectedIds || s.selectedId !== prev.selectedId);
+      if (fromLibrary && picked) useLibraryPanel.getState().stepAside();
+    });
+    return () => {
+      window.removeEventListener('pointerdown', mark, true);
+      window.removeEventListener('keydown', mark, true);
+      off();
+    };
+  }, [panel]);
 }
