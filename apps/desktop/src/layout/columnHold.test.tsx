@@ -6,7 +6,7 @@ import { renderWithProviders } from '../test/render';
 /*
  * The card shows in the left column, over the library, while a clip, a layer or a transition is selected (the frame
  * keeps its size: stageSize.test.tsx). A press on the timeline selects at once, so the column waits for the release:
- * the card never comes or goes under the pointer of a trim or a move, and a folded column doesn't open mid-gesture. A
+ * the card never comes or goes under the pointer of a trim or a move, folded library or not. A
  * keyboard walk along the lanes passes bare cuts, which select nothing, so the column waits until the walk settles.
  */
 
@@ -159,8 +159,8 @@ describe('the column holds still through a timeline press', () => {
   });
 });
 
-describe('a folded column through a press', () => {
-  it('stays folded while the press lasts, opens for the card at the release and folds again after', async () => {
+describe('a folded library through a press', () => {
+  it('shows no card while the press lasts, then the card at the release, the library still folded', async () => {
     useLibraryPanel.setState({ collapsed: true });
     renderWithProviders(<Editor />);
     const rail = () => document.querySelector<HTMLElement>('.library-rail')!;
@@ -174,11 +174,27 @@ describe('a folded column through a press', () => {
     await frames();
     expect(docked()).toBe(true);
     expect(rail().hidden).toBe(true);
-    // The library itself stays folded: the column opens for the card only.
+    // The library stays folded: the card lies over the preview's edge.
     expect(useLibraryPanel.getState().collapsed).toBe(true);
     act(() => useSelection.getState().select(null));
     expect(docked()).toBe(false);
     expect(rail().hidden).toBe(false);
+  });
+});
+
+describe('a press on a block brings its card back', () => {
+  it('even on a member of the selected group, whose selection the press doesn’t change', async () => {
+    renderWithProviders(<Editor />);
+    act(() => useSelection.getState().selectMany(['a', 'b'], 'b'));
+    await frames();
+    expect(docked()).toBe(true);
+    act(() => useLibraryPanel.getState().stepAside());
+    expect(docked()).toBe(false);
+    const b = block(/^broll\.mp4/);
+    press(b, 1000);
+    release(b, 1000);
+    await frames();
+    expect(docked()).toBe(true);
   });
 });
 

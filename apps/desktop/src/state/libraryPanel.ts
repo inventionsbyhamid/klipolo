@@ -16,12 +16,14 @@ interface LibraryPanelStore {
   aside: Picked | null;
   setCollapsed: (collapsed: boolean) => void;
   /**
-   * Command B: folds the library to its rail or opens it. While the card shows in the column, the column folds to the
-   * rail and the card steps aside, the selection kept.
+   * Command B: folds the library to its rail or opens it. While the card shows (`cardShown`, from `cardWanted`), the
+   * library folds to its rail and the card steps aside, the selection kept.
    */
-  toggle: () => void;
+  toggle: (cardShown?: boolean) => void;
   /** The card steps aside for the library; the selection stays. */
   stepAside: () => void;
+  /** The selection's card comes back (a press on a timeline block, even one already selected). */
+  showCard: () => void;
 }
 
 /** Whether `aside` is the selection `s`: the very pick it was, so a new pick of the same thing reads as new. */
@@ -34,14 +36,10 @@ const picked = (): Picked => {
   return { selectedId, selectedIds };
 };
 
-/** Something is selected and its card hasn't stepped aside: the card has the column. */
-export function cardHasColumn(aside: Picked | null, s: Picked): boolean {
-  return s.selectedId !== null && !steppedAside(aside, s);
-}
-
 /**
  * How the library shows: open, or folded to its rail. Control Command S folds it and opens it again. While something
- * is selected the column shows its card over the library (`Library`), unless the card stepped aside.
+ * is selected its card shows over the library (`Library`; over the preview's left edge while folded), unless the card
+ * stepped aside.
  */
 export const useLibraryPanel = create<LibraryPanelStore>((set, get) => ({
   collapsed: false,
@@ -49,12 +47,14 @@ export const useLibraryPanel = create<LibraryPanelStore>((set, get) => ({
   setCollapsed: (collapsed) => {
     if (get().collapsed !== collapsed) set({ collapsed });
   },
-  toggle: () => {
-    const now = picked();
-    if (cardHasColumn(get().aside, now)) set({ collapsed: true, aside: now });
+  toggle: (cardShown = false) => {
+    if (cardShown) set({ collapsed: true, aside: picked() });
     else set((s) => ({ collapsed: !s.collapsed }));
   },
   stepAside: () => set({ aside: picked() }),
+  showCard: () => {
+    if (get().aside !== null) set({ aside: null });
+  },
 }));
 
 /**

@@ -30,19 +30,49 @@ function wantsCard(project: Project | undefined, s: Picked, aside: Aside): boole
 }
 
 /**
- * Whether the left column shows the inspector card over the library: while a main clip, a camera, a transition or a
- * layer the inspector has fields for is selected in a project with video, unless its card stepped aside for the
- * library (`useLibraryPanel`'s `aside`), never in full screen, and steady through a timeline press or walk
- * (`useSteady`). The library re-renders only when the answer changes: never per edit, nor per pick while the card
- * stays (each store's selector reads the other's state as it is now, so either one's change is heard).
+ * Whether the selection's card shows, as the stores are now: a main clip, a camera, a transition or a layer the
+ * inspector has fields for is selected in a project with video, and its card hasn't stepped aside for the library
+ * (`useLibraryPanel`'s `aside`). Never in full screen: it is for watching. The one check the column and Command B use.
  */
+export function cardWanted(): boolean {
+  if (useFullScreen.getState().on) return false;
+  const project = useProject.getState().snapshot?.project;
+  return wantsCard(project, useSelection.getState(), useLibraryPanel.getState().aside);
+}
+
+/**
+ * `cardWanted`, heard from every store it reads. Each selector asks the same check over all of them as they are now,
+ * so a change to any one is heard, and the caller re-renders only when the answer changes: never per edit, nor per pick
+ * while the card stays.
+ */
+export function useCardWanted(): boolean {
+  const bySelection = useSelection(() => cardWanted());
+  const byProject = useProject(() => cardWanted());
+  const byPanel = useLibraryPanel(() => cardWanted());
+  const byFullScreen = useFullScreen(() => cardWanted());
+  return bySelection && byProject && byPanel && byFullScreen;
+}
+
+/** The selection has a card, and it stepped aside for the library (Back to library, or a view opened from it). */
+function cardAside(): boolean {
+  if (useFullScreen.getState().on) return false;
+  const selection = useSelection.getState();
+  const { aside } = useLibraryPanel.getState();
+  return steppedAside(aside, selection) && wantsCard(useProject.getState().snapshot?.project, selection, null);
+}
+
+/** `cardAside`, heard from every store it reads (as `useCardWanted`). */
+export function useCardAside(): boolean {
+  const bySelection = useSelection(() => cardAside());
+  const byProject = useProject(() => cardAside());
+  const byPanel = useLibraryPanel(() => cardAside());
+  const byFullScreen = useFullScreen(() => cardAside());
+  return bySelection && byProject && byPanel && byFullScreen;
+}
+
+/** Whether the inspector card shows over the library: `cardWanted`, steady through a timeline press or walk. */
 export function useColumnCard(): boolean {
-  const aside = useLibraryPanel((s) => s.aside);
-  const bySelection = useSelection((s) => wantsCard(useProject.getState().snapshot?.project, s, aside));
-  const byProject = useProject((p) => wantsCard(p.snapshot?.project, useSelection.getState(), aside));
-  // Full screen is for watching: the card stays out of the way until it ends.
-  const full = useFullScreen((s) => s.on);
-  return useSteady(bySelection && byProject) && !full;
+  return useSteady(useCardWanted());
 }
 
 /**
@@ -50,13 +80,18 @@ export function useColumnCard(): boolean {
  * the library in place: the card steps aside as the pick lands, so working through the library never sends it away.
  * The pick is the library's when the last press or key before it went to the library (never to its card, nor to the
  * panel itself, where the keyboard waits after a card). A press anywhere else, or a key there, lets the next pick show
- * its card again.
+ * its card again. A menu or popover opened in a portal (a row's More menu) is where its trigger was: a press or key in
+ * it keeps what the trigger's press said.
  */
+/** A popup in a portal, outside the panel: its own items act for whatever opened it. */
+const POPUP = '[data-radix-popper-content-wrapper], [role="menu"], [role="listbox"]';
+
 export function useLibraryKeepsItsPicks(panel: RefObject<HTMLElement | null>) {
   useEffect(() => {
     let fromLibrary = false;
     const mark = (e: Event) => {
       const el = e.target instanceof Element ? e.target : null;
+      if (el?.closest(POPUP)) return;
       const own = panel.current;
       fromLibrary = !!el && !!own && el !== own && own.contains(el) && el.closest('.inspector') === null;
     };
