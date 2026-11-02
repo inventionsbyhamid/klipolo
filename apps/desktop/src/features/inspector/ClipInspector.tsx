@@ -1,4 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
+import { Fragment } from 'react';
 import type { Clip } from '../../bindings/Clip';
 import type { FormatKind } from '../../bindings/FormatKind';
 import { IconButton } from '../../design/IconButton';
@@ -12,7 +13,7 @@ import { clipDurationUs, clipHasSound, clipLabel, clipStarts, isFreeze } from '.
 import { clipNow } from '../../state/latest';
 import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
-import { deleteBlock, duplicate } from '../timeline/commands';
+import { deleteBlock, duplicate, useClipActions } from '../timeline/commands';
 import { ClipCameraFields } from './CameraFields';
 import { ClipFadesField } from './ClipFadesField';
 import { EffectsButton } from './EffectsButton';
@@ -27,8 +28,9 @@ import { VolumeControls } from './VolumeControls';
 
 /**
  * The clip card: the inspector for a selected main-track clip, in the left column like the others. Its header has the
- * film icon and the clip's name (its file's, or a recording's own: "Recording 1"), a more menu (Duplicate, Delete: the
- * timeline's own commands; a main clip has no layer order) and a close button. Its fields: Fit or Fill in the format
+ * film icon and the clip's name (its file's, or a recording's own: "Recording 1"), a more menu (Freeze frame, Reverse
+ * and the Separate items as its block menu lists them, then Duplicate and Delete: the timeline's own commands; a main
+ * clip has no layer order) and a close button. Its fields: Fit or Fill in the format
  * shown, the Fill focus while Fill crops, and while Fit shows it the background behind it and the padding
  * (`FramingField`); its crop, in every format (`CropField`); Speed (0.5x to 2x, the clip's length follows); when
  * the clip has sound, Volume (0 to 200%) and Mute; its look (`LookField`, which opens the Looks view); its effects
@@ -68,6 +70,7 @@ export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind
             </button>
           </MenuTrigger>
           <MenuContent align="end">
+            <ClipActions clipId={clip.id} />
             <MenuItem onSelect={() => duplicate(clip.id)}>
               {t({ id: 'inspector.duplicate', message: 'Duplicate' })}
             </MenuItem>
@@ -129,4 +132,27 @@ export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind
       </div>
     </aside>
   );
+}
+
+/**
+ * The clip's own actions in its card's more menu, each group followed by a line: the same items, shortcuts and reasons
+ * for being off as its block menu (`useClipActions`). Mounted only while the menu is open.
+ */
+function ClipActions({ clipId }: { clipId: string }) {
+  return useClipActions(clipId).map((group, i) => (
+    <Fragment key={i}>
+      {group.map((action) => (
+        <MenuItem
+          key={action.id}
+          shortcut={action.shortcut}
+          disabled={action.disabled}
+          note={action.note}
+          onSelect={action.run}
+        >
+          {action.label}
+        </MenuItem>
+      ))}
+      <MenuSeparator />
+    </Fragment>
+  ));
 }

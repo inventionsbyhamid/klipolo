@@ -234,6 +234,33 @@ fn fit_camera<'a>(
     (screen, native, camera, None)
 }
 
+/// The camera recorded on its own ("Record yourself", a Camera take): no screen shares an encoder with it, so it
+/// records at Camera1080 on the first hardware encoder that holds 1080p30 alone (with the native rule's 5 % margin),
+/// else at Camera720 on the first that holds that, else at Camera720 on the first there is (the probe may have run at a
+/// bad moment). H.264 before HEVC, a dedicated engine first among each, then the report's order. None without a
+/// hardware encoder.
+pub fn camera_alone(report: &ProbeReport) -> Option<CameraChoice> {
+    let mut hw: Vec<&EncoderResult> = (report.encoders.iter()).filter(|e| e.hardware).collect();
+    hw.sort_by_key(|e| (e.codec != Codec::H264, !e.dedicated));
+    let holds = |id: PresetId| {
+        move |e: &&&EncoderResult| {
+            let p = crate::preset::preset(id, e.codec);
+            capacity(e) >= HEADROOM * f64::from(p.width) * f64::from(p.height) * f64::from(p.fps)
+        }
+    };
+    let (preset, e) = (hw.iter().find(holds(PresetId::Camera1080)))
+        .map(|e| (PresetId::Camera1080, *e))
+        .or_else(|| {
+            let e = hw.iter().find(holds(PresetId::Camera720)).or(hw.first())?;
+            Some((PresetId::Camera720, *e))
+        })?;
+    Some(CameraChoice {
+        preset,
+        codec: e.codec,
+        encoder: e.id.clone(),
+    })
+}
+
 /// Whether `encoder` keeps `screen` and `camera` together, with a 5 % margin: the camera on the screen's engine (one of
 /// its ids, or another). `decide` fits its defaults with it; the preflight asks it again for a preset the person picks
 /// while the camera is on.

@@ -166,9 +166,18 @@ impl Harness {
 
     /// Recording with the mic's device clock running `ppm` faster than the host's.
     pub fn recording_with_drift(srcs: &[Src], ppm: f64) -> Self {
-        let mut h = Self::new(cfg(srcs, 3));
+        Self::recording_cfg_with_drift(cfg(srcs, 3), ppm, &[])
+    }
+
+    /// [`Self::recording_with_drift`] for `cfg`, each of `late` sources sending its first frame that many seconds after
+    /// its start.
+    pub fn recording_cfg_with_drift(cfg: SessionConfig, ppm: f64, late: &[(&str, f64)]) -> Self {
+        let mut h = Self::new(cfg);
         for f in &mut h.fakes {
             f.drift_ppm = ppm;
+        }
+        for &(source, seconds) in late {
+            h.first_frame_after(source, seconds);
         }
         h.start_recording();
         h

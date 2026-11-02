@@ -231,6 +231,58 @@ describe('the dialog and its choices', () => {
     expect(fake.calls).toEqual(['setup']);
   });
 
+  it('record_yourself_records_the_camera_and_mic_without_screen_recording', async () => {
+    const dialog = await openOn(
+      recorderSetup({ cameras: [device('FaceTime HD Camera')], permissions: { screen: 'notAsked' } }),
+    );
+    expect(dialog).toHaveTextContent('Klipolo needs your permission to record your screen.');
+    await userEvent.click(screen.getByRole('radio', { name: 'Record yourself' }));
+    // No screen is recorded: no Screen Recording step, no cards, and the camera the setup offers is chosen.
+    expect(dialog).not.toHaveTextContent('Klipolo needs your permission to record your screen.');
+    expect(screen.queryByRole('button', { name: 'Allow screen recording' })).toBeNull();
+    expect(screen.queryByRole('radiogroup', { name: 'Screens' })).toBeNull();
+    expect(dialog).toHaveTextContent('You on camera, with your voice.');
+    expect(dialog).toHaveTextContent('Your camera and your mic. No screen is recorded.');
+    expect(screen.getByRole('button', { name: 'Camera: FaceTime HD Camera' })).toBeInTheDocument();
+    // No bubble over a screen; the mirror is for the picture only.
+    expect(screen.queryByRole('switch', { name: 'Show me on screen while recording' })).toBeNull();
+    expect(screen.getByRole('switch', { name: 'Mirror my camera' })).toHaveAttribute('aria-checked', 'true');
+    expect(yellows(dialog)).toEqual([recordButton()]);
+    await userEvent.click(recordButton());
+    expect(fake.calls).toEqual(['setup', 'arm', 'send:start']);
+    expect(fake.armed[0]).toEqual({
+      what: { kind: 'camera' },
+      mic: 'mic-1',
+      camera: 'FaceTime HD Camera',
+      cameraBubble: false,
+      mirrorCamera: true,
+    });
+  });
+
+  it('record_yourself_needs_a_camera', async () => {
+    const none = 'Klipolo found no camera. Connect one, then close Record and open it again.';
+    await openOn(recorderSetup({ cameras: [] }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Record yourself' }));
+    expect(recordButton()).toHaveAttribute('aria-disabled', 'true');
+    expect(recordButton()).toHaveAccessibleDescription(none);
+    await userEvent.click(recordButton());
+    expect(fake.calls).toEqual(['setup']);
+  });
+
+  it('record_yourself_with_no_camera_chosen_points_at_the_camera', async () => {
+    await openOn(recorderSetup({ cameras: [device('FaceTime HD Camera')] }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Record yourself' }));
+    await choose('Camera: FaceTime HD Camera', 'No camera');
+    expect(recordButton()).toHaveAttribute('aria-disabled', 'true');
+    expect(recordButton()).toHaveAccessibleDescription('Choose a camera first');
+    await userEvent.click(recordButton());
+    expect(screen.getByRole('button', { name: 'Camera: No camera' })).toHaveFocus();
+    expect(fake.calls).toEqual(['setup']);
+    // Back to the whole screen: the screen records without the camera, as chosen.
+    await userEvent.click(screen.getByRole('radio', { name: 'Whole screen' }));
+    expect(recordButton()).not.toHaveAttribute('aria-disabled');
+  });
+
   it('camera_toggles_show_only_with_a_camera', async () => {
     await openOn(recorderSetup({ cameras: [device('FaceTime HD Camera')] }));
     expect(screen.queryByRole('switch')).toBeNull();

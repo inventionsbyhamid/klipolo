@@ -178,6 +178,31 @@ fn an_imported_video_and_a_camera_take_have_footage_and_a_screen_take_does_not()
     assert!(footage(&p, &p.timeline.main[2]).is_none());
 }
 
+/// A "Record yourself" take lands as one clip from the take's 0, and its camera's first frame comes a frame after the
+/// start gate: the clip's footage is that run, from its first frame on, not nothing.
+#[test]
+fn a_camera_take_whose_camera_starts_a_frame_late_still_has_footage() {
+    let mut p = project();
+    p.recordings[0].sources[0].runs[0].offset_us = 33_000;
+    p.recordings[0].sources[0].runs[0].file_in_us = 0;
+    p.timeline.main[1].source_in_us = 0;
+    let cam = footage(&p, &p.timeline.main[1]).unwrap();
+    assert_eq!(cam.asset_id, "cam");
+    assert_eq!(
+        (cam.range, cam.shift_us),
+        (
+            RangeUs {
+                start: 0,
+                end: s(20.0) - 33_000
+            },
+            33_000
+        )
+    );
+    // A clip that ends before the camera's first frame has none.
+    p.timeline.main[1].source_out_us = 20_000;
+    assert!(footage(&p, &p.timeline.main[1]).is_none());
+}
+
 #[test]
 fn fill_crops_a_wide_video_only_in_vertical_and_square() {
     let p = project();

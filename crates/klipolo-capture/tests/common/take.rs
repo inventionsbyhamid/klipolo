@@ -41,6 +41,8 @@ pub struct Take {
     pub cut_last_fragment: bool,
     /// For the hour: real file IO without the log, and a tick every 10 s of media.
     pub fast: bool,
+    /// "Record yourself": a Camera take, its picture the camera's (`camera/run-01.mp4`), not a screen's.
+    pub camera: bool,
 }
 
 impl Default for Take {
@@ -50,6 +52,7 @@ impl Default for Take {
             finalize: false,
             cut_last_fragment: false,
             fast: false,
+            camera: false,
         }
     }
 }
@@ -71,10 +74,18 @@ pub fn mic_format() -> AudioFormat {
     }
 }
 
-/// `<root>/<id>.klipolorec`: a screen and a mic, one run each.
+/// `<root>/<id>.klipolorec`: a screen (or the camera, `Take::camera`) and a mic, one run each.
 pub fn write_take(root: &Path, id: &str, take: Take) -> Written {
     let dir = SessionDir::create(root, id).unwrap();
-    let mut cfg = config_with(&[("screen", SourceRole::Screen), ("mic", SourceRole::Mic)]);
+    let (picture, role) = if take.camera {
+        ("camera", SourceRole::Camera)
+    } else {
+        ("screen", SourceRole::Screen)
+    };
+    let mut cfg = config_with(&[(picture, role), ("mic", SourceRole::Mic)]);
+    if take.camera {
+        cfg.kind = klipolo_model::project::RecordingKind::Camera;
+    }
     cfg.id = id.into();
     session::write_config(&dir, &cfg).unwrap();
     let logged = Arc::new(LoggedIo::new());
@@ -88,13 +99,13 @@ pub fn write_take(root: &Path, id: &str, take: Take) -> Written {
     let format = mic_format();
     let mut mux = Fmp4Writer::at_rate(&video.info, FPS);
     let (screen, mic) = (
-        SessionDir::run_key("screen", 1, true),
+        SessionDir::run_key(picture, 1, true),
         SessionDir::run_key("mic", 1, false),
     );
     w.journal(&Entry::Started { host_ns: 0 }).unwrap();
     w.journal(&Entry::Gate { host_ns: 0 }).unwrap();
     w.open(&screen, mux.head()).unwrap();
-    w.journal(&run_started("screen", &screen, Some(&video), None))
+    w.journal(&run_started(picture, &screen, Some(&video), None))
         .unwrap();
     w.open(&mic, caf::header(format)).unwrap();
     w.journal(&run_started("mic", &mic, None, Some(format)))
@@ -166,7 +177,7 @@ pub fn write_take(root: &Path, id: &str, take: Take) -> Written {
     let us = last.media_us();
     w.append(&screen, last.bytes, us).unwrap();
     if take.finalize {
-        for source in ["screen", "mic"] {
+        for source in [picture, "mic"] {
             w.journal(&Entry::RunEnded {
                 source: source.into(),
                 run: 1,
@@ -185,7 +196,7 @@ pub fn write_take(root: &Path, id: &str, take: Take) -> Written {
         rw(&dir.path(&screen)).set_len(cut).unwrap();
     }
     if take.finalize {
-        stop(&*io, &dir, &cfg, &mux, &snap);
+        stop(&*io, &dir, &cfg, (picture, &mux), &snap);
     }
     Written { dir, io: logged }
 }
@@ -219,14 +230,14 @@ fn stop(
     io: &dyn Io,
     dir: &SessionDir,
     cfg: &session::SessionConfig,
-    mux: &Fmp4Writer,
+    (picture, mux): (&str, &Fmp4Writer),
     snap: &WriterSnapshot,
 ) {
     let runs = [
         RunDone {
-            source: "screen".into(),
+            source: picture.into(),
             run: 1,
-            key: SessionDir::run_key("screen", 1, true),
+            key: SessionDir::run_key(picture, 1, true),
             kind: RunKind::Video {
                 info: mux.info().clone(),
                 plan: mux.remux_plan(),

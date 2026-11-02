@@ -16,7 +16,8 @@
 //!   with no words yet are named (`Not transcribed yet: c2.`), and so are clips heard part of the way
 //!   (`Still transcribing: c3 (up to 40.0).`).
 //! - `Scenes`: the scene log's items, `[40.5-45.0] gesture (male astronaut): raises an arm`, mapped from their file's
-//!   time through every clip of that file on the main track. An item cut out entirely is left out; a partly cut one
+//!   time through every clip of that file on the main track (an imported video's clips, and a camera take's, whose
+//!   camera is its footage: `analysed::camera_footage`). An item cut out entirely is left out; a partly cut one
 //!   keeps what remains (a sliver of under `MIN_SCENE_PIECE_US` of the file, of a longer item, is dropped: measured in
 //!   the file, so a short item in a sped-up clip stays).
 //! - `Library`: what the media tools add by name, one line per kind (`Music: lofi.mp3; pack: Soft ambient, Upbeat
@@ -63,6 +64,7 @@ use std::fmt::Write as _;
 use std::ops::Range;
 
 use klipolo_model::Project;
+use klipolo_model::analysed::{FootageRun, camera_footage};
 use klipolo_model::captions::styles::default_style;
 use klipolo_model::fill_focus::FillFocus;
 use klipolo_model::ids::Id;
@@ -357,7 +359,9 @@ pub fn build_context(
                 .is_some_and(|a| a.kind == AssetKind::Video)
                 && !scenes.contains_key(id)
         }
-        ClipSource::Recording { .. } => false,
+        // A camera take's camera is watched as imported footage is; a screen take's files never are.
+        ClipSource::Recording { .. } => (camera_footage(project, clip).iter())
+            .any(|f| !scenes.contains_key(f.asset_id().as_str())),
     });
 
     // What Transcript and Scenes say after their lines.
@@ -1619,8 +1623,8 @@ struct ScenePiece<'a> {
     item: &'a SceneEntry,
 }
 
-/// Every scene item's pieces on the timeline, in timeline order: each clip of its file on the main track plays the
-/// part of it inside the clip. A piece that starts where the item's last piece ends on the timeline, further on in the
+/// Every scene item's pieces on the timeline, in timeline order: each clip of its file on the main track (an imported
+/// video's, or a camera take's whose camera it is) plays the part of it inside the clip. A piece that starts where the item's last piece ends on the timeline, further on in the
 /// file, carries it on (a clip split in two, or holes cut in it by removing pauses): one line, not one per clip. A
 /// copy (the file going back) or a piece elsewhere on the timeline is a piece of its own.
 fn scene_pieces<'a>(
@@ -1630,41 +1634,35 @@ fn scene_pieces<'a>(
 ) -> Vec<ScenePiece<'a>> {
     let mut out: Vec<ScenePiece<'a>> = Vec::new();
     // Each (file, item)'s latest piece: its index in `out` and where in the file it ends.
-    let mut latest: HashMap<(&str, usize), (usize, Us)> = HashMap::new();
+    let mut latest: HashMap<(&'a str, usize), (usize, Us)> = HashMap::new();
     for (clip, &clip_start) in p.timeline.main.iter().zip(starts) {
         // A freeze frame plays none of its file's scenes.
-        let (ClipSource::Asset { id }, false) = (&clip.source, clip.is_freeze()) else {
+        if clip.is_freeze() {
             continue;
-        };
-        let Some(log) = scenes.get(id) else {
-            continue;
-        };
+        }
         let (source_in, source_out) = (clip.source_in_us, clip.source_out_us);
-        let at = |source: Us| clip_start.saturating_add(scaled(source - source_in, clip.speed));
-        for (k, item) in log.items.iter().enumerate() {
-            let (start, end) = (item.start_us, item.end_us.max(item.start_us));
-            let (from, to) = (start.max(source_in), end.min(source_out));
-            let moment_inside = start == end && (source_in..source_out).contains(&start);
-            if from >= to && !moment_inside {
+        // Each file the clip plays and the stretch of it, in the file's time: an imported video plays its own time
+        // (no run), a camera take each camera run on the take's clock.
+        let files: Vec<(&str, (Us, Us), Option<FootageRun>)> = match &clip.source {
+            ClipSource::Asset { id } => vec![(id.as_str(), (source_in, source_out), None)],
+            ClipSource::Recording { .. } => (camera_footage(p, clip).into_iter())
+                .filter_map(|run| {
+                    let (from, to) = run.source_span();
+                    let (from, to) = (from.max(source_in), to.min(source_out));
+                    let window = (run.file_of(from), run.file_of(to));
+                    (from < to).then_some((run.asset_id().as_str(), window, Some(run)))
+                })
+                .collect(),
+        };
+        for (id, window, run) in files {
+            let Some((id, log)) = scenes.get_key_value(id) else {
                 continue;
-            }
-            let (from_t, to_t) = (at(from), at(to));
-            if let Some(&(j, file_end)) = latest.get(&(id.as_str(), k))
-                && file_end <= from
-                && out[j].end_us == from_t
-            {
-                out[j].end_us = to_t;
-                out[j].file_us += to - from;
-                latest.insert((id.as_str(), k), (j, to));
-                continue;
-            }
-            latest.insert((id.as_str(), k), (out.len(), to));
-            out.push(ScenePiece {
-                start_us: from_t,
-                end_us: to_t,
-                file_us: to - from,
-                item,
-            });
+            };
+            let at = |file: Us| {
+                let source = run.map_or(file, |r| r.source_of(file));
+                clip_start.saturating_add(scaled(source - source_in, clip.speed))
+            };
+            pieces_of(id, log, window, at, &mut out, &mut latest);
         }
     }
     out.retain(|s| {
@@ -1674,6 +1672,44 @@ fn scene_pieces<'a>(
     // Stable: pieces that start and end together keep the clips' and the log's order.
     out.sort_by_key(|s| (s.start_us, s.end_us));
     out
+}
+
+/// Each item of `log` (file `id`'s) inside the file's stretch `[file_in, file_out)` as a piece on the timeline, `at`
+/// mapping a file time there. A piece that starts where the item's latest piece (`latest`) ends, further on in the file,
+/// carries it on.
+fn pieces_of<'a>(
+    id: &'a str,
+    log: &'a SceneLog,
+    (file_in, file_out): (Us, Us),
+    at: impl Fn(Us) -> Us,
+    out: &mut Vec<ScenePiece<'a>>,
+    latest: &mut HashMap<(&'a str, usize), (usize, Us)>,
+) {
+    for (k, item) in log.items.iter().enumerate() {
+        let (start, end) = (item.start_us, item.end_us.max(item.start_us));
+        let (from, to) = (start.max(file_in), end.min(file_out));
+        let moment_inside = start == end && (file_in..file_out).contains(&start);
+        if from >= to && !moment_inside {
+            continue;
+        }
+        let (from_t, to_t) = (at(from), at(to));
+        if let Some(&(j, file_end)) = latest.get(&(id, k))
+            && file_end <= from
+            && out[j].end_us == from_t
+        {
+            out[j].end_us = to_t;
+            out[j].file_us += to - from;
+            latest.insert((id, k), (j, to));
+            continue;
+        }
+        latest.insert((id, k), (out.len(), to));
+        out.push(ScenePiece {
+            start_us: from_t,
+            end_us: to_t,
+            file_us: to - from,
+            item,
+        });
+    }
 }
 
 /// One scene line: `[a-b] kind (who): text`, and the text on screen if any; with `short`, only `[a-b] kind (who)`.

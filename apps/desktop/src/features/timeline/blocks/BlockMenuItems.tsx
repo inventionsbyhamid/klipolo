@@ -2,23 +2,12 @@ import { t } from '@lingui/core/macro';
 import { useLingui } from '@lingui/react/macro';
 import { Fragment } from 'react';
 import { ContextMenuItem, ContextMenuSeparator } from '../../../design/ContextMenu';
-import { recordingCameras } from '../../../lib/camera';
-import {
-  clipLabel,
-  clipReverseState,
-  clipSoundState,
-  findClip,
-  findItem,
-  hasOwnSound,
-  isFreeze,
-  itemLabel,
-} from '../../../lib/timeline';
+import { clipLabel, findClip, findItem, hasOwnSound, itemLabel } from '../../../lib/timeline';
 import { useProject } from '../../../state/project';
-import { useSelection } from '../../../state/selection';
 import { useUi } from '../../../state/ui';
-import type { Command } from '../../command-palette/command';
 import { useCommands } from '../../command-palette/useCommands';
 import { transitionLabels } from '../keys/transitionActions';
+import { blockActions, clipEdits, clipSeparates, type MenuEntry } from './blockActions';
 
 /** The menu's name for screen readers: "Actions for Recording 1". */
 export function blockMenuLabel(id: string): string | undefined {
@@ -38,14 +27,14 @@ export function blockMenuLabel(id: string): string | undefined {
 /**
  * What block `blockId`'s menu lists, in groups. Each item runs the same command as its shortcut, so the menu,
  * the keys and the player bar always agree; the block was selected when the menu opened, and is again before an item
- * runs. Mounted only while the menu is open, so only an open menu follows the selection and the playhead.
+ * runs. Mounted only while the menu is open, so only an open menu follows the selection and the playhead. A clip's
+ * edits and Separate items are its card's too (`blockActions`).
  */
 export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip' | 'layer' }) {
   const { t } = useLingui();
   const commands = useCommands();
   const project = useProject((s) => s.snapshot?.project);
   const expanded = useUi((s) => s.timelineExpanded);
-  const byId = new Map(commands.map((c) => [c.id, c]));
   const found = project ? findItem(project, blockId) : null;
   // A clip with one after it and no transition into it yet (one it has is selected at its cut). A video's only clip
   // lists it off, saying why: a transition goes between two clips.
@@ -53,13 +42,6 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
   const at = found ? -1 : main.findIndex((clip) => clip.id === blockId);
   const transitionAfter = at >= 0 && at + 1 < main.length && !main[at].transitionOut;
   const onlyClip = at === 0 && main.length === 1;
-  // A recording clip with a camera beside its footage: Separate camera (off, saying why, once it is a layer).
-  const hasCamera =
-    at >= 0 && !!project && !!main[at].camera && !isFreeze(main[at]) && recordingCameras(project, main[at]).length > 0;
-  // An imported clip whose file has sound: Separate sound (off, saying why, once it is a layer or while sped up).
-  const hasSound = at >= 0 && !!project && clipSoundState(project, at) !== 'none';
-  // An imported clip plays backward, or forward again: Reverse (off, saying why, while its sound is in a layer).
-  const turns = at >= 0 && !!project && ['backward', 'forward', 'separated'].includes(clipReverseState(project, at));
 
   // A sound layer, or a video layer whose file has sound, has Mute.
   const mutes = !!project && !!found && hasOwnSound(project, found.item);
@@ -85,24 +67,17 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
   };
   // A recording clip's sounds (`useSourceCommands`): their mutes in this clip, then Separate beside the camera's.
   const sounds = commands.filter((c) => c.id.startsWith('source-mute:')).map((c) => ({ id: c.id }));
-  const separates = commands.filter((c) => c.id.startsWith('source-separate:')).map((c) => ({ id: c.id }));
-  // `off`: listed, but off here, with why.
-  const groups: { id: string; label?: string; off?: string }[][] =
+  const groups: MenuEntry[][] =
     kind === 'clip'
       ? [
           [
             split,
-            { id: 'freeze-frame' },
-            ...(turns ? [{ id: 'reverse' }] : []),
+            ...(project && at >= 0 ? clipEdits(project, at) : []),
             ...(transitionAfter || onlyClip ? [addTransition] : []),
           ],
           [{ id: 'copy' }, { id: 'cut' }, { id: 'duplicate' }, { id: 'paste-effects' }],
           sounds,
-          [
-            ...(hasCamera ? [{ id: 'separate-camera' }] : []),
-            ...(hasSound ? [{ id: 'separate-sound' }] : []),
-            ...separates,
-          ],
+          project && at >= 0 ? clipSeparates(project, at, commands) : [],
           [{ id: 'delete' }],
         ]
       : [
@@ -120,28 +95,21 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
           [{ id: 'delete' }],
         ];
 
-  const item = ({ id, label, off }: { id: string; label?: string; off?: string }, command: Command) => (
-    <ContextMenuItem
-      key={id}
-      shortcut={typeof command.shortcut === 'string' ? command.shortcut : undefined}
-      disabled={off !== undefined || !command.enabled}
-      note={off ?? (command.enabled ? undefined : command.reason)}
-      onSelect={() => {
-        useSelection.getState().select(blockId);
-        // On this block alone: Split at playhead on a clip splits that clip, or says why it can't.
-        command.run({ block: blockId });
-      }}
-    >
-      {label ?? command.label}
-    </ContextMenuItem>
-  );
-  return groups
-    .map((group) => group.flatMap((entry) => (byId.has(entry.id) ? [item(entry, byId.get(entry.id)!)] : [])))
-    .filter((group) => group.length > 0)
-    .map((group, i) => (
-      <Fragment key={i}>
-        {i > 0 && <ContextMenuSeparator />}
-        {group}
-      </Fragment>
-    ));
+  return blockActions(blockId, groups, commands).map((group, i) => (
+    <Fragment key={i}>
+      {i > 0 && <ContextMenuSeparator />}
+      {group.map((action) => (
+        <ContextMenuItem
+          key={action.id}
+          shortcut={action.shortcut}
+          disabled={action.disabled}
+          note={action.note}
+          // On this block alone: Split at playhead on a clip splits that clip, or says why it can't.
+          onSelect={action.run}
+        >
+          {action.label}
+        </ContextMenuItem>
+      ))}
+    </Fragment>
+  ));
 }

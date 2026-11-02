@@ -1,7 +1,7 @@
 import { type KeyboardEvent, useId } from 'react';
 import type { RecorderSetup } from '../../bindings/RecorderSetup';
 import { Segmented } from '../../design/Segmented';
-import type { Picks } from '../../lib/recorder/choices';
+import { kindPicks, type Picks } from '../../lib/recorder/choices';
 import { useRecorder } from '../../state/recorder';
 import { useRecorderPreviews } from '../../state/recorderPreviews';
 import { NO_SCREEN } from './notes';
@@ -34,16 +34,47 @@ function cardsOf(setup: RecorderSetup, picks: Picks): Card[] {
       setup.devices.apps.map((a) => ({ value: a.appId, key: `app:${a.appId}`, name: a.name, meta: null }));
 }
 
+/** The kinds of take, in the control's order. */
+const KINDS: { value: Picks['kind']; label: string }[] = [
+  { value: 'screen', label: 'Whole screen' },
+  { value: 'app', label: 'One app' },
+  { value: 'camera', label: 'Record yourself' },
+];
+
 /**
- * "What to record": Whole screen or One app, then a card per screen or per app, a radio group whose arrow
- * keys move and choose. With One app and none chosen, the group says to choose one.
+ * "What to record": Whole screen, One app or Record yourself. A screen or an app then has a card per
+ * screen or per app, a radio group whose arrow keys move and choose; with One app and none chosen, the group says to
+ * choose one. Record yourself records the camera and the mic alone, so it has no cards: the preview shows the camera.
  */
 export function WhatToRecord({ setup }: { setup: RecorderSetup }) {
   const picks = useRecorder((s) => s.picks);
   const pick = useRecorder((s) => s.pick);
+  const headingId = useId();
+  return (
+    <section className="record-section" aria-labelledby={headingId}>
+      <h3 className="record-label" id={headingId}>
+        What to record
+      </h3>
+      <Segmented
+        label="What to record"
+        value={picks.kind}
+        options={KINDS}
+        onChange={(kind) => pick(kindPicks(setup, picks, kind))}
+      />
+      {picks.kind === 'camera' ? (
+        <p className="record-caption">Your camera and your mic. No screen is recorded.</p>
+      ) : (
+        <Cards setup={setup} picks={picks} />
+      )}
+    </section>
+  );
+}
+
+/** The cards of a screen or an app take, with what to choose when nothing is. */
+function Cards({ setup, picks }: { setup: RecorderSetup; picks: Picks }) {
+  const pick = useRecorder((s) => s.pick);
   const stills = useRecorderPreviews((s) => s.thumbs);
   const stillsAt = useRecorderPreviews((s) => s.thumbsAt);
-  const headingId = useId();
   const captionId = useId();
   const screens = picks.kind === 'screen';
   const cards = cardsOf(setup, picks);
@@ -72,19 +103,7 @@ export function WhatToRecord({ setup }: { setup: RecorderSetup }) {
   };
 
   return (
-    <section className="record-section" aria-labelledby={headingId}>
-      <h3 className="record-label" id={headingId}>
-        What to record
-      </h3>
-      <Segmented
-        label="What to record"
-        value={picks.kind}
-        options={[
-          { value: 'screen', label: 'Whole screen' },
-          { value: 'app', label: 'One app' },
-        ]}
-        onChange={(kind) => pick({ kind })}
-      />
+    <>
       {caption !== null && (
         <p className="record-caption" id={captionId}>
           {caption}
@@ -106,13 +125,13 @@ export function WhatToRecord({ setup }: { setup: RecorderSetup }) {
             meta={card.meta}
             picture={stills[card.key] ?? null}
             pictureAt={stillsAt[card.key] ?? null}
-            kind={picks.kind}
+            kind={screens ? 'screen' : 'app'}
             checked={card.value === chosen}
             tabbable={card.value === stop}
             onPick={() => choose(card.value)}
           />
         ))}
       </div>
-    </section>
+    </>
   );
 }

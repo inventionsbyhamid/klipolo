@@ -346,6 +346,88 @@ fn app_choice_records_that_apps_windows() {
     );
 }
 
+/// "Record yourself": a Camera take of the camera and the mic, with no screen. It arms though Screen Recording was
+/// never allowed, and never asks for it; the camera records at its own best on this Mac (1080p30 on the Intel GPU, which
+/// nothing shares with it), with no bubble (there is no screen to show it on) and the person's mirror.
+#[test]
+fn record_yourself_records_the_camera_and_mic_without_screen_recording() {
+    let rec = fixture_with(Script {
+        screen_permission: Permission::NotAsked,
+        ..Script::default()
+    });
+    rec.state.setup().unwrap();
+    let options = super::types::ArmOptions {
+        what: WhatToRecord::Camera,
+        mic: Some("mic-1".into()),
+        camera: Some("camera-1".into()),
+        camera_bubble: true,
+        mirror_camera: false,
+    };
+    let armed = rec.arm(options).unwrap();
+    assert_eq!(armed.notes, None);
+    assert_eq!(rec.screen_requests.load(Ordering::SeqCst), 0, "never asked");
+    let cfg = rec.config(&armed.id);
+    assert_eq!(cfg.kind, klipolo_model::project::RecordingKind::Camera);
+    assert_eq!(
+        sources(&cfg),
+        [("camera", SourceRole::Camera), ("mic", SourceRole::Mic)]
+    );
+    let gva = EncoderPick {
+        codec: Codec::H264,
+        id: "h264.gva".into(),
+    };
+    assert_eq!(
+        cfg.sources[0].spec,
+        SourceSpec::Camera {
+            device: "camera-1".into(),
+            preset: PresetId::Camera1080,
+            encoders: vec![gva],
+        }
+    );
+    assert_eq!(cfg.captured_display(), None);
+    assert!(!cfg.camera_bubble, "no screen to show a bubble on");
+    assert!(!cfg.mirror_camera, "the person's mirror choice");
+    assert_eq!(cfg.countdown_s, 3);
+    assert_eq!(cfg.keys, KeyBindings::defaults(OsFamily::Macos));
+}
+
+/// "Record yourself" needs a camera: without one nothing arms. Without the probe's report the camera records at 720p30
+/// on the worker's own encoder.
+#[test]
+fn record_yourself_needs_a_camera_and_falls_back_to_720p() {
+    let rec = fixture();
+    let options = super::types::ArmOptions {
+        what: WhatToRecord::Camera,
+        mic: Some("mic-1".into()),
+        camera: None,
+        camera_bubble: false,
+        mirror_camera: true,
+    };
+    assert_eq!(
+        rec.arm(options.clone()).unwrap_err().code,
+        "capture.error.noDevice"
+    );
+    assert_eq!(rec.launch.spawned(), 0);
+    rec.state.setup().unwrap();
+    let mut shown = rec.state.shown().expect("the dialog's setup");
+    shown.report = None;
+    let options = super::types::ArmOptions {
+        camera: Some("camera-1".into()),
+        ..options
+    };
+    let (cfg, notes) = super::setup::plan(&shown, &options, "t", ImportTarget::New, 0).unwrap();
+    assert!(notes.is_empty());
+    assert_eq!(
+        cfg.sources[0].spec,
+        SourceSpec::Camera {
+            device: "camera-1".into(),
+            preset: PresetId::Camera720,
+            encoders: vec![],
+        }
+    );
+    assert!(cfg.mirror_camera);
+}
+
 #[test]
 fn ids_the_os_could_not_have_given_are_refused_before_a_worker() {
     let rec = fixture();

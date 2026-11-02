@@ -36,6 +36,8 @@ function backend(extra: Record<string, (args: any) => unknown> = {}) {
     (cmd, args) => {
       (calls[cmd] ??= []).push(args);
       if (extra[cmd]) return extra[cmd](args);
+      // Asked again once an app's paid job ends: Rust says what the test set.
+      if (cmd === 'settings_get') return useAi.getState().status;
       return null;
     },
     { shouldMockEvents: true },
@@ -140,6 +142,19 @@ describe('another app in chat', () => {
     // What it did, in the history's words, under the app's name.
     expect(screen.getByText('Make it vertical')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Undo make it vertical (from Example Client)' })).toBeInTheDocument();
+  });
+
+  it('an_apps_change_reads_the_credit_again', async () => {
+    // Following a subject is paid for, and it comes back as a change: the top bar's credit is asked for again.
+    chat();
+    renderWithProviders(<ChatPanel />);
+    const undo = vertical();
+    await tell(external('Example Client', { applied: { change: changed(4, undo), undo }, revision: 4 }));
+    await waitFor(() => expect(calls.settings_get).toHaveLength(1));
+    // Moments alone cost nothing: nothing more is asked.
+    await tell(external('Example Client', { moments: [{ startUs: 0, endUs: S, label: 'Intro' }] }));
+    expect(await screen.findByRole('button', { name: '0:00.0 Intro' })).toBeInTheDocument();
+    expect(calls.settings_get).toHaveLength(1);
   });
 
   it('an_apps_undo_chip_takes_its_change_back_with_the_persons_undo', async () => {

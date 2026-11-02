@@ -190,6 +190,42 @@ fn failed_or_cancelled_take_adds_nothing() {
 }
 
 /// "Mirror my camera", on or off, is the clip's camera layout's.
+/// "Record yourself" lands as any take does, one undo step, and as camera footage: the camera is the clip's main
+/// picture, mirrored as the switch said, the mic its sound, and nothing to zoom.
+#[test]
+fn a_record_yourself_take_lands_as_camera_footage_in_one_undo_step() {
+    let sessions = Sessions::with_project();
+    let before = sessions.project();
+    let recorded = Recorded {
+        camera: Some(false),
+        yourself: true,
+        ..Recorded::default()
+    };
+    let take = TakeFixture::saved(recorded, armed_in(&sessions));
+    let import = sessions
+        .land(&take.done(false, sessions.open_file()), None)
+        .unwrap();
+    let after = sessions.project();
+    assert_eq!(after.timeline.main.len(), 2);
+    let clip = after.timeline.main.last().unwrap();
+    assert_eq!(import.clip_id, clip.id);
+    assert_eq!(import.zooms, 0, "no cursor to zoom on");
+    let rec = &after.recordings[0];
+    assert_eq!(rec.kind, klipolo_model::project::RecordingKind::Camera);
+    assert!(rec.camera_only(), "the camera is the main footage");
+    assert_eq!(rec.sources.len(), 2, "the camera and the mic");
+    assert_eq!(clip.camera.as_ref().map(|c| c.mirror), Some(false));
+    assert_eq!(after.assets.len(), 3, "the footage, the camera and the mic");
+    assert_eq!(
+        sessions.history().undo_label.as_deref(),
+        Some("undo.record")
+    );
+    sessions.undo();
+    let undone = sessions.project();
+    assert_eq!(undone.timeline.main, before.timeline.main);
+    assert!(undone.recordings.is_empty());
+}
+
 #[test]
 fn mirror_choice_reaches_the_clips_camera_layout() {
     for mirror in [true, false] {

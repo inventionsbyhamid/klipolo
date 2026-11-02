@@ -7,8 +7,8 @@ import type { WhatToRecord } from '../../bindings/WhatToRecord';
  * camera is "No microphone" or "No camera".
  */
 export interface Picks {
-  /** "Whole screen" or "One app". */
-  kind: 'screen' | 'app';
+  /** "Whole screen", "One app", or "Record yourself" (the camera alone, with the mic: no screen). */
+  kind: 'screen' | 'app' | 'camera';
   /** The display recorded, or the one the app's windows are recorded on; null when the setup lists none. */
   display: string | null;
   /** The app recorded (`AppInfo.appId`); null until one is chosen. */
@@ -43,8 +43,23 @@ export function defaultPicks(setup: RecorderSetup): Picks {
   return { ...NO_PICKS, display: displays[0]?.id ?? null, mic: listed ? setup.mic : (mics[0]?.id ?? null) };
 }
 
-/** What a take of these choices records; null while there is no display, or no app chosen for "One app". */
+/**
+ * The choices once "What to record" is `kind`. "Record yourself" with "No camera" chosen takes the camera the setup
+ * offers (the person's last, else the first listed), as it records nothing without one.
+ */
+export function kindPicks(setup: RecorderSetup, picks: Picks, kind: Picks['kind']): Partial<Picks> {
+  if (kind !== 'camera' || picks.camera !== null) return { kind };
+  const { cameras } = setup.devices;
+  const offered = cameras.some((c) => c.id === setup.camera) ? setup.camera : (cameras[0]?.id ?? null);
+  return { kind, camera: offered };
+}
+
+/**
+ * What a take of these choices records; null while there is no display, no app chosen for "One app", or no camera for
+ * "Record yourself".
+ */
 export function whatToRecord(picks: Picks): WhatToRecord | null {
+  if (picks.kind === 'camera') return picks.camera === null ? null : { kind: 'camera' };
   if (picks.display === null) return null;
   if (picks.kind === 'screen') return { kind: 'screen', display: picks.display };
   return picks.appId === null ? null : { kind: 'app', appId: picks.appId, display: picks.display };
@@ -59,8 +74,9 @@ export function armOptions(picks: Picks): ArmOptions | null {
     what,
     mic: picks.mic,
     camera,
-    // Both are the camera's: without one there is nothing to show or mirror.
-    cameraBubble: camera !== null && picks.showCamera,
+    // Both are the camera's: without one there is nothing to show or mirror. The bubble shows over a recorded screen,
+    // so the camera alone has none.
+    cameraBubble: camera !== null && picks.showCamera && picks.kind !== 'camera',
     mirrorCamera: camera !== null && picks.mirror,
   };
 }
