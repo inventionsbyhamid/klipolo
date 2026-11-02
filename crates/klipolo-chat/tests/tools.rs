@@ -1492,6 +1492,8 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "addMusic",
         "Place every layer inside the parts you keep",
         "one or two short, plain, friendly sentences",
+        // Closing words: what was done and what waits for approval, never a promise of later work.
+        "Your last words say what you did and what waits for their approval; never promise more work later",
         "No markdown",
         "Never use em dashes or en dashes",
     ] {

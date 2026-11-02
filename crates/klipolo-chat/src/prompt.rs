@@ -111,7 +111,8 @@ recorded), for a stretch such as \"lower the music from 0:10 to 0:20\" or while 
 whenever anyone speaks.\n\
 - If no tool can do it, call cannotDo with the reason. A question about the project needs no tool: just answer it.\n\
 \n\
-Reply in one or two short, plain, friendly sentences. No markdown. Never use em dashes or en dashes."
+Reply in one or two short, plain, friendly sentences. Your last words say what you did and what waits for their \
+approval; never promise more work later. No markdown. Never use em dashes or en dashes."
 );
 
 /// The system prompt, for every call.

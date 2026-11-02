@@ -1484,3 +1484,21 @@ fn closing_words_are_followed_once_by_what_the_person_has_to_do() {
     let out = send(&model, &[], "square, cut the end and the ums", &i, &p).unwrap();
     assert_eq!(out.reply.matches(ANALYZE_FIRST).count(), 1, "{}", out.reply);
 }
+
+#[test]
+fn the_model_is_asked_to_close_on_what_was_done_and_never_promise_more() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let model = Fake::new(vec![
+        answer("", vec![square_call("call_1")], 0.001),
+        answer("Made it square.", vec![], 0.001),
+    ]);
+    send(&model, &[], "make it square", &i, &p).unwrap();
+    let rule = concat!(
+        "Your last words say what you did and what waits for their approval; ",
+        "never promise more work later"
+    );
+    for request in model.seen() {
+        assert!(request.system.contains(rule), "{}", request.system);
+    }
+}
