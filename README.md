@@ -19,8 +19,8 @@ while in beta.
 
 **1. Download** the disk image for your Mac:
 
-- Apple Silicon: [Klipolo for Apple Silicon](DOWNLOAD_APPLE_SILICON_URL)
-- Intel: [Klipolo for Intel](DOWNLOAD_INTEL_URL)
+- Apple Silicon: [Klipolo for Apple Silicon](https://github.com/inventionsbyhamid/klipolo/releases/download/v0.1.0/Klipolo-0.1.0-aarch64.dmg)
+- Intel: [Klipolo for Intel](https://github.com/inventionsbyhamid/klipolo/releases/download/v0.1.0/Klipolo-0.1.0-x86_64.dmg)
 
 Open it and drag Klipolo to Applications.
 
@@ -41,7 +41,8 @@ key. The AI features need the internet.
 **3. Make a short.**
 
 1. Click **Record your screen**. Pick your whole screen or one app, then your
-   mic and camera, and record. Stop with Option Command R. Or click
+   mic and camera, and record. Or pick **Record yourself** for just your camera
+   and mic, with no screen. Stop with Option Command R. Or click
    **New project** and drag in a video of people talking.
 2. Click **Analyze** at the top of the preview.
 3. Type in the chat: "Turn this into a 60 second vertical short with nice
@@ -53,7 +54,8 @@ key. The AI features need the internet.
 
 - **Record in the app.** Your whole screen or one app, with your mic and
   camera. A take lands in your library with auto zoom on your clicks. Its
-  vertical version follows your cursor.
+  vertical version follows your cursor. Or record yourself: your camera and
+  mic, with no screen.
 - **One message, a whole short.** Muse Spark finds the best moments first, then
   plans the rest in one go. It adapts the plan to what you asked for.
 - **You approve every cut.** Anything that removes footage waits in red until

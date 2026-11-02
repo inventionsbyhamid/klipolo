@@ -3,6 +3,7 @@ import type { Snapshot } from './bindings/Snapshot';
 import { followAiStatus } from './ai/aiStatus';
 import { isCode } from './bridge/call';
 import { bridge } from './bridge/commands';
+import { pagePerf } from './bridge/pagePerf';
 import { cn } from './design/cn';
 import { Toaster } from './design/Toaster';
 import { TooltipProvider } from './design/Tooltip';
@@ -21,6 +22,8 @@ import { Chat } from './layout/Chat';
 import { Library } from './layout/Library';
 import { TopBar } from './layout/TopBar';
 import { errorMessage } from './lib/errors';
+import { pagePerfOn } from './perf/flag';
+import { readoutOnLine, startPagePerf } from './perf/readout';
 import { PlayerBar } from './player/PlayerBar';
 import { Preview } from './preview/Preview';
 import { SettingsDialog } from './settings/SettingsDialog';
@@ -84,16 +87,25 @@ function useKeysOnEditor() {
 }
 
 /**
+ * The editor's keys. Their commands follow the project, the selection and playback, so they live apart from the
+ * panels: a change they follow never draws the editor again.
+ */
+function EditorKeys() {
+  useEditorShortcuts();
+  return null;
+}
+
+/**
  * The editor, while a project is open: the library, the preview, the timeline and chat, and the player bar. Finder
  * drops and the editor's keys work only here, and the project's editing copies are followed (the top bar's pill).
  */
 function Editor() {
   const [filesOver, setFilesOver] = useState(false);
   useFinderDrop(setFilesOver);
-  useEditorShortcuts();
   useKeysOnEditor();
   return (
     <>
+      <EditorKeys />
       <div className="workspace">
         <Library />
         <Preview filesOver={filesOver} />
@@ -153,6 +165,12 @@ export function App() {
     followSpeech();
     // The start screen's posters, made in the background: each card swaps to its own as it lands.
     void followPosters();
+    // Launched with `KLIPOLO_PAGE_PERF=1`: first renders, timeline frames and renders while playing, into the log.
+    if (pagePerfOn()) {
+      const log = (line: string) => void pagePerf.log(line).catch(() => undefined);
+      log(readoutOnLine());
+      startPagePerf({ log });
+    }
     // Development builds only: Control Shift P a stand-in chat, Control Shift W sample words (`dev/devChat`).
     if (import.meta.env.DEV) void import('./dev/devChat').then((dev) => dev.listenForDevKeys());
     // Until a clip's analysis feeds speech: Control Shift S shows sample speech under the music (development only).

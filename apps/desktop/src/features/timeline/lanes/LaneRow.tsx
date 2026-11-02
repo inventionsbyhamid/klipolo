@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 import type { TrackKind } from '../../../bindings/TrackKind';
 import { cn } from '../../../design/cn';
 import { Tooltip } from '../../../design/Tooltip';
@@ -37,6 +37,17 @@ interface LaneRowProps {
   children: ReactNode;
 }
 
+/** A lane's icon in the gutter, named in its tooltip: drawn again only when its name or icon changes. */
+const LaneIcon = memo(function LaneIcon({ name, icon }: { name: string; icon: IconName }) {
+  return (
+    <Tooltip label={name} side="right">
+      <span className="tl-ico" tabIndex={-1}>
+        <Icon name={icon} />
+      </span>
+    </Tooltip>
+  );
+});
+
 /**
  * One lane of the timeline: its icon in the gutter, which stays put while the lanes scroll, then the lane. Click empty
  * lane to seek. While a file is dragged over it, it shows a dashed paper edge.
@@ -73,14 +84,7 @@ export function LaneRow({
       data-track-kind={track?.kind}
     >
       <div className="tl-gutter" style={{ width: gutter }}>
-        {header ??
-          (icon && (
-            <Tooltip label={name} side="right">
-              <span className="tl-ico" tabIndex={-1}>
-                <Icon name={icon} />
-              </span>
-            </Tooltip>
-          ))}
+        {header ?? (icon && <LaneIcon name={name} icon={icon} />)}
       </div>
       <div
         className={cn('tl-lane', empty && 'is-empty', dropOver && 'is-drop')}

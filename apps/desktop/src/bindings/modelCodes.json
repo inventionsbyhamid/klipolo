@@ -970,7 +970,7 @@
   },
   {
     "code": "model.layer.zoomRamp",
-    "message": "A slow zoom must reach its size within the zoom.",
+    "message": "A slow zoom needs a length to reach its size over.",
     "params": []
   },
   {

@@ -803,7 +803,7 @@ fn validate_content(p: &Project, content: &ItemContent, duration: Us) -> Result<
                 ZoomTarget::Push { rect, ramp_us } => {
                     check(valid_box(rect), code!("model.layer.zoomArea"))?;
                     check(
-                        *ramp_us > 0 && *ramp_us <= duration,
+                        *ramp_us > 0 && *ramp_us <= MAX_TIME_US,
                         code!("model.layer.zoomRamp"),
                     )
                 }
