@@ -556,6 +556,7 @@ fn every_call() -> Vec<(ToolCall, bool)> {
             ToolCall::SetCaptions {
                 on: true,
                 style: Some(BuiltinCaptionStyle::Karaoke),
+                look: Default::default(),
             },
             false,
         ),
@@ -574,6 +575,13 @@ fn every_call() -> Vec<(ToolCall, bool)> {
                 replace: "Kaiden".into(),
             },
             false,
+        ),
+        (
+            ToolCall::ReverseClip {
+                clip: "c2".into(),
+                backward: true,
+            },
+            true,
         ),
         (
             ToolCall::FindMoments {

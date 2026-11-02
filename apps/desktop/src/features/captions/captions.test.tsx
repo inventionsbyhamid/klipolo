@@ -85,6 +85,26 @@ describe('caption style cards', () => {
     );
   });
 
+  it('a new style starts from its own size, colors and case, as it does from its own look', async () => {
+    backend();
+    const snap = snapshot(true);
+    snap.project.captions = {
+      ...snap.project.captions,
+      style: 'klipolo.builtin/caption.bold',
+      size: 1.3,
+      color: '#FFD02E',
+      accent: '#39E508',
+      upper: false,
+    };
+    useProject.setState({ snapshot: snap });
+    renderWithProviders(<StyleCards />);
+    await userEvent.click(screen.getByRole('radio', { name: 'Karaoke' }));
+    const tx = (await landed()).at(-1);
+    const captions = tx.ops[0].captions;
+    expect(captions.style).toBe('klipolo.builtin/caption.karaoke');
+    for (const field of ['size', 'color', 'accent', 'upper']) expect(captions[field]).toBeUndefined();
+  });
+
   it('leaves the chosen style as it is: no preview, no change', async () => {
     backend();
     const snap = snapshot(true);

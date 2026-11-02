@@ -17,6 +17,7 @@ import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { useProposal } from '../../state/proposal';
 import { useRange } from '../../state/range';
+import { useReversing } from '../../state/reversing';
 import { useSelection } from '../../state/selection';
 import { fixturePatch, fixtureSnapshot } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
@@ -83,6 +84,7 @@ function external(client: string, parts: Partial<ChatReply>): ExternalReply {
       moments: [],
       revision: fixtureSnapshot().history.revision,
       pictures: [],
+      reverse: [],
       analyze: false,
       ...parts,
     },
@@ -289,6 +291,16 @@ describe('another app in chat', () => {
     expect(await within(screen.getByRole('log')).findByText('From Example Client')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '0:05.0 The big reveal' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Keep only these' })).toBeEnabled();
+  });
+
+  it('an_apps_clip_to_reverse_is_written_backward_as_the_clip_menu_does', async () => {
+    const asked: string[] = [];
+    useReversing.setState({ backward: (clipId) => void asked.push(clipId) });
+    chat();
+    renderWithProviders(<ChatPanel />);
+    await tell(external('Example Client', { text: 'The reversed copy is being made.', reverse: ['clip-2'] }));
+    expect(await within(screen.getByRole('log')).findByText('From Example Client')).toBeInTheDocument();
+    expect(asked).toEqual(['clip-2']);
   });
 
   it('an_apps_picture_is_drawn_and_waits_for_the_persons_use', async () => {

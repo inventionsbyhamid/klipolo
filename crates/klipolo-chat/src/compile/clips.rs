@@ -15,6 +15,9 @@
 //! - `setClip` on a layer, as its own card changes it: a song (`m1`, every piece of it) takes a volume and mute, a video
 //!   layer (`v1`) a speed (a separated camera's being its clip's), a volume and mute, each on the layer's content.
 //!   Fit and Fill stay main clips', and a speed on music is refused.
+//! - `reverseClip`: backward, a job per piece of the clip (`Job::Reverse`) for the app to write its reversed copy as the
+//!   clip menu's Reverse does, the copy and the turn then one undo step; forward again, one `ReverseClip` per piece
+//!   that plays backward, as Reverse on a reversed clip does.
 //!
 //! Undo labels: `chat.setClip {clip, change, noun}` (`change` one of speed, volume, mute, unmute, fit, fill, or
 //! several; `noun` clip, sound for a song or video for a video layer, as the cards' mute labels name it), and
@@ -27,12 +30,15 @@ use std::collections::BTreeMap;
 use klipolo_model::Project;
 use klipolo_model::coded::{CodedError, ErrorParam};
 use klipolo_model::framing::effective_framing;
+use klipolo_model::ids::Id;
 use klipolo_model::media::music::runs;
 use klipolo_model::ops::{ClipPatch, ItemPatch, Op};
-use klipolo_model::project::FormatKind;
+use klipolo_model::project::{AssetKind, FormatKind};
 use klipolo_model::query::{camera_clip_of, clip_has_sound, find_item, has_own_sound};
 use klipolo_model::time::Us;
-use klipolo_model::timeline::{Clip, Framing, FramingMode, ItemContent, TrackKind, Transition};
+use klipolo_model::timeline::{
+    Clip, ClipSource, Framing, FramingMode, ItemContent, ReverseCopy, TrackKind, Transition,
+};
 use klipolo_model::transitions::{
     MIN_TRANSITION_US, default_transition_us, max_transition_us, transition_length_us,
 };
@@ -50,6 +56,8 @@ pub const NO_ROOM_ANYWHERE: &str = "No cut has enough spare footage for a transi
                                     make room.";
 /// What a refusal says when there are no transitions to take away.
 pub const NO_TRANSITIONS: &str = "There are no transitions to remove.";
+/// What the reply says while a clip's reversed copy is written: it lands as one undo step once it is.
+pub const REVERSING: &str = "The reversed copy is being made.";
 
 /// What `setClip` asks to change, as read.
 pub(super) struct Change {
@@ -610,4 +618,66 @@ fn no_room_for(c: &Compiler, work: &Project, i: usize, max: Us) -> String {
         tenths / 10,
         tenths % 10
     )
+}
+
+/// What `reverseClip` comes to: the clips (every piece of the one named) to write backward, each a job (`Job::Reverse`),
+/// or the edit that plays them forward again.
+pub(super) enum Reverse {
+    Backward(Vec<Id>),
+    Forward(Edit),
+}
+
+/// `reverseClip` on the clip `clip` names: backward, its pieces that play forward, once each is tried with its own file
+/// standing in for the copy, so the model's own rules say why one can't (a freeze frame, a recording's clip, a clip
+/// whose sound plays in a layer of its own); forward, its pieces that play backward, as the clip menu does. A piece
+/// already playing the way asked is left as it is.
+pub(super) fn reverse_clip(
+    c: &Compiler,
+    work: &Project,
+    clip: &str,
+    backward: bool,
+) -> Result<Reverse, Refused> {
+    let pieces = named(c, work, "reverseClip", &ClipRef::One(clip.to_owned()))?;
+    let main = &work.timeline.main;
+    if !backward {
+        let ops = (pieces.iter())
+            .filter(|&&i| main[i].reversed.is_some())
+            .map(|&i| Op::ReverseClip {
+                clip_id: main[i].id.clone(),
+                copy: None,
+            })
+            .collect();
+        return Ok(Reverse::Forward(Edit {
+            ops,
+            label: label("reverseClip", vec![("clip", ErrorParam::from(clip))]),
+        }));
+    }
+    let mut ids = Vec::new();
+    for &i in &pieces {
+        let piece = &main[i];
+        if piece.reversed.is_some() {
+            continue;
+        }
+        let file = match &piece.source {
+            ClipSource::Asset { id } => work.asset(id).filter(|a| a.kind == AssetKind::Video),
+            ClipSource::Recording { .. } => None,
+        };
+        let Some(file) = file else {
+            return Err(to_model(format!(
+                "reverseClip: {clip} isn't an imported video, and only those can play backward."
+            )));
+        };
+        let tried = Op::ReverseClip {
+            clip_id: piece.id.clone(),
+            copy: Some(ReverseCopy {
+                asset_id: file.id.clone(),
+                from_us: 0,
+                to_us: file.duration_us.max(piece.source_out_us),
+            }),
+        };
+        klipolo_model::apply_ops(work, &[tried])
+            .map_err(|e| to_model(format!("reverseClip: {clip}: {e}")))?;
+        ids.push(piece.id.clone());
+    }
+    Ok(Reverse::Backward(ids))
 }

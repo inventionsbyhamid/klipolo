@@ -89,6 +89,20 @@ fn caption_settings_are_checked_and_a_dropped_format_drops_its_place() {
         ),
         (
             CaptionSettings {
+                color: Some("#FFF".into()),
+                ..CaptionSettings::default()
+            },
+            "model.captions.color",
+        ),
+        (
+            CaptionSettings {
+                size: Some(2.5),
+                ..CaptionSettings::default()
+            },
+            "model.captions.size",
+        ),
+        (
+            CaptionSettings {
                 place: [(FormatKind::Landscape, 0.99)].into(),
                 ..CaptionSettings::default()
             },

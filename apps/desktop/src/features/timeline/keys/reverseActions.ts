@@ -26,6 +26,18 @@ export const reversingName = (name: string) =>
 
 /** Reverse on clip `clipId`: forward again when it plays backward, else backward once its copy is made. */
 export function reverseClip(clipId: string) {
+  reverse(clipId, true);
+}
+
+/**
+ * Reverse's backward half only, as chat's `reverseClip` asks: clip `clipId` written backward once its copy is made, and
+ * nothing when it plays backward already or a copy of it is being made.
+ */
+export function playBackward(clipId: string) {
+  reverse(clipId, false);
+}
+
+function reverse(clipId: string, forward: boolean) {
   keyBurst.after(() => {
     const project = editable();
     const at = project ? project.timeline.main.findIndex((c) => c.id === clipId) : -1;
@@ -33,7 +45,7 @@ export function reverseClip(clipId: string) {
     const clip = project.timeline.main[at];
     const label = blockLabel(project, clipId);
     const state = clipReverseState(project, at);
-    if (state === 'forward') {
+    if (state === 'forward' && forward) {
       const said = t({ id: 'timeline.key.forward', message: `${label} plays forward again` });
       commit('undo.reverse', [{ type: 'reverseClip', clipId, copy: null }], said);
       return;
@@ -43,6 +55,10 @@ export function reverseClip(clipId: string) {
     void makeBackward({ projectId: project.id, clipId, source }, label);
   });
 }
+
+// Chat's `reverseClip` writes a clip backward through the store (`useReversing`'s `backward`): the same job, pill and
+// undo step as the clip menu's Reverse.
+useReversing.setState({ backward: playBackward });
 
 /** What a copy is made for: the project, the clip, and the file the clip played when it was asked. */
 interface Asked {

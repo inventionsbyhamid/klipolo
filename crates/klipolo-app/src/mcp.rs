@@ -511,12 +511,21 @@ impl<S: SessionOf> Host for AppHost<S> {
             Job::Follow { description, .. } => {
                 self.follow_estimate(description).map_or(0.0, |e| e.usd)
             }
-            // Not in Klipolo yet: nothing runs, nothing is spent.
-            Job::Blur { .. } => 0.0,
+            // Not in Klipolo yet: nothing runs, nothing is spent. A reversed copy is written on this Mac, for free.
+            Job::Blur { .. } | Job::Reverse { .. } => 0.0,
         }
     }
 
     fn start_paid(&self, client: &str, job: &Job) -> Result<Started, HostError> {
+        // The page writes the copy, as the clip menu's Reverse does, and turns the clip with it as one undo step.
+        if let Job::Reverse { clip_id } = job {
+            let at = self.at_now();
+            let asked = reply()
+                .reverse(clip_id)
+                .on_revision(at.as_ref().map_or(0, |at| at.revision));
+            self.told(client, at.map_or(0, |at| at.opening), asked);
+            return Ok(Started::Later);
+        }
         if let Job::Follow { description, focus } = job
             && self.chat.speaker().is_some()
         {

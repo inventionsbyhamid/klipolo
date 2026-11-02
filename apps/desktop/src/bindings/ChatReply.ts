@@ -37,6 +37,11 @@ revision: number,
  */
 pictures: Array<ChatPicture>, 
 /**
+ * Clips to play backward, by id: the page writes each one's reversed copy as the clip menu's Reverse does, its
+ * progress in the top bar, and turns the clip with the copy as one undo step once it is written.
+ */
+reverse: Array<string>, 
+/**
  * Something asked for needs a clip analyzed that isn't yet ("Analyze this clip first"): the panel offers Analyze
  * under the reply, which shows the price before anything is spent.
  */

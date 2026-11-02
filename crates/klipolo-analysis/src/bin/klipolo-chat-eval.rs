@@ -25,7 +25,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use klipolo_analysis::providers::meta_chat::MetaChat;
-use klipolo_chat::tools::LayerRef;
+use klipolo_chat::tools::{CaptionChange, CaptionPlace, LayerRef};
 use klipolo_chat::{
     AnalysisState, Audience, ChatError, CursorTakes, Inputs, Library, LibraryItem, MediaKind,
     PlanOut, SceneLog, SpeakerTurn, ToolCall, Turn, View, build_context, plan,
@@ -757,6 +757,41 @@ fn range_json(r: RangeUs) -> Value {
     json!({"startSec": s(r.start), "endSec": s(r.end)})
 }
 
+/// `setCaptions`' look as the model writes its `set` pairs, in the tool's key order; None when it changes nothing.
+fn look_json(look: &CaptionChange) -> Option<Value> {
+    let or_none = |v: Option<Value>| v.unwrap_or_else(|| json!("none"));
+    let mut set = Vec::new();
+    let mut put = |key: &str, value: Option<Value>| {
+        if let Some(value) = value {
+            set.push(json!({"key": key, "value": value}));
+        }
+    };
+    put(
+        "font",
+        look.font.clone().map(|f| or_none(f.map(Value::from))),
+    );
+    put("size", look.size.map(Value::from));
+    put(
+        "position",
+        look.position.map(|p| match p {
+            CaptionPlace::Top => json!("top"),
+            CaptionPlace::Middle => json!("middle"),
+            CaptionPlace::Bottom => json!("bottom"),
+            CaptionPlace::At(y) => json!(y),
+        }),
+    );
+    put(
+        "color",
+        look.color.clone().map(|c| or_none(c.map(Value::from))),
+    );
+    put(
+        "highlight",
+        look.highlight.clone().map(|c| or_none(c.map(Value::from))),
+    );
+    put("upper", look.upper.map(|u| or_none(u.map(Value::from))));
+    (!set.is_empty()).then_some(Value::Array(set))
+}
+
 /// A compiled call as the model would have written it: its name and its arguments in seconds and words.
 fn tool_json(call: &ToolCall) -> (String, Value) {
     let args = match call {
@@ -798,12 +833,17 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
             "kind": kind.map_or("none", |k| k.key()),
             "durationSec": duration_us.map(s),
         }),
+        ToolCall::ReverseClip { clip, backward } => json!({"clip": clip, "backward": backward}),
         ToolCall::SetFormat {
             format,
             keep_others,
         } => json!({"format": word(format), "keepOthers": keep_others}),
-        ToolCall::SetCaptions { on, style } => {
-            json!({"on": on, "style": style.map(|st| st.key())})
+        ToolCall::SetCaptions { on, style, look } => {
+            let mut args = json!({"on": on, "style": style.map(|st| st.key())});
+            if let Some(set) = look_json(look) {
+                args["set"] = set;
+            }
+            args
         }
         ToolCall::SetBackground {
             kind,
@@ -1350,6 +1390,11 @@ mod tests {
                 json!({"format": "portrait", "keepOthers": true}),
             ),
             ("setCaptions", json!({"on": true, "style": "karaoke"})),
+            (
+                "setCaptions",
+                json!({"on": true, "style": null, "set": [{"key": "size", "value": 1.3}, {"key": "position", "value": "top"},
+                       {"key": "color", "value": "#FFD02E"}, {"key": "upper", "value": "none"}]}),
+            ),
             (
                 "followSubject",
                 json!({"description": "woman astronaut", "focus": null}),

@@ -13,8 +13,9 @@
 //!   `Proposal`: a `Transaction` for the project as the additions leave it, judged by the model's own review (what it
 //!   takes away, on the timeline), applied as one undo step when the person says so. A later `keepOnly` in the
 //!   message replaces an earlier one, which changes nothing.
-//! - `findMoments` gives moments, `followSubject` and `blurObjects` jobs for their runners, `makeSticker` and
-//!   `makeTitleCard`'s background jobs for a picture to be drawn (never an op until it exists), `askUser` questions,
+//! - `findMoments` gives moments, `followSubject` and `blurObjects` jobs for their runners, `reverseClip` a job for each
+//!   clip's reversed copy (playing one forward again is an addition), `makeSticker` and `makeTitleCard`'s background
+//!   jobs for a picture to be drawn (never an op until it exists), `askUser` questions,
 //!   `undo` a flag. `cannotDo` is a refusal shown to the person, as is a tool that needs an analysis the clip doesn't
 //!   have yet (`STILL_LISTENING`, `STILL_WATCHING`, `ANALYZE_FIRST`), filler words only roughly timed
 //!   (`ROUGH_FILLERS`, `ROUGH_FILLERS_STAY`) and a removal with nothing to remove (`NO_FILLERS`, no pause that long);
@@ -90,7 +91,7 @@ use crate::tools::{
     EffectChange, FollowFocus, KeyIn, LayerRef, Moment, PictureSize, Position, PresetIn, ToolCall,
 };
 pub(crate) use cameras::every_camera;
-pub use clips::{NO_ROOM, NO_ROOM_ANYWHERE, NO_TRANSITIONS};
+pub use clips::{NO_ROOM, NO_ROOM_ANYWHERE, NO_TRANSITIONS, REVERSING};
 use map::Map;
 pub use media::{sticker_ops, sticker_placement};
 pub(crate) use recorded::recording_name;
@@ -283,6 +284,12 @@ pub enum Job {
         prompt: String,
         format: FormatKind,
         title_id: Id,
+    },
+    /// The main track's clip `clip_id` to play backward: the app writes its reversed copy as the clip menu's Reverse does,
+    /// its progress in the top bar, then adds the copy and turns the clip as one undo step, if the clip is still there
+    /// as it was.
+    Reverse {
+        clip_id: Id,
     },
 }
 
@@ -690,6 +697,26 @@ impl Compiler<'_> {
                     moments.push((i, found));
                     continue;
                 }
+                ToolCall::ReverseClip { clip, backward } => {
+                    match clips::reverse_clip(self, &adding.work, clip, *backward) {
+                        Ok(clips::Reverse::Backward(ids)) => {
+                            if ids.is_empty() {
+                                adding.unchanged.push(i);
+                            } else {
+                                notes.push((i, REVERSING.to_owned()));
+                            }
+                            jobs.extend(
+                                ids.into_iter().map(|clip_id| (i, Job::Reverse { clip_id })),
+                            );
+                            continue;
+                        }
+                        Ok(clips::Reverse::Forward(edit)) => (Ok(edit), Removal::Moved(call)),
+                        Err(r) => {
+                            refuse(&mut out, i, r);
+                            continue;
+                        }
+                    }
+                }
                 ToolCall::MakeSticker { .. } => {
                     stickers.push((i, call));
                     continue;
@@ -784,8 +811,15 @@ impl Compiler<'_> {
             });
             match tried {
                 // Judged by what it does, not by its tool: proposed with the removals. Auto zooms taken away are
-                // Klipolo's own, never the person's: applied at once.
-                Ok(tried) if tried.removes && !matches!(call, ToolCall::AutoZoom { .. }) => {
+                // Klipolo's own, never the person's, and a clip played forward again shows the same footage: applied at
+                // once.
+                Ok(tried)
+                    if tried.removes
+                        && !matches!(
+                            call,
+                            ToolCall::AutoZoom { .. } | ToolCall::ReverseClip { .. }
+                        ) =>
+                {
                     format_proposed |= matches!(call, ToolCall::SetFormat { .. });
                     waiting.push((i, if_it_removes));
                 }
@@ -801,6 +835,10 @@ impl Compiler<'_> {
                     }
                     // What a recording tool left as it was.
                     notes.extend(recorded.drain(..).map(|said| (i, said)));
+                    // The captions' font still to download is named, as `addText`'s is.
+                    if let Some(said) = media::font_note(self, call) {
+                        notes.push((i, said));
+                    }
                     adding.keep(tried, i);
                 }
                 Err(r) => refuse(&mut out, i, r),
@@ -1310,7 +1348,9 @@ impl Compiler<'_> {
                 format,
                 keep_others,
             } => Ok(additions::set_format(work, *format, *keep_others)),
-            ToolCall::SetCaptions { on, style } => Ok(additions::set_captions(work, *on, *style)),
+            ToolCall::SetCaptions { on, style, look } => {
+                additions::set_captions(self, work, *on, *style, look)
+            }
             ToolCall::SetBackground {
                 kind,
                 color,
@@ -1386,6 +1426,16 @@ impl Compiler<'_> {
             | ToolCall::SeparateSound { .. } => {
                 recorded::compile(self, work, call).map(|noted| noted.edit)
             }
+            ToolCall::ReverseClip {
+                clip,
+                backward: false,
+            } => match clips::reverse_clip(self, work, clip, false)? {
+                clips::Reverse::Forward(edit) => Ok(edit),
+                clips::Reverse::Backward(_) => Ok(Edit {
+                    ops: Vec::new(),
+                    label: label("reverseClip", Vec::<(&str, ErrorParam)>::new()),
+                }),
+            },
             other => Err(to_model(format!("{}: not an addition.", other.name()))),
         }
     }

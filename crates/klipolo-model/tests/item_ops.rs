@@ -1,6 +1,7 @@
 mod common;
 use common::*;
 use klipolo_model::contrib::builtin;
+use klipolo_model::layout::BoxN;
 use klipolo_model::motion::Motion;
 use klipolo_model::ops::*;
 use klipolo_model::query::clip_starts;
@@ -731,4 +732,55 @@ fn split_outside_a_layer_says_so() {
             "That's too close to the edge of the layer to split."
         ))
     );
+}
+
+/// A push zoom: a slow push toward its area's centre over `ramp_us`, held to its end. Its area must be a box and its
+/// ramp inside it.
+#[test]
+fn a_push_zoom_ramps_inside_its_item() {
+    let p = fixture();
+    let push = |ramp: f64| {
+        item(
+            "push",
+            1.0,
+            6.0,
+            full(),
+            ItemContent::Zoom {
+                target: ZoomTarget::Push {
+                    rect: BoxN {
+                        x: 0.3,
+                        y: 0.2,
+                        w: 0.6,
+                        h: 0.6,
+                    },
+                    ramp_us: secs(ramp),
+                },
+                scale: 1.25,
+            },
+        )
+    };
+    let pushed = add(&p, push(5.0), true);
+    let (_, zoom) = find(&pushed, "push");
+    assert!(matches!(
+        zoom.content,
+        ItemContent::Zoom {
+            target: ZoomTarget::Push { .. },
+            ..
+        }
+    ));
+    let json = serde_json::to_value(&zoom.content).unwrap();
+    assert_eq!(json["target"]["type"], "push");
+    assert_eq!(json["target"]["rampUs"], secs(5.0));
+    for ramp in [0.0, 6.5] {
+        let refused = apply_ops(
+            &p,
+            &[Op::AddItem {
+                track: TrackTarget::Auto,
+                item: push(ramp),
+                attach: true,
+            }],
+        )
+        .unwrap_err();
+        assert_eq!(refused.coded().code, "model.layer.zoomRamp", "{ramp}");
+    }
 }

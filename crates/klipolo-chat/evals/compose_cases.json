@@ -1,5 +1,5 @@
 {
-  "source": "The planner's eval of edits composed from the general tools rather than fixed styles, on project_compose_a.json: clip A (NASA's space station Q&A, 155 s) played whole, landscape, with a title \"Space station Q&A\" (t1, 0 to 4 s), the logo over the whole video (i1), a rocket sticker (i2, 20 to 25 s) and lofi-beat.mp3 as music at 50% that doesn't duck (m1); clip A's transcript, speaker turns and Spark scene log come from tests/fixtures. Each case passes when one of its `expect` alternatives matches the first answer, as cases.json says; `{has}` wants a list holding a match for each item given, in any order among others, and `{allOf}` each of several rules. A slow push-in on the main footage has no tool yet (no keys on the main track or on zoom layers), so that case wants cannotDo or a question; lowering the music for a stretch wants its volume keys, and while someone talks, volume keys or its ducking. With captions on (project_compose_a.json), \"make each word pop\" may ask whether the title or the captions are meant; with captions off (project_compose_b.json, the same project otherwise) it animates the title. Run it with --cases.",
+  "source": "The planner's eval of edits composed from the general tools rather than fixed styles, on project_compose_a.json: clip A (NASA's space station Q&A, 155 s) played whole, landscape, with a title \"Space station Q&A\" (t1, 0 to 4 s), the logo over the whole video (i1), a rocket sticker (i2, 20 to 25 s) and lofi-beat.mp3 as music at 50% that doesn't duck (m1); clip A's transcript, speaker turns and Spark scene log come from tests/fixtures. Each case passes when one of its `expect` alternatives matches the first answer, as cases.json says; `{has}` wants a list holding a match for each item given, in any order among others, and `{allOf}` each of several rules. A slow push-in on the main footage is setMotion's scale keys on its clip (a push zoom, reaching its size about five seconds in); lowering the music for a stretch wants its volume keys, and while someone talks, volume keys or its ducking. With captions on (project_compose_a.json), \"make each word pop\" may ask whether the title or the captions are meant; with captions off (project_compose_b.json, the same project otherwise) it animates the title. The captions' look (bigger, yellow, at the top) is setCaptions' set keys over the style; playing the video backward is reverseClip, a job for its reversed copy. Run it with --cases.",
   "project": "project_compose_a.json",
   "asset": "clip-a",
   "transcript": "../tests/fixtures/transcript_clip_a.json",
@@ -73,8 +73,12 @@
       "id": "slow-zoom-speaker",
       "message": "slowly zoom into the speaker over five seconds",
       "expect": [
-        {"calls": [{"name": "cannotDo"}]},
-        {"calls": [{"name": "askUser"}], "outcome": {"asked": true}}
+        {
+          "calls": [{"name": "setMotion", "args": {"layer": "c1", "keys": {"has": [
+            {"property": "scale", "value": {"min": 1.05, "max": 2.0}, "atSec": {"min": 3.0, "max": 7.0}}
+          ]}}}],
+          "outcome": {"applied": true}
+        }
       ]
     },
     {
@@ -149,6 +153,30 @@
         {
           "calls": [{"name": "setEffects", "args": {"target": "c1", "name": "vignette"}}],
           "outcome": {"applied": true}
+        }
+      ]
+    },
+    {
+      "id": "caption-look",
+      "message": "make the captions bigger and yellow, and move them to the top",
+      "expect": [
+        {
+          "calls": [{"name": "setCaptions", "args": {"on": true, "set": {"has": [
+            {"key": "size", "value": {"min": 1.1, "max": 2.0}},
+            {"key": "color", "value": {"contains": "#"}},
+            {"key": "position", "value": "top"}
+          ]}}}],
+          "outcome": {"applied": true}
+        }
+      ]
+    },
+    {
+      "id": "reverse-video",
+      "message": "play the video backward",
+      "expect": [
+        {
+          "calls": [{"name": "reverseClip", "args": {"clip": "c1", "backward": true}}],
+          "outcome": {"jobs": true}
         }
       ]
     }
