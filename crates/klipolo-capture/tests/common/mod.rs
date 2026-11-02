@@ -11,7 +11,7 @@ pub mod harness;
 pub mod replay;
 #[cfg(feature = "synthetic")]
 pub mod take;
-// After `take`, not in order: the `harness` module lands beside `decode`.
+// After `take`, not in order, so `harness` (a `SessionCore` driven in virtual time) stays beside `decode`.
 #[cfg(feature = "synthetic")]
 pub mod fake;
 
