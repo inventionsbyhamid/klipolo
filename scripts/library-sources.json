@@ -1,0 +1,1147 @@
+{
+  "about": "The bundled pack's items made by others: each one's source, author and licence, the cut of it the pack keeps (seconds into the source; fades in seconds), and the SHA-256 of the file in assets/library. scripts/library-media.py makes the files from the downloads; scripts/gen-library.py lists them.",
+  "noto_commit": "41e31b110b4eb929dffb410264694a06205b7ad7",
+  "items": [
+    {
+      "id": "whoosh",
+      "name": "Whoosh",
+      "category": "sound",
+      "tags": [
+        "whoosh",
+        "transition",
+        "topic change",
+        "fast",
+        "air",
+        "swipe"
+      ],
+      "title": "Whoosh",
+      "author": "qubodup",
+      "source": "https://freesound.org/people/qubodup/sounds/60013/",
+      "license": "CC0-1.0",
+      "from": "freesound/60013.ogg",
+      "sha256": "b4df9a92cf3ab443b1d5fb65bc895b95c956d5853411b6373a0ca36e24b52442"
+    },
+    {
+      "id": "swoosh",
+      "name": "Swoosh",
+      "category": "sound",
+      "tags": [
+        "swoosh",
+        "transition",
+        "quick",
+        "swipe",
+        "reveal"
+      ],
+      "title": "swoosh-1.mp3",
+      "author": "lesaucisson",
+      "source": "https://freesound.org/people/lesaucisson/sounds/585257/",
+      "license": "CC0-1.0",
+      "from": "freesound/585257.ogg",
+      "sha256": "0ba80702db166a28ab57c78ee2f1d69341d2fb771d674bbea2b6d6d66a9ad906"
+    },
+    {
+      "id": "pop",
+      "name": "Pop",
+      "category": "sound",
+      "tags": [
+        "pop",
+        "appear",
+        "bubble",
+        "short",
+        "fun"
+      ],
+      "title": "Pop sound",
+      "author": "deraj",
+      "source": "https://freesound.org/people/deraj/sounds/202230/",
+      "license": "CC0-1.0",
+      "from": "freesound/202230.ogg",
+      "sha256": "90474d4d4c81358ce99a8b50172d05b05ee89219efed980df80d8c6d97d6c13a"
+    },
+    {
+      "id": "click",
+      "name": "Click",
+      "category": "sound",
+      "tags": [
+        "click",
+        "tap",
+        "button",
+        "short",
+        "ui"
+      ],
+      "title": "click_001.ogg (Interface Sounds 1.0)",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/interface-sounds",
+      "license": "CC0-1.0",
+      "from": "kenney/interface-sounds/Audio/click_001.ogg",
+      "sha256": "bac6d5cd67de51cc1a568ad46f42175e20943148252f11cc76d5a8ccbfce3cf2"
+    },
+    {
+      "id": "ding",
+      "name": "Ding",
+      "category": "sound",
+      "tags": [
+        "ding",
+        "bell",
+        "correct",
+        "idea",
+        "bright",
+        "alert"
+      ],
+      "title": "Ding! idea.mp3",
+      "author": "Saya13",
+      "source": "https://freesound.org/people/Saya13/sounds/407258/",
+      "license": "CC0-1.0",
+      "from": "freesound/407258.ogg",
+      "sha256": "e6eca5b5a935cd6bcf5d5f310c41e13b1f60a10e6f63d32703af89c51f6ef8c7"
+    },
+    {
+      "id": "chime",
+      "name": "Chime",
+      "category": "sound",
+      "tags": [
+        "chime",
+        "magic",
+        "soft",
+        "glow",
+        "success"
+      ],
+      "title": "GLEAM-GLOW-SFX-CHIME.wav",
+      "author": "newagesoup",
+      "source": "https://freesound.org/people/newagesoup/sounds/351408/",
+      "license": "CC0-1.0",
+      "from": "freesound/351408.ogg",
+      "start": 1.3,
+      "length": 2.9,
+      "fade_out": 0.6,
+      "sha256": "677b1e0bbedb4a09528b95982851933722212011513f82ae73528d13b66e2b91"
+    },
+    {
+      "id": "rise",
+      "name": "Rise",
+      "category": "sound",
+      "tags": [
+        "riser",
+        "build up",
+        "tension",
+        "transition",
+        "intro"
+      ],
+      "title": "Riser sound effect short.wav",
+      "author": "syntheffects",
+      "source": "https://freesound.org/people/syntheffects/sounds/685256/",
+      "license": "CC0-1.0",
+      "from": "freesound/685256.ogg",
+      "sha256": "508e3cfdb3b7d15814302c696546a253bb949b90780f8fe481b34d85b22cba5a"
+    },
+    {
+      "id": "sparkle",
+      "name": "Sparkle",
+      "category": "sound",
+      "tags": [
+        "sparkle",
+        "magic",
+        "shine",
+        "twinkle",
+        "reveal"
+      ],
+      "title": "cartoon_wink_magic_sparkle.wav",
+      "author": "MLaudio",
+      "source": "https://freesound.org/people/MLaudio/sounds/511485/",
+      "license": "CC0-1.0",
+      "from": "freesound/511485.ogg",
+      "sha256": "b687ae54de2554e4d901dddbce839219f4dc12ac52eda1c1278bf7bb943d561a"
+    },
+    {
+      "id": "impact",
+      "name": "Impact",
+      "category": "sound",
+      "tags": [
+        "impact",
+        "hit",
+        "cinematic",
+        "dramatic",
+        "transition"
+      ],
+      "title": "Dramatic Hit",
+      "author": "qubodup",
+      "source": "https://freesound.org/people/qubodup/sounds/222517/",
+      "license": "CC0-1.0",
+      "from": "freesound/222517.ogg",
+      "length": 2.9,
+      "fade_out": 1.0,
+      "sha256": "5341d8640e1316e4fc14ae9ea6b1d24359d965b68f474c56b329d8d03e2622c6"
+    },
+    {
+      "id": "bass-drop",
+      "name": "Bass drop",
+      "category": "sound",
+      "tags": [
+        "bass drop",
+        "drop",
+        "bass",
+        "sub",
+        "boom",
+        "transition"
+      ],
+      "title": "Sub Drop Smooth.wav",
+      "author": "newagesoup",
+      "source": "https://freesound.org/people/newagesoup/sounds/428073/",
+      "license": "CC0-1.0",
+      "from": "freesound/428073.ogg",
+      "length": 2.9,
+      "fade_out": 0.8,
+      "sha256": "21826f5909f474a8703cf65d7e3f0550babe71ed43b75c804e2a690127664af8"
+    },
+    {
+      "id": "long-riser",
+      "name": "Long riser",
+      "category": "sound",
+      "tags": [
+        "riser",
+        "build up",
+        "tension",
+        "suspense",
+        "intro"
+      ],
+      "title": "dark riser buildup",
+      "author": "CogFireStudios",
+      "source": "https://freesound.org/people/CogFireStudios/sounds/683667/",
+      "license": "CC0-1.0",
+      "from": "freesound/683667.ogg",
+      "start": 1.08,
+      "fade_in": 0.4,
+      "sha256": "67c94a3f8554d3344f3e46a61a065ba968dad8f0b550c311c655267f9f9f3b22"
+    },
+    {
+      "id": "swipe-left",
+      "name": "Swipe left",
+      "category": "sound",
+      "tags": [
+        "swipe",
+        "left",
+        "slide",
+        "transition",
+        "quick"
+      ],
+      "title": "Throw/Swipe",
+      "author": "mrickey13",
+      "source": "https://freesound.org/people/mrickey13/sounds/515625/",
+      "license": "CC0-1.0",
+      "from": "freesound/515625.ogg",
+      "sha256": "f753478c266a3f0dd3105420f6bd8c6f701cd25a76867ebf6d900f6c0f4b8ba4"
+    },
+    {
+      "id": "swipe-right",
+      "name": "Swipe right",
+      "category": "sound",
+      "tags": [
+        "swipe",
+        "right",
+        "slide",
+        "transition",
+        "quick"
+      ],
+      "title": "Swipe Whoosh",
+      "author": "qubodup",
+      "source": "https://freesound.org/people/qubodup/sounds/60007/",
+      "license": "CC0-1.0",
+      "from": "freesound/60007.ogg",
+      "sha256": "50c7d5bb70f61d0e0157a9ce2c8902da6172b02850ea4fcb1139cd4ee83a9033"
+    },
+    {
+      "id": "glitch",
+      "name": "Glitch",
+      "category": "sound",
+      "tags": [
+        "glitch",
+        "digital",
+        "error",
+        "tech",
+        "transition"
+      ],
+      "title": "Digital Glitch_v1.wav",
+      "author": "tadaizm",
+      "source": "https://freesound.org/people/tadaizm/sounds/458065/",
+      "license": "CC0-1.0",
+      "from": "freesound/458065.ogg",
+      "sha256": "df69d5a61297e46b1c375445f3cbfd1eff6dc0284da63719e20716e98fe95ac7"
+    },
+    {
+      "id": "record-scratch",
+      "name": "Record scratch",
+      "category": "sound",
+      "tags": [
+        "record scratch",
+        "scratch",
+        "stop",
+        "freeze",
+        "funny"
+      ],
+      "title": "record_scratch.wav",
+      "author": "simkiott",
+      "source": "https://freesound.org/people/simkiott/sounds/43404/",
+      "license": "CC0-1.0",
+      "from": "freesound/43404.ogg",
+      "sha256": "cf2c5e88f804fa7af65dabfe0d6513832c4dcfdc8f888dae5ba43629209ade21"
+    },
+    {
+      "id": "shutter",
+      "name": "Camera shutter",
+      "category": "sound",
+      "tags": [
+        "camera",
+        "shutter",
+        "photo",
+        "snap",
+        "picture"
+      ],
+      "title": "Camera Shutter",
+      "author": "roachpowder",
+      "source": "https://freesound.org/people/roachpowder/sounds/170229/",
+      "license": "CC0-1.0",
+      "from": "freesound/170229.ogg",
+      "sha256": "f1fbefe417b56f912e3660dd60c4b2719a3b637185f5d453115df8f59034857a"
+    },
+    {
+      "id": "typing",
+      "name": "Keyboard typing",
+      "category": "sound",
+      "tags": [
+        "typing",
+        "keyboard",
+        "keys",
+        "text",
+        "computer"
+      ],
+      "title": "Keyboard Typing",
+      "author": "Trollarch2",
+      "source": "https://freesound.org/people/Trollarch2/sounds/331656/",
+      "license": "CC0-1.0",
+      "from": "freesound/331656.ogg",
+      "start": 1.0,
+      "length": 2.0,
+      "fade_in": 0.005,
+      "fade_out": 0.08,
+      "sha256": "47d823cc709be5364f19a6a8c28b78ed922336f4dfce3fa094241706f4e62609"
+    },
+    {
+      "id": "notification",
+      "name": "Notification",
+      "category": "sound",
+      "tags": [
+        "notification",
+        "message",
+        "alert",
+        "phone",
+        "ping"
+      ],
+      "title": "Notification Sound",
+      "author": "yfjesse",
+      "source": "https://freesound.org/people/yfjesse/sounds/235911/",
+      "license": "CC0-1.0",
+      "from": "freesound/235911.ogg",
+      "sha256": "af2cf59e451f2c2d5f78dd7442ec9b5d36951b6f41a37496b4e128585c10dcaa"
+    },
+    {
+      "id": "success",
+      "name": "Success",
+      "category": "sound",
+      "tags": [
+        "success",
+        "win",
+        "level up",
+        "correct",
+        "game"
+      ],
+      "title": "Short Success Sound Glockenspiel Treasure Video Game.mp3",
+      "author": "FunWithSound",
+      "source": "https://freesound.org/people/FunWithSound/sounds/456965/",
+      "license": "CC0-1.0",
+      "from": "freesound/456965.ogg",
+      "sha256": "9d7c4a023c623ba1b620727e1ab611f3fdef9cf017141a12f5154586f6802e39"
+    },
+    {
+      "id": "error",
+      "name": "Error buzz",
+      "category": "sound",
+      "tags": [
+        "error",
+        "wrong",
+        "buzzer",
+        "fail",
+        "no"
+      ],
+      "title": "Wrong Answer",
+      "author": "-Andreas",
+      "source": "https://freesound.org/people/-Andreas/sounds/648462/",
+      "license": "CC0-1.0",
+      "from": "freesound/648462.ogg",
+      "sha256": "10022477670aa11891cef42b5829af3475d950504ae50c938de64838eaf5aa2a"
+    },
+    {
+      "id": "pop-high",
+      "name": "High pop",
+      "category": "sound",
+      "tags": [
+        "pop",
+        "high",
+        "appear",
+        "cute",
+        "short"
+      ],
+      "title": "cartoon pop or drip",
+      "author": "AlaskaRobotics",
+      "source": "https://freesound.org/people/AlaskaRobotics/sounds/221091/",
+      "license": "CC0-1.0",
+      "from": "freesound/221091.ogg",
+      "sha256": "ac3feb76251a19115ca2b4609621c8f576fb9514c26fe87a0c74f48addba8e62"
+    },
+    {
+      "id": "bubbles",
+      "name": "Bubble pops",
+      "category": "sound",
+      "tags": [
+        "bubbles",
+        "pop",
+        "popping",
+        "appear",
+        "fun"
+      ],
+      "title": "Bubble Pop.wav",
+      "author": "OGMeek",
+      "source": "https://freesound.org/people/OGMeek/sounds/59978/",
+      "license": "CC0-1.0",
+      "from": "freesound/59978.ogg",
+      "start": 1.45,
+      "length": 1.6,
+      "fade_in": 0.005,
+      "fade_out": 0.05,
+      "sha256": "56f28d69b9099c54fffaad6c4f175d6bf51944b7b851244050cea0f8518b5daf"
+    },
+    {
+      "id": "boing",
+      "name": "Cartoon boing",
+      "category": "sound",
+      "tags": [
+        "boing",
+        "bounce",
+        "spring",
+        "cartoon",
+        "funny"
+      ],
+      "title": "Boing 2",
+      "author": "magnuswaker",
+      "source": "https://freesound.org/people/magnuswaker/sounds/540790/",
+      "license": "CC0-1.0",
+      "from": "freesound/540790.ogg",
+      "sha256": "e9e4a1a924029ba153e21b260cfce88af8d5e4edc35492e94cb7825d77d16835"
+    },
+    {
+      "id": "drum-hit",
+      "name": "Drum hit",
+      "category": "sound",
+      "tags": [
+        "drum",
+        "hit",
+        "punch",
+        "snare",
+        "beat"
+      ],
+      "title": "Dubstep Snare drum",
+      "author": "Tr4ck3r",
+      "source": "https://freesound.org/people/Tr4ck3r/sounds/190592/",
+      "license": "CC0-1.0",
+      "from": "freesound/190592.ogg",
+      "sha256": "ebcdbf852d36c38ed2edd683238873fcc46de090bc4fa34bedd6489ca69eed82"
+    },
+    {
+      "id": "tick-tock",
+      "name": "Tick tock",
+      "category": "sound",
+      "tags": [
+        "clock",
+        "tick tock",
+        "timer",
+        "countdown",
+        "waiting"
+      ],
+      "title": "Clock ticking",
+      "author": "olver",
+      "source": "https://freesound.org/people/olver/sounds/130388/",
+      "license": "CC0-1.0",
+      "from": "freesound/130388.ogg",
+      "length": 2.9,
+      "fade_out": 0.1,
+      "sha256": "32e176627323d66febbba9c14983e2a2e07af3b0bbb5d8f6eab7ebda9db5b3d5"
+    },
+    {
+      "id": "applause",
+      "name": "Applause",
+      "category": "sound",
+      "tags": [
+        "applause",
+        "clapping",
+        "cheering",
+        "crowd",
+        "win"
+      ],
+      "title": "cheering and clapping crowd 2",
+      "author": "AlaskaRobotics",
+      "source": "https://freesound.org/people/AlaskaRobotics/sounds/221567/",
+      "license": "CC0-1.0",
+      "from": "freesound/221567.ogg",
+      "start": 0.3,
+      "length": 2.9,
+      "fade_in": 0.15,
+      "fade_out": 0.8,
+      "sha256": "bb095ec43b397144be93b290571ae8597a25f90473b99bbeaa99d07ad4f5486b"
+    },
+    {
+      "id": "crowd-laugh",
+      "name": "Crowd laugh",
+      "category": "sound",
+      "tags": [
+        "laugh",
+        "crowd",
+        "funny",
+        "audience",
+        "joke"
+      ],
+      "title": "Small Crowd Laughing",
+      "author": "snakebarney",
+      "source": "https://freesound.org/people/snakebarney/sounds/138112/",
+      "license": "CC0-1.0",
+      "from": "freesound/138112.ogg",
+      "start": 0.1,
+      "length": 2.9,
+      "fade_out": 0.7,
+      "sha256": "68aba4b2b89af5409bf455594ff868dcd35a4cfc6486232f6a7779780890ccce"
+    },
+    {
+      "id": "crowd-wow",
+      "name": "Crowd wow",
+      "category": "sound",
+      "tags": [
+        "wow",
+        "ooh",
+        "crowd",
+        "amazed",
+        "reaction"
+      ],
+      "title": "Crowd Ooohs and Ahhhs in Excitement",
+      "author": "noah0189",
+      "source": "https://freesound.org/people/noah0189/sounds/264499/",
+      "license": "CC0-1.0",
+      "from": "freesound/264499.ogg",
+      "length": 2.0,
+      "fade_out": 0.3,
+      "sha256": "41b41943b074f4225ea6f61ce0e9b1cc04cf07ee433818452b0674e2e2e92c81"
+    },
+    {
+      "id": "cash-register",
+      "name": "Cash register",
+      "category": "sound",
+      "tags": [
+        "cash register",
+        "money",
+        "sale",
+        "cha ching",
+        "price"
+      ],
+      "title": "Cash Register Purchase",
+      "author": "Zott820",
+      "source": "https://freesound.org/people/Zott820/sounds/209578/",
+      "license": "CC0-1.0",
+      "from": "freesound/209578.ogg",
+      "sha256": "9df49517d2781783256642b139d2fac796f04e18f395fc5dcec2e696e4dc325d"
+    },
+    {
+      "id": "heartbeat",
+      "name": "Heartbeat",
+      "category": "sound",
+      "tags": [
+        "heartbeat",
+        "heart",
+        "tension",
+        "nervous",
+        "suspense"
+      ],
+      "title": "Heart Beating",
+      "author": "michorvath",
+      "source": "https://freesound.org/people/michorvath/sounds/273150/",
+      "license": "CC0-1.0",
+      "from": "freesound/273150.ogg",
+      "start": 0.25,
+      "length": 2.35,
+      "fade_out": 0.15,
+      "sha256": "8f91af654fa679945370d94e9976c121a83062bbf8ca7f4a9368965c22c2c1ab"
+    },
+    {
+      "id": "deep-boom",
+      "name": "Deep boom",
+      "category": "sound",
+      "tags": [
+        "boom",
+        "deep",
+        "cinematic",
+        "bass",
+        "reveal"
+      ],
+      "title": "Cinematic_Boom_Rhapsodize.wav",
+      "author": "rhapsodize",
+      "source": "https://freesound.org/people/rhapsodize/sounds/255111/",
+      "license": "CC0-1.0",
+      "from": "freesound/255111.ogg",
+      "length": 2.9,
+      "fade_out": 1.2,
+      "sha256": "67f845b05eae2fbe91b30edeb32d751a0a6c5dadc3e686d4f1842b4a5d23a14d"
+    },
+    {
+      "id": "cartoon-fall",
+      "name": "Cartoon fall",
+      "category": "sound",
+      "tags": [
+        "slide whistle",
+        "fall",
+        "fail",
+        "cartoon",
+        "funny"
+      ],
+      "title": "Cartoon Fall",
+      "author": "plasterbrain",
+      "source": "https://freesound.org/people/plasterbrain/sounds/395443/",
+      "license": "CC0-1.0",
+      "from": "freesound/395443.ogg",
+      "sha256": "860d84c962d4d232911f1e7d2646b0866a083d6ea7d028fcdbde544430bd7ad2"
+    },
+    {
+      "id": "drumroll",
+      "name": "Drumroll",
+      "category": "sound",
+      "tags": [
+        "drumroll",
+        "reveal",
+        "suspense",
+        "announcement",
+        "drums"
+      ],
+      "title": "Drum Roll, Please!",
+      "author": "HoBoTrails",
+      "source": "https://freesound.org/people/HoBoTrails/sounds/424927/",
+      "license": "CC0-1.0",
+      "from": "freesound/424927.ogg",
+      "start": 3.2,
+      "length": 2.9,
+      "fade_in": 0.3,
+      "fade_out": 0.3,
+      "sha256": "d3c17ef68a79757070506edb93cab68e86b5388f4e88048ea0ac6293843c4d04"
+    },
+    {
+      "id": "crickets",
+      "name": "Crickets",
+      "category": "sound",
+      "tags": [
+        "crickets",
+        "silence",
+        "awkward",
+        "night",
+        "nothing"
+      ],
+      "title": "crickets",
+      "author": "FreethinkerAnon",
+      "source": "https://freesound.org/people/FreethinkerAnon/sounds/129678/",
+      "license": "CC0-1.0",
+      "from": "freesound/129678.ogg",
+      "start": 1.0,
+      "length": 2.9,
+      "fade_in": 0.25,
+      "fade_out": 0.6,
+      "sha256": "a2184ec361937330757ac3d2fa88911f60817dfbabba08d6907d74531f91d81b"
+    },
+    {
+      "id": "ta-da",
+      "name": "Ta-da",
+      "category": "sound",
+      "tags": [
+        "ta-da",
+        "reveal",
+        "fanfare",
+        "done",
+        "celebrate"
+      ],
+      "title": "Tada Fanfare A",
+      "author": "plasterbrain",
+      "source": "https://freesound.org/people/plasterbrain/sounds/397355/",
+      "license": "CC0-1.0",
+      "from": "freesound/397355.ogg",
+      "sha256": "4824f25b295a876a6e9a15bc83737c55cb238c2324031b4cde52527031bb220f"
+    },
+    {
+      "id": "heart",
+      "name": "Heart",
+      "category": "sticker",
+      "tags": [
+        "heart",
+        "love",
+        "like",
+        "red"
+      ],
+      "title": "emoji_u2764.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u2764.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u2764.svg",
+      "sha256": "083c6ade1ece4c6befde4312e3a06f088744d88663bcb07cb305317c5e6265f6"
+    },
+    {
+      "id": "star",
+      "name": "Star",
+      "category": "sticker",
+      "tags": [
+        "star",
+        "favourite",
+        "best",
+        "gold"
+      ],
+      "title": "emoji_u2b50.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u2b50.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u2b50.svg",
+      "sha256": "6e31087ba5cb13e78cd6d4cfd02b188e550bb118a59b9f0a790ee47fd67d42b2"
+    },
+    {
+      "id": "check",
+      "name": "Check",
+      "category": "sticker",
+      "tags": [
+        "check",
+        "tick",
+        "done",
+        "yes",
+        "green"
+      ],
+      "title": "emoji_u2705.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u2705.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u2705.svg",
+      "sha256": "511ec9d7d4f9c58bd6ed4d41e945dda9fa71cc3a4ca2e45b2354b4f79842871d"
+    },
+    {
+      "id": "x-mark",
+      "name": "X mark",
+      "category": "sticker",
+      "tags": [
+        "x",
+        "cross",
+        "wrong",
+        "no",
+        "red"
+      ],
+      "title": "emoji_u274c.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u274c.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u274c.svg",
+      "sha256": "d35fd93adc7815f0fe374d5ae8c2a2e36ac7e61d2b19ea3b3098025b7b61325f"
+    },
+    {
+      "id": "question",
+      "name": "Question mark",
+      "category": "sticker",
+      "tags": [
+        "question",
+        "question mark",
+        "why",
+        "quiz",
+        "red"
+      ],
+      "title": "emoji_u2753.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u2753.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u2753.svg",
+      "sha256": "32395a2b53d9b44c910191b1d42b988715cfd1a27ac84ed0fa7d35bdee883a7b"
+    },
+    {
+      "id": "exclamation",
+      "name": "Exclamation mark",
+      "category": "sticker",
+      "tags": [
+        "exclamation",
+        "exclamation mark",
+        "wow",
+        "alert",
+        "important",
+        "red"
+      ],
+      "title": "emoji_u2757.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u2757.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u2757.svg",
+      "sha256": "fda8072ab9cac5cc5ba299f6a99f3a73fc77cd28b290af0480a0a36da92fd785"
+    },
+    {
+      "id": "thumbs-up",
+      "name": "Thumbs up",
+      "category": "sticker",
+      "tags": [
+        "thumbs up",
+        "like",
+        "yes",
+        "good",
+        "approve"
+      ],
+      "title": "emoji_u1f44d.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u1f44d.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u1f44d.svg",
+      "sha256": "76b74e0d8a097ae06f3296db1e27484c9ccd7b18645db98741606d0ef91065d4"
+    },
+    {
+      "id": "fire",
+      "name": "Fire",
+      "category": "sticker",
+      "tags": [
+        "fire",
+        "flame",
+        "hot",
+        "trending",
+        "lit"
+      ],
+      "title": "emoji_u1f525.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u1f525.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u1f525.svg",
+      "sha256": "8f1e221e009ce4f77db412047f99040205ba1b3a5548e10ed377ab4566b6a775"
+    },
+    {
+      "id": "sparkles",
+      "name": "Sparkles",
+      "category": "sticker",
+      "tags": [
+        "sparkles",
+        "shine",
+        "magic",
+        "new",
+        "gold"
+      ],
+      "title": "emoji_u2728.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u2728.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u2728.svg",
+      "sha256": "538bb2dc53f203ff6ba1c908e24a00d255fa49300daafed86d7e710da7dd6405"
+    },
+    {
+      "id": "lightbulb",
+      "name": "Lightbulb",
+      "category": "sticker",
+      "tags": [
+        "lightbulb",
+        "idea",
+        "tip",
+        "think",
+        "smart"
+      ],
+      "title": "emoji_u1f4a1.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u1f4a1.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u1f4a1.svg",
+      "sha256": "fb7cdbcb1f03df1d532b1b87c1b7f776d58b738e94d9ff63fe842fcfac44eed3"
+    },
+    {
+      "id": "hundred",
+      "name": "100",
+      "category": "sticker",
+      "tags": [
+        "100",
+        "hundred",
+        "perfect",
+        "agree",
+        "score"
+      ],
+      "title": "emoji_u1f4af.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u1f4af.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u1f4af.svg",
+      "sha256": "ff10c1fc5e475dbfe0079f6e5c3546ad402e880cafd57c622ee9f83ddc0459dd"
+    },
+    {
+      "id": "tears-of-joy",
+      "name": "Tears of joy",
+      "category": "sticker",
+      "tags": [
+        "laugh",
+        "lol",
+        "funny",
+        "crying laughing",
+        "joke"
+      ],
+      "title": "emoji_u1f602.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u1f602.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u1f602.svg",
+      "sha256": "b42f31c41fd7d8359ac5da70c9059ab9bc3cc8cbe44adce1f950aa6f7a2b0396"
+    },
+    {
+      "id": "mind-blown",
+      "name": "Mind blown",
+      "category": "sticker",
+      "tags": [
+        "mind blown",
+        "wow",
+        "shocked",
+        "amazing",
+        "exploding head"
+      ],
+      "title": "emoji_u1f92f.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u1f92f.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u1f92f.svg",
+      "sha256": "26769c864508772e3a02f16835801b7add1678803e9c61be84c78239b018aabb"
+    },
+    {
+      "id": "heart-eyes",
+      "name": "Heart eyes",
+      "category": "sticker",
+      "tags": [
+        "heart eyes",
+        "love",
+        "crush",
+        "adore",
+        "beautiful"
+      ],
+      "title": "emoji_u1f60d.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u1f60d.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u1f60d.svg",
+      "sha256": "abd20c31d2dd522cfd4c74ee7414eb03bf728b10bb3d55d91293430c2b9b415a"
+    },
+    {
+      "id": "clapping",
+      "name": "Clapping",
+      "category": "sticker",
+      "tags": [
+        "clap",
+        "applause",
+        "well done",
+        "bravo",
+        "congrats"
+      ],
+      "title": "emoji_u1f44f.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u1f44f.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u1f44f.svg",
+      "sha256": "c2e217690a9cc7df8e4d0827d325f083f29d589fd2c9f7d59e7a71f1e2d3d5be"
+    },
+    {
+      "id": "rocket",
+      "name": "Rocket",
+      "category": "sticker",
+      "tags": [
+        "rocket",
+        "launch",
+        "growth",
+        "fast",
+        "to the moon"
+      ],
+      "title": "emoji_u1f680.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u1f680.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u1f680.svg",
+      "sha256": "96ac5b6de8590601d48a746b0101eab15e9d820d04cd9c2e78b9ddc521cb402f"
+    },
+    {
+      "id": "money-bag",
+      "name": "Money bag",
+      "category": "sticker",
+      "tags": [
+        "money",
+        "cash",
+        "rich",
+        "profit",
+        "price"
+      ],
+      "title": "emoji_u1f4b0.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u1f4b0.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u1f4b0.svg",
+      "sha256": "fd19cb43451b75a6cc2d78c2adbafef1644cfa0258f17b7d6ff1f408d952c8d0"
+    },
+    {
+      "id": "eyes",
+      "name": "Eyes",
+      "category": "sticker",
+      "tags": [
+        "eyes",
+        "look",
+        "watch",
+        "see",
+        "curious"
+      ],
+      "title": "emoji_u1f440.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u1f440.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u1f440.svg",
+      "sha256": "119beba5ac5fe045eb2127668eb867bf114f430b70cfb302a0326933fd4034cc"
+    },
+    {
+      "id": "party-popper",
+      "name": "Party popper",
+      "category": "sticker",
+      "tags": [
+        "party",
+        "celebrate",
+        "congrats",
+        "launch",
+        "confetti"
+      ],
+      "title": "emoji_u1f389.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u1f389.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u1f389.svg",
+      "sha256": "b62b7af375648d164960dccc91391f62d9f84ae668d52a3fadd5c249fa0228d7"
+    },
+    {
+      "id": "warning",
+      "name": "Warning",
+      "category": "sticker",
+      "tags": [
+        "warning",
+        "caution",
+        "alert",
+        "danger",
+        "careful"
+      ],
+      "title": "emoji_u26a0.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u26a0.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u26a0.svg",
+      "sha256": "71df7bdb542de2768261186368bebd08adf0f269e79b12f29d56254bc57d2572"
+    },
+    {
+      "id": "skull",
+      "name": "Skull",
+      "category": "sticker",
+      "tags": [
+        "skull",
+        "dead",
+        "dying laughing",
+        "fail",
+        "rip"
+      ],
+      "title": "emoji_u1f480.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u1f480.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u1f480.svg",
+      "sha256": "c5ddc2505f5ab1de824a4ec69fb70e59803d3b2e11c254b004715c40fcfb5738"
+    },
+    {
+      "id": "raised-hands",
+      "name": "Raised hands",
+      "category": "sticker",
+      "tags": [
+        "raised hands",
+        "yay",
+        "praise",
+        "celebrate",
+        "hooray"
+      ],
+      "title": "emoji_u1f64c.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u1f64c.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u1f64c.svg",
+      "sha256": "c6220dcb637d9787ed24e11d44347a8459bb979e56b4dd18c024995181d8a2e1"
+    },
+    {
+      "id": "ok-hand",
+      "name": "OK hand",
+      "category": "sticker",
+      "tags": [
+        "ok",
+        "okay",
+        "perfect",
+        "good",
+        "fine"
+      ],
+      "title": "emoji_u1f44c.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u1f44c.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u1f44c.svg",
+      "sha256": "469fb998f20d0c41430be39ae914d011c19ab126fa558023818f876c5fcf6236"
+    },
+    {
+      "id": "thinking",
+      "name": "Thinking face",
+      "category": "sticker",
+      "tags": [
+        "thinking",
+        "hmm",
+        "wonder",
+        "question",
+        "doubt"
+      ],
+      "title": "emoji_u1f914.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u1f914.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u1f914.svg",
+      "sha256": "7a21885dea87ef264567ccbbad04f46dd4fccc4e0384edef7831ac211b6df25f"
+    },
+    {
+      "id": "shocked",
+      "name": "Shocked face",
+      "category": "sticker",
+      "tags": [
+        "shocked",
+        "scream",
+        "scared",
+        "surprise",
+        "omg"
+      ],
+      "title": "emoji_u1f631.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u1f631.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u1f631.svg",
+      "sha256": "e00d6d6ddb49458d0a6b37874dbc88d4afc994d356678324f734ea77d439c706"
+    },
+    {
+      "id": "thumbs-down",
+      "name": "Thumbs down",
+      "category": "sticker",
+      "tags": [
+        "thumbs down",
+        "dislike",
+        "no",
+        "bad",
+        "disapprove"
+      ],
+      "title": "emoji_u1f44e.svg",
+      "author": "Google (Noto Emoji)",
+      "source": "https://github.com/googlefonts/noto-emoji/blob/41e31b110b4eb929dffb410264694a06205b7ad7/svg/emoji_u1f44e.svg",
+      "license": "Apache-2.0",
+      "from": "noto/svg/emoji_u1f44e.svg",
+      "sha256": "ec998aadc4c251ac2c291a71a61b429e7a0da6a3b3b989eb82bf2afc52032628"
+    }
+  ]
+}
