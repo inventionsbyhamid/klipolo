@@ -879,6 +879,27 @@ async fn a_message_sent_to_a_project_that_closed_while_it_waited_is_not_sent() {
     assert_eq!(model.seen().len(), 1);
 }
 
+/// `reverseClip` changes nothing yet: the reply names the clip for the page to write backward, as the clip menu's
+/// Reverse does, and says the copy is being made.
+#[tokio::test]
+async fn a_clip_to_reverse_is_named_for_the_page() {
+    let chat = chat(vec![answer(
+        "Reversing it.",
+        vec![fc("r", "reverseClip", r#"{"clip": "c1", "backward": true}"#)],
+    )]);
+    let r = reply(
+        &chat
+            .session
+            .send(request("play it backward"))
+            .await
+            .unwrap(),
+    );
+    assert_eq!(r["reverse"], serde_json::json!(["t"]));
+    assert_eq!(r["text"], "Reversing it. The reversed copy is being made.");
+    assert!(r["applied"].is_null());
+    assert_eq!(chat.project.revision(), 0);
+}
+
 #[tokio::test]
 async fn follow_and_blur_say_they_are_coming() {
     let chat = chat(vec![answer(

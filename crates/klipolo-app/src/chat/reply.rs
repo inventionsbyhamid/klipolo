@@ -73,6 +73,9 @@ pub struct ChatReply {
     revision: u64,
     /// Pictures it asked for, to draw (`chat_draw_picture`) and show with Use and Try again.
     pictures: Vec<ChatPicture>,
+    /// Clips to play backward, by id: the page writes each one's reversed copy as the clip menu's Reverse does, its
+    /// progress in the top bar, and turns the clip with the copy as one undo step once it is written.
+    reverse: Vec<String>,
     /// Something asked for needs a clip analyzed that isn't yet ("Analyze this clip first"): the panel offers Analyze
     /// under the reply, which shows the price before anything is spent.
     analyze: bool,
@@ -261,6 +264,16 @@ impl ChatReply {
 
     pub fn pictures(&self) -> &[ChatPicture] {
         &self.pictures
+    }
+
+    /// A clip to play backward once its reversed copy is written (`klipolo_chat::Job::Reverse`).
+    pub fn reverse(mut self, clip_id: &str) -> Self {
+        self.reverse.push(clip_id.to_owned());
+        self
+    }
+
+    pub fn reversing(&self) -> &[String] {
+        &self.reverse
     }
 
     pub fn id(&self) -> &str {
