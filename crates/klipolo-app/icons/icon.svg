@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <title>Klipolo</title>
+  <!--
+    The app icon's source. On Apple's macOS grid: an 824 square with continuous corners (radius 185.4) on a 1024
+    canvas, with its shadow. The mark is a K whose leg is cut away in red. scripts/app-icon/render.sh renders
+    icon.icns and the PNGs beside this file from it.
+  -->
+  <defs>
+    <path id="shape" d="M383.4 100L640.6 100C722.2 100 763 100 799.8 112.1L806.9 113.9C854.9 131.3 892.7 169.1 910.1 217.1C924 261 924 301.8 924 383.4L924 640.6C924 722.2 924 763 911.9 799.8L910.1 806.9C892.7 854.9 854.9 892.7 806.9 910.1C763 924 722.2 924 640.6 924L383.4 924C301.8 924 261 924 224.2 911.9L217.1 910.1C169.1 892.7 131.3 854.9 113.9 806.9C100 763 100 722.2 100 640.6L100 383.4C100 301.8 100 261 112.1 224.2L113.9 217.1C131.3 169.1 169.1 131.3 217.1 113.9C261 100 301.8 100 383.4 100Z"/>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2c2f35"/>
+      <stop offset="1" stop-color="#16181b"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+    <clipPath id="inside"><use href="#shape"/></clipPath>
+  </defs>
+  <use href="#shape" fill="url(#tile)" filter="url(#shadow)"/>
+  <use href="#shape" fill="none" stroke="#fff" stroke-opacity="0.1" stroke-width="4" clip-path="url(#inside)"/>
+  <g transform="translate(160 160) scale(11)">
+    <path fill="#f2f3f5" d="M12 12H20V52H12ZM20 34L42 12H52L20 44Z"/>
+    <path fill="#e0301a" d="M30 40L35 35L52 52H42Z"/>
+  </g>
+</svg>
