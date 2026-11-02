@@ -120,7 +120,15 @@ function Settings() {
               Chat, transcripts, captions and stickers use Meta's models. Choose how to pay for them.
             </p>
           </div>
-          <button type="button" className="icon-btn" aria-label="Close" title="Close (Esc)" onClick={closeSettings}>
+          <button
+            type="button"
+            // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+            tabIndex={0}
+            className="icon-btn"
+            aria-label="Close"
+            title="Close (Esc)"
+            onClick={closeSettings}
+          >
             <AiIcon name="x" />
           </button>
         </div>
@@ -132,7 +140,7 @@ function Settings() {
         <AppearanceSettings />
         <div className="dialog-foot">
           <span className="left">Audio and low-resolution video go to Meta's model API.</span>
-          <button type="button" className="btn btn-primary" onClick={closeSettings}>
+          <button type="button" tabIndex={0} className="btn btn-primary" onClick={closeSettings}>
             Done
           </button>
         </div>
@@ -225,6 +233,7 @@ function CodeSection({ status }: { status: AiStatus | null }) {
             <input id="settings-code" className="input" value={saved.code ?? ''} readOnly />
             <button
               type="button"
+              tabIndex={0}
               className="btn btn-secondary"
               disabled={busy === 'remove'}
               onClick={() => void remove()}
@@ -304,6 +313,7 @@ function KeySection({ status }: { status: AiStatus | null }) {
           />
           <button
             type="button"
+            tabIndex={0}
             className="btn btn-secondary"
             disabled={busy === 'remove'}
             onClick={() => void remove()}
@@ -328,6 +338,7 @@ function KeySection({ status }: { status: AiStatus | null }) {
             />
             <button
               type="button"
+              tabIndex={0}
               className="btn btn-ghost btn-sm show-secret"
               aria-pressed={shown}
               onClick={() => setShown((v) => !v)}
@@ -360,7 +371,7 @@ function KeySection({ status }: { status: AiStatus | null }) {
 /** Save key and Use code: they check first, so they say "Checking" with a spinner meanwhile. */
 function SubmitButton({ busy, disabled, label }: { busy: boolean; disabled: boolean; label: string }) {
   return (
-    <button type="submit" className="btn btn-secondary" disabled={busy || disabled}>
+    <button type="submit" tabIndex={0} className="btn btn-secondary" disabled={busy || disabled}>
       {busy && <span className="spinner" aria-hidden />}
       {busy ? 'Checking' : label}
     </button>
