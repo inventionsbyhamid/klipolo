@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
-"""Klipolo's bundled pack: sound effects, music beds, stickers and backgrounds, all made here from code and dedicated to
-the public domain (CC0 1.0). No recordings, samples or outside media go in.
+"""Klipolo's bundled pack: sound effects, music beds, stickers and backgrounds. The music beds, the backgrounds and the
+pack's own stickers (arrows, circles, bubbles, numbers and the like) are made here from code and dedicated to the
+public domain (CC0 1.0). The sound effects and the emoji stickers come from others, each under its own licence
+(CC0 1.0 or Apache 2.0): scripts/library-sources.json lists each one's source, author, licence and SHA-256, and
+scripts/library-media.py makes their files in assets/library from the downloads. This script takes those files as
+they are there, after checking each one's SHA-256, and credits each in LICENSE.txt.
 
 Python 3 standard library only, and deterministic: fixed seeds, no clocks, and nothing but IEEE arithmetic and square
 roots (sines and exponentials are computed here, never by the platform's maths library), so every machine works out
 the same samples and pixels. The PNGs are deflated by the zlib Python is built with, which can differ between builds
 (zlib-ng, Apple's), so regenerate the pack in the klipolo-ci image (ci/linux.Dockerfile), where its check runs.
 It writes, into assets/library or --out DIR:
-  sounds/<id>.wav     48 kHz 16-bit mono, each under 3 s, starting and ending at silence
+  sounds/<id>.wav     48 kHz 16-bit mono, each under 3 s, starting and ending at silence (from others, copied)
   music/<id>.wav      24 kHz 16-bit mono beds of 16 s, drawn exactly periodic so they loop without a click
-  stickers/<id>.png   1024 x 1024 RGBA, the shape with a border on a transparent canvas
+  stickers/<id>.png   1024 x 1024 RGBA, the shape with a border on a transparent canvas (the emoji from others, copied)
   backgrounds/<id>.png  1920 x 1080 or 1080 x 1920 RGB, sized for a 16:9 or 9:16 frame (listed as stickers: pictures)
-  manifest.json       each item's id, name, category, file, length or size, tags, sha256 and licence
-  LICENSE.txt         the CC0 dedication
+  manifest.json       each item's id, name, category, file, length or size, tags, sha256 and licence, and for an item
+                      from others its author and source
+  LICENSE.txt         the CC0 dedication of the pack's own items, each item from others credited, and the licence texts
 Usage: python3 scripts/gen-library.py [--out DIR] [--workers N]
 scripts/gen-library.test.sh checks that two runs write the same bytes as the committed assets/library.
 """
@@ -26,8 +31,14 @@ import math
 import os
 import pathlib
 import struct
+import textwrap
 import wave
 import zlib
+
+HERE = pathlib.Path(__file__).resolve().parent
+LIBRARY = HERE.parent / "assets" / "library"
+SOURCES = HERE / "library-sources.json"
+LICENCE_TEXTS = HERE / "release" / "licenses"
 
 PI = 3.141592653589793
 TAU = 2 * PI
@@ -1686,38 +1697,6 @@ BACKGROUNDS = [
 
 # ---------------------------------------------------------------------------------------------------------- the pack
 
-SOUNDS = [
-    ("whoosh", "Whoosh", ["transition", "topic change", "fast", "air", "swipe"],
-     lambda: edges(whoosh(), 0.002, 0.01), 0.5),
-    ("swoosh", "Swoosh", ["transition", "quick", "swipe", "air", "reveal"],
-     lambda: edges(whoosh(0.5, 0.3, 900.0, 5100.0, 0.45, 29), 0.002, 0.01), 0.45),
-    ("pop", "Pop", ["pop", "appear", "bubble", "short", "fun"], lambda: edges(pop(), 0.0005, 0.005), 0.55),
-    ("click", "Click", ["click", "tap", "button", "short", "ui"], lambda: edges(click(), 0.0002, 0.004), 0.45),
-    ("ding", "Ding", ["bell", "notification", "correct", "bright", "alert"], lambda: edges(ding(), 0.001, 0.03), 0.5),
-    ("chime", "Chime", ["chime", "bells", "soft", "magic", "success"], lambda: edges(chime(), 0.001, 0.3), 0.45),
-    ("rise", "Rise", ["riser", "build up", "tension", "transition", "intro"], lambda: edges(rise(), 0.01, 0.06), 0.5),
-    ("sparkle", "Sparkle", ["sparkle", "magic", "shine", "twinkle", "reveal"],
-     lambda: edges(sparkle(), 0.001, 0.3), 0.45),
-    ("impact", "Impact", ["impact", "boom", "hit", "cinematic", "transition"], impact, 0.4),
-    ("bass-drop", "Bass drop", ["bass drop", "drop", "bass", "boom", "transition"], bass_drop, 0.35),
-    ("long-riser", "Long riser", ["riser", "build up", "tension", "suspense", "intro"], long_riser, 0.5),
-    ("swipe-left", "Swipe left", ["swipe", "left", "slide", "transition", "quick"], lambda: swipe(False, 139), 0.5),
-    ("swipe-right", "Swipe right", ["swipe", "right", "slide", "transition", "quick"], lambda: swipe(True, 137), 0.5),
-    ("glitch", "Glitch", ["glitch", "digital", "error", "tech", "transition"], glitch, 0.35),
-    ("record-scratch", "Record scratch", ["record scratch", "scratch", "stop", "rewind", "funny"],
-     record_scratch, 0.6),
-    ("shutter", "Camera shutter", ["camera", "shutter", "photo", "snap", "picture"], shutter, 0.68),
-    ("typing", "Keyboard typing", ["typing", "keyboard", "keys", "text", "computer"], typing, 0.68),
-    ("notification", "Notification", ["notification", "message", "alert", "phone", "ping"], notification, 0.5),
-    ("success", "Success", ["success", "win", "level up", "correct", "game"], success, 0.5),
-    ("error", "Error buzz", ["error", "wrong", "buzz", "fail", "no"], error_buzz, 0.33),
-    ("pop-high", "High pop", ["pop", "high", "appear", "cute", "short"], pop_high, 0.55),
-    ("bubbles", "Bubble pops", ["bubbles", "pop", "popping", "appear", "fun"], bubbles, 0.55),
-    ("boing", "Cartoon boing", ["boing", "bounce", "spring", "cartoon", "funny"], boing, 0.42),
-    ("drum-hit", "Drum hit", ["drum", "hit", "punch", "snare", "kick"], drum_hit, 0.45),
-    ("tick-tock", "Tick tock", ["clock", "tick tock", "timer", "countdown", "waiting"], tick_tock, 0.55),
-]
-
 MUSIC = [
     ("soft-ambient", "Soft ambient", ["calm", "ambient", "soft", "chill", "loop"], soft_ambient),
     ("upbeat-loop", "Upbeat loop", ["upbeat", "happy", "energetic", "pop", "loop"], upbeat_loop),
@@ -1726,11 +1705,8 @@ MUSIC = [
 ]
 
 STICKERS = [
-    ("heart", "Heart", ["heart", "love", "like", "pink"], heart, "#FF4D6D"),
-    ("star", "Star", ["star", "favourite", "best", "gold"], star, "#FFC21A"),
     ("arrow", "Arrow", ["arrow", "point", "look", "right", "blue"], arrow, "#4C8DFF"),
     ("circle", "Circle", ["circle", "ring", "highlight", "look here", "orange"], ring, "#FF6A3D"),
-    ("check", "Check", ["check", "tick", "done", "yes", "green"], check, "#22C55E"),
 ]
 
 DRAWN = [  # drawn as layers (`painted`), after the speech bubble
@@ -1738,11 +1714,6 @@ DRAWN = [  # drawn as layers (`painted`), after the speech bubble
     ("arrow-pointer", "Pointer arrow", ["arrow", "pointer", "point", "look here", "red"], pointer_arrow),
     ("circle-drawn", "Drawn circle", ["circle", "highlight", "look here", "marker", "red"], drawn_circle),
     ("underline", "Underline", ["underline", "highlight", "marker", "emphasis", "gold"], underline),
-    ("x-mark", "X mark", ["x", "cross", "wrong", "no", "red"], x_mark),
-    ("question", "Question mark", ["question", "question mark", "why", "quiz", "purple"],
-     lambda: bordered(text("?", 0.0, 0.0, 760.0, 130.0), PURPLE)),
-    ("exclamation", "Exclamation mark", ["exclamation", "exclamation mark", "wow", "alert", "important", "red"],
-     lambda: bordered(text("!", 0.0, 0.0, 760.0, 140.0), RED)),
     ("number-1", "Number 1", ["number", "1", "one", "step", "first"], lambda: number("1")),
     ("number-2", "Number 2", ["number", "2", "two", "step", "second"], lambda: number("2")),
     ("number-3", "Number 3", ["number", "3", "three", "step", "third"], lambda: number("3")),
@@ -1750,10 +1721,6 @@ DRAWN = [  # drawn as layers (`painted`), after the speech bubble
     ("number-5", "Number 5", ["number", "5", "five", "step", "fifth"], lambda: number("5")),
     ("thought-bubble", "Thought bubble", ["thought", "think", "idea", "cloud", "white"], thought_bubble),
     ("shout-bubble", "Shout bubble", ["shout", "burst", "wow", "loud", "comic"], shout_bubble),
-    ("thumbs-up", "Thumbs up", ["thumbs up", "like", "yes", "good", "approve"], thumbs_up),
-    ("fire", "Fire", ["fire", "flame", "hot", "trending", "lit"], fire),
-    ("sparkles", "Sparkles", ["sparkles", "shine", "magic", "new", "gold"], sparkles),
-    ("lightbulb", "Lightbulb", ["lightbulb", "idea", "tip", "think", "smart"], lightbulb),
     ("new-tag", "New tag", ["new", "tag", "label", "launch", "red"], new_tag),
     ("subscribe", "Subscribe button", ["subscribe", "button", "follow", "channel", "call to action"], subscribe),
     ("cursor-hand", "Cursor hand", ["cursor", "hand", "click", "pointer", "tap"], cursor_hand),
@@ -1762,18 +1729,52 @@ DRAWN = [  # drawn as layers (`painted`), after the speech bubble
 CC0 = ("To the extent possible under law, Klipolo has waived all copyright and related or neighbouring rights to these "
        "files.\nThey are dedicated to the public domain under CC0 1.0 Universal:\n"
        "https://creativecommons.org/publicdomain/zero/1.0/\n")
+# How LICENSE.txt credits the items from others, by licence: what the files are and what was done to them. An item under
+# any other licence stops the script, so a new licence is read before it ships.
+FROM_OTHERS = {
+    "CC0-1.0": ("The sound effects come from Freesound (freesound.org) and Kenney (kenney.nl). Each one's author dedicated "
+                "it to the public domain under CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/). "
+                "Klipolo cut each one, trimmed its silence, faded it in and out, matched its loudness to the others and "
+                "saved it as 48 kHz mono WAV (scripts/library-media.py). Each file, the sound it was made from, its "
+                "author and where it is:"),
+    "Apache-2.0": ("The emoji stickers are Noto Emoji images by Google Inc. (https://github.com/googlefonts/noto-emoji, at "
+                   "commit {noto}), used under the Apache License, Version 2.0, whose text is below. Klipolo drew each "
+                   "image 896 pixels square in the middle of a 1024 x 1024 transparent canvas and saved it as PNG "
+                   "(scripts/library-media.py). Each file, the image it was made from and where it is:"),
+}
 
 
 SHAPES = ((1920, 1080, "16:9", "wide"), (1080, 1920, "9:16", "vertical"))
 SPEECH_TAGS = ["speech", "talk", "say", "quote", "white"]
 
 
+def from_others():
+    """The items from others, as scripts/library-sources.json lists them."""
+    return json.loads(SOURCES.read_text())["items"]
+
+
+def taken(k):
+    """Item k from others: its file as scripts/library-media.py left it in assets/library, checked against the SHA-256
+    the table records, and its length or size."""
+    item = from_others()[k]
+    path = LIBRARY / f"{item['category']}s" / f"{item['id']}.{'wav' if item['category'] == 'sound' else 'png'}"
+    if not path.is_file():
+        raise SystemExit(f"no {path}: run scripts/library-media.py with the downloads")
+    data = path.read_bytes()
+    if hashlib.sha256(data).hexdigest() != item["sha256"]:
+        raise SystemExit(f"{path} isn't the file scripts/library-sources.json records: run scripts/library-media.py")
+    if item["category"] == "sound":
+        with wave.open(io.BytesIO(data), "rb") as w:
+            return data, dict(duration_ms=round(w.getnframes() * 1000 / w.getframerate()))
+    width, height = struct.unpack("!2I", data[16:24])
+    return data, dict(width=width, height=height)
+
+
 def made(key):
     """One item's file, and its length or size. Each item is made on its own, so several are made at once."""
     kind, k = key
-    if kind == "sound":
-        samples = normalised(SOUNDS[k][3](), SOUNDS[k][4])
-        return wav_bytes(samples, SR), dict(duration_ms=round(len(samples) * 1000 / SR))
+    if kind == "taken":
+        return taken(k)
     if kind == "music":
         samples = MUSIC[k][3]()
         return wav_bytes(samples, MUSIC_RATE), dict(duration_ms=round(len(samples) * 1000 / MUSIC_RATE))
@@ -1791,10 +1792,13 @@ def made(key):
 def build(workers=None):
     """Every file of the pack, by path, and the manifest's items. The items are made by `workers` processes at once
     (default: one a CPU, at most 8), the longest first; the bytes are the same however many."""
-    listed = [(id_, name, "sound", f"sounds/{id_}.wav", tags, ("sound", k))
-              for k, (id_, name, tags, _, _) in enumerate(SOUNDS)]
+    others = from_others()
+    listed = [(i["id"], i["name"], "sound", f"sounds/{i['id']}.wav", i["tags"], ("taken", k))
+              for k, i in enumerate(others) if i["category"] == "sound"]
     listed += [(id_, name, "music", f"music/{id_}.wav", tags, ("music", k))
                for k, (id_, name, tags, _) in enumerate(MUSIC)]
+    listed += [(i["id"], i["name"], "sticker", f"stickers/{i['id']}.png", i["tags"], ("taken", k))
+               for k, i in enumerate(others) if i["category"] == "sticker"]
     listed += [(id_, name, "sticker", f"stickers/{id_}.png", tags, ("sticker", k))
                for k, (id_, name, tags, _, _) in enumerate(STICKERS)]
     listed.append(("bubble", "Speech bubble", "sticker", "stickers/bubble.png", SPEECH_TAGS, ("speech", 0)))
@@ -1812,19 +1816,50 @@ def build(workers=None):
         results = [made_by[entry[-1]].result() for entry in listed]
 
     files, items = {}, []
-    for (id_, name, category, path, tags, _), (data, size) in zip(listed, results):
+    for (id_, name, category, path, tags, key), (data, size) in zip(listed, results):
         files[path] = data
+        credit = {}
+        if key[0] == "taken":
+            other = others[key[1]]
+            credit = dict(license=other["license"], author=other["author"], source=other["source"])
         items.append(dict(id=id_, name=name, category=category, file=path, **size, tags=tags,
-                          sha256=hashlib.sha256(data).hexdigest(), license="CC0-1.0"))
-    manifest = dict(version=1, id="klipolo-pack", name="Klipolo pack", license="CC0-1.0", creator="Klipolo",
-                    items=items)
+                          sha256=hashlib.sha256(data).hexdigest(), **({"license": "CC0-1.0"} | credit)))
+    licences = sorted({i["license"] for i in items})
+    manifest = dict(version=1, id="klipolo-pack", name="Klipolo pack", license=" AND ".join(licences),
+                    creator="Klipolo", items=items)
     files["manifest.json"] = (json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode()
-    stickers = len(STICKERS) + 1 + len(DRAWN)  # with the speech bubble
-    holds = (f"{len(SOUNDS)} sound effects, {len(MUSIC)} music beds, {stickers} stickers and "
-             f"{len(BACKGROUNDS) * len(SHAPES)} backgrounds")
-    files["LICENSE.txt"] = (f"Klipolo pack: {holds},\nmade from code by scripts/gen-library.py. No recordings, "
-                            f"samples or outside media were used.\n\n{CC0}").encode()
+    files["LICENSE.txt"] = licence_file(listed, others).encode()
     return files
+
+
+def licence_file(listed, others):
+    """LICENSE.txt: what the pack holds, the CC0 dedication of Klipolo's own items, and each item from others credited
+    under its licence, with the texts of the licences that ask for theirs to go with the files."""
+    count = {c: sum(e[2] == c for e in listed) for c in ("sound", "music", "sticker")}
+    backgrounds = sum(e[3].startswith("backgrounds/") for e in listed)
+    own = [e[0] for e in listed if e[-1][0] in ("sticker", "speech", "drawn")]
+    text = (f"Klipolo pack: {count['sound']} sound effects, {count['music']} music beds, "
+            f"{count['sticker'] - backgrounds} stickers and {backgrounds} backgrounds.\n\n"
+            + textwrap.fill("Klipolo made the music beds, the backgrounds and these stickers from code "
+                            f"(scripts/gen-library.py), with no recordings, samples or outside media: {', '.join(own)}.",
+                            120, break_on_hyphens=False)
+            + f"\n{CC0}")
+    noto = json.loads(SOURCES.read_text())["noto_commit"]
+    files = {e[-1][1]: e[3] for e in listed if e[-1][0] == "taken"}
+    texts = []
+    for licence in sorted({i["license"] for i in others}, reverse=True):
+        if licence not in FROM_OTHERS:
+            raise SystemExit(f"{licence}: no credit for it in gen-library.py's FROM_OTHERS; check it can ship first")
+        text += "\n" + textwrap.fill(FROM_OTHERS[licence].format(noto=noto), 120, break_on_hyphens=False) + "\n"
+        for k, i in enumerate(others):
+            if i["license"] == licence:
+                by = f" by {i['author']}" if licence == "CC0-1.0" else ""
+                text += f"  {files[k]}: \"{i['title']}\"{by}, {i['source']}\n"
+        if licence != "CC0-1.0":
+            texts.append(licence)
+    for licence in texts:
+        text += "\n" + "-" * 100 + "\n" + (LICENCE_TEXTS / f"{licence}.txt").read_text()
+    return text
 
 
 def main():

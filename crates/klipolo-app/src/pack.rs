@@ -1,4 +1,4 @@
-//! Klipolo's own pack of sounds, music beds and stickers (`assets/library`, CC0, made by `scripts/gen-library.py`):
+//! Klipolo's own pack of sounds, music beds and stickers (`assets/library`, listed by `scripts/gen-library.py`):
 //! what its manifest lists, as the library shows it and as assets a project adds. The files ship in the app's resources
 //! (`library/`); a project names them by their path there, as any file, and by their id (`klipolo-pack-<item>`). That
 //! path is where the pack was when the file was added: the app moved, macOS ran it from a translocated copy, or another
@@ -202,7 +202,7 @@ mod tests {
         )))
     }
 
-    /// The repository's pack lists its 25 sounds, four music beds and 35 pictures (stickers and backgrounds),
+    /// The repository's pack lists its 35 sounds, four music beds and 51 pictures (stickers and backgrounds),
     /// each with its file.
     #[test]
     fn the_bundled_pack_lists_its_sounds_music_and_stickers() {
@@ -219,14 +219,14 @@ mod tests {
                 count(PackCategory::Music),
                 count(PackCategory::Sticker)
             ),
-            (25, 4, 35)
+            (35, 4, 51)
         );
         let whoosh = pack.asset("whoosh").unwrap();
         assert_eq!(
             (whoosh.id.as_str(), whoosh.kind, whoosh.name.as_str()),
             ("klipolo-pack-whoosh", AssetKind::Audio, "Whoosh")
         );
-        assert_eq!(whoosh.duration_us, 900_000);
+        assert_eq!(whoosh.duration_us, 426_000);
         assert!(Path::new(&whoosh.path).is_file());
         let star = pack.asset("star").unwrap();
         assert_eq!(
