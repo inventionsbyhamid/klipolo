@@ -1733,3 +1733,88 @@ fn an_answer_cut_off_keeps_its_finished_calls_and_is_asked_again_once() {
     assert!((e.usage_usd - 0.008).abs() < 1e-12, "{}", e.usage_usd);
     assert_eq!(model.seen().len(), 2);
 }
+
+#[test]
+fn a_message_that_runs_out_of_steps_says_what_its_edits_did() {
+    let (p, speech) = talk();
+    let i = with_pack(inputs(&p, speech));
+    // One call a step, each answer saying what comes next, until the steps run out mid-way: the reply says what the
+    // edits did, never the model's words about what it was still going to do.
+    let busy = "Now I'm adding the pop animations and final sounds to finish the short.";
+    let steps: Vec<Vec<FunctionCall>> = vec![
+        vec![find_call("call_1")],
+        vec![
+            fc(
+                "call_2",
+                "keepOnly",
+                r#"{"ranges": [{"startSec": 0.5, "endSec": 7.8}]}"#,
+            ),
+            fc(
+                "call_3",
+                "setFormat",
+                r#"{"format": "portrait", "keepOthers": true}"#,
+            ),
+        ],
+        vec![fc(
+            "call_4",
+            "setCaptions",
+            r#"{"on": true, "style": "word-pop"}"#,
+        )],
+        vec![fc(
+            "call_5",
+            "addText",
+            r#"{"text": "the new module", "preset": "title", "atSec": 0.5, "atWords": null, "durationSec": 2.0, "animation": "pop", "font": null}"#,
+        )],
+        vec![fc(
+            "call_6",
+            "addImage",
+            r#"{"file": "Star", "size": "medium", "position": "top-right", "atSec": null, "atWords": "the new module", "durationSec": 2.0}"#,
+        )],
+        vec![fc(
+            "call_7",
+            "animate",
+            r#"{"layer": "last", "enter": "pop", "exit": null, "emphasis": null, "sound": "Pop"}"#,
+        )],
+        vec![fc(
+            "call_8",
+            "addSound",
+            r#"{"name": "Pop", "atWords": ["a long time"], "atSec": null}"#,
+        )],
+        vec![fc(
+            "call_9",
+            "addMusic",
+            r#"{"file": "Soft ambient", "volume": 0.15, "duck": true, "atSec": null}"#,
+        )],
+        vec![fc(
+            "call_10",
+            "addImage",
+            r#"{"file": "Star", "size": "medium", "position": "top-left", "atSec": null, "atWords": "It took", "durationSec": 2.0}"#,
+        )],
+        vec![fc(
+            "call_11",
+            "findMoments",
+            r#"{"query": "the end", "ranges": [{"startSec": 6.7, "endSec": 7.8, "label": "the end"}]}"#,
+        )],
+    ];
+    assert_eq!(steps.len(), MAX_STEPS);
+    let model = Fake::new(
+        steps
+            .into_iter()
+            .map(|calls| answer(busy, calls, 0.001))
+            .collect(),
+    );
+    let out = send(&model, &[], "make a short with stickers and sounds", &i, &p).unwrap();
+    assert_eq!(model.seen().len(), MAX_STEPS);
+    assert_eq!(out.compiled.refusals, vec![], "{:?}", out.compiled.refusals);
+    assert!(!out.reply.contains("Now I'm adding"), "{}", out.reply);
+    assert!(
+        out.reply.starts_with(
+            "I made it vertical and added captions, a title, 2 stickers, 2 sounds and music. Approve the cut to keep \
+             the "
+        ),
+        "{}",
+        out.reply
+    );
+    assert!(out.reply.contains(" s version."), "{}", out.reply);
+    assert_plain(&out.reply);
+}

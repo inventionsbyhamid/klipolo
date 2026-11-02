@@ -20,6 +20,8 @@
 //! reply says it stopped (`STOPPED`).
 //!
 //! The reply is the model's closing words, then the sentences of refusals meant for the person that they don't say yet.
+//! When the steps run out right after an answer with calls and the edits did something, the model's last words were
+//! about what it was still doing: what the edits did is said instead (`summary`).
 //! Without closing words (the steps ran out, a call failed, or they were empty), it is built from the model's last
 //! text: that text, then Klipolo's own notes on what the edits did or left as they were (`Compiled::notes` and `waits`:
 //! a speed that shortens a transition, or waits for the person as it leaves one no room, a camera that is its own
@@ -251,6 +253,8 @@ pub async fn plan(
     let mut stopped: Option<ChatError> = None;
     // Whether an answer was cut off at its output cap: the first is kept and asked again once, the next fails.
     let mut cut_before = false;
+    // The loop ran out of steps right after an answer with calls: the model never said it was done.
+    let mut out_of_steps = false;
     loop {
         steps += 1;
         let (answer, cut) = match ask(model, &request, spent, steps).await {
@@ -375,10 +379,20 @@ pub async fn plan(
             });
         }
         if steps >= MAX_STEPS {
+            out_of_steps = true;
             break;
         }
     }
     let compiled = compile(project, inputs, &calls);
+    // Its words then were written before what came of its calls, often what it was about to do: said instead is what
+    // the edits did.
+    if out_of_steps
+        && closing.is_none()
+        && stopped.is_none()
+        && (compiled.additions.is_some() || compiled.proposal.is_some())
+    {
+        said = summary(&calls, &compiled);
+    }
     // Closing words, when it had them, are the reply: written knowing what came of every call.
     let (text, summed) = match closing.filter(|c| !c.is_empty()) {
         Some(closing) => (closing, stopped.is_none()),
@@ -753,6 +767,99 @@ fn done(call: &ToolCall) -> Option<&'static str> {
         // Shown on their own (moments, questions), or proposed.
         _ => return None,
     })
+}
+
+/// One or two sentences on what a message's edits did, for a reply when the model never closed: what the additions
+/// did ("I made it vertical and added captions, a title, 3 stickers, 3 sounds and music."), from the calls that went
+/// through and the layers they added, then the cut waiting for the person and how long the video is once applied.
+fn summary(calls: &[ToolCall], compiled: &Compiled) -> String {
+    use klipolo_model::Op;
+    use klipolo_model::media::music::is_music;
+    use klipolo_model::timeline::ItemContent;
+    let through = |i: usize| {
+        !compiled.refusals.iter().any(|r| r.call_index == i)
+            && !compiled.proposed_calls.contains(&i)
+            && !compiled.unchanged.contains(&i)
+    };
+    let mut did: Vec<String> = Vec::new();
+    let mut added: Vec<String> = Vec::new();
+    let count = |n: usize, one: &str, many: &str| match n {
+        0 => None,
+        1 => Some(one.to_owned()),
+        n => Some(format!("{n} {many}")),
+    };
+    for (_, call) in calls.iter().enumerate().filter(|&(i, _)| through(i)) {
+        let said = match call {
+            ToolCall::SetFormat { format, .. } => match format {
+                klipolo_model::project::FormatKind::Portrait => "made it vertical",
+                klipolo_model::project::FormatKind::Square => "made it square",
+                klipolo_model::project::FormatKind::Landscape => "made it wide",
+            },
+            ToolCall::FollowSubject { .. } => "kept the speaker in frame",
+            ToolCall::AutoZoom { on: true, .. } => "zoomed in on the clicks",
+            _ => continue,
+        };
+        if !did.iter().any(|d| d == said) {
+            did.push(said.to_owned());
+        }
+    }
+    let ops: &[Op] = (compiled.additions.as_ref()).map_or(&[][..], |tx| tx.ops.as_slice());
+    let items = || {
+        ops.iter().filter_map(|op| match op {
+            Op::AddItem { item, .. } => Some(item),
+            _ => None,
+        })
+    };
+    let captions = (calls.iter().enumerate())
+        .any(|(i, c)| through(i) && matches!(c, ToolCall::SetCaptions { on: true, .. }));
+    if captions {
+        added.push("captions".to_owned());
+    }
+    let words = items()
+        .filter(|i| {
+            matches!(
+                i.content,
+                ItemContent::Text { .. } | ItemContent::Generator { .. }
+            )
+        })
+        .count();
+    let drawn = (compiled.jobs.iter())
+        .filter(|j| matches!(j, crate::Job::MakeSticker(_)))
+        .count();
+    let pictures = items()
+        .filter(|i| matches!(i.content, ItemContent::Image { .. }))
+        .count()
+        + drawn;
+    let sounds = items()
+        .filter(|i| matches!(i.content, ItemContent::Audio { .. }) && !is_music(i))
+        .count();
+    let music = items().any(is_music);
+    added.extend(count(words, "a title", "titles"));
+    added.extend(count(pictures, "a sticker", "stickers"));
+    added.extend(count(sounds, "a sound", "sounds"));
+    if music {
+        added.push("music".to_owned());
+    }
+    let list = |parts: &[String]| match parts {
+        [] => String::new(),
+        [one] => one.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    };
+    let mut out = match (did.is_empty(), added.is_empty()) {
+        (false, false) => format!("I {} and added {}.", list(&did), list(&added)),
+        (false, true) => format!("I {}.", list(&did)),
+        (true, false) => format!("I added {}.", list(&added)),
+        (true, true) if compiled.additions.is_some() => "I made the changes.".to_owned(),
+        (true, true) => String::new(),
+    };
+    if let Some(proposal) = &compiled.proposal {
+        let length = klipolo_model::query::video_duration(&proposal.review.after.timeline);
+        let secs = (length as f64 / US_PER_SEC as f64).round();
+        out = format!("{out} Approve the cut to keep the {secs} s version.")
+            .trim()
+            .to_owned();
+    }
+    out
 }
 
 /// The calls of `compiled` that went through, each said once (`done`), then the proposal if there is one.
