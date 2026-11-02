@@ -12,7 +12,7 @@ export type ArmOptions = { what: WhatToRecord,
  */
 mic: string | null, 
 /**
- * A camera id; None: "No camera".
+ * A camera id; None: "No camera". "Record yourself" needs one.
  */
 camera: string | null, 
 /**
