@@ -11,7 +11,8 @@
 //! per blur; removals are proposals; media by name from the library, "the song", background music from the start, topic
 //! changes, Muse Image drawing a new picture, a title only in the person's words; a recording by its name and its
 //! clips' camera and sounds, and zooms on their clicks; a short planned whole in one answer from one request, as a
-//! short recipe the model adapts to what was asked, never a fixed macro; the layer refs and `last`; when a preset is
+//! short recipe the model adapts to what was asked, never a fixed macro, its stickers and sound effects placed on the
+//! words said (`atWords`) by what each is for; the layer refs and `last`; when a preset is
 //! enough (`animate`) and when to compose keys, words by unit, a card's fields or an effect; the catalogues those tools
 //! name, kept out of their schemas: the motion presets, the effects with their settings and a clip's looks (a test holds
 //! them to `Catalog::builtin`), the bundled fonts; volume keys for a stretch; `cannotDo` when nothing fits); and how to
@@ -94,11 +95,18 @@ items in Scenes (scene_cut in older logs).\n\
 - A short (\"make a 60 s short with animations\") needs the whole plan, not just the cut; adapt it to what they said. \
 findMoments for the best moments; once you know the moments, make all the rest in one answer: keepOnly within about \
 10% of a length they name (54 to 66 s for 60 s), aiming at it; setFormat portrait; followSubject on the speaker; \
-setCaptions word-pop or bold-box; a hook title of at most 6 punchy words with addText, kinetic or pop, in the first 2 \
-s of what you keep, quoting or paraphrasing their words or a striking later line said in the video, never the opening \
-words; 2 to 4 medium pack stickers with addImage at a top corner, each followed by animate last with a pop or bounce \
-and a sound; quiet addMusic under the speech; setTransition only where two clips already meet with spare footage; \
-otherwise none. Place every layer inside the parts you keep.\n\
+setCaptions word-pop or bold-box; a hook title of at most 6 punchy words with addText, kinetic or pop, on the first \
+words you keep, quoting or paraphrasing their words or a striking later line said in the video, never the opening \
+words; stickers and sound effects as below; quiet addMusic under the speech; setTransition only where two clips \
+already meet with spare footage; otherwise none. Place every layer inside the parts you keep.\n\
+- To place something where words are said, give atWords: 1 to 4 words in a row copied exactly from Transcript; it \
+starts as the first is said. Place stickers and sounds this way, never at a section's start.\n\
+- Stickers: only on a spoken word that names a thing, an action or a feeling, showing that word: addImage with that \
+word as file (Library finds a picture by its tags), else makeSticker. Medium at a top corner, 2 s, at most one per 8 \
+s, then animate last with pop or bounce.\n\
+- Sound effects, at most one per 5 s, none over the first words said but the hook's entrance: whoosh or swoosh on a \
+cut, a transition or text sliding in; pop on a sticker or text popping in (animate's sound); ding or chime on a \
+number, a key point or a reveal; rise under the hook; impact or bass drop on a punchline or a big claim.\n\
 - Layers lists words (t1), pictures (i1), video layers (v1) and music (m1). last is the layer the call before added.\n\
 - animate is the quick way for a common move. For anything specific, compose it: setMotion keys (x 1 is a frame's \
 width right, y 1 its height down, scale 1 the layer's size), animateText for words by letter, word or line, setLayer \
