@@ -167,7 +167,6 @@
   --timeline-max: 360px;
   --timeline-gutter: 40px;       /* lane icons column */
 
-  --inspector-w: 264px;
   --dialog-w: 560px;
 
   --hit-min: 28px;               /* smallest pointer target (timeline handles get a 12 px invisible pad) */
@@ -188,7 +187,6 @@
   :root {
     --library-w: 256px;
     --chat-w: 304px;
-    --inspector-w: 236px;
   }
 }
 

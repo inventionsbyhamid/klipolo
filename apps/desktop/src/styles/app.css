@@ -3429,7 +3429,7 @@
 
 /* The Effects popover: the card's width, never taller than the room it has, the stack scrolling inside it. */
 .fx-pop {
-  width: calc(var(--inspector-w) - 2 * var(--space-3));
+  width: calc(var(--library-w) - 2 * var(--space-3));
   max-height: min(32rem, 70vh, var(--radix-popover-content-available-height));
   overflow-y: auto;
   scrollbar-width: thin;
