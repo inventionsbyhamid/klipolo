@@ -20,7 +20,7 @@ beforeEach(resetCaptions);
 const cards = () => within(screen.getByRole('radiogroup', { name: 'Caption style' })).getAllByRole('radio');
 
 describe('caption style cards', () => {
-  it('shows Off and the five styles, each an existing builtin, in the design’s order', () => {
+  it('shows Off and the seven styles, each an existing builtin, in the design’s order with the shorts’ two last', () => {
     backend();
     renderWithProviders(<StyleCards />);
     expect(cards().map((c) => c.getAttribute('aria-label'))).toEqual([
@@ -30,6 +30,8 @@ describe('caption style cards', () => {
       'Karaoke',
       'Highlight',
       'Boxed',
+      'Word pop',
+      'Bold box',
     ]);
     // Off is chosen while captions are off.
     expect(screen.getByRole('radio', { name: 'Off' })).toHaveAttribute('aria-checked', 'true');

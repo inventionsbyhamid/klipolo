@@ -59,10 +59,17 @@ const same = (rect: BoxN) => rect;
 
 /**
  * Where a title template's own picture is in the frame, for picking it: the lower third's card (a share of the frame
- * across, 238 of 1080p's pixels tall, as its `scene.json` places it, inside 9:16's clear area), the title card's whole
- * frame. Anything else the layout's box.
+ * across, 238 of 1080p's pixels tall, as its `scene.json` places it, inside 9:16's clear area), the kinetic title's band
+ * of words near the top (220 of 1080p's pixels tall, as its `scene.json` places it), the title card's whole frame.
+ * Anything else the layout's box.
  */
 const SCENE_PICK: Record<string, (format: FormatKind) => BoxN> = {
+  'klipolo.builtin/scene.kinetic-title': (format) => ({
+    x: 0.13,
+    y: 0.2,
+    w: 0.74,
+    h: 220 / FORMAT_SIZE[format][1],
+  }),
   'klipolo.builtin/scene.lower-third': (format) => ({
     x: 0.06,
     y: 0.58,

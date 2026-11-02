@@ -114,6 +114,7 @@ fn talk() -> (Project, Inputs, ChatContext) {
         scenes: HashMap::new(),
         analysis: HashMap::from([("talk".to_owned(), AnalysisState::Done)]),
         time_again: HashSet::new(),
+        cursor: None,
         library: Library::default(),
         fonts: Default::default(),
     };

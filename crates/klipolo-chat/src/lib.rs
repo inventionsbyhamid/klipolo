@@ -17,8 +17,8 @@ pub mod sanitize;
 pub mod tools;
 
 pub use compile::{
-    ANALYZE_FIRST, AnalysisState, Audience, Compiled, FontNamer, FontNames, Inputs, Job,
-    MakeSticker, NO_FILLERS, NamedFont, Proposal, ROUGH_FILLERS, ROUGH_FILLERS_STAY, Refusal,
+    ANALYZE_FIRST, AnalysisState, Audience, Compiled, CursorTakes, FontNamer, FontNames, Inputs,
+    Job, MakeSticker, NO_FILLERS, NamedFont, Proposal, ROUGH_FILLERS, ROUGH_FILLERS_STAY, Refusal,
     STILL_LISTENING, STILL_WATCHING, compile, compile_for_app, sticker_ops, sticker_placement,
 };
 pub use context::{
@@ -29,8 +29,8 @@ pub use context::{
 pub use library::{Library, LibraryItem, MediaKind};
 pub use model::{BoxFuture, Item, LanguageModel, ModelError, ModelRequest, ModelResponse};
 pub use planner::{
-    ChatError, ChatErrorKind, DONE_OUTPUT, KEPT_TURNS, PROPOSED_OUTPUT, PlanOut, TOLD_PERSON,
-    TOO_LONG, Turn, plan, remember,
+    ChatError, ChatErrorKind, DONE_OUTPUT, GO_ON, KEPT_TURNS, MAX_STEPS, PROPOSED_OUTPUT, PlanOut,
+    SUM_UP, TOLD_PERSON, TOO_LONG, Turn, plan, remember,
 };
 pub use prompt::system_prompt;
 pub use tools::{FollowFocus, FunctionCall, Moment, Problem, ToolCall, ToolError, tools};

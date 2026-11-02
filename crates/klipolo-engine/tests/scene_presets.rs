@@ -33,6 +33,7 @@ use support::*;
 
 const LOWER_THIRD: &str = "scene.lower-third";
 const TITLE_CARD: &str = "scene.title-card";
+const KINETIC_TITLE: &str = "scene.kinetic-title";
 /// Where the stills are drawn: landscape, 640 px across.
 const SIZE: (u32, u32) = (640, 360);
 
@@ -140,8 +141,9 @@ fn text_of<'a>(inst: &'a SceneInstance, f: &'a SceneFrame, id: &str) -> &'a str 
 fn every_scene_preset_is_one_an_agent_could_have_made() {
     let reg = Registry::builtin();
     for (local, keys) in [
-        (LOWER_THIRD, ["title", "role", "accent"]),
-        (TITLE_CARD, ["title", "subtitle", "accent"]),
+        (LOWER_THIRD, &["title", "role", "accent"][..]),
+        (TITLE_CARD, &["title", "subtitle", "accent"][..]),
+        (KINETIC_TITLE, &["title"][..]),
     ] {
         let id = ContribId::builtin(local);
         assert!(
@@ -452,6 +454,46 @@ const FORMATS: [(FormatKind, (u32, u32), &str); 3] = [
     (FormatKind::Portrait, (1080, 1920), "9x16"),
     (FormatKind::Square, (1080, 1080), "1x1"),
 ];
+
+/// The kinetic title: nothing before it starts, its letters rising in from below at first, the whole title in its
+/// area, centred, once they are up; in 9:16 inside the area the apps keep clear.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "needs a GPU (lavapipe in CI)"]
+async fn kinetic_title_letters_rise_into_place() {
+    let mut h = Headless::new(Registry::builtin()).await.unwrap();
+    let (json, _) = scene_json(KINETIC_TITLE);
+    let p = Arc::new(project(KINETIC_TITLE, 3.0, &[("title", "We went flying")]));
+    let area = node_px(&json, "title", SIZE);
+    let (img, _) = scene_frame(&mut h, &p, 0.0, SIZE).await;
+    assert!(
+        ink_bounds_in(&img, area).is_none(),
+        "nothing before it starts"
+    );
+    // Part way: the last letters are still below their place, or not in yet.
+    let (early, notes) = scene_frame(&mut h, &p, 0.3, SIZE).await;
+    assert!(notes.is_empty(), "{notes:?}");
+    let (img, _) = scene_frame(&mut h, &p, 1.5, SIZE).await;
+    keep_still("kinetic-title", &img);
+    let up = ink_bounds_in(&img, area).expect("the title, once up");
+    assert!(
+        ((up.x0 + up.x1) / 2.0 - f64::from(SIZE.0) / 2.0).abs() <= 4.0 && up.within(area),
+        "centred in its area: {up:?} in {area:?}"
+    );
+    let rising = bounds_where(&early, |px| px.iter().all(|&c| c > 200));
+    assert!(
+        rising.is_none_or(|b| b.x1 < up.x1 || b.y1 > up.y1),
+        "rising in: {rising:?} vs {up:?}"
+    );
+    for (format, size, name) in FORMATS {
+        let (img, notes) = scene_frame_in(&mut h, &p, 1.5, size, format).await;
+        assert!(notes.is_empty(), "{name}: {notes:?}");
+        let drawn = bounds_where(&img, |px| px.iter().all(|&c| c > 200))
+            .unwrap_or_else(|| panic!("{name}: no title"));
+        if format == FormatKind::Portrait {
+            inside_the_clear_area("the kinetic title", drawn, size);
+        }
+    }
+}
 
 /// The box holding `img`'s pixels that `keep` picks, if any.
 fn bounds_where(img: &image::RgbaImage, keep: impl Fn([u8; 3]) -> bool) -> Option<Bounds> {

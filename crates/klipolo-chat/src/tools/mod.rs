@@ -13,15 +13,16 @@
 //! time holds a word or a scene, or a ref a clip, is the compiler's to judge against the project. A call that doesn't
 //! fit is a `ToolError` naming the tool and the field, whose text is one plain sentence the planner can send back to
 //! the model. Where the meaning is clear it reads leniently: no arguments at all for a tool that takes none, a nullable
-//! value left out, text with stray spaces.
+//! value left out, text with stray spaces, a nullable value written as the text "null".
 //!
 //! Adding a tool is one `ToolCall` variant and one entry in `TOOLS`, where its name, description, parameters and reader
 //! sit together; the tests check every schema is strict and every reader reads the fields its schema lists. Splitting
 //! by concern: `schema` (the pieces of a schema, and the words a tool takes), `args` (a call's arguments read field by
 //! field), `error` (why a call couldn't be read), `media` (the media tools and their words), `clips` (the clip and
 //! transition tools and their words), `background` (the background tool and its words), `recorded` (a recording's
-//! camera and recorded sounds, and their words).
+//! camera and recorded sounds, and their words), `animate` (a layer's animation and its words).
 
+pub mod animate;
 mod args;
 pub mod background;
 pub mod clips;
@@ -41,6 +42,7 @@ use klipolo_model::timeline::{CameraMode, FramingMode};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
+pub use animate::{Emphasis, Entrance, Exit, LayerRef};
 use args::{Args, kind};
 pub use background::BackgroundChoice;
 pub use clips::{ClipRef, TransitionKind};
@@ -208,12 +210,14 @@ pub enum ToolCall {
     },
     /// Play the library's sound `name` at each of `at_us` (at least one).
     AddSound { name: String, at_us: Vec<Us> },
-    /// Show `text` in text preset `preset` from `at_us` (None: the playhead) for `duration_us` (None: the default).
+    /// Show `text` in text preset `preset` from `at_us` (None: the playhead) for `duration_us` (None: the default),
+    /// coming in as `animation` says (None: a fade).
     AddText {
         text: String,
         preset: TextPreset,
         at_us: Option<Us>,
         duration_us: Option<Us>,
+        animation: Option<Entrance>,
         /// A font by name; None: the preset's.
         font: Option<String>,
     },
@@ -238,6 +242,16 @@ pub enum ToolCall {
         prompt: String,
         at_us: Option<Us>,
         duration_us: Option<Us>,
+    },
+    /// Set how the layer `layer` names comes in, goes out and moves while it shows (None keeps each, a `None` word takes
+    /// it away), with the library's sound `sound` (a name, not yet resolved) as it comes in, or goes out when only its
+    /// exit is set.
+    Animate {
+        layer: LayerRef,
+        enter: Option<Entrance>,
+        exit: Option<Exit>,
+        emphasis: Option<Emphasis>,
+        sound: Option<String>,
     },
     /// Show the cameras of `clips` (refs from the context, not yet resolved; None: every clip with one) as `mode`, in
     /// `format` alone or in every format.
@@ -274,6 +288,9 @@ pub enum ToolCall {
         which: Option<String>,
         clips: Option<Vec<String>>,
     },
+    /// Zoom in on the clicks of every recording on the main track, at most `scale` (None: the camera's own most), or
+    /// take the auto zooms over them away (`on` false).
+    AutoZoom { on: bool, scale: Option<f64> },
     /// Undo the last change.
     Undo,
     /// Ask the person `question` before doing anything more.
@@ -303,12 +320,27 @@ impl ToolCall {
         } else {
             serde_json::from_str(text).map_err(|_| whole(Problem::NotJson))?
         };
-        let Value::Object(map) = value else {
+        let Value::Object(mut map) = value else {
             return Err(whole(Problem::WrongType {
                 expected: "an object",
                 got: kind(&value),
             }));
         };
+        // A field that may be null, written as the text "null" (as some models write it), is null.
+        let nullable: Vec<&'static str> = ((tool.parameters)().into_iter())
+            .filter(|(_, schema)| {
+                (schema["type"].as_array()).is_some_and(|ts| ts.contains(&Value::from("null")))
+            })
+            .map(|(name, _)| name)
+            .collect();
+        for name in nullable {
+            if let Some(v) = map.get_mut(name)
+                && v.as_str()
+                    .is_some_and(|s| s.trim().eq_ignore_ascii_case("null"))
+            {
+                *v = Value::Null;
+            }
+        }
         let mut args = Args {
             tool: tool.name,
             path: String::new(),
@@ -344,22 +376,31 @@ impl ToolCall {
             ToolCall::AddImage { .. } => "addImage",
             ToolCall::MakeSticker { .. } => "makeSticker",
             ToolCall::MakeTitleCard { .. } => "makeTitleCard",
+            ToolCall::Animate { .. } => "animate",
             ToolCall::SetCameraMode { .. } => "setCameraMode",
             ToolCall::AdjustCamera { .. } => "adjustCamera",
             ToolCall::DetachCamera { .. } => "detachCamera",
             ToolCall::MuteSource { .. } => "muteSource",
             ToolCall::SetSourceVolume { .. } => "setSourceVolume",
             ToolCall::SeparateSound { .. } => "separateSound",
+            ToolCall::AutoZoom { .. } => "autoZoom",
             ToolCall::Undo => "undo",
             ToolCall::AskUser { .. } => "askUser",
             ToolCall::CannotDo { .. } => "cannotDo",
         }
     }
 
-    /// Whether the call names a song or a video layer by its ref (`m1`, `v1`), which holds only while the layers stay
-    /// as the context named them (`context::layers_key`).
+    /// Whether the call names a song, a video layer, words or a picture by its ref (`m1`, `v1`, `t1`, `i1`), which holds
+    /// only while the layers stay as the context named them (`context::layers_key`).
     pub fn names_layer(&self) -> bool {
-        matches!(self, ToolCall::SetClip { clip: ClipRef::One(r), .. } if r.starts_with(['m', 'v']))
+        match self {
+            ToolCall::SetClip {
+                clip: ClipRef::One(r),
+                ..
+            } => r.starts_with(['m', 'v']),
+            ToolCall::Animate { layer, .. } => matches!(layer, LayerRef::One(_)),
+            _ => false,
+        }
     }
 
     /// Whether the call names a timeline time or a clip ref, which hold only while the main track's clips stay where
@@ -396,6 +437,8 @@ impl ToolCall {
             | ToolCall::FixCaptionWords { .. }
             | ToolCall::FollowSubject { .. }
             | ToolCall::BlurObjects { .. }
+            | ToolCall::Animate { .. }
+            | ToolCall::AutoZoom { .. }
             | ToolCall::Undo
             | ToolCall::AskUser { .. }
             | ToolCall::CannotDo { .. } => false,
@@ -405,9 +448,9 @@ impl ToolCall {
 
 /// The caption styles `setCaptions` offers, in the schema's order, each with how the model is told it looks. Whether a
 /// word lights up as it is said is what tells them apart when a person asks for captions "that light up" or "word by
-/// word": karaoke and highlight light up each word, bold only pops words in. The other built-ins (Loud, Arcade) stay
-/// out of chat.
-pub const CHAT_CAPTION_STYLES: [(BuiltinCaptionStyle, &str); 5] = [
+/// word": karaoke, highlight and word pop light up each word, bold only pops words in. Word pop and bold box are the
+/// shorts' styles. The other built-ins (Loud, Arcade) stay out of chat.
+pub const CHAT_CAPTION_STYLES: [(BuiltinCaptionStyle, &str); 7] = [
     (
         BuiltinCaptionStyle::Clean,
         "calm subtitles, a sentence at a time",
@@ -425,6 +468,14 @@ pub const CHAT_CAPTION_STYLES: [(BuiltinCaptionStyle, &str); 5] = [
         "up to four big uppercase words where a coloured box lights up each word as it is said, word by word",
     ),
     (BuiltinCaptionStyle::Boxed, "sentences on rounded boxes"),
+    (
+        BuiltinCaptionStyle::WordPop,
+        "for shorts: words pop in as said, the said one coloured",
+    ),
+    (
+        BuiltinCaptionStyle::BoldBox,
+        "for shorts: heavy words on a rounded box",
+    ),
 ];
 
 /// The formats `setFormat` offers, `setClip`'s framing names, and the recording tools' `format`.
@@ -765,12 +816,14 @@ const TOOLS: &[Tool] = &[
     media::ADD_IMAGE,
     media::MAKE_STICKER,
     media::MAKE_TITLE_CARD,
+    animate::ANIMATE,
     recorded::SET_CAMERA_MODE,
     recorded::ADJUST_CAMERA,
     recorded::DETACH_CAMERA,
     recorded::MUTE_SOURCE,
     recorded::SET_SOURCE_VOLUME,
     recorded::SEPARATE_SOUND,
+    recorded::AUTO_ZOOM,
     Tool {
         name: "undo",
         description: "Undo the last change.",
@@ -815,7 +868,7 @@ pub fn tools() -> Value {
     )
 }
 
-fn chat_styles() -> [BuiltinCaptionStyle; 5] {
+fn chat_styles() -> [BuiltinCaptionStyle; 7] {
     CHAT_CAPTION_STYLES.map(|(s, _)| s)
 }
 

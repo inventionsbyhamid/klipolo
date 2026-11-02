@@ -64,6 +64,8 @@ pub enum TextPreset {
 pub enum TitleTemplate {
     LowerThird,
     TitleCard,
+    /// A title whose letters rise in one by one: chat's kinetic words.
+    KineticTitle,
 }
 
 impl TitleTemplate {
@@ -72,6 +74,7 @@ impl TitleTemplate {
         ContribId::builtin(match self {
             Self::LowerThird => "scene.lower-third",
             Self::TitleCard => "scene.title-card",
+            Self::KineticTitle => "scene.kinetic-title",
         })
     }
 }

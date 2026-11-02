@@ -35,4 +35,9 @@ revision: number,
 /**
  * Pictures it asked for, to draw (`chat_draw_picture`) and show with Use and Try again.
  */
-pictures: Array<ChatPicture>, };
+pictures: Array<ChatPicture>, 
+/**
+ * Something asked for needs a clip analyzed that isn't yet ("Analyze this clip first"): the panel offers Analyze
+ * under the reply, which shows the price before anything is spent.
+ */
+analyze: boolean, };

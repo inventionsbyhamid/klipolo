@@ -39,7 +39,7 @@ fn every_style_file_is_listed_and_valid() {
         def.check().unwrap_or_else(|e| panic!("{key}.json: {e}"));
         assert_eq!(def.id.as_str(), format!("klipolo.builtin/caption.{key}"));
     }
-    assert_eq!(CaptionStyles::builtin().defs().count(), 7);
+    assert_eq!(CaptionStyles::builtin().defs().count(), 9);
     // The one list is also the tool's and the UI's word for each style.
     for s in BuiltinCaptionStyle::ALL {
         assert_eq!(serde_json::to_value(s).unwrap(), s.key());
@@ -154,4 +154,20 @@ fn export_bindings_caption_styles() {
         serde_json::to_string_pretty(&defs).unwrap() + "\n",
     )
     .unwrap();
+}
+
+/// The shorts' two styles sit in 9:16's lower third, under a speaker's chin, inside the band the apps keep clear (the
+/// engine's organic-safe 0.15 to 0.72).
+#[test]
+fn the_shorts_styles_sit_in_the_lower_third_of_9_16() {
+    for key in ["word-pop", "bold-box"] {
+        let style = CaptionStyles::builtin()
+            .get(&ContribId::builtin(&format!("caption.{key}")))
+            .unwrap();
+        let y = style.position.get(FormatKind::Portrait).y;
+        assert!(
+            (0.667..=0.72).contains(&y),
+            "{key}: centred at {y} of the height"
+        );
+    }
 }

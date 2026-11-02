@@ -4,4 +4,4 @@
  * A built-in caption style, by its word (`bold`): the style is `klipolo.builtin/caption.<word>`, drawn from
  * `captions/styles/<word>.json`.
  */
-export type BuiltinCaptionStyle = "bold" | "loud" | "boxed" | "karaoke" | "highlight" | "clean" | "arcade";
+export type BuiltinCaptionStyle = "bold" | "loud" | "boxed" | "karaoke" | "highlight" | "clean" | "arcade" | "word-pop" | "bold-box";

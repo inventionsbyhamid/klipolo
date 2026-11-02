@@ -5,6 +5,7 @@ use klipolo_model::captions::style::{BoxOn, CaptionStyleDef};
 
 use super::layout::{PageLayout, WordBox};
 use super::shaping::Words;
+use crate::plan::captions::place::word_growth;
 
 /// Cells are packed into rows no wider than this.
 const ROW_PX: u32 = 2048;
@@ -14,7 +15,8 @@ const OVERHANG_EM: f32 = 0.1;
 const MAX_ATLAS_SIDE: u32 = 8192;
 
 /// Each word's box on its line (lines starting at `starts`, a `space` between two words at scale 1), and each line's
-/// rect, at `layout.autofit`.
+/// rect, at `layout.autofit`. In a style whose words grow as they are said (`word_growth`), two words are as far apart
+/// as a space at that growth, plus what each grows into the gap, so a word that grows never touches its neighbour.
 pub(super) fn place_words(
     layout: &mut PageLayout,
     style: &CaptionStyleDef,
@@ -33,11 +35,15 @@ pub(super) fn place_words(
         ),
         _ => (0.0, 0.0),
     };
+    let grow = word_growth(style) as f32;
+    // The gap after word i: a space at the growth, and what i and the word after it grow into it.
+    let gap =
+        |i: usize| space * grow + (grow - 1.0) / 2.0 * (words.widths[i] + words.widths[i + 1]);
     let n = words.widths.len();
     for (line, &from) in starts.iter().enumerate() {
         let from = from as usize;
         let to = starts.get(line + 1).map_or(n, |&e| e as usize);
-        let gaps = space * (to - from).saturating_sub(1) as f32;
+        let gaps: f32 = (from..to.saturating_sub(1)).map(gap).sum();
         let line_w = (words.widths[from..to].iter().sum::<f32>() + gaps) * a;
         let y = -block_h / 2.0 + line_h * (line as f32 + 0.5);
         let mut left = -line_w / 2.0;
@@ -47,7 +53,7 @@ pub(super) fn place_words(
             .zip(&words.scales[from..to])
             .zip(&words.faces[from..to])
             .zip(&words.ranges[from..to]);
-        for ((((&w, &h), &scale), &face), &text) in on_line {
+        for (k, ((((&w, &h), &scale), &face), &text)) in on_line.enumerate() {
             let w = w * a;
             layout.words.push(WordBox {
                 centre: [left + w / 2.0, y],
@@ -58,7 +64,9 @@ pub(super) fn place_words(
                 face,
                 text,
             });
-            left += w + space * a;
+            if from + k + 1 < to {
+                left += w + gap(from + k) * a;
+            }
         }
         layout.lines.push([
             -line_w / 2.0 - box_x,
@@ -139,4 +147,55 @@ pub(super) fn pack_cells(layout: &mut PageLayout) {
         width.clamp(1, MAX_ATLAS_SIDE),
         (y + row_h).clamp(1, MAX_ATLAS_SIDE),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use klipolo_model::captions::styles::CaptionStyles;
+    use klipolo_model::contrib::ContribId;
+
+    use super::*;
+
+    /// Word pop's words, each grown as far as a word being said grows, keep a space's width at that size between them.
+    #[test]
+    fn a_word_that_grows_never_touches_its_neighbour() {
+        for key in ["word-pop", "bold-box", "bold", "clean"] {
+            let style = CaptionStyles::builtin()
+                .get(&ContribId::builtin(&format!("caption.{key}")))
+                .unwrap();
+            let grow = word_growth(style) as f32;
+            let mut words = Words::default();
+            for (i, w) in [300.0, 120.0, 420.0].into_iter().enumerate() {
+                words.widths.push(w);
+                words.heights.push(100.0);
+                words.scales.push(1.0);
+                words.faces.push(0);
+                words.ranges.push([i as u32, i as u32 + 1]);
+            }
+            let mut layout = PageLayout {
+                font_px: 96.0,
+                autofit: 1.0,
+                ..PageLayout::default()
+            };
+            let space = 27.0;
+            place_words(&mut layout, style, &[0], &words, space);
+            for pair in layout.words.windows(2) {
+                let (a, b) = (&pair[0], &pair[1]);
+                let gap =
+                    (b.centre[0] - b.size[0] * grow / 2.0) - (a.centre[0] + a.size[0] * grow / 2.0);
+                assert!(
+                    gap >= space * grow - 0.01,
+                    "{key}: {gap} between grown words, not {}",
+                    space * grow
+                );
+            }
+            // A style whose words don't grow keeps a plain space.
+            if grow == 1.0 {
+                let gap = layout.words[1].centre[0]
+                    - layout.words[1].size[0] / 2.0
+                    - (layout.words[0].centre[0] + layout.words[0].size[0] / 2.0);
+                assert!((gap - space).abs() < 0.01, "{key}: {gap}");
+            }
+        }
+    }
 }

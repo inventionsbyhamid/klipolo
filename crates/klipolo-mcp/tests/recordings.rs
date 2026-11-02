@@ -227,3 +227,24 @@ fn a_sound_the_video_lacks_is_the_persons_to_hear_about() {
     assert_refused(&result, "Your video has no computer sound.");
     assert_eq!(host.revision(), revision);
 }
+
+#[test]
+fn an_app_may_zoom_in_on_clicks_and_hears_when_there_are_none() {
+    // Listed as an edit, as chat's other tools are.
+    let tools = klipolo_mcp::tools::list();
+    let zoom = (tools.as_array().unwrap().iter())
+        .find(|t| t["name"] == "autoZoom")
+        .expect("autoZoom is listed");
+    assert_eq!(zoom["annotations"]["readOnlyHint"], json!(false));
+    // Klipolo knows no click in this take: the person's to hear, and nothing changes.
+    let host = with_a_take();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    let revision = host.revision();
+    let result = agent.call("autoZoom", json!({"on": true, "scale": null}));
+    assert_refused(
+        &result,
+        "These screen recordings have no clicks to zoom in on.",
+    );
+    assert_eq!(host.revision(), revision);
+}

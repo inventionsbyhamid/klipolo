@@ -2489,6 +2489,7 @@ dependencies = [
 name = "klipolo-chat"
 version = "0.1.0"
 dependencies = [
+ "klipolo-cursor",
  "klipolo-model",
  "serde",
  "serde_json",

@@ -91,11 +91,16 @@ export type Message =
       revision: number;
       /** The project changed since it landed: its moments still seek, but can't be kept only (their times moved). */
       momentsStale: boolean;
-      /** Additions applied at once: their undo label and the revision they made (the Undo chip). */
-      applied: { undo: CodedError; revision: number } | null;
+      /**
+       * Additions applied at once: their undo label and the revision they made (the Undo chip), and for a step of
+       * several changes, each one's label in the order asked (listed under the reply).
+       */
+      applied: { undo: CodedError; revision: number; changes?: CodedError[] } | null;
       proposal: ProposalPart | null;
       /** The pictures it asked for (stickers, title card backgrounds). */
       pictures: PicturePart[];
+      /** Something asked for needs a clip analyzed that isn't yet: Analyze under it, which shows the price first. */
+      analyze?: boolean;
       /**
        * Another app's reply (MCP): the app's name, as it gave it. Its `text` is empty: the panel says what the app did.
        * Undefined for Klipolo's own.

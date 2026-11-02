@@ -8,7 +8,7 @@ import { formatNumber } from '../../lib/format';
 import { hasOwnSound, sourceLabel } from '../../lib/timeline';
 import { contentNow, contentOps, editContent } from '../../state/latest';
 import { useProject } from '../../state/project';
-import { PositionField, TimingField } from './common';
+import { AnimationField, PositionField, TimingField } from './common';
 import { MotionField } from './MotionField';
 import { CropField, isNoCrop } from './CropField';
 import { EffectsButton } from './EffectsButton';
@@ -24,11 +24,11 @@ export type VideoContent = Extract<ItemContent, { type: 'video' }>;
 /**
  * A video layer's fields (a picture in picture): Size, Opacity and Corner radius (`PictureFields`), Framing (Fit shows
  * the whole picture in its box, Fill covers the box from the centre, cutting the edges) and Crop (`CropField`),
- * Effects, its sound (Volume and Mute, when its file has sound), Speed (its length follows), Mirror, Position and
- * Timing. A separated camera keeps its clip's speed, so the lips stay in sync with the mic: its Speed changes the
- * clip's as the clip card's does, saying what that does to the clip's transitions. Each change is built at its turn
- * from the layer as the project has it then (`contentOps`), setting only its own field: Speed keeps a volume change
- * still on its way.
+ * Effects, its sound (Volume and Mute, when its file has sound), Speed (its length follows), Mirror, Position,
+ * Animation and Timing. A separated camera keeps its clip's speed, so the lips stay in sync with the mic: its Speed
+ * changes the clip's as the clip card's does, saying what that does to the clip's transitions. Each change is built at
+ * its turn from the layer as the project has it then (`contentOps`), setting only its own field: Speed keeps a volume
+ * change still on its way.
  */
 export function VideoInspector({
   item,
@@ -125,6 +125,7 @@ export function VideoInspector({
         />
       </Field>
       <PositionField item={item} format={format} primary={primary} />
+      <AnimationField item={item} typewriter={false} />
       <MotionField item={item} />
       <TimingField item={item} />
     </>

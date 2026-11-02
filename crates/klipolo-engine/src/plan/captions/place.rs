@@ -5,7 +5,7 @@
 //! safe band, and a block as wide as the frame allows stays inside it, its outline and the word being said at its
 //! active scale included.
 
-use klipolo_model::captions::style::CaptionStyleDef;
+use klipolo_model::captions::style::{CaptionStyleDef, Move, Per};
 use klipolo_model::project::{FormatKind, Project};
 
 const ORGANIC: (f64, f64) = (0.15, 0.72);
@@ -74,6 +74,18 @@ impl Anchor {
 /// How much the word being said grows (Arcade 1.08, Loud 1.06, Highlight 1.04): at least 1.
 pub fn active_scale(style: &CaptionStyleDef) -> f64 {
     style.active.scale.unwrap_or(1.0).max(1.0)
+}
+
+/// The most a word of `style` grows past its size while it shows: the word being said at its active scale, popping in
+/// past its size word by word, and a keyword at its own scale, all at once (at least 1). Words are spaced for it
+/// (`render::captions::cells::place_words`).
+pub fn word_growth(style: &CaptionStyleDef) -> f64 {
+    let pop = match (&style.enter.per, &style.enter.motion) {
+        (Per::Word, Move::Pop { peak, .. }) => peak.max(1.0),
+        _ => 1.0,
+    };
+    let keyword = style.keyword.as_ref().map_or(1.0, |k| k.scale.max(1.0));
+    active_scale(style) * pop * keyword
 }
 
 /// What a word's ink reaches past its advance on each side, in em of its size: its outline, or the style's box

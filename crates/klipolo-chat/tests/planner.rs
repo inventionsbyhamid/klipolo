@@ -11,11 +11,11 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 
 use klipolo_chat::{
-    AnalysisState, Audience, BoxFuture, ChatContext, ChatError, ChatErrorKind, FunctionCall,
-    Inputs, Item, KEPT_TURNS, LanguageModel, Library, LibraryItem, MAX_CONTEXT_TOKENS, MediaKind,
-    ModelError, ModelRequest, ModelResponse, PROPOSED_OUTPUT, PlanOut, Refs, STILL_LISTENING,
-    TOLD_PERSON, TOO_LONG, ToolCall, Turn, View, build_context, plan, remember, sanitize,
-    system_prompt, tools,
+    ANALYZE_FIRST, AnalysisState, Audience, BoxFuture, ChatContext, ChatError, ChatErrorKind,
+    FunctionCall, Inputs, Item, KEPT_TURNS, LanguageModel, Library, LibraryItem,
+    MAX_CONTEXT_TOKENS, MediaKind, ModelError, ModelRequest, ModelResponse, PROPOSED_OUTPUT,
+    PlanOut, Refs, STILL_LISTENING, TOLD_PERSON, TOO_LONG, ToolCall, Turn, View, build_context,
+    plan, remember, sanitize, system_prompt, tools,
 };
 use klipolo_model::Project;
 use klipolo_model::project::{Asset, AssetKind};
@@ -121,6 +121,7 @@ fn inputs(project: &Project, speech: Speech) -> Inputs {
             .map(|a| (a.id.clone(), AnalysisState::Done))
             .collect(),
         time_again: HashSet::new(),
+        cursor: None,
         library: Library::default(),
         fonts: Default::default(),
     }
@@ -1149,4 +1150,221 @@ fn the_reply_says_what_a_new_speed_did_to_a_transition_after_the_models_words() 
     let model = Fake::new(vec![answer("", vec![speed()], 0.001)]);
     let out = send(&model, &[], "speed up the talk 2x", &i, &p).unwrap();
     assert_eq!(out.reply, "Done. A transition is shortened.");
+}
+
+fn find_call(call_id: &str) -> FunctionCall {
+    fc(
+        call_id,
+        "findMoments",
+        r#"{"query": "the module", "ranges": [{"startSec": 0.0, "endSec": 30.0, "label": "the whole talk"}]}"#,
+    )
+}
+
+#[test]
+fn a_look_around_first_goes_on_to_the_edits_in_the_same_message() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let model = Fake::new(vec![
+        answer(
+            "I will make this a square short.",
+            vec![find_call("call_1")],
+            0.002,
+        ),
+        answer("Made it square.", vec![square_call("call_2")], 0.002),
+    ]);
+    let out = send(&model, &[], "make a square short", &i, &p).unwrap();
+    assert_eq!(model.seen().len(), 2);
+    // The second request carries the first answer, its call and what it found.
+    let second = &model.seen()[1];
+    let found = output_for(second, "call_1");
+    assert!(found.contains("0.0-30.0"), "{found}");
+    assert!(out.compiled.additions.is_some());
+    assert_eq!(
+        out.compiled.moments.len(),
+        1,
+        "what it found is still shown"
+    );
+    assert_eq!(out.reply, "Made it square.");
+    assert_eq!(out.answers.len(), 2);
+    assert!((out.usage_usd - 0.004).abs() < 1e-12);
+}
+
+#[test]
+fn a_call_that_fails_after_a_look_leaves_the_look_as_the_answer() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let model = Fake::new(vec![
+        answer("Here is the start.", vec![find_call("call_1")], 0.002),
+        Err(ModelError::Budget(String::new())),
+    ]);
+    let out = send(&model, &[], "find the start", &i, &p).unwrap();
+    assert_eq!(model.seen().len(), 2);
+    assert_eq!(out.compiled.moments.len(), 1, "what it found is shown");
+    assert_eq!(out.reply, "Here is the start.");
+    assert_eq!(out.answers.len(), 1);
+    assert!((out.usage_usd - 0.002).abs() < 1e-12);
+}
+
+#[test]
+fn a_promise_without_calls_is_asked_to_go_on() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let model = Fake::new(vec![
+        answer("I will turn this into a square short.", vec![], 0.002),
+        answer("Made it square.", vec![square_call("call_1")], 0.002),
+    ]);
+    let out = send(&model, &[], "make a square short", &i, &p).unwrap();
+    assert_eq!(model.seen().len(), 2);
+    let second = &model.seen()[1];
+    assert!(
+        matches!(second.input.last(), Some(Item::User { text }) if text == klipolo_chat::GO_ON),
+        "{:?}",
+        second.input.last()
+    );
+    assert!(out.compiled.additions.is_some());
+    assert_eq!(out.reply, "Made it square.");
+    // An answer that is done says so without a promise: one call.
+    let model = Fake::new(vec![answer(
+        "This video is 30 seconds long.",
+        vec![],
+        0.002,
+    )]);
+    let out = send(&model, &[], "how long is it", &i, &p).unwrap();
+    assert_eq!(model.seen().len(), 1);
+    assert_eq!(out.reply, "This video is 30 seconds long.");
+}
+
+#[test]
+fn looking_around_never_takes_more_than_four_model_calls() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    // Each look another: the same look again ends it sooner.
+    let looks: Vec<_> = (0..6)
+        .map(|k| {
+            let look = fc(
+                &format!("call_{k}"),
+                "findMoments",
+                &format!(r#"{{"query": "part {k}", "ranges": [{{"startSec": 0.0, "endSec": 30.0, "label": "a part"}}]}}"#),
+            );
+            answer("I will look again.", vec![look], 0.001)
+        })
+        .collect();
+    let model = Fake::new(looks);
+    let out = send(&model, &[], "find the module part", &i, &p).unwrap();
+    assert!(model.seen().len() <= 4, "{}", model.seen().len());
+    assert!(model.left() >= 2);
+    assert!(!out.compiled.moments.is_empty());
+}
+
+#[test]
+fn the_same_look_again_leaves_the_first_as_the_answer() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let model = Fake::new(vec![
+        answer("Here is the module.", vec![find_call("call_1")], 0.001),
+        answer("Here it is again.", vec![find_call("call_2")], 0.001),
+        answer("And again.", vec![find_call("call_3")], 0.001),
+    ]);
+    let out = send(&model, &[], "find the module part", &i, &p).unwrap();
+    assert_eq!(model.seen().len(), 2);
+    assert_eq!(out.compiled.moments.len(), 1, "shown once");
+    assert_eq!(out.reply, "Here is the module.");
+    assert!((out.usage_usd - 0.002).abs() < 1e-12, "both calls count");
+}
+
+#[test]
+fn a_big_plan_ends_with_the_models_own_summary() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    // A plan that applies at once and proposes a cut: the model is told what came of it and sums it up.
+    let model = Fake::new(vec![
+        answer(
+            "I will make it square and cut the end.",
+            vec![square_call("call_1"), cut_call("call_2", 7.8, 30.0)],
+            0.002,
+        ),
+        answer(
+            "Made a square version and marked the end to cut. Review the cut below.",
+            vec![],
+            0.001,
+        ),
+    ]);
+    let out = send(&model, &[], "square, and cut the end", &i, &p).unwrap();
+    assert_eq!(model.seen().len(), 2);
+    let last = model.seen()[1].input.last().cloned();
+    let Some(Item::User { text }) = last else {
+        panic!("{last:?}");
+    };
+    assert!(
+        text.contains("Applied setFormat") && text.contains("Proposed cutRange"),
+        "{text}"
+    );
+    assert!(out.compiled.additions.is_some() && out.compiled.proposal.is_some());
+    assert_eq!(
+        out.reply,
+        "Made a square version and marked the end to cut. Review the cut below."
+    );
+    // Without a summary (the call fails), the plan still lands, with the model's first words.
+    let model = Fake::new(vec![answer(
+        "Made it square and marked the end to cut.",
+        vec![square_call("call_1"), cut_call("call_2", 7.8, 30.0)],
+        0.002,
+    )]);
+    let out = send(&model, &[], "square, and cut the end", &i, &p).unwrap();
+    assert!(out.compiled.additions.is_some() && out.compiled.proposal.is_some());
+    assert_eq!(out.reply, "Made it square and marked the end to cut.");
+}
+
+#[test]
+fn a_summary_still_says_once_what_the_person_has_to_do() {
+    let (p, speech) = talk();
+    let mut i = inputs(&p, speech);
+    i.analysis.insert("talk".into(), AnalysisState::NotStarted);
+    let calls = || {
+        vec![
+            square_call("call_1"),
+            cut_call("call_2", 7.8, 30.0),
+            fc("call_3", "removeFillers", "{}"),
+        ]
+    };
+    // The ums wait for analysis: the line that says so follows the model's summary, which didn't say it.
+    let model = Fake::new(vec![
+        answer(
+            "Making it square, cutting the end and the ums.",
+            calls(),
+            0.002,
+        ),
+        answer(
+            "Made a square version and marked the end to cut.",
+            vec![],
+            0.001,
+        ),
+    ]);
+    let out = send(&model, &[], "square, cut the end and the ums", &i, &p).unwrap();
+    let Some(Item::User { text }) = model.seen()[1].input.last().cloned() else {
+        panic!("no summary asked");
+    };
+    assert!(
+        text.contains(&format!("Shown after your words: {ANALYZE_FIRST}.")),
+        "{text}"
+    );
+    assert_eq!(
+        out.reply,
+        format!("Made a square version and marked the end to cut. {ANALYZE_FIRST}.")
+    );
+    // A summary that says it already is not followed by it again.
+    let model = Fake::new(vec![
+        answer(
+            "Making it square, cutting the end and the ums.",
+            calls(),
+            0.002,
+        ),
+        answer(
+            &format!("Made it square and marked the end to cut. {ANALYZE_FIRST}."),
+            vec![],
+            0.001,
+        ),
+    ]);
+    let out = send(&model, &[], "square, cut the end and the ums", &i, &p).unwrap();
+    assert_eq!(out.reply.matches(ANALYZE_FIRST).count(), 1, "{}", out.reply);
 }

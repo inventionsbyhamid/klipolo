@@ -11,28 +11,89 @@ import { safeRect } from '../../lib/safeAreas';
 /** How long an animation picked in the inspector runs (0.3 s), at most the layer's length. */
 export const ANIMATION_US = 300_000;
 
-/** The ways a layer comes in and goes out. "Slide up" comes in from below; "Slide down" goes out below. */
-export type InChoice = 'none' | 'fade' | 'pop' | 'slideUp' | 'typewriter';
-export type OutChoice = 'none' | 'fade' | 'pop' | 'slideDown';
+/**
+ * The ways a layer comes in and goes out, as chat's `animate` offers them. A slide is named by the way it
+ * moves: "Slide up" comes in from below or goes out at the top, "Slide right" comes in from the left or goes out at the
+ * right.
+ */
+export type InChoice =
+  | 'none'
+  | 'fade'
+  | 'pop'
+  | 'zoom'
+  | 'bounce'
+  | 'blur'
+  | 'typewriter'
+  | 'slideUp'
+  | 'slideDown'
+  | 'slideLeft'
+  | 'slideRight';
+export type OutChoice = 'none' | 'fade' | 'pop' | 'zoom' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight';
+/** How a layer moves while it shows (a loop), as chat's `animate` offers it. */
+export type EmphasisChoice = 'none' | 'pulse' | 'shake' | 'wiggle';
 
-const PRESETS: Record<Exclude<InChoice | OutChoice, 'none'>, { word: string; from?: string }> = {
-  fade: { word: 'fade' },
-  pop: { word: 'pop' },
-  slideUp: { word: 'slide', from: 'bottom' },
-  slideDown: { word: 'slide', from: 'bottom' },
-  typewriter: { word: 'typewriter' },
+type Slide = 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight';
+/** The edge a slide comes in from, and the one it goes out at (the preset's `from` either way). */
+const FROM: Record<'enter' | 'exit', Record<Slide, string>> = {
+  enter: { slideUp: 'bottom', slideDown: 'top', slideLeft: 'right', slideRight: 'left' },
+  exit: { slideUp: 'top', slideDown: 'bottom', slideLeft: 'left', slideRight: 'right' },
 };
+/** The preset each other choice is. */
+const WORDS: Record<'fade' | 'pop' | 'zoom' | 'bounce' | 'blur' | 'typewriter', string> = {
+  fade: 'fade',
+  pop: 'pop',
+  zoom: 'zoom',
+  bounce: 'bounce',
+  blur: 'blur-in',
+  typewriter: 'typewriter',
+};
+/** Each loop's cycle and strength: chat's own (`klipolo-chat`'s `EMPHASIS_US`, `EMPHASIS_STRENGTH`). */
+const LOOPS: Record<Exclude<EmphasisChoice, 'none'>, number> = { pulse: 800_000, shake: 600_000, wiggle: 800_000 };
+const LOOP_STRENGTH = 1.5;
 
-/** The choice a layer's enter (or exit) is: a preset the inspector offers, else the nearest it names, else none. */
+const wordOf = (preset: string) => preset.split('/').pop()?.replace('motion.', '');
+
+/** The choice a layer's enter (or exit) is: a preset the inspector offers, else null (shown as it is), else none. */
 export function animationOf(motion: Motion | undefined, end: 'enter' | 'exit'): InChoice | OutChoice | null {
   const use = motion?.[end];
   if (!use) return 'none';
-  const word = use.preset.split('/').pop()?.replace('motion.', '');
-  if (word === 'slide') return end === 'enter' ? 'slideUp' : 'slideDown';
-  if (word === 'fade' || word === 'pop') return word;
-  if (word === 'typewriter' && end === 'enter') return 'typewriter';
-  // Set from chat: shown as it is, not one of the choices.
-  return null;
+  const word = wordOf(use.preset);
+  if (word === 'slide') {
+    const from = typeof use.params.from === 'string' ? use.params.from : 'bottom';
+    const slides = Object.entries(FROM[end]) as [Slide, string][];
+    return slides.find(([, edge]) => edge === from)?.[0] ?? (end === 'enter' ? 'slideUp' : 'slideDown');
+  }
+  const choice = (Object.keys(WORDS) as (keyof typeof WORDS)[]).find((c) => WORDS[c] === word);
+  if (!choice) return null;
+  // Typewriter, bounce and blur come in only.
+  if (end === 'exit' && (choice === 'typewriter' || choice === 'bounce' || choice === 'blur')) return null;
+  return choice;
+}
+
+/** The loop a layer moves with while it shows: one the inspector offers, else null (shown as it is), else none. */
+export function emphasisOf(motion: Motion | undefined): EmphasisChoice | null {
+  const word = motion?.loop ? wordOf(motion.loop.preset) : 'none';
+  return word === 'none' || word === 'pulse' || word === 'shake' || word === 'wiggle' ? word : null;
+}
+
+/** What is left of `motion`: undefined when nothing is. */
+const kept = (motion: Motion) =>
+  (motion.enter ?? motion.exit ?? motion.loop ?? motion.keys) === undefined ? undefined : motion;
+
+/**
+ * `layout`'s motion with its loop set to `choice` (or cleared by "none"), keeping the rest of it; undefined when nothing
+ * is left. `durationUs`: the layer's length (a cycle never runs longer).
+ */
+export function withEmphasis(layout: Layout, choice: EmphasisChoice, durationUs: number): Motion | undefined {
+  const motion: Motion = { ...layout.motion };
+  if (choice === 'none') delete motion.loop;
+  else
+    motion.loop = {
+      preset: builtinId(`motion.${choice}`),
+      params: { strength: LOOP_STRENGTH },
+      durationUs: Math.min(LOOPS[choice], durationUs),
+    };
+  return kept(motion);
 }
 
 /**
@@ -49,15 +110,15 @@ export function withAnimation(
   if (choice === 'none') {
     delete motion[end];
   } else {
-    const { word, from } = PRESETS[choice];
+    const slide = choice.startsWith('slide');
+    const word = slide ? 'slide' : WORDS[choice as keyof typeof WORDS];
     motion[end] = {
       preset: builtinId(`motion.${word}`),
-      params: from ? { from } : {},
+      params: slide ? { from: FROM[end][choice as Slide] } : {},
       durationUs: Math.min(ANIMATION_US, durationUs),
     };
   }
-  const left = motion.enter ?? motion.exit ?? motion.loop ?? motion.keys;
-  return left === undefined ? undefined : motion;
+  return kept(motion);
 }
 
 /** The box behind the words (the Highlight field's navy, and the Box look's) lives with the other text looks. */
