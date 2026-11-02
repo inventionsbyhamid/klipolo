@@ -368,6 +368,18 @@ def test_a_romanizer_that_gets_its_check_word_wrong_is_not_loaded(no_romanizer, 
     assert text_norm._romanizer is None and text_norm._failed_at is not None
 
 
+def test_a_check_word_failure_on_a_request_is_logged_without_text(no_romanizer, monkeypatch, caplog):
+    class Wrong(FakeUroman):
+        answer = "nmst"
+
+    monkeypatch.setattr(text_norm.uroman, "Uroman", Wrong)
+    with caplog.at_level(logging.ERROR, logger="relay.text_norm"):
+        assert normalize("मेरा नाम") == [("मेरा", ""), ("नाम", "")]
+    assert "romanizer could not load (RomanizerUnavailable)" in caplog.text
+    assert [r.levelno for r in caplog.records] == [logging.ERROR]
+    assert "मेरा" not in caplog.text and "nmst" not in caplog.text
+
+
 def test_a_loaded_romanizer_is_frozen_and_its_load_time_logged(no_romanizer, monkeypatch, caplog):
     monkeypatch.setattr(text_norm.uroman, "Uroman", FakeUroman)
     with caplog.at_level(logging.INFO, logger="relay.text_norm"):

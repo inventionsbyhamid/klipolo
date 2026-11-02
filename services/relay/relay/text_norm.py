@@ -142,8 +142,11 @@ def load_romanizer() -> uroman.Uroman:
         started = time.monotonic()
         try:
             romanizer = _load()
-        except Exception:
+        except Exception as exc:
             _failed_at = time.monotonic()
+            # Logged here, whoever asked (the warm-up or a request); never with
+            # the error's message, which may quote text.
+            logger.error("romanizer could not load (%s); trying again in %d s", type(exc).__name__, RETRY_LOAD_AFTER_S)
             raise
         _romanizer, _failed_at = romanizer, None
         logger.info("romanizer loaded in %.1f s", time.monotonic() - started)
@@ -173,11 +176,8 @@ def romanize(word: str) -> str:
     dropped, and a word left with none gets interpolated times."""
     try:
         romanizer = load_romanizer()
-    except RomanizerUnavailable:
-        return word  # logged when the load failed
     except Exception:
-        logger.exception("romanizer could not load; trying again in %d s", RETRY_LOAD_AFTER_S)
-        return word
+        return word  # logged by load_romanizer when the load failed
     pieces = []
     for piece in _pieces(word):
         try:
