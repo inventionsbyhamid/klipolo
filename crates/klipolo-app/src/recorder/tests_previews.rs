@@ -12,7 +12,7 @@ use super::state::RecorderState;
 use super::test_launch::Logged;
 use super::test_previews::*;
 use super::test_support::*;
-use super::types::{PreviewId, PreviewKind, Previews, PrivacyPage};
+use super::types::{PreviewId, PreviewKind, Previews, PrivacyPage, WhatToRecord};
 
 const THUMBS: &str = "--thumbs";
 const LIVE: &str = "--live-view";
@@ -109,6 +109,25 @@ fn ask_camera_starts_the_camera_preview_once() {
     let refused = p.set(allow_camera).unwrap_err();
     assert_eq!(refused.code, "capture.permission.camera");
     assert_eq!(p.launched(CAMERA).len(), 1);
+}
+
+/// "Record yourself" previews the camera and the mic alone: no screen picture is wanted, so nothing waits for Screen
+/// Recording or says it isn't allowed.
+#[test]
+fn the_camera_alone_previews_without_screen_recording() {
+    let p = previewing(Permissions {
+        screen: Permission::NotAsked,
+        ..all_allowed()
+    });
+    p.set(Previews {
+        live: Some(WhatToRecord::Camera),
+        camera: Some("camera-1".into()),
+        mic: Some("mic-1".into()),
+        ..nothing()
+    })
+    .unwrap();
+    assert!(p.launched(THUMBS).is_empty() && p.launched(LIVE).is_empty());
+    assert_eq!(p.launched(CAMERA).len() + p.launched(METER).len(), 2);
 }
 
 #[test]

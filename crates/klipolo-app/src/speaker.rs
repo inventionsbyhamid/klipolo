@@ -8,9 +8,9 @@
 //!   its cost counted into the session's spend (`spent_usd`); then each clip's path in each format whose Fill crops
 //!   it. A used-up credit stops it with the relay's sentence.
 //! - **Who speaks** (`klipolo_analysis::subject::voices`): following a person in a clip whose people don't all fit
-//!   the crop, each voice of its file's transcript (`Voices`) is matched to one of them by Muse Spark (`Trackers::
-//!   matcher`), priced with the tracking (at most, before anything is tracked) and cached beside it, so the crop keeps
-//!   whoever is speaking. Who the card or chat keeps instead (`Keep`) is made from the cache at no charge. A matcher
+//!   the crop, each voice of its file's transcript (`Voices`; a camera take's, its mic's, heard in each window beside
+//!   the camera: `camera_voice`) is matched to one of them by Muse Spark (`Trackers::matcher`), priced with the
+//!   tracking (at most, before anything is tracked) and cached beside it, so the crop keeps whoever is speaking. Who the card or chat keeps instead (`Keep`) is made from the cache at no charge. A matcher
 //!   that fails leaves the follow as it was, framing each shot's main subject.
 //! - **Landing** is the caller's: the paths are in the clips' source time, so `Followed::ops` builds the ops on the
 //!   project as it is once the run is done (a hand edit meanwhile is kept), as one undo step.
@@ -23,8 +23,8 @@ use std::sync::{Arc, Mutex, PoisonError};
 use klipolo_analysis::cache::{Dir, content_key};
 use klipolo_analysis::providers::{BoxFuture, Heard, SubjectTracker, VoiceMatcher};
 use klipolo_analysis::subject::clips::{
-    Footage, Speech, clip_people, follow_op_keeping, followable_formats, footage, speaker_path,
-    voice_windows,
+    Footage, Speech, camera_voice, clip_people, follow_op_keeping, followable_formats, footage,
+    speaker_path, voice_windows,
 };
 use klipolo_analysis::subject::voices::{self, Asking, MAX_WINDOWS, VoiceTurn, Window};
 use klipolo_analysis::subject::{self, Ask, FPS, PERSON, SubjectCopy, SubjectTrack};
@@ -491,11 +491,13 @@ impl Speaker {
                             .unwrap_or_default();
                         }
                         (Some(m), true) => {
+                            let beside = camera_voice(p, &asset_id);
                             let asking = Asking {
                                 src: &src,
                                 cache: dir.as_ref(),
                                 work: &self.work_root,
                                 cancel: Arc::new(AtomicBool::new(false)),
+                                sound: &beside,
                             };
                             let found =
                                 voices::match_voices(&**m, self.copier.clone(), &asking, &windows)
@@ -584,13 +586,18 @@ impl Speaker {
         self.trackers.matcher().await
     }
 
-    /// `asset_id`'s voice turns on its file's clock.
+    /// `asset_id`'s voice turns on its file's clock: a camera take's camera has its mic's, lined up beside it
+    /// (`camera_voice`).
     fn file_turns(&self, p: &Project, asset_id: &str) -> Vec<VoiceTurn> {
-        let Some(voices) = &self.voices else {
+        let Some(heard) = &self.voices else {
             return Vec::new();
         };
+        let beside = camera_voice(p, asset_id);
+        if !beside.is_empty() {
+            return voices::turns_beside(&beside, |id| heard.turns(id));
+        }
         let lead = p.asset(asset_id).map_or(0, |a| a.lead_us());
-        (voices.turns(asset_id).into_iter())
+        (heard.turns(asset_id).into_iter())
             .map(|t| VoiceTurn {
                 start_us: t.start_us + lead,
                 end_us: t.end_us + lead,

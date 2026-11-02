@@ -2,13 +2,12 @@ import { t } from '@lingui/core/macro';
 import { create } from 'zustand';
 import type { AiStatus } from '../bindings/AiStatus';
 import type { ChatRequest } from '../bindings/ChatRequest';
-import { useAi } from '../ai/aiStatus';
+import { creditMoved, useAi } from '../ai/aiStatus';
 import { isCode } from '../bridge/call';
 import { chatBridge } from '../bridge/chat';
 import { onMcpReply, type UnlistenFn } from '../bridge/mcp';
 import { errorMessage } from '../lib/errors';
 import {
-  creditMoved,
   session,
   staleMoments,
   withMessages,

@@ -483,6 +483,37 @@ describe('a recording', () => {
     expect(screen.getByText('Screen of Recording 1')).toBeInTheDocument();
   });
 
+  it('a_camera_take_is_one_clip_and_one_row_for_its_words_and_its_scene_log', async () => {
+    // "Record yourself": its camera, the footage, is watched; its mic, the voice, heard. One take, one clip.
+    const SILENT = { ...CAMERA, hasAudio: false };
+    bridge.estimate.mockResolvedValue(offer({ usd: 0.05, clips: ['camera', 'mic'] }));
+    showTake([
+      ['camera', SILENT],
+      ['mic', MIC],
+    ]);
+    renderWithProviders(<AnalysisBanner />);
+
+    expect(await screen.findByText('Analyze 1 clip for about $0.05')).toBeInTheDocument();
+    expect(bridge.estimate).toHaveBeenCalledWith(['camera', 'mic']);
+    expect(screen.getByText(/^Klipolo transcribes it, times each word and watches the footage\./)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+    expect(bridge.start).toHaveBeenCalledWith(['camera', 'mic']);
+
+    // One row named as its clip, at the step of its least advanced file.
+    act(() =>
+      useAnalysis.setState({
+        states: {
+          camera: { state: 'running', step: 'scenes', pct: 10 },
+          mic: { state: 'running', step: 'words', pct: 50 },
+        },
+      }),
+    );
+    expect(screen.getByText('Analyzing 1 clip')).toBeInTheDocument();
+    expect(screen.getAllByText('Recording 1')).toHaveLength(1);
+    expect(screen.queryByText('Camera of Recording 1')).toBeNull();
+    expect(screen.getByText('Timing words')).toBeInTheDocument();
+  });
+
   it('a_take_in_two_files_counts_and_lists_as_one_clip', async () => {
     // The mic reconnected into a second file: still one take, one clip.
     const MIC2 = clip('mic2', 'mic-2.m4a', 'audio');

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import type { Asset } from '../../bindings/Asset';
 import type { Project } from '../../bindings/Project';
 import { openSettings, useAi, useNeedsKey } from '../../ai/aiStatus';
-import { recordingOf, voiceOf } from '../../lib/analysed';
+import { takeOf, wordsOnly } from '../../lib/analysed';
 import { assetName, recordingName } from '../../lib/timeline';
 import {
   analyze,
@@ -83,19 +83,19 @@ function useOffer(clips: Asset[]) {
 }
 
 /**
- * A row's name: a recording's voice is the take, named as the timeline names the take's clip ("Recording 1"); a
- * recording's file placed on its own as that clip is ("Screen of Recording 1"); any other file by its own name. The
- * row and what a screen reader hears of it say the same.
+ * A row's name: a take's file (its voice, or a camera take's footage) is the take, named as the timeline names the
+ * take's clip ("Recording 1"); a recording's file placed on its own as that clip is ("Screen of Recording 1"); any
+ * other file by its own name. The row and what a screen reader hears of it say the same.
  */
 function rowName(project: Project | undefined, clip: Asset): string {
   if (!project) return clip.name;
-  const take = voiceOf(project, clip.id);
+  const take = takeOf(project, clip.id);
   return take ? recordingName(project, take) : assetName(project, clip);
 }
 
 /** A clip's art and name, as each row of the banner starts (`rowName`): a take has a film's art. */
 function ClipName({ clip }: { clip: Asset }) {
-  const take = useProject((s) => (s.snapshot ? voiceOf(s.snapshot.project, clip.id) : null));
+  const take = useProject((s) => (s.snapshot ? takeOf(s.snapshot.project, clip.id) : null));
   const name = useProject((s) => rowName(s.snapshot?.project, clip));
   const film = clip.kind === 'video' || take !== null;
   return (
@@ -291,9 +291,10 @@ export function AnalysisBanner() {
       </section>
     );
   }
-  // Footage is watched only for a video imported on its own: a recording's files are analysed for their words only.
+  // Footage is watched only for a video imported on its own or a camera take's camera: a recording's other files are
+  // analysed for their words only.
   const videos = clips.some(
-    (c) => c.kind === 'video' && !recordingOf({ assets, recordings }, c.id) && estimate.clips.includes(c.id),
+    (c) => c.kind === 'video' && !wordsOnly({ assets, recordings }, c.id) && estimate.clips.includes(c.id),
   );
   const refused = !!estimate.refusal;
   // Retry asks for the estimate again (the price may have changed), never starts a run unseen.

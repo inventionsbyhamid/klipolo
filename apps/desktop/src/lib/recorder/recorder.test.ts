@@ -3,7 +3,7 @@ import type { WorkerState } from '../../bindings/WorkerState';
 import captureCodes from '../../bindings/captureCodes.json';
 import { codedMessage } from '../../bridge/call';
 import { app, device, display, recorderSetup } from '../../test/recorderBridge';
-import { armOptions, defaultPicks, NO_PICKS, type Picks, whatToRecord } from './choices';
+import { armOptions, defaultPicks, kindPicks, NO_PICKS, type Picks, whatToRecord } from './choices';
 import { deviceDenied, screenStage, screenStep } from './permission';
 import { phaseOf, type RecorderPhase } from './phase';
 import { RECORDER_WORDS } from './words';
@@ -26,6 +26,7 @@ describe('choices', () => {
       camera: null,
       showCamera: true,
       mirror: true,
+      cameras: { screen: null, yourself: null },
     });
   });
 
@@ -71,9 +72,61 @@ describe('choices', () => {
       mirrorCamera: false,
     });
   });
+
+  it('record_yourself_records_the_camera_alone_with_no_bubble', () => {
+    expect(whatToRecord(picks({ kind: 'camera', camera: null }))).toBeNull();
+    expect(armOptions(picks({ kind: 'camera', camera: null }))).toBeNull();
+    // No screen, so no display is needed and none is named.
+    const yourself = picks({ kind: 'camera', display: null, camera: 'facetime', mic: 'usb', showCamera: true });
+    expect(armOptions(yourself)).toEqual({
+      what: { kind: 'camera' },
+      mic: 'usb',
+      camera: 'facetime',
+      cameraBubble: false,
+      mirrorCamera: true,
+    });
+  });
+
+  it('choosing_record_yourself_takes_the_camera_the_setup_offers', () => {
+    const setup = recorderSetup({ cameras: [device('facetime'), device('desk')] });
+    const camera = (over: Partial<Picks>, s = setup) => ({ ...picks(over), ...kindPicks(s, picks(over), 'camera') }).camera;
+    expect(camera({})).toBe('facetime');
+    expect(camera({}, { ...setup, camera: 'desk' })).toBe('desk');
+    // A camera that went is never offered; with none listed there is none to take.
+    expect(camera({}, { ...setup, camera: 'gone' })).toBe('facetime');
+    expect(camera({}, recorderSetup({ cameras: [] }))).toBeNull();
+  });
+
+  it('each_mode_keeps_its_own_camera', () => {
+    const setup = recorderSetup({ cameras: [device('facetime'), device('desk')] });
+    const to = (now: Picks, kind: Picks['kind']) => ({ ...now, ...kindPicks(setup, now, kind) });
+    // A screen take with no camera; Record yourself takes the camera offered, and the person picks another.
+    let now = to(picks(), 'camera');
+    expect(now.camera).toBe('facetime');
+    now = { ...now, camera: 'desk' };
+    // Back to the whole screen: no camera, as it had, so no bubble comes with it.
+    now = to(now, 'screen');
+    expect(now.camera).toBeNull();
+    expect(armOptions(now)).toMatchObject({ camera: null, cameraBubble: false });
+    // A camera chosen for the screen goes with it to one app, and comes back after Record yourself.
+    now = to({ ...now, camera: 'facetime' }, 'app');
+    expect(now.camera).toBe('facetime');
+    now = to(now, 'camera');
+    expect(now.camera).toBe('desk');
+    now = to(now, 'screen');
+    expect(now.camera).toBe('facetime');
+  });
 });
 
 describe('permissions', () => {
+  it('record_yourself_never_shows_the_screen_recording_step', () => {
+    for (const screen of ['notAsked', 'denied'] as const) {
+      const setup = recorderSetup({ permissions: { screen } });
+      expect(screenStep(setup, picks({ kind: 'camera', camera: 'facetime' }), false)).toBe(false);
+      expect(screenStep(setup, picks({ kind: 'camera', camera: 'facetime' }), true)).toBe(false);
+    }
+  });
+
   it('screen_step_shows_until_screen_recording_is_allowed', () => {
     const asked = recorderSetup({ permissions: { screen: 'notAsked' } });
     expect(screenStep(asked, picks(), false)).toBe(true);

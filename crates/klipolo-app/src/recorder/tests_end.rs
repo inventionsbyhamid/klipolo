@@ -370,6 +370,33 @@ fn a_take_the_worker_stopped_saving_lands_from_its_files_and_says_so() {
     assert!(rec.visible());
 }
 
+/// "Record yourself" whose worker stopped while saving: finished from its files and landed as camera footage, as any
+/// take is.
+#[test]
+fn a_record_yourself_take_the_worker_stopped_saving_lands_from_its_files() {
+    let sessions = Arc::new(Sessions::with_project());
+    let (rec, landed) = landing_in(&sessions);
+    let id = rec.arm(options_yourself()).unwrap().id;
+    rec.send(Command::Start).unwrap();
+    rec.launch.emit(state(Recording));
+    write_cut_off(&SessionDir::at(&rec.take_dir(&id)));
+    rec.send(Command::Stop).unwrap();
+    rec.launch.emit(state(Stopping));
+    rec.launch.exit(None);
+    rec.settle();
+    let finished = rec.finished();
+    assert!(finished.len() == 1 && finished[0].recover);
+    let import = landed.lock().unwrap()[0].clone().unwrap();
+    assert_eq!(
+        import.notes[0],
+        CodedError::new("capture.note.savedFromFiles")
+    );
+    let project = sessions.project();
+    assert_eq!(project.recordings.len(), 1);
+    assert!(project.recordings[0].camera_only());
+    assert_eq!(project.timeline.main.len(), 2);
+}
+
 /// A drive that stops answering while the take saves: the worker says so itself (`capture.error.driveStuck`) and ends,
 /// and the take is finished from its files and lands with no second note saying the same.
 #[test]

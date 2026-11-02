@@ -347,7 +347,8 @@ impl PreviewWorkers {
             );
             return Err(CodedError::new(code));
         }
-        if (want.thumbs || want.live.is_some()) && !screen {
+        let live_screen = (want.live.as_ref()).is_some_and(WhatToRecord::records_the_screen);
+        if (want.thumbs || live_screen) && !screen {
             tracing::info!(
                 permission = ?allowed.screen,
                 refused = run.screen_refused,
@@ -867,7 +868,7 @@ fn thumb_targets(devices: &Devices) -> Vec<(String, Target)> {
     });
     (screens.chain(apps))
         .take(MAX_THUMBS)
-        .map(|what| (card_key(&what), take_target(&what)))
+        .filter_map(|what| Some((card_key(&what), take_target(&what)?)))
         .collect()
 }
 
@@ -876,7 +877,7 @@ fn check_ids(want: &Previews) -> Result<(), CodedError> {
     let what = match &want.live {
         Some(WhatToRecord::Screen { display }) => [Some(display), None],
         Some(WhatToRecord::App { app_id, display }) => [Some(app_id), Some(display)],
-        None => [None, None],
+        Some(WhatToRecord::Camera) | None => [None, None],
     };
     let mut ids = (want.camera.iter().chain(&want.mic)).chain(what.into_iter().flatten());
     if ids.all(|id| is_os_id(id)) {

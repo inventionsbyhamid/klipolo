@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Estimate } from '../../bindings/Estimate';
 
-vi.mock('../../ai/aiStatus', async (real) => ({ ...(await real<object>()), refreshAiStatus: vi.fn() }));
+vi.mock('../../ai/aiStatus', async (real) => ({ ...(await real<object>()), creditMoved: vi.fn() }));
 vi.mock('../../bridge/analysis', () => ({
   analysisBridge: {
     estimate: vi.fn(),
@@ -13,7 +13,7 @@ vi.mock('../../bridge/analysis', () => ({
   },
 }));
 const { analysisBridge } = await import('../../bridge/analysis');
-const { refreshAiStatus, useAi } = await import('../../ai/aiStatus');
+const { creditMoved, useAi } = await import('../../ai/aiStatus');
 const {
   analyze,
   applyEvent,
@@ -137,10 +137,10 @@ describe('the store', () => {
 
   it('reads the credit again when a clip is done or failed (it was spent)', () => {
     applyEvent({ kind: 'progress', payload: { assetId: 'a', step: 'scenes', pct: 90 } });
-    expect(refreshAiStatus).not.toHaveBeenCalled();
+    expect(creditMoved).not.toHaveBeenCalled();
     applyEvent({ kind: 'done', payload: { assetId: 'a', approximate: false } });
     applyEvent({ kind: 'failed', payload: { assetId: 'b', reason: 'Meta is busy right now. Try again in a moment.' } });
-    expect(refreshAiStatus).toHaveBeenCalledTimes(2);
+    expect(creditMoved).toHaveBeenCalledTimes(2);
   });
 
   it('reads what Rust knows once, and an event that came meanwhile wins', async () => {
@@ -278,6 +278,12 @@ describe('the store', () => {
     ]);
     expect(whyNoWords({ mic: silent, mic2: silent }, ['mic', 'mic2'], takes)).toBe('noSpeechOne');
     expect(whyNoWords({ mic: silent, mic2: silent, b: silent }, ['mic', 'mic2', 'b'], takes)).toBe('noSpeechMany');
+    // A camera take: its silent camera (the footage) and its mic with no speech are one clip with none.
+    const camera = new Map([
+      ['mic', 'take'],
+      ['camera', 'take'],
+    ]);
+    expect(whyNoWords({ camera: silent, mic: silent }, ['camera', 'mic'], camera)).toBe('noSpeechOne');
   });
 
   it('retries a failed clip, and puts the offer off with Not now', async () => {

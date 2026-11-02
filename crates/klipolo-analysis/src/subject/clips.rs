@@ -5,7 +5,8 @@
 //!
 //! An imported video plays its file in its own time. A camera take (its camera the main footage) plays its camera
 //! run's file: a clip's source time is the take's, its file time the run's own (`SourceRun::local_us`), so its path is
-//! moved onto the take's clock. A screen or game take follows the cursor instead, and has no footage here.
+//! moved onto the take's clock; its voice is its mic's, lined up beside the camera's file (`camera_voice`). A screen or
+//! game take follows the cursor instead, and has no footage here.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -17,13 +18,14 @@ use klipolo_model::framing::effective_framing;
 use klipolo_model::ids::Id;
 use klipolo_model::layout::BoxN;
 use klipolo_model::ops::{ClipPatch, Op};
-use klipolo_model::project::{AssetKind, FormatKind, Project};
+use klipolo_model::project::{AssetKind, FormatKind, Project, SourceRun};
+use klipolo_model::speech::voice_runs;
 use klipolo_model::time::{RangeUs, Us};
 use klipolo_model::timeline::{Clip, ClipSource, FramingMode};
 
 use super::SubjectTrack;
 use super::path::{PathInput, focus_path, people_in, shots};
-use super::voices::{self, VoiceTurn, Window};
+use super::voices::{self, SoundBeside, VoiceTurn, Window};
 use crate::providers::{Heard, TrackedBox, TrackedFrame};
 
 /// A Fill crop at least this share of the picture on both sides crops nothing.
@@ -48,7 +50,8 @@ impl Footage {
 }
 
 /// `clip`'s footage: an imported video's stretch, or a camera take's camera run's (the run playing at the clip's start,
-/// cut to its end). None for a screen or game take, a picture, or a take with no camera run there.
+/// else the first that starts inside the clip, as a camera whose first frame came a frame after the take's start;
+/// cut to the clip's end). None for a screen or game take, a picture, or a take with no camera run there.
 pub fn footage(p: &Project, clip: &Clip) -> Option<Footage> {
     let (asset_id, range, shift_us) = match &clip.source {
         ClipSource::Asset { id } => (
@@ -62,14 +65,21 @@ pub fn footage(p: &Project, clip: &Clip) -> Option<Footage> {
         ClipSource::Recording { id } => {
             let rec = p.recording(id).filter(|r| r.camera_only())?;
             let source = rec.primary_source()?;
-            let (run, start) = source.run_at(clip.source_in_us)?;
-            let (_, run_end) = run.rec_span(source.nudge_us);
-            let end = run.local_us(clip.source_out_us.min(run_end), source.nudge_us);
-            (
-                run.asset_id.clone(),
-                RangeUs { start, end },
-                clip.source_in_us - start,
-            )
+            let nudge = source.nudge_us;
+            let (run, start, shift) = match source.run_at(clip.source_in_us) {
+                Some((run, start)) => (run, start, clip.source_in_us - start),
+                None => {
+                    let within = |r: &&SourceRun| {
+                        (clip.source_in_us..clip.source_out_us).contains(&r.rec_span(nudge).0)
+                    };
+                    let run = source.runs.iter().find(within)?;
+                    let start = run.file_in_us;
+                    (run, start, run.rec_of(start, nudge) - start)
+                }
+            };
+            let (_, run_end) = run.rec_span(nudge);
+            let end = run.local_us(clip.source_out_us.min(run_end), nudge);
+            (run.asset_id.clone(), RangeUs { start, end }, shift)
         }
     };
     let asset = p.asset(&asset_id).filter(|a| a.kind == AssetKind::Video)?;
@@ -79,6 +89,39 @@ pub fn footage(p: &Project, clip: &Clip) -> Option<Footage> {
         range,
         shift_us,
     })
+}
+
+/// The sound a camera take's camera file `asset_id` plays beside: each run of the take's voice (its mic, as the
+/// captions read it: `speech::voice_runs`) where it plays beside one of the camera's runs, lined up on the take's clock.
+/// None for any other file, or a camera whose own file carries the voice.
+pub fn camera_voice(p: &Project, asset_id: &str) -> Vec<SoundBeside> {
+    let mut out = Vec::new();
+    for r in p.recordings.iter().filter(|r| r.camera_only()) {
+        let Some(camera) = r.primary_source() else {
+            continue;
+        };
+        for run in camera.runs.iter().filter(|run| run.asset_id == asset_id) {
+            let (from, to) = run.rec_span(camera.nudge_us);
+            let whole = Clip::new(ClipSource::Recording { id: r.id.clone() }, from, to);
+            for voice in voice_runs(p, &whole) {
+                let Some(file) = p.asset(&voice.asset).filter(|_| voice.asset != asset_id) else {
+                    continue;
+                };
+                let at = |rec| run.local_us(rec, camera.nudge_us);
+                let start = at(voice.rec_from);
+                out.push(SoundBeside {
+                    asset_id: voice.asset.clone(),
+                    path: PathBuf::from(&file.path),
+                    span: RangeUs {
+                        start,
+                        end: at(voice.rec_to),
+                    },
+                    lead_us: start - voice.local_us(voice.rec_from),
+                });
+            }
+        }
+    }
+    out
 }
 
 /// Which of `formats` crop `clip`'s footage when it fills them: where its Fill crop is narrower or shorter than the
