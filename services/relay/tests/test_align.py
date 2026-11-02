@@ -108,6 +108,16 @@ def test_turn_with_more_letters_than_its_audio_can_hold_is_skipped():
     assert align.MAX_LETTERS_PER_FRAME == 0.6
 
 
+def test_text_far_longer_than_its_audio_can_hold_is_skipped_before_it_is_normalized(monkeypatch):
+    normalized = []
+    monkeypatch.setattr(align, "normalize", lambda text: normalized.append(text) or [])
+    # A 1 s turn is a 1.5 s slice: 74 frames, room for 2.4 x 74 = 177.6 characters of raw text.
+    assert align.MAX_CHARACTERS_PER_FRAME * emission_frames(seconds(1.5)) == pytest.approx(177.6)
+    _, skipped = plan([Turn(2000, 3000, "न" * 177), Turn(2000, 3000, "न" * 178), Turn(0, 1000, "न" * 100_000)], seconds(10))
+    assert [(s.turn, s.reason) for s in skipped] == [(0, NOTHING_TO_ALIGN), (1, TOO_SHORT), (2, TOO_SHORT)]
+    assert normalized == ["न" * 177]
+
+
 def test_repeated_letters_need_a_frame_between_them():
     # "aa" needs 3 frames (a, blank, a); "ab" needs 2.
     assert align.frames_needed(["aa"]) == 3
