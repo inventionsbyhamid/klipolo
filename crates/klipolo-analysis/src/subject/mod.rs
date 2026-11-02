@@ -119,6 +119,21 @@ pub trait SubjectCopy: Send + Sync {
     ) -> Result<(), VideoError> {
         self.copy(src, range, fps, out, cancel).map(|_| ())
     }
+
+    /// [`Self::copy_with_sound`] with `sound`'s file heard instead of `src`'s own, lined up with the picture (a
+    /// camera take's mic beside its camera). Blocking; `cancel` stops it. A copy without sound by default.
+    fn copy_with_sound_beside(
+        &self,
+        src: &Path,
+        sound: &voices::SoundBeside,
+        range: RangeUs,
+        fps: f64,
+        out: &Path,
+        cancel: &AtomicBool,
+    ) -> Result<(), VideoError> {
+        let _ = sound;
+        self.copy(src, range, fps, out, cancel).map(|_| ())
+    }
 }
 
 /// The engine's small copy, with no sound, its cut finder watching every source frame.
@@ -144,12 +159,7 @@ impl SubjectCopy for EngineCopy {
             ),
         };
         let mut finder = Finder::new();
-        small_copy::write(src, out, &spec, cancel, Some(&mut finder)).map_err(|e| match e {
-            SmallCopyError::NoVideo => VideoError::NoVideo,
-            SmallCopyError::NoEncoder => VideoError::NoEncoder,
-            SmallCopyError::Stopped => VideoError::Stopped,
-            SmallCopyError::Failed(e) => VideoError::Failed(e),
-        })?;
+        small_copy::write(src, out, &spec, cancel, Some(&mut finder)).map_err(video_error)?;
         Ok(finder.finish())
     }
 
@@ -162,24 +172,48 @@ impl SubjectCopy for EngineCopy {
         out: &Path,
         cancel: &AtomicBool,
     ) -> Result<(), VideoError> {
-        let spec = SmallCopy {
-            range,
-            fit: proxy::FIT,
-            max_fps: fps,
-            video_bps: proxy::VIDEO_BPS,
-            audio_bps: proxy::AUDIO_BPS,
-            threads: small_copy::background_threads(
-                std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get),
-            ),
-        };
-        small_copy::write(src, out, &spec, cancel, None)
+        small_copy::write(src, out, &heard_copy(range, fps), cancel, None)
             .map(|_| ())
-            .map_err(|e| match e {
-                SmallCopyError::NoVideo => VideoError::NoVideo,
-                SmallCopyError::NoEncoder => VideoError::NoEncoder,
-                SmallCopyError::Stopped => VideoError::Stopped,
-                SmallCopyError::Failed(e) => VideoError::Failed(e),
-            })
+            .map_err(video_error)
+    }
+
+    /// The same copy with `sound`'s file heard, lined up by its lead.
+    fn copy_with_sound_beside(
+        &self,
+        src: &Path,
+        sound: &voices::SoundBeside,
+        range: RangeUs,
+        fps: f64,
+        out: &Path,
+        cancel: &AtomicBool,
+    ) -> Result<(), VideoError> {
+        let beside = (sound.path.as_path(), sound.lead_us);
+        small_copy::write_beside(src, beside, out, &heard_copy(range, fps), cancel)
+            .map(|_| ())
+            .map_err(video_error)
+    }
+}
+
+/// The small copy a model watches and hears: 640 × 360, the scene log's bitrates, sound in AAC.
+fn heard_copy(range: RangeUs, fps: f64) -> SmallCopy {
+    SmallCopy {
+        range,
+        fit: proxy::FIT,
+        max_fps: fps,
+        video_bps: proxy::VIDEO_BPS,
+        audio_bps: proxy::AUDIO_BPS,
+        threads: small_copy::background_threads(
+            std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get),
+        ),
+    }
+}
+
+fn video_error(e: SmallCopyError) -> VideoError {
+    match e {
+        SmallCopyError::NoVideo => VideoError::NoVideo,
+        SmallCopyError::NoEncoder => VideoError::NoEncoder,
+        SmallCopyError::Stopped => VideoError::Stopped,
+        SmallCopyError::Failed(e) => VideoError::Failed(e),
     }
 }
 

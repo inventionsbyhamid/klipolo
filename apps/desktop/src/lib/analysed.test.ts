@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Project } from '../bindings/Project';
 import { fixtureProject } from '../test/fixtures';
-import { analysable, cameraFootage, recordingOf, voiceOf, wordsOnly } from './analysed';
+import { analysable, cameraFootage, recordingOf, takeOf, takes, voiceOf, wordsOnly } from './analysed';
 
 const S = 1_000_000;
 
@@ -102,6 +102,13 @@ describe('what analysis offers', () => {
     expect(cameraFootage(project, 'camera')).toBe(true);
     expect(wordsOnly(project, 'camera')).toBe(false);
     expect(wordsOnly(project, 'mic')).toBe(true);
+    // Its words and its scene log are one take's: one clip, one row, named as its clip.
+    expect([...takes(project)]).toEqual([
+      ['mic', 'rec'],
+      ['camera', 'rec'],
+    ]);
+    expect(takeOf(project, 'camera')).toBe('rec');
+    expect(takeOf(project, 'broll')).toBeNull();
     // A screen take's camera is a bubble: heard for words only, never offered alone.
     expect(cameraFootage(fixtureProject(), 'camera')).toBe(false);
     expect(wordsOnly(fixtureProject(), 'camera')).toBe(true);

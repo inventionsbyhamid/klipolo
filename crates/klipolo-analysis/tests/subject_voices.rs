@@ -276,6 +276,7 @@ fn asking(s: &Setup) -> Asking<'_> {
         cache: Some(&s.cache),
         work: &s.work,
         cancel: Arc::new(AtomicBool::new(false)),
+        sound: &[],
     }
 }
 

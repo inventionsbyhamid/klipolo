@@ -99,6 +99,7 @@ describe('opening', () => {
       camera: null,
       showCamera: true,
       mirror: true,
+      cameras: { screen: null, yourself: null },
     });
     // Opening reads the setup: it arms, asks and captures nothing.
     expect(fake.calls).toEqual(['setup']);

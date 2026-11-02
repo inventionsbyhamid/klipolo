@@ -8,6 +8,8 @@
 //!   each part's "A" apart.
 //! - **The question** (`VoiceMatcher`): a window copied small with its sound (`SubjectCopy::copy_with_sound`) and the
 //!   people on screen, numbered from the left with their boxes; the answer is a person, nobody on screen, or unclear.
+//!   A camera take's camera has no sound of its own: its windows carry its mic's, lined up on the take's clock
+//!   (`SoundBeside`, `SubjectCopy::copy_with_sound_beside`), and its voices are the mic's (`turns_beside`).
 //! - **The vote** (`vote`): what most of a voice's windows said; a tie says nothing. Windows are asked in turn and
 //!   stop once two agree.
 //! - **The price** comes first: `uncached_usd` for windows known (the tracking is cached), `most_usd` before anything
@@ -17,11 +19,12 @@
 //!   again. `cached_voices` settles voices from it alone, never asking.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use klipolo_model::fill_focus::Voice;
+use klipolo_model::ids::Id;
 use klipolo_model::layout::BoxN;
 use klipolo_model::time::{RangeUs, Us};
 use serde::{Deserialize, Serialize};
@@ -47,6 +50,39 @@ pub struct VoiceTurn {
     pub start_us: Us,
     pub end_us: Us,
     pub voice: Voice,
+}
+
+/// Another file's sound lined up with a file's picture: a camera take's mic beside its camera. Over the picture's
+/// `span` (its file clock), the sound file's own time plus `lead_us` is the picture's time.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SoundBeside {
+    pub asset_id: Id,
+    pub path: PathBuf,
+    pub span: RangeUs,
+    pub lead_us: Us,
+}
+
+/// The voices of `beside`'s sound files (`turns_of` gives each file's, in its sound time) on the picture's clock, each
+/// cut to where its file plays beside the picture.
+pub fn turns_beside(
+    beside: &[SoundBeside],
+    turns_of: impl Fn(&str) -> Vec<VoiceTurn>,
+) -> Vec<VoiceTurn> {
+    let mut out = Vec::new();
+    for b in beside {
+        for t in turns_of(&b.asset_id) {
+            let start_us = (t.start_us + b.lead_us).max(b.span.start);
+            let end_us = (t.end_us + b.lead_us).min(b.span.end);
+            if end_us > start_us {
+                out.push(VoiceTurn {
+                    start_us,
+                    end_us,
+                    voice: t.voice,
+                });
+            }
+        }
+    }
+    out
 }
 
 /// A stretch of a file to ask about: `voice` alone, on the file's clock, and the people on screen left to right.
@@ -99,6 +135,8 @@ pub struct Asking<'a> {
     /// Where the copies are made (each removed once sent).
     pub work: &'a Path,
     pub cancel: Arc<AtomicBool>,
+    /// The sound beside the file's picture (a camera take's mic); empty: the file's own sound.
+    pub sound: &'a [SoundBeside],
 }
 
 /// The windows to ask about in `range` of a file (its clock), from its tracked `frames` and `cuts` there and its
@@ -404,7 +442,8 @@ pub async fn match_voices(
     matched
 }
 
-/// One window copied small with its sound and asked about; the copy is removed once sent.
+/// One window copied small with its sound (the sound beside the picture that plays where the window starts, else the
+/// file's own) and asked about; the copy is removed once sent.
 async fn ask(
     matcher: &dyn VoiceMatcher,
     copier: Arc<dyn SubjectCopy>,
@@ -421,8 +460,12 @@ async fn ask(
             window.range,
             asking.cancel.clone(),
         );
-        tokio::task::spawn_blocking(move || {
-            copier.copy_with_sound(&src, range, FPS, &out, &cancel)
+        let beside = (asking.sound.iter())
+            .find(|b| (b.span.start..b.span.end).contains(&range.start))
+            .cloned();
+        tokio::task::spawn_blocking(move || match &beside {
+            Some(sound) => copier.copy_with_sound_beside(&src, sound, range, FPS, &out, &cancel),
+            None => copier.copy_with_sound(&src, range, FPS, &out, &cancel),
         })
         .await
         .map_err(|e| VideoError::Failed(format!("copy: {e}")))??;

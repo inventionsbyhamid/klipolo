@@ -4,7 +4,7 @@ import type { AssetState } from '../bindings/AssetState';
 import type { Estimate } from '../bindings/Estimate';
 import { creditMoved, useAi } from '../ai/aiStatus';
 import { analysisBridge, type AnalysisEvent, type UnlistenFn } from '../bridge/analysis';
-import { analysable, voices } from '../lib/analysed';
+import { analysable, takes } from '../lib/analysed';
 import { useProject } from './project';
 
 interface AnalysisStore {
@@ -228,11 +228,11 @@ export function offerAgainOnAiModeChange(): () => void {
 const NO_TAKES: ReadonlyMap<string, string> = new Map();
 
 /**
- * The open project's take voice files, each by the recording it is the voice of (`voices`): a take's files count as
- * one clip. The same map until they change.
+ * The open project's takes' analysed files (their voice, and a camera take's footage), each by its recording
+ * (`takes`): a take's files count as one clip. The same map until they change.
  */
 export function useTakes(): ReadonlyMap<string, string> {
-  return useProject((s) => (s.snapshot ? voices(s.snapshot.project) : NO_TAKES));
+  return useProject((s) => (s.snapshot ? takes(s.snapshot.project) : NO_TAKES));
 }
 
 /**
