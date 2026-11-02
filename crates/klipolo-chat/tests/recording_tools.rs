@@ -1283,6 +1283,72 @@ fn the_context_numbers_several_mics_and_names_a_camera_only_take() {
     );
 }
 
+/// Recording 2 as "Record yourself" made it: its camera (1 s into the take) and mic, no screen.
+fn camera_take() -> Project {
+    let mut p = two_takes();
+    let rec = &mut p.recordings[1];
+    rec.sources.retain(|s| s.role != SourceRole::Screen);
+    (rec.kind, rec.primary) = (RecordingKind::Camera, "camera".into());
+    rec.sources[0].runs[0].offset_us = secs(1.0);
+    p
+}
+
+/// The context's Scenes section for `p` with these scene logs, by file.
+fn scenes_of(p: &Project, scenes: &HashMap<String, klipolo_chat::context::SceneLog>) -> String {
+    let ctx = build_context(
+        p,
+        &Default::default(),
+        &HashMap::new(),
+        scenes,
+        &View::default(),
+        &Default::default(),
+    );
+    let at = ctx.text.find("## Scenes").expect("a Scenes section");
+    let rest = &ctx.text[at..];
+    rest[..rest[1..].find("\n## ").map_or(rest.len(), |end| end + 1)].to_owned()
+}
+
+/// A camera take is camera footage: its line says so, and its camera is watched, its scene log read through the take's
+/// clock as an imported video's is through its own.
+#[test]
+fn a_camera_take_s_clip_reads_as_camera_footage_with_its_scenes() {
+    let p = camera_take();
+    assert_eq!(
+        clip_lines(&p)[2],
+        "c3 40.0-60.0 Recording 2 (camera only, mirrored; sounds mic)"
+    );
+    // Not watched yet: said, as for an imported video. A screen take's clip never is.
+    assert_eq!(
+        scenes_of(&p, &HashMap::new()),
+        "## Scenes\nNo scene log yet: c2, c3.\n"
+    );
+    let entry = klipolo_chat::context::SceneEntry {
+        start_us: secs(5.0),
+        end_us: secs(8.0),
+        kind: "gesture".into(),
+        who: "host".into(),
+        text: "Waves".into(),
+        on_screen_text: None,
+    };
+    let log = klipolo_chat::context::SceneLog {
+        items: vec![entry],
+    };
+    let scenes = HashMap::from([
+        ("cam2".to_owned(), log.clone()),
+        ("broll".to_owned(), Default::default()),
+    ]);
+    // 5 s into the camera's file is 6 s into the take, and c3 starts at 40 s: 46.0 to 49.0.
+    let said = scenes_of(&p, &scenes);
+    assert!(
+        said.contains("[46.0-49.0] gesture (host): Waves"),
+        "{said}"
+    );
+    // A screen take's camera is a bubble, never watched: its log is not its clip's.
+    let screen_take = two_takes();
+    let scenes = HashMap::from([("cam2".to_owned(), log), ("broll".to_owned(), Default::default())]);
+    assert!(!scenes_of(&screen_take, &scenes).contains("Waves"));
+}
+
 // ---- The prompt.
 
 #[test]

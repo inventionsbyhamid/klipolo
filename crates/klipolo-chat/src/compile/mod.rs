@@ -1392,9 +1392,9 @@ impl Compiler<'_> {
 
     /// The person's refusal when `call` needs an analysis some clip on the main track lacks: its voice files' words for
     /// removing fillers and pauses (a scene log still being made doesn't hold them up), and its picture's scene log too
-    /// for finding moments (a video imported on its own: a take's files are never watched). Not started anywhere wins
-    /// over still being made, since analyzing is something the person can do, and words still to come over a scene
-    /// log; the refusal names the first clip it is about.
+    /// for finding moments (a video imported on its own, or a camera take's camera: a screen take's files are never
+    /// watched). Not started anywhere wins over still being made, since analyzing is something the person can do, and
+    /// words still to come over a scene log; the refusal names the first clip it is about.
     fn missing_analysis(&self, call: &ToolCall) -> Option<Refused> {
         let pictures = match call {
             ToolCall::RemoveFillers | ToolCall::RemoveSilences { .. } => false,
@@ -1425,6 +1425,13 @@ impl Compiler<'_> {
                 && !klipolo_model::analysed::words_only(p, id)
             {
                 files.push(id.as_str());
+            }
+            // A camera take's camera is its footage, watched as imported footage is.
+            if pictures {
+                files.extend(
+                    (klipolo_model::analysed::camera_footage(p, clip).iter())
+                        .map(|f| f.asset_id().as_str()),
+                );
             }
             for file in files {
                 match state(file) {
