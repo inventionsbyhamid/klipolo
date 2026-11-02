@@ -7,7 +7,7 @@ The relay lets people with an access code use Meta's models in Klipolo without t
 | Route | What it does |
 | --- | --- |
 | `GET /healthz` | `{"ok": true}` |
-| `POST /v1/devices` | Registers a device, with or without an access code. Returns a bearer token. |
+| `POST /v1/devices` | Registers a device, with or without an access code. Returns a bearer token. A code at its device limit takes no new devices (402 `budget`, "Klipolo's shared AI credit is used up for now."), but its own devices may register again. |
 | `GET /v1/devices/me` | Whether relay AI is on, the budget and the spend. |
 | `POST /meta/v1/responses`, `POST /meta/v1/asr/transcribe`, `POST /meta/v1/images/generations`, `POST /meta/v1/files`, `GET` and `DELETE /meta/v1/files/{id}` | Forwarded to Meta for devices with an active code, and charged against the caps. |
 | `POST /meta/v1/sam/videos` | A video for SAM, sent as its raw bytes (at most 64 MB, one a device at a time): the relay decodes it with ffmpeg and writes its own copy (one video track, 2 frames a second, its long side at most 640, no sound, at most 10 minutes), uploads that to Meta and answers with Meta's file. SAM takes only videos made this way, and the relay reserves their frames. ffmpeg reads only MOV/MP4 from a file, on two threads, pictures up to 4K, under a 1.5 GB memory limit at a lower priority; two copies are made at once, a third waits at most 10 s (then 429), and each has 60 s. |
@@ -23,7 +23,7 @@ What Klipolo, or any other client, must do to use the relay well:
 - **429 is retryable, 402 is final.** On 429, wait for `Retry-After` and try again. A 402 `budget` stays until the device or the relay has credit again; the message says which, and the app should offer the user's own Meta key.
   - 402 "This device has used its Klipolo credit." The device's spend reached its cap.
   - 402 "This device does not have enough Klipolo credit left for this request." The device has some credit, but less than this call could cost. A smaller call may still fit.
-  - 402 "Klipolo's shared AI credit is used up for now." The relay's overall cap is reached.
+  - 402 "Klipolo's shared AI credit is used up for now." The relay's overall cap is reached, or the access code's cap: what all the code's devices spent together.
   - 429 "Other AI requests from this device are still running." Its other calls in flight hold the room until they finish. `Retry-After: 5`.
   - 429 "Klipolo AI is busy." Calls in flight from other devices hold the shared room. `Retry-After: 5`.
   - Other 429 `busy`: the device already has 4 proxied calls (or 2 alignments) in flight, or the relay has 32 proxied calls (or 8 alignments). `Retry-After` is 1 s for proxied calls and 30 s for alignment.
@@ -152,6 +152,7 @@ C=$(docker ps --filter name=^klipolo-relay- --format '{{.Names}}')
 docker exec $C python -m relay.admin add-code <code> --note "who it is for"
 docker exec $C python -m relay.admin deactivate-code <code>
 docker exec $C python -m relay.admin enable-sam <code>
+docker exec $C python -m relay.admin set-code-cap <code> --usd 30 --devices 25
 docker exec $C python -m relay.admin list-codes
 docker exec $C python -m relay.admin spend
 ```
@@ -159,6 +160,8 @@ docker exec $C python -m relay.admin spend
 - `add-code` also reactivates a code that was turned off.
 - `deactivate-code` stops relay AI at once for every device that registered with the code.
 - `enable-sam` turns video tracking back on for a code the relay turned it off for (Meta billed more frames than it reserved: look at the log first).
+- `set-code-cap` limits one code, on top of the per-device and overall caps: `--usd` is the most all its devices may spend together, all time, and `--devices` how many devices may register with it, counting every device that ever did. Give either or both; `none` removes a limit. A new code has neither, so nothing changes until you set them. Give a code that many people share (judges, a class) both: without them, anyone with the code can register new devices, $2 each, until the overall cap is gone for everyone.
+- `list-codes` shows each code's devices (with its limit, as `3/25`), what was charged under it and its cap.
 - `spend` shows the total, the spend per device and the last 20 charges.
 
 Codes are case-sensitive. Make them hard to guess: at least 12 random lowercase letters and digits.
@@ -169,12 +172,14 @@ Codes are case-sensitive. Make them hard to guess: at least 12 random lowercase 
 
 ## Data
 
-The SQLite database is `/data/relay.db` in the service's volume, which ends in `_klipolo-relay-data`. It holds codes, devices (token hashes only) and one ledger row per charged call. Nothing from requests or audio is kept. To copy it while the relay runs:
+The SQLite database is `/data/relay.db` in the service's volume, which ends in `_klipolo-relay-data`. It holds codes (with their limits), devices (token hashes only), which devices registered with which code, and one ledger row per charged call, with the code it was charged under. Nothing from requests or audio is kept. To copy it while the relay runs:
 
 ```sh
 docker exec $C python -c "import sqlite3; sqlite3.connect('/data/relay.db').backup(sqlite3.connect('/data/backup.db'))"
 docker cp $C:/data/backup.db relay-backup.db && docker exec $C rm /data/backup.db
 ```
+
+The relay moves the database to its current schema when it opens it, in one transaction. Schema 3 adds the per-code limits: two columns on codes (no limits), the code on each ledger row (filled in for earlier rows from their device's code) and the table of devices registered with each code (filled in from the devices on each code). It only adds, so an earlier relay still runs on it; charges and registrations it makes meanwhile don't count toward a code's limits.
 
 ## Limits to know
 
