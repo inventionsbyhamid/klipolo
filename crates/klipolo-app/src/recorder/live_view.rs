@@ -16,16 +16,18 @@ use super::config::take_target;
 use super::previews::Wanted;
 use super::types::WhatToRecord;
 
-/// The card a choice is shown on, as a frame's `key` names it: `display:<display id>` or `app:<app id>`.
+/// The card a choice is shown on, as a frame's `key` names it: `display:<display id>` or `app:<app id>`. The camera
+/// alone has no card (its picture is the camera's own preview).
 pub(super) fn card_key(what: &WhatToRecord) -> String {
     match what {
         WhatToRecord::Screen { display } => format!("display:{display}"),
         WhatToRecord::App { app_id, .. } => format!("app:{app_id}"),
+        WhatToRecord::Camera => "camera".into(),
     }
 }
 
 /// The live picture of `what` for a box of `pixels` (None: the small picture). Its worker's arguments are the target
-/// as JSON, then the box's size as JSON when there is one.
+/// as JSON, then the box's size as JSON when there is one. None for the camera alone: no screen to show.
 pub(super) fn live_wanted(
     what: Option<&WhatToRecord>,
     pixels: Option<ViewPixels>,
@@ -36,7 +38,7 @@ pub(super) fn live_wanted(
             .inspect_err(|error| tracing::warn!(%error, "recorder: the live picture's arguments"))
             .ok()
     };
-    let target = json(serde_json::to_string(&take_target(what)))?;
+    let target = json(serde_json::to_string(&take_target(what)?))?;
     let mut args = vec![
         "--record-worker".into(),
         "--live-view".into(),

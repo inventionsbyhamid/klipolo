@@ -71,7 +71,8 @@ export function notesBefore(setup: RecorderSetup, picks: Picks): CodedError[] {
  * starts the take at once, so the person reads this here, before Record.
  */
 export function cameraNote(setup: RecorderSetup, picks: Picks): CodedError | null {
-  if (picks.camera === null) return null;
+  // The camera alone shares its encoder with no screen.
+  if (picks.camera === null || picks.kind === 'camera') return null;
   const listed = setup.displays.find((d) => d.display === picks.display) ?? setup.displays[0];
   const fit = listed ? (listed.withCamera ?? listed.noCamera) : { choices: setup.choices, offers: setup.offers };
   const offer = fit.offers.find((o) => o.bestNative) ?? fit.offers[0];
@@ -81,6 +82,9 @@ export function cameraNote(setup: RecorderSetup, picks: Picks): CodedError | nul
 /** The setup lists no screen: there is nothing to choose, and a new reading may find one. */
 export const NO_SCREEN = 'Klipolo found no screen to record. Close Record and open it again.';
 
+/** "Record yourself" with no camera listed: a new reading may find one. */
+export const NO_CAMERA = 'Klipolo found no camera. Connect one, then close Record and open it again.';
+
 /** Why Record can't start yet, as the dialog says it; null when it can. */
 export type NotReady =
   /** A take runs: it stops from the recorder's own item. */
@@ -89,12 +93,14 @@ export type NotReady =
   | { why: 'note'; text: string }
   /** The Screen Recording step shows: a press on Record goes to its button. */
   | { why: 'screen'; text: string }
-  | { why: 'choose'; text: string };
+  | { why: 'choose'; text: string }
+  /** "Record yourself" with "No camera": a press on Record goes to the camera's select. */
+  | { why: 'camera'; text: string };
 
 /**
  * Record's reason to wait, first first: a take already runs (or the dialog's last take, `lastTake`, is still the
- * app's), the setup's own block, Screen Recording not allowed yet, then nothing chosen to record. The store arms
- * nothing in these cases either; this says why.
+ * app's), the setup's own block, Screen Recording not allowed yet (never for "Record yourself"), then nothing chosen to
+ * record (no camera for "Record yourself"). The store arms nothing in these cases either; this says why.
  */
 export function notReady(
   setup: RecorderSetup,
@@ -108,6 +114,10 @@ export function notReady(
   if (block) return { why: 'note', text: codedMessage(block) };
   if (!setup.caps.osSupported) return { why: 'note', text: codedMessage(coded('capture.error.unsupported')) };
   if (screenStep(setup, picks, screenRefused)) return { why: 'screen', text: 'Allow screen recording first' };
+  if (picks.kind === 'camera') {
+    if (picks.camera !== null) return null;
+    return { why: 'camera', text: setup.devices.cameras.length > 0 ? 'Choose a camera first' : NO_CAMERA };
+  }
   if (picks.display === null) return { why: 'choose', text: NO_SCREEN };
   if (picks.kind === 'app' && picks.appId === null) return { why: 'choose', text: 'Choose an app first' };
   return null;

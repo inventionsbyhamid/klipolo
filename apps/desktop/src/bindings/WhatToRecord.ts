@@ -3,4 +3,4 @@
 /**
  * The Record dialog's "What to record". Ids are the ones `RecorderSetup.devices` lists.
  */
-export type WhatToRecord = { "kind": "screen", display: string, } | { "kind": "app", appId: string, display: string, };
+export type WhatToRecord = { "kind": "screen", display: string, } | { "kind": "app", appId: string, display: string, } | { "kind": "camera" };

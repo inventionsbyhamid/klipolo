@@ -139,6 +139,22 @@ describe('a recording in the Library', () => {
     expect(within(broll).getByRole('button', { name: 'Favorite broll.mp4' })).toBeInTheDocument();
   });
 
+  it('a_record_yourself_take_is_one_row_of_camera_and_mic', () => {
+    const [take] = useProject.getState().snapshot!.project.recordings;
+    const yourself = {
+      ...take,
+      kind: 'camera' as const,
+      primary: 'camera',
+      sources: take.sources.filter((s) => s.role !== 'screen'),
+    };
+    const rows = recordingRows({
+      recordings: [take, { ...take, id: 'rec-2' }, { ...yourself, id: 'rec-3' }],
+    });
+    expect(rows[2]).toEqual({ id: 'rec-3', name: 'Recording 3', durationUs: 60_000_000, meta: '1:00, camera and mic' });
+    // Its camera and mic are the take's own files: none is a row of its own.
+    expect(recordingFiles({ recordings: [yourself] })).toEqual(new Set(['camera', 'mic']));
+  });
+
   it('a game take’s row names its game where a screen take names its screen', () => {
     const [take] = useProject.getState().snapshot!.project.recordings;
     const asGame = (id: string, keep: (role: string) => boolean) => ({

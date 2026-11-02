@@ -4,7 +4,7 @@ use klipolo_capture::backend::{EncoderResult, PresetId, ProbeReport};
 use klipolo_capture::games::{AppFacts, looks_like_game};
 use klipolo_capture::media::Codec;
 use klipolo_capture::preset::{native_preset, preset};
-use klipolo_capture::probe::{Choices, decide};
+use klipolo_capture::probe::{CameraChoice, Choices, camera_alone, decide};
 use klipolo_capture::profile::GameProfile;
 
 fn enc(id: &str, codec: Codec, dedicated: bool, p1080: f32, flat_1440: f32) -> EncoderResult {
@@ -242,4 +242,48 @@ fn a_new_game_profile_records_at_what_suits_this_computer() {
     // None is "Best for this computer": the probe's choice, never a fixed Smooth an older Mac can't hold.
     let json = serde_json::to_value(GameProfile::default()).unwrap();
     assert_eq!(json["preset"], serde_json::Value::Null);
+}
+
+/// "Record yourself" records the camera alone, so nothing shares its encoder: 1080p30 wherever an encoder holds it
+/// (this Mac's Intel GPU does, though it is shared with nothing), 720p30 on one that can't, H.264 and a dedicated engine
+/// first, and nothing without a hardware encoder.
+#[test]
+fn the_camera_alone_records_at_1080p30_where_an_encoder_holds_it() {
+    let pick = |preset, e: &EncoderResult| {
+        Some(CameraChoice {
+            preset,
+            codec: e.codec,
+            encoder: e.id.clone(),
+        })
+    };
+    let gva = enc("h264.gva", Codec::H264, false, 60.0, 67.0);
+    assert_eq!(
+        camera_alone(&report(vec![gva.clone()])),
+        pick(PresetId::Camera1080, &gva)
+    );
+    let hevc = enc("hevc.ave", Codec::Hevc, true, 60.0, 90.0);
+    let engine = enc("h264.engine", Codec::H264, true, 60.0, 90.0);
+    let both = report(vec![hevc.clone(), gva.clone(), engine.clone()]);
+    assert_eq!(camera_alone(&both), pick(PresetId::Camera1080, &engine));
+    assert_eq!(
+        camera_alone(&report(vec![hevc.clone()])),
+        pick(PresetId::Camera1080, &hevc),
+        "an HEVC-only computer records the camera in HEVC"
+    );
+    // 20 fps of 1080p is 41 million pixels a second: 1080p30 needs 65, 720p30 29.
+    let slow = enc("h264.slow", Codec::H264, false, 20.0, 10.0);
+    assert_eq!(
+        camera_alone(&report(vec![slow.clone()])),
+        pick(PresetId::Camera720, &slow)
+    );
+    // One the probe saw refuse is still tried, at 720p.
+    let refused = enc("h264.refused", Codec::H264, false, 0.0, 0.0);
+    assert_eq!(
+        camera_alone(&report(vec![refused.clone()])),
+        pick(PresetId::Camera720, &refused)
+    );
+    let mut software = gva.clone();
+    software.hardware = false;
+    assert_eq!(camera_alone(&report(vec![software])), None);
+    assert_eq!(camera_alone(&report(vec![])), None);
 }

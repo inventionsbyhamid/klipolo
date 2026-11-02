@@ -17,7 +17,7 @@ use klipolo_model::framing::effective_framing;
 use klipolo_model::ids::Id;
 use klipolo_model::layout::BoxN;
 use klipolo_model::ops::{ClipPatch, Op};
-use klipolo_model::project::{AssetKind, FormatKind, Project};
+use klipolo_model::project::{AssetKind, FormatKind, Project, SourceRun};
 use klipolo_model::time::{RangeUs, Us};
 use klipolo_model::timeline::{Clip, ClipSource, FramingMode};
 
@@ -48,7 +48,8 @@ impl Footage {
 }
 
 /// `clip`'s footage: an imported video's stretch, or a camera take's camera run's (the run playing at the clip's start,
-/// cut to its end). None for a screen or game take, a picture, or a take with no camera run there.
+/// else the first that starts inside the clip, as a camera whose first frame came a frame after the take's start;
+/// cut to the clip's end). None for a screen or game take, a picture, or a take with no camera run there.
 pub fn footage(p: &Project, clip: &Clip) -> Option<Footage> {
     let (asset_id, range, shift_us) = match &clip.source {
         ClipSource::Asset { id } => (
@@ -62,14 +63,21 @@ pub fn footage(p: &Project, clip: &Clip) -> Option<Footage> {
         ClipSource::Recording { id } => {
             let rec = p.recording(id).filter(|r| r.camera_only())?;
             let source = rec.primary_source()?;
-            let (run, start) = source.run_at(clip.source_in_us)?;
-            let (_, run_end) = run.rec_span(source.nudge_us);
-            let end = run.local_us(clip.source_out_us.min(run_end), source.nudge_us);
-            (
-                run.asset_id.clone(),
-                RangeUs { start, end },
-                clip.source_in_us - start,
-            )
+            let nudge = source.nudge_us;
+            let (run, start, shift) = match source.run_at(clip.source_in_us) {
+                Some((run, start)) => (run, start, clip.source_in_us - start),
+                None => {
+                    let within = |r: &&SourceRun| {
+                        (clip.source_in_us..clip.source_out_us).contains(&r.rec_span(nudge).0)
+                    };
+                    let run = source.runs.iter().find(within)?;
+                    let start = run.file_in_us;
+                    (run, start, run.rec_of(start, nudge) - start)
+                }
+            };
+            let (_, run_end) = run.rec_span(nudge);
+            let end = run.local_us(clip.source_out_us.min(run_end), nudge);
+            (run.asset_id.clone(), RangeUs { start, end }, shift)
         }
     };
     let asset = p.asset(&asset_id).filter(|a| a.kind == AssetKind::Video)?;

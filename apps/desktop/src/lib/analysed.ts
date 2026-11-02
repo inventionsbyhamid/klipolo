@@ -5,7 +5,7 @@ import type { Recording } from '../bindings/Recording';
 import type { RecordingSource } from '../bindings/RecordingSource';
 import type { SourceRole } from '../bindings/SourceRole';
 import type { SourceRun } from '../bindings/SourceRun';
-import { audioSources, isVideoRole, mixFor, runSpan } from './recording';
+import { audioSources, isVideoRole, mixFor, primarySource, runSpan } from './recording';
 
 /** What `analysedAssets` reads of a project. */
 export type AnalysedScope = Pick<Project, 'assets' | 'recordings'> & { timeline: Pick<Project['timeline'], 'main'> };
@@ -102,6 +102,14 @@ function voiceFiles(clip: Clip, r: Recording, sounding: Set<string>): string[] {
   return files.map((run) => run.assetId);
 }
 
+/** A camera take's footage files a clip of it plays (`cameraFootage`); none for any other take. */
+function footageFiles(clip: Clip, r: Recording): string[] {
+  const footage = primarySource(r);
+  if (footage?.role !== 'camera') return [];
+  const span: [number, number] = [clip.sourceInUs, clip.sourceOutUs];
+  return footage.runs.filter((run) => playsIn(footage, run, span)).map((run) => run.assetId);
+}
+
 /** What analysis offers in a project, and which recording each voice file is the voice of. */
 interface Offer {
   out: Asset[];
@@ -130,6 +138,8 @@ function offerOf(project: AnalysedScope): Offer {
     const id = clip.source.id;
     const recording = recordings.find((r) => r.id === id);
     if (recording) for (const file of voiceFiles(clip, recording, sounding)) voices.set(file, id);
+    // A camera take's camera is its footage: watched for a scene log, as imported camera footage is.
+    if (recording) for (const file of footageFiles(clip, recording)) alone.add(file);
   }
   const out = analysedAssets(project).filter((a) => alone.has(a.id) || voices.has(a.id));
   const offer = { out, voices };
@@ -142,9 +152,10 @@ function offerOf(project: AnalysedScope): Offer {
  * play (`analysedAssets`), each one a clip plays on its own (a take's file only when it has sound), and each
  * recording's voice: the files of its first source with a file that has sound, in the order mic, camera, screen, as
  * the model's `speech::voice_runs` picks it (its captions read their words), with a picture source's own sound where
- * it fills the take's gaps. A recording's other files (its screen and camera beside a mic) are never offered, so they
- * are never sent. The app analyses any file of a recording for its words only (`recordingOf`). The same array for the
- * same main track, assets and recordings, so a store selector can return it.
+ * it fills the take's gaps. A camera take's camera is its footage, offered too to be watched for a scene log
+ * (`cameraFootage`). A recording's other files (its screen and camera bubble beside a mic) are never offered, so they
+ * are never sent. The app analyses any other file of a recording for its words only (`wordsOnly`). The same array for
+ * the same main track, assets and recordings, so a store selector can return it.
  */
 export function analysable(project: AnalysedScope): Asset[] {
   return offerOf(project).out;
@@ -164,16 +175,41 @@ export function voiceOf(project: AnalysedScope, assetId: string): string | null 
   return offerOf(project).voices.get(assetId) ?? null;
 }
 
+/** Whether `ids` hold `assetId`, or a file at the same path. */
+function sameFile(assets: Asset[], assetId: string): (id: string) => boolean {
+  const path = assets.find((a) => a.id === assetId)?.path;
+  return (id) => id === assetId || (path !== undefined && assets.find((a) => a.id === id)?.path === path);
+}
+
 /**
  * The recording whose files hold `assetId` (its screen, camera or a sound), or the same file (by its path) imported
- * again; null for a file imported on its own. The app analyses such a file for its words only, never watching it for
- * a scene log (the model's `analysed::words_only`, pinned by `voices-parity.json`).
+ * again; null for a file imported on its own.
  */
 export function recordingOf(project: Pick<AnalysedScope, 'assets' | 'recordings'>, assetId: string): string | null {
-  const assets = project.assets ?? NO_ASSETS;
+  const same = sameFile(project.assets ?? NO_ASSETS, assetId);
   const recordings = project.recordings ?? NO_RECORDINGS;
-  const path = assets.find((a) => a.id === assetId)?.path;
-  const same = (id: string) => id === assetId || (path !== undefined && assets.find((a) => a.id === id)?.path === path);
   const holder = recordings.find((r) => r.sources.some((s) => s.runs.some((run) => same(run.assetId))));
   return holder?.id ?? null;
+}
+
+/**
+ * Whether `assetId` is a camera take's footage: a run of the camera that is a recording's main picture ("Record
+ * yourself"), or the same file imported again. The app watches it for a scene log as it does imported camera footage
+ * (the model's `analysed::camera_footage_file`).
+ */
+export function cameraFootage(project: Pick<AnalysedScope, 'assets' | 'recordings'>, assetId: string): boolean {
+  const same = sameFile(project.assets ?? NO_ASSETS, assetId);
+  return (project.recordings ?? NO_RECORDINGS).some((r) => {
+    const footage = primarySource(r);
+    return footage?.role === 'camera' && footage.runs.some((run) => same(run.assetId));
+  });
+}
+
+/**
+ * Whether the app analyses `assetId` for its words only, never watching it for a scene log: a recording's file
+ * (`recordingOf`) that isn't a camera take's footage (`cameraFootage`). Mirrors the model's `analysed::words_only`,
+ * pinned by `voices-parity.json`.
+ */
+export function wordsOnly(project: Pick<AnalysedScope, 'assets' | 'recordings'>, assetId: string): boolean {
+  return recordingOf(project, assetId) !== null && !cameraFootage(project, assetId);
 }

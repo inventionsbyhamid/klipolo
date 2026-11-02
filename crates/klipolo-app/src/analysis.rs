@@ -3,7 +3,8 @@
 //! chat read what it finds.
 //!
 //! A recording is one clip: its files (screen, camera, mic) are analysed for their words only, never watched for a
-//! scene log (`words_only`).
+//! scene log (`words_only`), except a camera take's camera ("Record yourself"), its footage, watched as imported
+//! camera footage is.
 //!
 //! - **Estimate** (`AnalysisState::estimate`): what analysing the clips asked for costs at Meta's list prices (the
 //!   providers' own estimates: `transcript::estimate_usd`, `scenes::estimate_usd`), how long they are, and which are
@@ -321,7 +322,8 @@ pub fn words_only(project: &Project, asset_id: &str) -> bool {
 pub(crate) struct Clip {
     pub id: String,
     pub path: PathBuf,
-    /// Watched for a scene log after its words: a video imported on its own, never a recording's file.
+    /// Watched for a scene log after its words: a video imported on its own, or a camera take's camera; never another
+    /// file of a recording.
     pub video: bool,
     pub has_audio: bool,
     pub duration_us: Us,
@@ -1245,6 +1247,17 @@ mod tests {
         assert_eq!(heard("mic", AssetKind::Audio), Some(false));
         assert_eq!(heard("broll", AssetKind::Video), Some(true));
         assert_eq!(heard("logo", AssetKind::Image), None);
+
+        // "Record yourself": the camera is the take's footage, watched as imported camera footage is; its mic is
+        // still heard for its words.
+        let take = &mut p.recordings[0];
+        take.sources.retain(|s| s.role != SourceRole::Screen);
+        (take.kind, take.primary) = (RecordingKind::Camera, "Camera".into());
+        assert!(!words_only(&p, "camera"));
+        assert!(words_only(&p, "mic"));
+        let heard = |id: &str, kind| Clip::of(&p, &file(id, kind)).map(|c| c.video);
+        assert_eq!(heard("camera", AssetKind::Video), Some(true));
+        assert_eq!(heard("mic", AssetKind::Audio), Some(false));
     }
 
     #[test]
