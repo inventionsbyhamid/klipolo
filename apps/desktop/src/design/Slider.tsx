@@ -26,8 +26,8 @@ interface SliderProps {
 }
 
 /**
- * A slider: a 4 px track, paper up to the value and press colour after, a 14 px paper knob, and the value
- * to the right in faint tabular text. Arrow keys step 1, Shift arrow 10. The knob carries the name and spoken value.
+ * A slider: a 4 px sunken track, signal yellow up to the value, a 14 px raised knob with a hairline edge, and the value
+ * to the right in tabular text. Arrow keys step 1, Shift arrow 10. The knob carries the name and spoken value.
  */
 export function Slider({
   label,

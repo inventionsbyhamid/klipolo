@@ -1,6 +1,5 @@
-/* The window's skeleton (built only from tokens.css): top bar,
-   library, preview, chat, timeline and player bar. Only the preview and the transport work for now; the other
-   regions are styled placeholders until their features land. */
+/* The editor's styles, built only from tokens.css: the window's frame (top bar, library, preview, chat, timeline and
+   transport bar), the shared controls (buttons, fields, menus, toggles, sliders, toasts) and the timeline's blocks. */
 
 @font-face {
   font-family: "Archivo";
@@ -88,22 +87,22 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-paper);
+    outline: 2px solid var(--color-signal-ink);
     outline-offset: 2px;
   }
 
   kbd {
     display: inline-grid;
     place-items: center;
-    min-width: 20px;
-    height: 20px;
-    padding: 0 5px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
     border-radius: var(--radius-xs);
-    box-shadow: inset 0 0 0 1px var(--color-line-strong);
-    color: var(--color-ink-soft);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 30%, transparent);
+    color: inherit;
     font-family: inherit;
-    font-size: var(--text-xs);
-    font-weight: var(--weight-medium);
+    font-size: var(--text-2xs);
+    font-weight: var(--weight-body);
     line-height: 1;
   }
 }
@@ -142,7 +141,6 @@
   grid-template-columns: var(--library-w) minmax(0, 1fr) var(--chat-w);
   grid-template-rows: minmax(0, 1fr) var(--timeline-h);
   gap: var(--gutter);
-  padding: 0 var(--gutter);
   min-height: 0;
 }
 
@@ -153,8 +151,9 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border-radius: var(--radius-lg);
   background: var(--color-bay);
+  /* Panels meet at hairlines: each draws its edge into the 1 px gap around it. */
+  box-shadow: 0 0 0 var(--gutter) var(--color-line);
 }
 
 .library {
@@ -325,31 +324,21 @@
   justify-content: center;
   gap: var(--space-4);
   height: var(--hit-comfort);
-  padding: 0 var(--space-6);
-  border-radius: var(--radius-pill);
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-md);
   font-size: var(--text-sm);
-  font-weight: var(--weight-strong);
+  font-weight: var(--weight-medium);
   line-height: 1;
   white-space: nowrap;
   transition:
-    transform var(--dur-fast) var(--ease-out),
-    background-color var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out);
+  background-color var(--dur-fast) var(--ease-out),
+  box-shadow var(--dur-fast) var(--ease-out),
+  color var(--dur-fast) var(--ease-out);
 }
 
 .btn .ico {
-  width: 18px;
-  height: 18px;
-  margin-left: -2px;
-}
-
-.btn:not(:disabled):not([aria-disabled="true"]):hover {
-  transform: scale(var(--hover-scale));
-}
-
-.btn:not(:disabled):not([aria-disabled="true"]):active {
-  transform: scale(var(--press-scale));
-  transition-duration: var(--dur-instant);
+  width: 16px;
+  height: 16px;
 }
 
 .btn-primary {
@@ -362,41 +351,43 @@
 }
 
 .btn-ghost {
-  color: var(--color-ink-soft);
+  color: var(--color-ink);
   padding: 0 var(--space-5);
 }
 
 .btn-ghost:not(:disabled):not([aria-disabled="true"]):hover {
   background: var(--color-bay-hover);
   color: var(--color-ink);
-  transform: none;
 }
 
 .btn-secondary {
-  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   color: var(--color-ink);
 }
 
 .btn-secondary:not(:disabled):not([aria-disabled="true"]):hover {
-  box-shadow: inset 0 0 0 1px var(--color-ink);
+  background: var(--color-sunken);
 }
 
 /* aria-disabled: inert but still focusable, so its tooltip can say why; drawn as disabled. */
 .btn:disabled,
 .btn[aria-disabled="true"] {
   background: var(--color-off);
-  color: var(--color-ink-disabled);
+  color: var(--color-ink-faint);
 }
 
 .btn-ghost:disabled,
 .btn-ghost[aria-disabled="true"] {
   background: transparent;
+  box-shadow: none;
 }
 
 .btn-sm {
-  height: 30px;
-  padding: 0 var(--space-5);
-  font-size: var(--text-sm);
+  height: 28px;
+  padding: 0 10px;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
 }
 
 .icon-btn {
@@ -406,7 +397,7 @@
   width: 32px;
   height: 32px;
   flex: none;
-  border-radius: 50%;
+  border-radius: var(--radius-md);
   color: var(--color-ink-soft);
   transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
@@ -422,21 +413,21 @@
 
 .icon-btn:disabled,
 .icon-btn[aria-disabled="true"] {
-  color: var(--color-ink-disabled);
+  color: var(--color-ink-faint);
 }
 
-/* A toggle that is on, or a menu whose choice is on: a 4 px paper dot under its icon. */
-.icon-btn[aria-pressed="true"]::after,
-.icon-btn[data-on]::after {
-  content: "";
-  position: absolute;
-  bottom: 2px;
-  left: 50%;
-  width: 4px;
-  height: 4px;
-  margin-left: -2px;
-  border-radius: 50%;
-  background: var(--color-paper);
+/* A toggle that is on, or a menu whose choice is on: a signal wash with a signal-ink ring. */
+.icon-btn[aria-pressed="true"],
+.icon-btn[data-on] {
+  background: var(--color-paper-wash);
+  box-shadow: inset 0 0 0 1px var(--color-signal-ink);
+  color: var(--color-ink);
+}
+
+.icon-btn .ico {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
 }
 
 .icon-btn-sm {
@@ -446,27 +437,30 @@
 
 /* ---------- Search ---------- */
 
-/* A 30 px raised pill with a search icon: the Captions words and the library. */
+/* A 28 px raised field with 6 px corners and a search icon: the Captions words and the library. */
 .search {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  height: 30px;
+  height: 28px;
   padding: 0 var(--space-4);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-md);
   background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   color: var(--color-ink-faint);
   font-size: var(--text-sm);
 }
 
 .search:focus-within {
-  box-shadow: inset 0 0 0 2px var(--color-paper);
+  box-shadow: inset 0 0 0 1px var(--color-line);
+  outline: 2px solid var(--color-signal-ink);
+  outline-offset: 0;
 }
 
 .search .ico {
   flex: none;
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
 }
 
 .search input {
@@ -491,7 +485,7 @@
 
 .pills {
   display: flex;
-  gap: var(--space-3);
+  gap: var(--space-2);
   overflow-x: auto;
   scrollbar-width: none;
   padding-right: 16px;
@@ -500,36 +494,37 @@
 .pill {
   display: inline-flex;
   align-items: center;
-  height: 30px;
-  padding: 0 var(--space-5);
+  height: 28px;
+  padding: 0 10px;
   flex: none;
-  border-radius: var(--radius-pill);
-  background: var(--color-bay-raised);
-  color: var(--color-ink);
-  font-size: var(--text-sm);
+  border-radius: var(--radius-md);
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
   font-weight: var(--weight-medium);
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
 
 .pill[aria-selected="true"] {
-  background: var(--color-paper);
-  color: var(--color-on-paper);
+  background: var(--color-paper-wash);
+  box-shadow: inset 0 0 0 1px var(--color-signal-ink);
+  color: var(--color-ink);
 }
 
 .seg {
   display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  border-radius: var(--radius-pill);
-  background: var(--color-bay-raised);
+  gap: 0;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--color-sunken);
 }
 
 .seg button {
   height: 28px;
-  padding: 0 var(--space-5);
-  border-radius: var(--radius-pill);
+  padding: 0 10px;
+  border-radius: var(--radius-xs);
   color: var(--color-ink-soft);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-strong);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-body);
   font-variant-numeric: tabular-nums;
   transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
@@ -539,13 +534,14 @@
 }
 
 .seg button[aria-checked="true"] {
-  background: var(--color-paper);
-  color: var(--color-on-paper);
+  background: var(--color-paper-wash);
+  box-shadow: inset 0 0 0 1px var(--color-signal-ink);
+  color: var(--color-ink);
 }
 
 /* An option that can't be chosen now (a note beside it says why): disabled ink, no hover. */
 .seg button:disabled:not([aria-checked="true"]) {
-  color: var(--color-ink-disabled);
+  color: var(--color-ink-faint);
   cursor: default;
 }
 
@@ -553,16 +549,16 @@
   display: inline-flex;
   align-items: center;
   height: 28px;
-  padding: 0 var(--space-5);
-  border-radius: var(--radius-pill);
+  padding: 0 10px;
+  border-radius: var(--radius-md);
   color: var(--color-ink);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-weight: var(--weight-medium);
   white-space: nowrap;
 }
 
 .chip-outline {
-  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
 /* ---------- Top bar ---------- */
@@ -571,14 +567,16 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: 0 var(--space-5) 0 calc(var(--traffic-lights-w) + var(--space-4));
+  gap: var(--space-2);
+  padding: 0 var(--space-4) 0 calc(var(--traffic-lights-w) + var(--space-4));
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-bay);
 }
 
 .app-icon {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
   box-shadow: 0 0 0 1px var(--color-line);
 }
 
@@ -587,7 +585,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  height: 34px;
+  height: 32px;
   min-width: 0;
   padding: 0 var(--space-3) 0 var(--space-4);
   border-radius: var(--radius-md);
@@ -602,18 +600,16 @@
 .project-name {
   overflow: hidden;
   max-width: 420px;
-  font-size: 19px;
-  font-weight: var(--weight-title);
-  font-stretch: var(--wdth-title);
-  letter-spacing: -0.005em;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-strong);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 .project .ico {
   color: var(--color-ink-faint);
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 /* The project's name as a field while it is renamed (the project menu's Rename). */
@@ -641,13 +637,13 @@
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-3);
   margin-left: auto;
 }
 
 .export-btn {
-  height: 36px;
-  padding: 0 var(--space-7) 0 var(--space-6);
+  height: 32px;
+  padding: 0 var(--space-5);
 }
 
 /* ---------- Library ---------- */
@@ -656,8 +652,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  min-height: 56px;
-  padding: var(--space-5) var(--space-5) var(--space-3) var(--space-6);
+  min-height: 44px;
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-6);
 }
 
 .view-tabs {
@@ -668,10 +664,9 @@
 }
 
 .view-tab {
-  font-size: var(--text-xl);
-  line-height: var(--lh-xl);
-  font-weight: var(--weight-title);
-  font-stretch: var(--wdth-title);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--weight-strong);
   color: var(--color-ink-faint);
 }
 
@@ -714,8 +709,8 @@
   }
 
   .library .view-tab {
-    font-size: var(--text-lg);
-    line-height: var(--lh-lg);
+    font-size: var(--text-xs);
+    line-height: var(--lh-xs);
   }
 }
 
@@ -766,7 +761,8 @@
 }
 
 .row.is-selected {
-  background: var(--color-bay-press);
+  background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-signal-ink);
 }
 
 .art-clip {
@@ -788,7 +784,7 @@
 .row-title {
   overflow: hidden;
   font-size: var(--text-md);
-  font-weight: var(--weight-strong);
+  font-weight: var(--weight-medium);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -804,6 +800,8 @@
 
 .stage {
   grid-area: 1 / 2 / 2 / 3;
+  /* The preview sits in a well darker than the panels around it. */
+  background: var(--color-stage);
 }
 
 /* The panel takes the keyboard when a project opens (Space plays), never by Tab: no ring round the whole panel. */
@@ -811,8 +809,8 @@
   outline: none;
 }
 
-/* With the native layer, the stage panel has no background of its own: the frame paints the panel colour around
-   itself (its shadow, clipped by the panel's rounded corners), so the frame can stay a hole the layer shows through. */
+/* With the native layer, the stage panel has no background of its own: the frame paints the well's colour around
+   itself (its shadow, clipped by the panel), so the frame can stay a hole the layer shows through. */
 .stage.has-hole {
   background: transparent;
 }
@@ -895,7 +893,7 @@
   position: relative;
   overflow: hidden;
   border-radius: var(--radius-sm);
-  box-shadow: 0 0 0 100vmax var(--color-bay);
+  box-shadow: 0 0 0 100vmax var(--color-stage);
 }
 
 .frame.is-socket {
@@ -934,7 +932,7 @@
   height: 100%;
 }
 
-/* No clip yet: the drop zone. Files held over the window turn it paper. */
+/* No clip yet: the drop zone. Files held over the window give it a signal wash and edge. */
 .drop {
   flex: 1;
   display: grid;
@@ -942,14 +940,14 @@
   justify-items: center;
   gap: var(--space-5);
   padding: var(--space-9);
-  border: 2px dashed var(--color-line-strong);
-  border-radius: var(--radius-md);
+  border: 1px dashed var(--color-line-strong);
+  border-radius: var(--radius-lg);
   text-align: center;
   transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
 }
 
 .drop.is-over {
-  border-color: var(--color-paper);
+  border-color: var(--color-signal-ink);
   background: var(--color-paper-wash);
 }
 
@@ -977,12 +975,10 @@
 
 .drop-title {
   margin: 0;
-  word-spacing: 0.08em;
   font-size: var(--text-3xl);
   line-height: var(--lh-3xl);
   font-weight: var(--weight-display);
-  font-stretch: var(--wdth-display);
-  letter-spacing: var(--tracking-display);
+  letter-spacing: -0.025em;
 }
 
 .drop-text {
@@ -1011,9 +1007,9 @@
 }
 
 .btn-lg {
-  height: 48px;
+  height: 44px;
   padding: 0 var(--space-8);
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
 }
 
 .preview-note {
@@ -1024,7 +1020,7 @@
   align-content: center;
   gap: var(--space-4);
   padding: var(--space-6);
-  background: var(--color-bay);
+  background: var(--color-stage);
   color: var(--color-ink-soft);
   font-size: var(--text-sm);
   text-align: center;
@@ -2243,7 +2239,7 @@
   gap: var(--space-4);
   height: 32px;
   padding: 0 var(--space-4);
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   color: var(--color-ink);
   font-size: var(--text-sm);
   outline: none;
@@ -2252,7 +2248,12 @@
 }
 
 .menu-item[data-highlighted] {
-  background: var(--color-bay-hover);
+  background: var(--color-paper);
+  color: var(--color-on-paper);
+}
+
+.menu-item[data-highlighted] .menu-key {
+  color: var(--color-on-paper);
 }
 
 .menu-item[data-disabled] {
@@ -2289,7 +2290,7 @@
 
 .menu-sep {
   height: 1px;
-  margin: 6px;
+  margin: 4px;
   background: var(--color-line);
 }
 
@@ -2307,26 +2308,26 @@
   align-items: center;
   gap: var(--space-4);
   padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--color-dialog);
-  box-shadow: var(--shadow-1);
-  color: var(--color-ink);
+  border-radius: var(--radius-md);
+  background: var(--color-ink);
+  box-shadow: var(--shadow-soft);
+  color: var(--color-night);
   font-size: var(--text-xs);
 }
 
 .popover {
   z-index: 50;
   padding: var(--space-5);
-  border-radius: var(--radius-md);
-  background: var(--color-dialog);
+  border-radius: var(--radius-lg);
+  background: var(--color-bay-raised);
   box-shadow: var(--shadow-1);
   color: var(--color-ink);
 }
 
 /* ---------- Toggle ---------- */
 
-/* A 36 x 20 track. Off: raised, a line-strong edge (ink-soft under the pointer) and an ink-soft knob. On: paper with
-   an on-paper knob. Disabled: an empty track with a faint edge. Styled from aria-checked, not data-state: a tooltip
+/* A 36 x 20 track. Off: sunken, a hairline edge and a 16 px ink-soft knob. On: signal yellow with a signal-ink edge
+   and a dark knob. Disabled: an empty track with a faint edge. Styled from aria-checked, not data-state: a tooltip
    trigger sets its own data-state on the same element. */
 .toggle {
   display: inline-flex;
@@ -2334,33 +2335,29 @@
   width: 36px;
   height: 20px;
   flex: none;
-  padding: 0 3px;
+  padding: 0 2px;
   border-radius: var(--radius-pill);
-  background: var(--color-bay-raised);
-  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  background: var(--color-sunken);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   transition:
-    background-color var(--dur-fast) var(--ease-out),
-    box-shadow var(--dur-fast) var(--ease-out);
-}
-
-.toggle:not(:disabled):hover {
-  box-shadow: inset 0 0 0 1px var(--color-ink-soft);
+  background-color var(--dur-fast) var(--ease-out),
+  box-shadow var(--dur-fast) var(--ease-out);
 }
 
 .toggle-knob {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--color-ink-soft);
   transition:
-    transform var(--dur-fast) var(--ease-out),
-    background-color var(--dur-fast) var(--ease-out);
+  transform var(--dur-fast) var(--ease-out),
+  background-color var(--dur-fast) var(--ease-out);
 }
 
 .toggle[aria-checked="true"] {
   background: var(--color-paper);
-  box-shadow: none;
+  box-shadow: inset 0 0 0 1px var(--color-signal-ink);
 }
 
 .toggle[aria-checked="true"] .toggle-knob {
@@ -2374,7 +2371,7 @@
 }
 
 .toggle:disabled .toggle-knob {
-  background: var(--color-ink-disabled);
+  background: var(--color-ink-faint);
 }
 
 /* The knob jumps instead of sliding. */
@@ -2391,7 +2388,9 @@
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: var(--space-6);
-  padding: 0 var(--space-6) 0 var(--space-5);
+  padding: 0 var(--space-4);
+  border-top: 1px solid var(--color-line);
+  background: var(--color-bay);
 }
 
 .pb-left,
@@ -2419,15 +2418,14 @@
 .transport {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-2);
 }
 
 .time {
   width: 66px;
-  font-size: 15px;
-  font-weight: var(--weight-strong);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
 }
 
 .time-now {
@@ -2443,35 +2441,33 @@
 .play {
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: var(--color-paper);
-  color: var(--color-on-paper);
-  transition: transform var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  color: var(--color-ink);
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
 
 .play .ico {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
 }
 
 .play .ico.is-play {
-  margin-left: 3px;
+  margin-left: 1px;
 }
 
 .play:not(:disabled):hover {
-  transform: scale(var(--hover-scale));
-  background: var(--color-paper-hover);
+  background: var(--color-bay-hover);
 }
 
 .play:not(:disabled):active {
-  transform: scale(var(--press-scale));
+  background: var(--color-bay-press);
 }
 
 .play:disabled {
-  background: var(--color-off-canvas);
-  color: var(--color-ink-disabled);
+  color: var(--color-ink-faint);
 }
 
 /* The play button, with the shuttle's speed on its top right corner while J or L plays backward or faster. */
@@ -2494,20 +2490,14 @@
   height: 16px;
   padding: 0 var(--space-2);
   border-radius: var(--radius-xs);
-  background: var(--color-paper);
-  color: var(--color-on-paper);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-strong);
+  background: var(--color-ink);
+  color: var(--color-night);
+  font-size: 10px;
+  font-weight: var(--weight-medium);
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-height: 819px) {
-  .play {
-    width: 42px;
-    height: 42px;
-  }
-}
 
 .zoom {
   display: flex;
@@ -2555,7 +2545,7 @@
   top: 6px;
   height: 4px;
   border-radius: var(--radius-pill);
-  background: linear-gradient(to right, var(--color-paper) var(--v), var(--color-bay-press) var(--v));
+  background: linear-gradient(to right, var(--color-paper) var(--v), var(--color-sunken) var(--v));
 }
 
 .slider i {
@@ -2566,8 +2556,8 @@
   height: 14px;
   margin-left: -7px;
   border-radius: 50%;
-  background: var(--color-paper);
-  box-shadow: 0 2px 6px var(--color-shade);
+  background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line), 0 1px 2px var(--color-shade);
 }
 
 /* ---------- Chat ---------- */
@@ -2576,14 +2566,14 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 56px;
-  padding: var(--space-5) var(--space-4) var(--space-3) var(--space-6);
+  min-height: 44px;
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-6);
 }
 
 .chat-head h2 {
   margin-right: auto;
-  font-size: var(--text-xl);
-  line-height: var(--lh-xl);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
 }
 
 .log {
@@ -2603,11 +2593,9 @@
 }
 
 .chat-empty h3 {
-  word-spacing: 0.08em;
-  font-size: var(--text-2xl);
-  line-height: var(--lh-2xl);
+  font-size: var(--text-xl);
+  line-height: var(--lh-xl);
   font-weight: var(--weight-display);
-  font-stretch: var(--wdth-display);
 }
 
 .chat-empty > p {
@@ -2618,7 +2606,8 @@
 .composer {
   display: grid;
   gap: var(--space-4);
-  padding: var(--space-4) var(--space-5) var(--space-5);
+  padding: var(--space-5);
+  border-top: 1px solid var(--color-line);
 }
 
 .input-wrap {
@@ -2626,17 +2615,17 @@
   align-items: flex-end;
   gap: var(--space-4);
   min-height: 48px;
-  padding: 6px 6px 6px 16px;
-  border-radius: 24px;
-  background: transparent;
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--color-bay-raised);
   box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
 .input-wrap textarea {
   flex: 1;
-  height: 36px;
-  min-height: 36px;
-  padding: 8px 0;
+  height: 32px;
+  min-height: 32px;
+  padding: 7px 0;
   border: 0;
   background: transparent;
   color: var(--color-ink);
@@ -2653,12 +2642,12 @@
 .send {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   flex: none;
-  border-radius: 50%;
+  border-radius: var(--radius-md);
   background: var(--color-off);
-  color: var(--color-ink-disabled);
+  color: var(--color-ink-faint);
 }
 
 /* Short windows (700 to 819 tall): keep empty states whole. */
@@ -2696,15 +2685,14 @@
 .toast {
   display: flex;
   align-items: center;
-  gap: var(--space-5);
-  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-6);
-  min-height: 44px;
-  border-radius: var(--radius-md);
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-5);
+  min-height: 40px;
+  border-radius: var(--radius-lg);
   background: var(--color-dialog);
   box-shadow: var(--shadow-2);
   color: var(--color-ink);
   font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
 }
 
 .toast .ico {
@@ -2718,7 +2706,7 @@
 }
 
 .toast:focus-visible {
-  outline: 2px solid var(--color-paper);
+  outline: 2px solid var(--color-signal-ink);
   outline-offset: 2px;
 }
 
@@ -2747,7 +2735,7 @@
 }
 
 .pill:focus-visible {
-  outline: 2px solid var(--color-paper);
+  outline: 2px solid var(--color-signal-ink);
   outline-offset: 2px;
 }
 
@@ -2764,7 +2752,7 @@
   justify-content: space-between;
   gap: var(--space-4);
   padding: var(--space-6) var(--space-4) var(--space-3);
-  font-size: var(--text-md);
+  font-size: var(--text-sm);
   font-weight: var(--weight-strong);
 }
 
@@ -3068,17 +3056,17 @@
 }
 
 .gizmo:not(.is-selected):hover {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-paper) 60%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-signal-ink) 60%, transparent);
 }
 
-/* Selected: a 1.5 px paper outline 5 px outside its box; keyboard focus adds a second ring. */
+/* Selected: a 1.5 px signal outline 5 px outside its box; keyboard focus adds a second ring. */
 .gizmo.is-selected {
-  outline: 1.5px solid var(--color-paper);
+  outline: 1.5px solid var(--color-signal-ink);
   outline-offset: 5px;
 }
 
 .gizmo.is-selected:focus-visible {
-  box-shadow: 0 0 0 9px color-mix(in srgb, var(--color-paper) 35%, transparent);
+  box-shadow: 0 0 0 9px color-mix(in srgb, var(--color-signal-ink) 35%, transparent);
 }
 
 .gizmo.is-fixed {
@@ -3089,7 +3077,7 @@
   will-change: transform;
 }
 
-/* Eight 10 px paper handles with a navy edge, centred on the outline's corners and edges. */
+/* Eight 10 px signal yellow handles with a dark edge, centred on the outline's corners and edges. */
 .gizmo-handle {
   position: absolute;
   width: 10px;
@@ -3120,7 +3108,7 @@
   inset: 0;
 }
 
-/* The rotate knob: a round handle on a paper stem above the top edge's handle. It turns with the layer. */
+/* The rotate knob: a round handle on a signal yellow stem above the top edge's handle. It turns with the layer. */
 .gizmo-stem {
   position: absolute;
   bottom: calc(100% + 10px);
@@ -3142,7 +3130,7 @@
   border-radius: 50%;
 }
 
-/* The line a moving layer snapped to: dashed paper, across the canvas. */
+/* The line a moving layer snapped to: dashed signal-ink, across the canvas. */
 .snap-guide {
   position: absolute;
   z-index: 2;
@@ -3152,13 +3140,13 @@
 .snap-guide.is-x {
   top: 0;
   bottom: 0;
-  border-left: 1px dashed color-mix(in srgb, var(--color-paper) 70%, transparent);
+  border-left: 1px dashed color-mix(in srgb, var(--color-signal-ink) 70%, transparent);
 }
 
 .snap-guide.is-y {
   left: 0;
   right: 0;
-  border-top: 1px dashed color-mix(in srgb, var(--color-paper) 70%, transparent);
+  border-top: 1px dashed color-mix(in srgb, var(--color-signal-ink) 70%, transparent);
 }
 
 .safe-area {
@@ -3175,7 +3163,7 @@
 
 .safe-area-clear {
   fill: none;
-  stroke: color-mix(in srgb, var(--color-paper) 60%, transparent);
+  stroke: color-mix(in srgb, var(--color-signal-ink) 60%, transparent);
 }
 
 /* A title typed on the canvas: its box with the outline, the look behind a transparent-background textarea. */
@@ -3188,7 +3176,7 @@
 
 .text-edit.is-editing {
   pointer-events: auto;
-  outline: 1.5px solid var(--color-paper);
+  outline: 1.5px solid var(--color-signal-ink);
   outline-offset: 5px;
 }
 
@@ -3239,7 +3227,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--color-bay-raised);
+  background: var(--color-bay);
 }
 
 /* Back to library at the start, then the kind and its name, More and Close. */
@@ -3258,7 +3246,7 @@
   min-width: 0;
   margin: 0 auto 0 0;
   overflow: hidden;
-  font-size: var(--text-lg);
+  font-size: var(--text-sm);
   font-weight: var(--weight-strong);
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -3439,7 +3427,7 @@
 
 /* A checked swatch's gap takes the popover's surface, not the card's. */
 .popover .swatch[aria-checked="true"] {
-  box-shadow: 0 0 0 2px var(--color-dialog), 0 0 0 4px var(--color-paper);
+  box-shadow: 0 0 0 2px var(--color-dialog), 0 0 0 4px var(--color-signal-ink);
 }
 
 .field-note {
@@ -3461,12 +3449,12 @@
   display: flex;
   align-items: center;
   width: 100%;
-  height: 40px;
+  height: 32px;
   padding: 0 var(--space-5);
   border: 0;
   border-radius: var(--radius-md);
   background: var(--color-bay-raised);
-  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   color: var(--color-ink);
   font: inherit;
   font-size: var(--text-md);
@@ -3474,26 +3462,26 @@
 }
 
 .input:hover {
-  box-shadow: inset 0 0 0 1px var(--color-ink-soft);
+  box-shadow: inset 0 0 0 1px var(--color-ink-faint);
 }
 
 .input:focus,
 .input:focus-within {
-  box-shadow: inset 0 0 0 2px var(--color-paper);
+  box-shadow: inset 0 0 0 2px var(--color-signal-ink);
 }
 
 .input-sm {
-  height: 30px;
+  height: 28px;
   padding: 0 var(--space-4);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--color-bay);
   font-size: var(--text-sm);
 }
 
 .textarea {
   height: auto;
-  min-height: 40px;
-  padding: var(--space-3) var(--space-4);
+  min-height: 32px;
+  padding: var(--space-3) var(--space-5);
   line-height: var(--lh-sm);
   resize: none;
 }
@@ -3510,11 +3498,11 @@
   gap: var(--space-3);
   width: 100%;
   min-width: 0;
-  height: 30px;
+  height: 28px;
   padding: 0 var(--space-2) 0 var(--space-4);
-  border-radius: var(--radius-sm);
-  background: var(--color-bay);
-  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   color: var(--color-ink);
   font-size: var(--text-sm);
   text-align: left;
@@ -3522,7 +3510,7 @@
 }
 
 .select:hover {
-  box-shadow: inset 0 0 0 1px var(--color-ink-soft);
+  box-shadow: inset 0 0 0 1px var(--color-ink-faint);
 }
 
 .select-text {
@@ -3660,7 +3648,7 @@
   flex: 1;
   height: 4px;
   border-radius: var(--radius-pill);
-  background: var(--color-bay-press);
+  background: var(--color-sunken);
 }
 
 .slider-range {
@@ -3675,17 +3663,17 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--color-paper);
-  box-shadow: 0 2px 6px var(--color-shade);
+  background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line), 0 1px 2px var(--color-shade);
 }
 
 .slider-thumb:focus-visible {
-  outline: 2px solid var(--color-paper);
+  outline: 2px solid var(--color-signal-ink);
   outline-offset: 2px;
 }
 
 .slider-val {
-  color: var(--color-ink-soft);
+  color: var(--color-ink);
   font-size: var(--text-xs);
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -3708,7 +3696,7 @@
 }
 
 .swatch[aria-checked="true"] {
-  box-shadow: 0 0 0 2px var(--color-bay-raised), 0 0 0 4px var(--color-paper);
+  box-shadow: 0 0 0 2px var(--color-bay-raised), 0 0 0 4px var(--color-signal-ink);
 }
 
 .swatch.add {
@@ -3809,7 +3797,7 @@
 }
 
 .motion-key[aria-pressed="true"] {
-  color: var(--color-paper);
+  color: var(--color-signal-ink);
 }
 
 /* A layer's motion keys: small diamonds along the foot of its block, beside it in the lane (they follow its moves). */
@@ -3827,24 +3815,24 @@
   margin-left: -4.5px;
   padding: 0;
   border: 1px solid var(--color-bay);
-  background: var(--color-paper);
+  background: var(--color-signal-ink);
   cursor: ew-resize;
   pointer-events: auto;
   transform: rotate(45deg);
 }
 
 .tl-key:focus-visible {
-  outline: 2px solid var(--color-paper);
+  outline: 2px solid var(--color-signal-ink);
   outline-offset: 2px;
 }
 
-/* The key Delete takes away, picked last on the timeline: drawn inverted, as the selection's paper ring. */
+/* The key Delete takes away, picked last on the timeline: drawn inverted, as the selection's signal-ink ring. */
 .tl-key[data-picked] {
-  border: 2px solid var(--color-paper);
+  border: 2px solid var(--color-signal-ink);
   background: var(--color-bay);
 }
 
 .tl-volume-key[data-picked] {
-  border: 2px solid var(--color-paper);
+  border: 2px solid var(--color-signal-ink);
   background: var(--color-bay);
 }

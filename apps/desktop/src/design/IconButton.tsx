@@ -7,13 +7,13 @@ interface IconButtonProps extends Omit<
   ButtonHTMLAttributes<HTMLButtonElement>,
   'aria-label' | 'aria-pressed'
 > {
-  /** A lucide icon, drawn at 20 px with a 1.8 px stroke, or an element (the app's own icon set). */
+  /** A lucide icon, drawn at 16 px, or an element (the app's own icon set). */
   icon: LucideIcon | ReactElement;
   label: string;
   /** Tooltip text when it should say more than the label, e.g. why an `aria-disabled` control is inert. */
   tooltip?: string;
   shortcut?: string;
-  /** A toggle that is on: a 4 px paper dot under its icon. */
+  /** A toggle that is on: a signal wash with a signal-ink ring. */
   active?: boolean;
   ref?: Ref<HTMLButtonElement>;
 }
@@ -39,7 +39,7 @@ export function IconButton({
         aria-pressed={active}
         className={cn('icon-btn', className)}
       >
-        {isValidElement(Icon) ? Icon : <Icon size={20} strokeWidth={1.8} aria-hidden />}
+        {isValidElement(Icon) ? Icon : <Icon size={16} aria-hidden />}
       </button>
     </Tooltip>
   );

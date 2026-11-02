@@ -12,7 +12,7 @@ interface SearchFieldProps {
 }
 
 /**
- * The search field: a 30 px raised pill with a search icon that filters as you type. Escape empties it;
+ * The search field: a 28 px raised field with 6 px corners and a search icon that filters as you type. Escape empties it;
  * the editor's keys never run from it (the shortcuts leave fields alone).
  */
 export function SearchField({ value, onChange, label, className, ref }: SearchFieldProps) {

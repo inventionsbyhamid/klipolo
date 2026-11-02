@@ -56,7 +56,7 @@ export function MenuTrigger({
   );
 }
 
-// Klipolo's menu rows: 32 px, the highlighted (pointer or keyboard) row on the hover fill; icons inherit.
+// Klipolo's menu rows: 32 px, the highlighted (pointer or keyboard) row on the signal fill with dark ink; icons inherit.
 export const menuItemClass = 'menu-item';
 
 export function MenuContent({
