@@ -3,7 +3,7 @@
 //! built: its fields are set only by these constructors, so the page shows them as they are and never cleans them
 //! itself. Klipolo's own sentences (a proposal's title, a failure's plain reason) are written without dashes.
 
-use klipolo_chat::{ChatError, ChatErrorKind, PlanOut, sanitize};
+use klipolo_chat::{ANALYZE_FIRST, Audience, ChatError, ChatErrorKind, PlanOut, sanitize};
 use klipolo_model::coded::CodedError;
 use klipolo_model::history::SnapshotPatch;
 use klipolo_model::project::FormatKind;
@@ -73,6 +73,9 @@ pub struct ChatReply {
     revision: u64,
     /// Pictures it asked for, to draw (`chat_draw_picture`) and show with Use and Try again.
     pictures: Vec<ChatPicture>,
+    /// Something asked for needs a clip analyzed that isn't yet ("Analyze this clip first"): the panel offers Analyze
+    /// under the reply, which shows the price before anything is spent.
+    analyze: bool,
 }
 
 /// What another app (MCP) did, for the chat panel: its name as it gave it (cleaned, `klipolo_mcp::client_name`), and a
@@ -90,13 +93,28 @@ pub struct ExternalReply {
     pub reply: ChatReply,
 }
 
-/// Additions applied at once, as one undo step: what changed, and its undo label.
+/// Additions applied at once, as one undo step: what changed, and its undo label; for a step of several changes (a
+/// short's plan), each change's own label, in the order asked, which the reply lists.
 #[derive(Clone, Debug, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct ChatApplied {
     pub change: SnapshotPatch,
     pub undo: CodedError,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub changes: Option<Vec<CodedError>>,
+}
+
+impl ChatApplied {
+    /// One step's change and undo label, listing no changes of its own.
+    pub fn new(change: SnapshotPatch, undo: CodedError) -> Self {
+        Self {
+            change,
+            undo,
+            changes: None,
+        }
+    }
 }
 
 /// Removals waiting for the person: red on the timeline and a card in chat. Apply is one undo step.
@@ -209,7 +227,13 @@ impl ChatReply {
     }
 
     pub fn applied(mut self, change: SnapshotPatch, undo: CodedError) -> Self {
-        self.applied = Some(ChatApplied { change, undo });
+        self.applied = Some(ChatApplied::new(change, undo));
+        self
+    }
+
+    /// The additions applied at once, each change of a step of several listed too.
+    pub fn applied_with(mut self, applied: ChatApplied) -> Self {
+        self.applied = Some(applied);
         self
     }
 
@@ -270,6 +294,8 @@ impl ChatReply {
     /// app's to add (`applied`, `proposal`), once it has applied or kept them.
     pub fn from_plan(id: impl Into<String>, plan: &PlanOut) -> Self {
         let mut reply = Self::new(id, &plan.reply);
+        reply.analyze = (plan.compiled.refusals.iter())
+            .any(|r| r.audience == Audience::Person && r.reason == ANALYZE_FIRST);
         for question in &plan.compiled.questions {
             if !plan.reply.contains(question.trim()) {
                 reply = reply.question(question);

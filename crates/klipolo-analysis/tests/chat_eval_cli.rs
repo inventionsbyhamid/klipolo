@@ -294,8 +294,9 @@ async fn ideal_answers_pass_every_case() {
     assert_eq!(stdout.matches("     passed on alternative ").count(), 4);
     assert_eq!(stdout.matches("     passed on alternative #0").count(), 4);
     assert_eq!(out.status.code(), Some(0));
-    // One call each: clip A's missing filler words are told to the person, with no refusal round.
-    assert!(stdout.contains("38 model calls"), "{stdout}");
+    // One call each, and one more for each of the two cases that only look (the stub answers the same look again,
+    // which ends it): clip A's missing filler words are told to the person, with no refusal round.
+    assert!(stdout.contains("40 model calls"), "{stdout}");
     assert!(
         stdout.contains("     reply: There are no filler words to remove."),
         "{stdout}"

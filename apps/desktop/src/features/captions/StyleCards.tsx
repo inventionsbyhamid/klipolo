@@ -55,11 +55,11 @@ function Sample({ style, variant, accent }: { style: CaptionStyleDef; variant?: 
 }
 
 /**
- * The caption styles as one-tap cards: Off, then the five shown styles, a radio group of 2:1 stills with
- * the name under each and a check before the chosen one (not color alone). Hovering or focusing a style dry-runs it on
- * the video (the engine draws it; nothing is committed), leaving the group or Escape puts the video back, and a click
- * or Enter applies it as one undo step. "Off" is the only off switch. The arrow keys move between cards, up and down by
- * the columns the grid shows.
+ * The caption styles as one-tap cards: Off, then the shown styles (`STYLE_ORDER`), a radio group of 2:1
+ * stills with the name under each and a check before the chosen one (not color alone). Hovering or focusing a style
+ * dry-runs it on the video (the engine draws it; nothing is committed), leaving the group or Escape puts the video
+ * back, and a click or Enter applies it as one undo step. "Off" is the only off switch. The arrow keys move between
+ * cards, up and down by the columns the grid shows.
  */
 export function StyleCards() {
   const { t, i18n } = useLingui();

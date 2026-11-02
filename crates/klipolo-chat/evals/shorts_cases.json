@@ -1,0 +1,29 @@
+{
+  "source": "The planner's eval of a short made from one request, on project_talk_a.json: a 7 min 45 s talk (clip A, NASA's space station Q&A, played three times as c1 to c3), landscape, captions off, with clip A's transcript, speaker turns and Spark scene log from tests/fixtures. The library is Klipolo's pack as its manifest lists it. The person's request plans a whole short in one answer: each case passes when the answer holds the calls listed (others may come too, `partial`), its additions apply at once, its cut is proposed, and the video once applied is about the length asked (`keptSec`). Run it with --cases.",
+  "project": "project_talk_a.json",
+  "asset": "clip-a",
+  "transcript": "../tests/fixtures/transcript_clip_a.json",
+  "turns": "../tests/fixtures/turns_clip_a.json",
+  "scenes": "../tests/fixtures/scenes_clip_a.json",
+  "pack": "../../../assets/library/manifest.json",
+  "cases": [
+    {
+      "id": "short-talk",
+      "message": "Convert this long video into a 60 second short with nice animations, sound effects and text animations",
+      "expect": [
+        {
+          "partial": true,
+          "calls": [
+            {"name": "keepOnly", "args": {"ranges": {"minItems": 1}}},
+            {"name": "setFormat", "args": {"format": "portrait"}},
+            {"name": "setCaptions", "args": {"on": true, "style": {"anyOf": ["word-pop", "bold-box"]}}},
+            {"name": "addText", "args": {"animation": {"anyOf": ["kinetic", "pop", "zoom", "bounce", "blur", "typewriter", "fromLeft", "fromRight", "fromTop", "fromBottom", "fade"]}}},
+            {"name": "animate", "args": {"layer": "last"}},
+            {"name": "addMusic"}
+          ],
+          "outcome": {"applied": true, "proposed": true, "keptSec": {"min": 45.0, "max": 75.0}}
+        }
+      ]
+    }
+  ]
+}

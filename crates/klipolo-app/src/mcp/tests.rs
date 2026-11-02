@@ -243,6 +243,8 @@ fn sticker(prompt: &str) -> Job {
         position: Position::TopRight,
         size: PictureSize::Medium,
         anchor: None,
+        motion: None,
+        sound: None,
     })
 }
 

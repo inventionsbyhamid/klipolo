@@ -39,23 +39,26 @@ use klipolo_model::media::sound::add_sound_ops;
 use klipolo_model::media::text::{
     TEMPLATE_US, TEXT_US, TitleTemplate, add_template_ops, add_text_ops,
 };
-use klipolo_model::motion;
+use klipolo_model::motion::{self, Motion};
 use klipolo_model::ops::Op;
 use klipolo_model::params::{ParamKind, ParamValue};
 use klipolo_model::project::{Asset, AssetKind};
 use klipolo_model::query::{anchor_at, main_track_duration, resolve_attach, video_duration};
+use klipolo_model::speech::WordKind;
 use klipolo_model::text_safety::clean_shown;
 use klipolo_model::time::{MIN_DURATION_US, Us};
 use klipolo_model::timeline::ItemContent;
 use klipolo_model::validate::MAX_TEXT;
 use klipolo_model::{Project, apply_ops};
 
-use super::{Compiler, Edit, Job, MakeSticker, Refused, label, to_model, unfounded};
+use super::{
+    Compiler, Edit, Job, MakeSticker, Refused, animate, clear, label, to_model, unfounded,
+};
 use crate::context::{secs, within_video};
 use crate::evidence::TOLERANCE_US;
 use crate::library::{Found, LibraryItem, MediaKind, is_generic};
 use crate::sanitize;
-use crate::tools::{PictureSize, Position, TextPreset, ToolCall};
+use crate::tools::{Entrance, PictureSize, Position, TextPreset, ToolCall};
 
 /// The most names a refusal lists, then how many more there are: as many as Library shows of a kind.
 const LISTED: usize = crate::context::LIBRARY_NAMES;
@@ -74,7 +77,7 @@ fn names(items: &[&LibraryItem]) -> String {
 }
 
 /// The library item `asked` names among `kinds`, or why none, said for `tool`.
-fn pick<'l>(
+pub(super) fn pick<'l>(
     c: &'l Compiler,
     tool: &str,
     asked: &str,
@@ -253,20 +256,19 @@ fn apps_words((tool, field): (&str, &str), text: &str) -> Result<String, Refused
     Ok(words)
 }
 
-/// The ops that add the title card template reading `text` (its other words left empty) from `start` for `duration`
-/// (None: `TEMPLATE_US`), as the canvas adds a title template (`media::text::add_template_ops`: filling the frame in
-/// every format, attached to the clip under it); and the new layer's id. Refused when the template holds fewer
-/// characters, said for `tool`'s `field`.
+/// The ops that add title template `template` (the title card, or the kinetic title) reading `text` (its other words
+/// left empty) from `start` for `duration` (None: `TEMPLATE_US`), as the canvas adds a title template
+/// (`media::text::add_template_ops`: filling the frame in every format, attached to the clip under it); and the new
+/// layer's id. Refused when the template holds fewer characters, said for `tool`'s `field`.
 fn title_ops(
     work: &Project,
+    template: TitleTemplate,
     (tool, field): (&str, &str),
     text: &str,
-    start: Us,
-    duration: Option<Us>,
+    (start, duration): (Us, Option<Us>),
 ) -> Result<(Vec<Op>, Id), Refused> {
-    let template = TitleTemplate::TitleCard;
     let def = (Catalog::builtin().get(&template.source()))
-        .ok_or_else(|| to_model(format!("{tool}: this build has no title card template.")))?;
+        .ok_or_else(|| to_model(format!("{tool}: this build has no such title template.")))?;
     let mut params = BTreeMap::new();
     for spec in &def.params {
         let ParamKind::Text { max_len, .. } = &spec.kind else {
@@ -387,27 +389,111 @@ pub(super) fn add_sound(
     })
 }
 
+/// `text` as it is said in the video, when it is: the same words in a row in one file's transcript (`persons_words` on
+/// the transcript's words), as the transcript writes them. Files are looked at in the project's order.
+fn said_in_video(c: &Compiler, text: &str) -> Option<String> {
+    let transcripts = &c.inputs.speech.transcripts;
+    (c.snapshot.assets.iter())
+        .filter_map(|asset| transcripts.get(&asset.id))
+        .find_map(|t| {
+            let said: Vec<&str> = (t.words.iter())
+                .filter(|w| w.kind != WordKind::Pause)
+                .map(|w| w.text.as_str())
+                .collect();
+            persons_words(&said.join(" "), text)
+        })
+}
+
+/// The most words a hook paraphrasing the video holds.
+pub const HOOK_WORDS: usize = 6;
+
+/// `text` as a short's hook that paraphrases the video: at most `HOOK_WORDS` words, more than half of its words of three
+/// letters or more said in the video (in a transcript of the project's files). As the model wrote it, trimmed.
+fn hook_from_video(c: &Compiler, text: &str) -> Option<String> {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.is_empty() || words.len() > HOOK_WORDS {
+        return None;
+    }
+    let bare = |w: &str| {
+        w.trim_matches(|ch: char| !ch.is_alphanumeric())
+            .to_lowercase()
+    };
+    let content: Vec<String> = (words.iter())
+        .map(|w| bare(w))
+        .filter(|w| w.chars().count() >= 3)
+        .collect();
+    if content.is_empty() {
+        return None;
+    }
+    let transcripts = &c.inputs.speech.transcripts;
+    let said: std::collections::HashSet<String> = (c.snapshot.assets.iter())
+        .filter_map(|a| transcripts.get(&a.id))
+        .flat_map(|t| t.words.iter())
+        .filter(|w| w.kind != WordKind::Pause)
+        .map(|w| bare(&w.text))
+        .collect();
+    let found = content.iter().filter(|w| said.contains(*w)).count();
+    (2 * found > content.len()).then(|| words.join(" "))
+}
+
 pub(super) fn add_text(
     c: &Compiler,
     work: &Project,
     text: &str,
     preset: TextPreset,
     (at, duration): (Option<Us>, Option<Us>),
+    animation: Option<Entrance>,
     font: Option<&str>,
 ) -> Result<Edit, Refused> {
     let words = if c.by_app {
         apps_words(("addText", "text"), text)?
     } else {
-        persons_words(&c.inputs.message, text).ok_or_else(|| {
+        (persons_words(&c.inputs.message, text)
+            .or_else(|| said_in_video(c, text))
+            .or_else(|| hook_from_video(c, text)))
+        .ok_or_else(|| {
             to_model(format!(
-                "addText: the words must be the person's own, and they did not write {text:?}. If they gave none, \
-                 ask them with askUser."
+                "addText: the words must be the person's own or said in the video, and {text:?} is neither. If they \
+                 gave none, quote the video or ask them with askUser."
             ))
         })?
     };
     let start = start(c, work, "addText", "atSec", at)?;
+    // Kinetic words are the kinetic title template, near the top whatever the preset, in its own font.
+    if animation == Some(Entrance::Kinetic) {
+        let (ops, _) = title_ops(
+            work,
+            TitleTemplate::KineticTitle,
+            ("addText", "text"),
+            &words,
+            (start, duration.or(Some(TEXT_US))),
+        )?;
+        return Ok(Edit {
+            ops,
+            label: label(
+                "addText",
+                vec![
+                    ("text", ErrorParam::from(words.as_str())),
+                    ("preset", ErrorParam::from("kinetic")),
+                ],
+            ),
+        });
+    }
     let mut ops = add_text_ops(work, preset.preset(), &words, start)
         .map_err(|e| to_model(format!("addText: {e}")))?;
+    if let Some(animation) = animation {
+        for op in &mut ops {
+            if let Op::AddItem { item, .. } = op {
+                let change = animate::Change {
+                    enter: Some(animation),
+                    ..animate::Change::default()
+                };
+                let now = item.layout.motion.take();
+                item.layout.motion =
+                    animate::animated(now, &change, item.duration_us, Some(&words));
+            }
+        }
+    }
     if let Some(name) = font {
         in_font(c, &mut ops, name)?;
     }
@@ -481,8 +567,9 @@ pub(super) fn add_image(
     let size = size.unwrap_or(PictureSize::Medium);
     let spot = position.unwrap_or(Position::Center).spot();
     // As the library's + puts a picture (`add_image_ops`), at a size and in a corner when one was asked for.
-    let ops = add_image_ops_at(work, &item.asset, start, size.share(), spot)
+    let mut ops = add_image_ops_at(work, &item.asset, start, size.share(), spot)
         .map_err(|e| to_model(format!("addImage: {e}")))?;
+    clear::clear_of_person(work, &mut ops, &item.asset, (size.share(), spot), start);
     Ok(Edit {
         ops: lasting(ops, length(work, start, duration, IMAGE_US)),
         label: label(
@@ -512,8 +599,33 @@ pub fn sticker_placement(p: &Project, job: &MakeSticker) -> Option<(Us, Us)> {
 /// start is now at the video's end (or the file isn't a picture, which a drawing always is).
 pub fn sticker_ops(p: &Project, job: &MakeSticker, asset: &Asset) -> Option<Vec<Op>> {
     let (start, duration) = sticker_placement(p, job)?;
-    let ops = add_image_ops_at(p, asset, start, job.size.share(), job.position.spot()).ok()?;
-    Some(lasting(ops, duration))
+    let mut ops = add_image_ops_at(p, asset, start, job.size.share(), job.position.spot()).ok()?;
+    let placed = (job.size.share(), job.position.spot());
+    clear::clear_of_person(p, &mut ops, asset, placed, start);
+    if let Some(m) = &job.motion {
+        for op in &mut ops {
+            if let Op::AddItem { item, .. } = op {
+                item.layout.motion = Some(Motion::clone(m));
+            }
+        }
+    }
+    let mut ops = lasting(ops, duration);
+    // Its sound where its animation starts, as `animate` places one (left out where it no longer fits).
+    if let Some(sound) = &job.sound {
+        let m = (ops.iter()).find_map(|op| match op {
+            Op::AddItem { item, .. } => item.layout.motion.clone(),
+            _ => None,
+        });
+        let exit_only = m
+            .as_ref()
+            .is_some_and(|m| m.enter.is_none() && m.looping.is_none());
+        let at = animate::sound_start(exit_only, start, duration, m.as_ref());
+        let with_picture = apply_ops(p, &ops).ok()?;
+        if let Ok(more) = add_sound_ops(&with_picture, sound, at) {
+            ops.extend(more);
+        }
+    }
+    Some(ops)
 }
 
 /// `makeSticker`'s job, on the project as the message's additions leave it (`with_additions`), whatever came before it
@@ -534,6 +646,8 @@ pub(super) fn make_sticker(
         position: position.unwrap_or(Position::Center),
         size: PictureSize::Medium,
         anchor: anchor_at(&with_additions.timeline.main, start),
+        motion: None,
+        sound: None,
     }))
 }
 
@@ -555,7 +669,13 @@ pub(super) fn make_title_card(
         })?
     };
     let start = start(c, work, "makeTitleCard", "atSec", at)?;
-    let (ops, title_id) = title_ops(work, ("makeTitleCard", "title"), &words, start, duration)?;
+    let (ops, title_id) = title_ops(
+        work,
+        TitleTemplate::TitleCard,
+        ("makeTitleCard", "title"),
+        &words,
+        (start, duration),
+    )?;
     let edit = Edit {
         ops,
         label: label(

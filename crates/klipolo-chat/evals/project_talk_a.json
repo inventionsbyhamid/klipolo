@@ -1,0 +1,94 @@
+{
+ "version": 7,
+ "id": "space-station-talk",
+ "name": "Space station talk",
+ "settings": {
+  "fps": 30,
+  "formats": [
+   "landscape"
+  ],
+  "primaryFormat": "landscape"
+ },
+ "assets": [
+  {
+   "id": "clip-a",
+   "kind": "video",
+   "path": "/media/astronauts.mp4",
+   "name": "astronauts.mp4",
+   "durationUs": 155040000,
+   "width": 1280,
+   "height": 720,
+   "fps": 29.97,
+   "hasAudio": true
+  }
+ ],
+ "timeline": {
+  "main": [
+   {
+    "id": "talk-1",
+    "source": {
+     "type": "asset",
+     "id": "clip-a"
+    },
+    "sourceInUs": 0,
+    "sourceOutUs": 155040000,
+    "speed": 1.0,
+    "volume": 1.0,
+    "muted": false,
+    "fadeInUs": 0,
+    "fadeOutUs": 0,
+    "look": {
+     "preset": null,
+     "strength": 1.0,
+     "lutId": null,
+     "lutStrength": 1.0
+    }
+   },
+   {
+    "id": "talk-2",
+    "source": {
+     "type": "asset",
+     "id": "clip-a"
+    },
+    "sourceInUs": 0,
+    "sourceOutUs": 155040000,
+    "speed": 1.0,
+    "volume": 1.0,
+    "muted": false,
+    "fadeInUs": 0,
+    "fadeOutUs": 0,
+    "look": {
+     "preset": null,
+     "strength": 1.0,
+     "lutId": null,
+     "lutStrength": 1.0
+    }
+   },
+   {
+    "id": "talk-3",
+    "source": {
+     "type": "asset",
+     "id": "clip-a"
+    },
+    "sourceInUs": 0,
+    "sourceOutUs": 155040000,
+    "speed": 1.0,
+    "volume": 1.0,
+    "muted": false,
+    "fadeInUs": 0,
+    "fadeOutUs": 0,
+    "look": {
+     "preset": null,
+     "strength": 1.0,
+     "lutId": null,
+     "lutStrength": 1.0
+    }
+   }
+  ],
+  "tracks": []
+ },
+ "captions": {
+  "enabled": false,
+  "style": null
+ }
+}

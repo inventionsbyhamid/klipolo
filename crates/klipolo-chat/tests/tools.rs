@@ -11,8 +11,9 @@
 use std::collections::BTreeSet;
 
 use klipolo_chat::tools::{
-    BackgroundChoice, BubbleChange, CHAT_CAPTION_STYLES, ClipRef, FunctionCall, Moment,
-    PictureSize, Position, Problem, SizeStep, Sound, TextPreset, ToolCall, TransitionKind, tools,
+    BackgroundChoice, BubbleChange, CHAT_CAPTION_STYLES, ClipRef, Entrance, FunctionCall, LayerRef,
+    Moment, PictureSize, Position, Problem, SizeStep, Sound, TextPreset, ToolCall, TransitionKind,
+    tools,
 };
 use klipolo_model::captions::styles::{BuiltinCaptionStyle, CaptionStyles};
 use klipolo_model::layout::Anchor;
@@ -208,12 +209,14 @@ fn every_tool_schema_is_strict() {
             "addImage",
             "makeSticker",
             "makeTitleCard",
+            "animate",
             "setCameraMode",
             "adjustCamera",
             "detachCamera",
             "muteSource",
             "setSourceVolume",
             "separateSound",
+            "autoZoom",
             "undo",
             "askUser",
             "cannotDo",
@@ -257,6 +260,7 @@ fn every_tool_schema_is_strict() {
             "addMusic.atSec",
             "addMusic.duck",
             "addMusic.volume",
+            "addText.animation",
             "addText.atSec",
             "addText.durationSec",
             "addText.font",
@@ -269,6 +273,10 @@ fn every_tool_schema_is_strict() {
             "makeSticker.position",
             "makeTitleCard.atSec",
             "makeTitleCard.durationSec",
+            "animate.emphasis",
+            "animate.enter",
+            "animate.exit",
+            "animate.sound",
             "setCameraMode.clips",
             "setCameraMode.format",
             "adjustCamera.border",
@@ -286,6 +294,7 @@ fn every_tool_schema_is_strict() {
             "setSourceVolume.which",
             "separateSound.clips",
             "separateSound.which",
+            "autoZoom.scale",
         ]
     );
 }
@@ -514,6 +523,7 @@ fn parses_each_tool_from_spike_shaped_calls() {
                     preset: TextPreset::Title,
                     at_us: Some(0),
                     duration_us: Some(secs_to_us(3.0)),
+                    animation: None,
                     font: None,
                 },
             ],
@@ -611,6 +621,23 @@ fn parses_each_tool_from_spike_shaped_calls() {
                 duration_us: Some(secs_to_us(2.0)),
             }],
         ),
+        (
+            "zoom in on my clicks",
+            vec![AutoZoom {
+                on: true,
+                scale: None,
+            }],
+        ),
+        (
+            "make the heart pop in with a pop sound",
+            vec![Animate {
+                layer: LayerRef::One("i1".into()),
+                enter: Some(Entrance::Pop),
+                exit: None,
+                emphasis: None,
+                sound: Some("Pop".into()),
+            }],
+        ),
     ];
     assert_eq!(fixture.answers.len(), expected.len());
     let mut seen = BTreeSet::new();
@@ -679,6 +706,14 @@ fn caption_styles_say_which_light_up_each_word() {
     for key in ["clean", "boxed"] {
         assert!(!of(key).contains("lights up"), "{}", of(key));
     }
+    // The shorts' two say so.
+    for key in ["word-pop", "bold-box"] {
+        assert!(
+            of(key).starts_with(&format!("{key}: for shorts")),
+            "{}",
+            of(key)
+        );
+    }
 }
 
 #[test]
@@ -686,14 +721,29 @@ fn style_enum_matches_caption_style_ids() {
     let style = &parameters_of("setCaptions")["properties"]["style"];
     assert_eq!(
         style["enum"],
-        json!(["clean", "bold", "karaoke", "highlight", "boxed", null])
+        json!([
+            "clean",
+            "bold",
+            "karaoke",
+            "highlight",
+            "boxed",
+            "word-pop",
+            "bold-box",
+            null
+        ])
     );
-    assert_eq!(
-        CHAT_CAPTION_STYLES.map(|(s, _)| s.key()),
-        ["clean", "bold", "karaoke", "highlight", "boxed"]
-    );
+    let words = [
+        "clean",
+        "bold",
+        "karaoke",
+        "highlight",
+        "boxed",
+        "word-pop",
+        "bold-box",
+    ];
+    assert_eq!(CHAT_CAPTION_STYLES.map(|(s, _)| s.key()), words);
     let installed = CaptionStyles::builtin();
-    for word in ["clean", "bold", "karaoke", "highlight", "boxed"] {
+    for word in words {
         let args = json!({"on": true, "style": word}).to_string();
         let parsed = ToolCall::parse(&call("setCaptions", &args)).unwrap();
         let ToolCall::SetCaptions {
@@ -720,7 +770,8 @@ fn style_enum_matches_caption_style_ids() {
         assert_eq!(
             err.to_string(),
             format!(
-                "setCaptions: style must be one of clean, bold, karaoke, highlight, boxed or null, not \"{word}\"."
+                "setCaptions: style must be one of clean, bold, karaoke, highlight, boxed, word-pop, bold-box or \
+                 null, not \"{word}\"."
             )
         );
     }
@@ -1114,7 +1165,8 @@ fn every_tool_in_the_schema_has_a_reader_that_reads_it() {
     for tool in tool_list() {
         let name = tool["name"].as_str().unwrap();
         let params = &tool["parameters"];
-        let mut next = -0.5;
+        // Numbers count up from 0.5; a zoom's scale starts at 1.25.
+        let mut next = if name == "autoZoom" { 1.0 } else { -0.5 };
         let args = sample(params, &mut next);
         let parsed = ToolCall::parse(&call(name, &args.to_string()))
             .unwrap_or_else(|e| panic!("{name} {args}: {e}"));
@@ -1310,6 +1362,26 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "topic and shot items",
         "Muse Image draw a new picture",
         "If the person gave no title words, ask for them",
+        // A short from one prompt: the whole plan in one answer, adapted to what was asked.
+        "A short (",
+        "in one answer",
+        "findMoments",
+        "keepOnly",
+        "setFormat portrait",
+        "followSubject",
+        "word-pop or bold-box",
+        "addText, kinetic or pop",
+        "in the first 2 s of what you keep",
+        "a striking later line said in the video, never the opening words",
+        "at most 6 punchy words",
+        "only where two clips already meet with spare footage; otherwise none",
+        "never the text \"null\"",
+        "medium pack stickers",
+        "at a top corner",
+        "animate last",
+        "a sound",
+        "addMusic",
+        "Place every layer inside the parts you keep",
         "one or two short, plain, friendly sentences",
         "No markdown",
         "Never use em dashes or en dashes",
@@ -1381,9 +1453,10 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
     // The caps every lane's prompt lines and tools share: 914 prompt tokens measured with the clip tools' line and the
-    // recordings' line; 4,555 tools tokens with the clip tools (setClip, setTransition), setBackground (about 210),
-    // freezeFrame (about 105), addText's font (about 25), the recording tools (about 1,010) and followSubject's focus
-    // (about 117).
+    // recordings' line, 1,126 with autoZoom's line and the short's recipe; 4,555 tools tokens with the clip tools
+    // (setClip, setTransition), setBackground (about 210), freezeFrame (about 105), addText's font (about 25), the
+    // recording tools (about 1,010) and followSubject's focus (about 117), and about 390 more with animate, the words'
+    // entrance, autoZoom and the shorts' two caption styles.
     assert!(prompt_tokens <= 1_800, "prompt {prompt_tokens} tokens");
     assert!(tools_tokens <= 6_500, "tools {tools_tokens} tokens");
 }

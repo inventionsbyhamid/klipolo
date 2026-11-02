@@ -11,6 +11,7 @@ use klipolo_model::media::image::IMAGE_US;
 use klipolo_model::media::music::MUSIC_VOLUME;
 use klipolo_model::media::text::{TEMPLATE_US, TEXT_US};
 
+use super::animate::ENTRANCES;
 use super::schema::{
     Word, list, nullable_boolean, nullable_number, nullable_string, nullable_words, seconds,
     string, words,
@@ -243,7 +244,7 @@ pub(super) const ADD_SOUND: Tool = Tool {
 pub(super) const ADD_TEXT: Tool = Tool {
     name: "addText",
     description: "Show words over the video in a text preset, at once and free: a title, a name, a caption. For a \
-                  full-screen title card, use makeTitleCard.",
+                  full-screen title card, use makeTitleCard. A short's hook: at most 6 punchy words.",
     parameters: || {
         vec![
             ("text", string("The words, as the person wrote them.")),
@@ -257,6 +258,7 @@ pub(super) const ADD_TEXT: Tool = Tool {
             ),
             at_sec(),
             duration_sec(TEXT_SECS),
+            ("animation", nullable_words(&ENTRANCES, "Null: fade.")),
             (
                 "font",
                 nullable_string("A font by name, e.g. Poppins; null: the preset's."),
@@ -269,6 +271,7 @@ pub(super) const ADD_TEXT: Tool = Tool {
             preset: a.word("preset", &TEXT_PRESETS)?,
             at_us: a.nullable_time("atSec")?,
             duration_us: a.nullable_length("durationSec", &OVERLAY_SECS)?,
+            animation: a.nullable_word("animation", &ENTRANCES)?,
             font: a.optional_text("font")?,
         })
     },
