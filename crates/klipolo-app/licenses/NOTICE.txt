@@ -24,5 +24,9 @@ Archivo, which the caption style samples fall back to, is under the SIL Open Fon
 The interface uses the Mac's system font. The video fonts in Klipolo.app/Contents/Resources/fonts each come with
 their own licence file in their folder.
 
+The sound effects of Klipolo's bundled pack come from Freesound and Kenney under CC0 1.0, and its emoji stickers are
+Google's Noto Emoji under the Apache License, Version 2.0. Klipolo.app/Contents/Resources/library/LICENSE.txt credits
+each file and gives the Apache licence's text.
+
 Klipolo also uses the Rust crates and JavaScript packages listed in THIRD-PARTY-NOTICES.txt, each under the licence
 given there.
