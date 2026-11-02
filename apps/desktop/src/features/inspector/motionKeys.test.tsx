@@ -137,6 +137,25 @@ describe('the cards during playback', () => {
     expect(renderCounts.get('motion:title')).toBeGreaterThan(motion);
   });
 
+  it("a picture layer with keys re-renders its Size and Opacity only when what they show changes", () => {
+    // The logo as an image layer from 1 s to 4 s, fading out over its last two seconds by keys.
+    const snapshot = title();
+    const [track] = snapshot.project.timeline.tracks;
+    track.items[0] = {
+      ...track.items[0],
+      content: { type: 'image', assetId: 'logo' },
+      layout: { ...track.items[0].layout, motion: { keys: { x: [], y: [], scale: [], rotation: [], opacity: [key(1, 1), key(3, 0)] } } },
+    };
+    renderWithProviders(<Inspector format="landscape" />);
+    renderCounts.clear();
+    // Before the fade: what Size and Opacity show stays the same however the playhead moves.
+    for (const at of [1.1, 1.3, 1.5, 1.7, 1.9]) act(() => usePlayback.setState({ playheadUs: at * S }));
+    expect(renderCounts.get('picture:title') ?? 0).toBe(0);
+    // Into the fade: Opacity shows the new level.
+    act(() => usePlayback.setState({ playheadUs: 3 * S }));
+    expect(renderCounts.get('picture:title')).toBeGreaterThan(0);
+  });
+
   it('Volume with keys re-renders when the level it shows changes', () => {
     const snapshot = fixtureSnapshot();
     snapshot.project.timeline.main[1].volumeKeys = [key(0, 1), key(4, 0)];
