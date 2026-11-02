@@ -8,7 +8,8 @@
 //!
 //! It calls Meta for real with `MODEL_API_KEY` (a Meta key) from the environment, never from a file, and never prints
 //! it. `KLIPOLO_SPEND_LEDGER` (a CSV file), when set, gets one row per model call; `KLIPOLO_META_BASE` points the calls
-//! elsewhere. It exits 0 when at least `--min-pass` cases pass (`MIN_PASS` by default, or every case run with
+//! elsewhere; `KLIPOLO_PLAN_DIR` (a folder), when set, gets `<case id>-plan.json` per case answered: the message, the
+//! reply and every call as the model made it, with its step, to compile and render again. It exits 0 when at least `--min-pass` cases pass (`MIN_PASS` by default, or every case run with
 //! `--only`), 1 when fewer do, 2 when it could not run.
 //!
 //! The eval set names a project, its one asset and that asset's transcript, speaker turns and scene log (paths beside
@@ -469,6 +470,13 @@ fn run(args: &Args) -> Result<bool, String> {
                 println!("     plan: {}", plan_line(project, out));
             }
             println!("     reply: {}", out.reply);
+            if let Some(dir) = std::env::var_os("KLIPOLO_PLAN_DIR") {
+                let path = Path::new(&dir).join(format!("{}-plan.json", case.id));
+                match std::fs::write(&path, plan_json(case, out)) {
+                    Ok(()) => println!("     plan written: {}", path.display()),
+                    Err(e) => println!("     plan not written: {}: {e}", path.display()),
+                }
+            }
         }
     }
     let min = (args.min_pass)
@@ -487,6 +495,22 @@ fn run(args: &Args) -> Result<bool, String> {
 
 fn failed(e: &ChatError) -> String {
     format!("{:?}: {} ({})", e.kind, e.message, e.detail)
+}
+
+/// The case's message, the reply and each call as the model made it (its arguments as JSON, the text when they aren't),
+/// with the step it came in from 1, as pretty JSON.
+fn plan_json(case: &Case, out: &PlanOut) -> String {
+    let calls: Vec<Value> = (out.answers.iter().enumerate())
+        .flat_map(|(k, calls)| {
+            calls.iter().map(move |c| {
+                let arguments = serde_json::from_str::<Value>(&c.arguments)
+                    .unwrap_or_else(|_| Value::String(c.arguments.clone()));
+                json!({"name": c.name, "arguments": arguments, "step": k + 1})
+            })
+        })
+        .collect();
+    let plan = json!({"message": case.message, "reply": out.reply, "calls": calls});
+    serde_json::to_string_pretty(&plan).unwrap_or_default()
 }
 
 /// Each answer's calls as the model wrote them: `name(args) | name(args)`, answers apart with `then`.
