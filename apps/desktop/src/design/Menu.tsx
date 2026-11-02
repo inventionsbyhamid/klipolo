@@ -94,21 +94,35 @@ export function MenuItem({
   onSelect,
   disabled,
   describedBy,
+  shortcut,
+  note,
 }: {
   children: ReactNode;
   onSelect: () => void;
   disabled?: boolean;
   /** Id of a `MenuNote` that explains the item, e.g. why it is disabled. */
   describedBy?: string;
+  /** Its keyboard shortcut ("⌥F"), shown at the end, as a context menu's item shows it. */
+  shortcut?: string;
+  /** What to know about it, such as why it is off: its tooltip, and its description for screen readers. */
+  note?: string;
 }) {
+  const noteId = useId();
   return (
     <DropdownMenu.Item
       className={menuItemClass}
       onSelect={onSelect}
       disabled={disabled}
-      aria-describedby={describedBy}
+      title={note}
+      aria-describedby={note ? noteId : describedBy}
     >
-      {children}
+      {shortcut ? <span className="menu-item-text">{children}</span> : children}
+      {shortcut && <span className="menu-key">{shortcut}</span>}
+      {note && (
+        <span id={noteId} hidden>
+          {note}
+        </span>
+      )}
     </DropdownMenu.Item>
   );
 }
