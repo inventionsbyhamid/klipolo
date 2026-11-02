@@ -227,9 +227,12 @@ open http://localhost:8000. Its two download links are in the
   `crates/klipolo-capture/NOTICE` name each file and where it came from.
 - FFmpeg is used under the LGPL, version 2.1 or later, and is dynamically
   linked.
-- The pack of sound effects, music, stickers and backgrounds is made from code
-  by `scripts/gen-library.py` and dedicated to the public domain under CC0 1.0
-  (`assets/library/LICENSE.txt`).
+- The pack's music, backgrounds and own stickers are made from code by
+  `scripts/gen-library.py` and dedicated to the public domain under CC0 1.0.
+  Its sound effects come from Freesound and Kenney under CC0 1.0, and its emoji
+  stickers are Google's Noto Emoji under the Apache License 2.0.
+  `assets/library/LICENSE.txt` credits each file, and
+  `scripts/library-sources.json` lists where each one came from.
 - Each font in `assets/fonts` comes with its own licence file. Archivo, the
   interface and site font, is under the SIL Open Font License
   (`site/assets/fonts/OFL.txt`).

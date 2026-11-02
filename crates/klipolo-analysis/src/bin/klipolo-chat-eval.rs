@@ -1507,7 +1507,7 @@ mod tests {
         assert_eq!(library.items.len(), 1 + listed);
         let whoosh = (library.items.iter()).find(|i| i.name == "Whoosh").unwrap();
         assert_eq!((whoosh.kind, whoosh.pack), (MediaKind::Sound, true));
-        assert_eq!(whoosh.asset.duration_us, 900_000);
+        assert_eq!(whoosh.asset.duration_us, 426_000);
         assert!(
             Path::new(&whoosh.asset.path).is_file(),
             "{}",

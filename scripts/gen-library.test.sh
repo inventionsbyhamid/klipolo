@@ -5,8 +5,10 @@
 # is 48 kHz 16-bit mono and under 3 s; every music bed is 16 to 30 s and loops at a zero crossing without a click (two
 # copies back to back are as smooth at the join as anywhere else); every sticker is a 1024 x 1024 RGBA PNG with
 # transparent corners; every background an RGB PNG sized for a 16:9 or 9:16 frame, each in both; the pack holds the
-# items listed below, CC0-1.0, and is under 10.5 MiB. Then scripts/check-library-sounds.py measures each sound and fails
-# on any out of bounds.
+# items listed below and is under 16 MiB; Klipolo's own items are CC0-1.0, and each item from others
+# (scripts/library-sources.json) is CC0-1.0 or Apache-2.0, names its author and source, and is credited in LICENSE.txt,
+# which carries the Apache licence's text. Then scripts/check-library-sounds.py measures each sound and fails on any
+# out of bounds.
 #   scripts/gen-library.test.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -90,29 +92,42 @@ def _():
 @check("manifest_lists_the_pack")
 def _():
     want = {
-        "sound": ["whoosh", "swoosh", "pop", "click", "ding", "chime", "rise", "sparkle",
-                  "impact", "bass-drop", "long-riser", "swipe-left", "swipe-right", "glitch", "record-scratch",
-                  "shutter", "typing", "notification", "success", "error", "pop-high", "bubbles", "boing", "drum-hit",
-                  "tick-tock"],
+        "sound": ["whoosh", "swoosh", "pop", "click", "ding", "chime", "rise", "sparkle", "impact", "bass-drop",
+                  "long-riser", "swipe-left", "swipe-right", "glitch", "record-scratch", "shutter", "typing",
+                  "notification", "success", "error", "pop-high", "bubbles", "boing", "drum-hit", "tick-tock",
+                  "applause", "crowd-laugh", "crowd-wow", "cash-register", "heartbeat", "deep-boom", "cartoon-fall",
+                  "drumroll", "crickets", "ta-da"],
         "music": ["soft-ambient", "upbeat-loop", "chill-beat", "energetic-loop"],
-        "sticker": ["heart", "star", "arrow", "circle", "check", "bubble",
-                    "arrow-curved", "arrow-pointer", "circle-drawn", "underline", "x-mark", "question", "exclamation",
-                    "number-1", "number-2", "number-3", "number-4", "number-5", "thought-bubble", "shout-bubble",
-                    "thumbs-up", "fire", "sparkles", "lightbulb", "new-tag", "subscribe", "cursor-hand",
-                    "sunset-16x9", "sunset-9x16", "soft-16x9", "soft-9x16", "night-16x9", "night-9x16", "paper-16x9",
-                    "paper-9x16"],
+        "sticker": ["heart", "star", "check", "x-mark", "question", "exclamation", "thumbs-up", "fire", "sparkles",
+                    "lightbulb", "hundred", "tears-of-joy", "mind-blown", "heart-eyes", "clapping", "rocket",
+                    "money-bag", "eyes", "party-popper", "warning", "skull", "raised-hands", "ok-hand", "thinking",
+                    "shocked", "thumbs-down", "arrow", "circle", "bubble", "arrow-curved", "arrow-pointer",
+                    "circle-drawn", "underline", "number-1", "number-2", "number-3", "number-4", "number-5",
+                    "thought-bubble", "shout-bubble", "new-tag", "subscribe", "cursor-hand", "sunset-16x9",
+                    "sunset-9x16", "soft-16x9", "soft-9x16", "night-16x9", "night-9x16", "paper-16x9", "paper-9x16"],
     }
     assert {k: [i["id"] for i in of(k)] for k in want} == want, [i["id"] for i in items]
-    assert len(items) == 64 and manifest["license"] == "CC0-1.0" and manifest["creator"] == "Klipolo"
+    assert len(items) == 90 and manifest["creator"] == "Klipolo", (len(items), manifest["creator"])
+    assert manifest["license"] == "Apache-2.0 AND CC0-1.0", manifest["license"]
+    others = {i["id"]: i for i in json.loads(pathlib.Path("scripts/library-sources.json").read_text())["items"]}
+    licence = (committed / "LICENSE.txt").read_text()
     for i in items:
-        assert i["license"] == "CC0-1.0", i["id"]
+        if i["id"] in others:
+            # From others: its licence one the app can ship, its author and source named, and credited in LICENSE.txt.
+            o = others[i["id"]]
+            assert i["license"] in ("CC0-1.0", "Apache-2.0") and i["license"] == o["license"], i["id"]
+            assert (i["author"], i["source"]) == (o["author"], o["source"]) and i["source"].startswith("https://"), i["id"]
+            assert f"  {i['file']}: " in licence and i["source"] in licence, f"{i['id']} isn't credited in LICENSE.txt"
+        else:
+            assert i["license"] == "CC0-1.0" and "author" not in i, i["id"]
         assert i["name"] and not any(d in i["name"] for d in "–—"), i["id"]
         folders = {"sound": ["sounds/"], "music": ["music/"], "sticker": ["stickers/", "backgrounds/"]}
         assert any(i["file"].startswith(f) for f in folders[i["category"]]), i["file"]
         assert ("duration_ms" in i) == (i["category"] != "sticker"), i["id"]
         assert ("width" in i and "height" in i) == (i["category"] == "sticker"), i["id"]
     size = sum(len(v) for v in files(committed).values())
-    assert size < 10.5 * 1024 * 1024, f"the pack is {size} bytes"
+    assert size < 16 * 1024 * 1024, f"the pack is {size} bytes"
+    assert "Apache License" in licence and "Version 2.0, January 2004" in licence, "LICENSE.txt has no Apache 2.0 text"
 
 
 def pcm(path):
