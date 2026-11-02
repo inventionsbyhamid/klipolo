@@ -40,10 +40,10 @@
   --color-hilite-hover: #c8281a; /* deeper under the pointer, so the white text keeps its contrast */
   --color-hilite-press: #b8241a;
 
-  --color-cut: light-dark(#c62828, #ff4d4f);         /* tally red: recording, the playhead, and "this will be cut" */
-  --color-cut-text: light-dark(#c62828, #ff6b63);    /* red used as text on panels */
-  --color-cut-wash: light-dark(rgb(229 56 59 / 0.14), rgb(255 77 79 / 0.2));
-  --color-cut-hatch: light-dark(rgb(229 56 59 / 0.45), rgb(255 77 79 / 0.55));
+  --color-cut: light-dark(#e0301a, #ff5a45);         /* brand red: recording, the playhead, "this will be cut" */
+  --color-cut-text: light-dark(#c8281a, #ff6650);    /* red used as text on panels */
+  --color-cut-wash: light-dark(rgb(224 48 26 / 0.14), rgb(255 90 69 / 0.2));
+  --color-cut-hatch: light-dark(rgb(224 48 26 / 0.45), rgb(255 90 69 / 0.55));
   --color-on-cut: light-dark(#ffffff, #16181b);      /* text on red ("Cut" tags) */
 
   --color-warning: light-dark(#a15c00, #f5a742);     /* warning amber: a font that isn't on this Mac, as text and marks */

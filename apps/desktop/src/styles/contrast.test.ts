@@ -121,4 +121,9 @@ describe('colour tokens', () => {
     expect(token('paper')).toEqual([BRAND_RED, BRAND_RED]);
     expect(token('signal-ink')[0]).toBe(BRAND_RED);
   });
+
+  it('cuts, recording and the playhead are the same red as the accent, so the app has one red', () => {
+    expect(token('cut')).toEqual(token('signal-ink'));
+    expect(token('cut')[0]).toBe(BRAND_RED);
+  });
 });
