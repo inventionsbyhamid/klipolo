@@ -1452,6 +1452,9 @@ fn system_prompt_explains_the_context_and_the_rules() {
         // Results come back: the model goes on until the request is done, then replies with no call.
         "What came of each call comes back to you",
         "then reply with no call",
+        // Independent calls together: a short's whole plan in one answer once the moments are known.
+        "Make calls that don't depend on each other together, in one answer",
+        "once you know the moments, make all the rest in one answer",
         "set keepOthers to true unless the person asks for only that format",
         "\"only vertical\", \"just square\", \"drop the landscape version\"",
         "unclear what to remove",
