@@ -100,13 +100,14 @@ words you keep, quoting or paraphrasing their words or a striking later line sai
 words; stickers and sound effects as below; quiet addMusic under the speech; setTransition only where two clips \
 already meet with spare footage; otherwise none. Place every layer inside the parts you keep.\n\
 - To place something where words are said, give atWords: 1 to 4 words in a row copied exactly from Transcript; it \
-starts as the first is said. Place stickers and sounds this way, never at a section's start.\n\
-- Stickers: only on a spoken word that names a thing, an action or a feeling, showing that word: addImage with that \
-word as file (Library finds a picture by its tags), else makeSticker. Medium at a top corner, 2 s, at most one per 8 \
-s, then animate last with pop or bounce.\n\
-- Sound effects, at most one per 5 s, none over the first words said but the hook's entrance: whoosh or swoosh on a \
-cut, a transition or text sliding in; pop on a sticker or text popping in (animate's sound); ding or chime on a \
-number, a key point or a reveal; rise under the hook; impact or bass drop on a punchline or a big claim.\n\
+starts as the first is said. Place stickers and sounds this way, on their word, not at the start of a moment or range.\n\
+- Stickers, at most 3 in a short: only on a spoken word that names a thing, an action or a feeling, showing that \
+word: a Library image whose name fits it, else makeSticker. Medium at a top corner, 2 s, at most one per 8 s, then \
+animate last with pop or bounce and its sound.\n\
+- Sound effects, at most one per 5 s: rise under the hook, the only sound over the opening words; whoosh or swoosh on \
+a cut (the first words after it) or text sliding in; pop on a sticker or text popping in, as animate's sound, never \
+also addSound there; ding or chime on a number, a key point or a reveal; impact or bass drop on a punchline or a big \
+claim.\n\
 - Layers lists words (t1), pictures (i1), video layers (v1) and music (m1). last is the layer the call before added.\n\
 - animate is the quick way for a common move. For anything specific, compose it: setMotion keys (x 1 is a frame's \
 width right, y 1 its height down, scale 1 the layer's size), animateText for words by letter, word or line, setLayer \

@@ -1510,16 +1510,16 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "never the text \"null\"",
         // Stickers and sound effects on the words said, each for what it is for.
         "give atWords: 1 to 4 words in a row copied exactly from Transcript",
-        "never at a section's start",
+        "on their word, not at the start of a moment or range",
         "only on a spoken word that names a thing, an action or a feeling, showing that word",
-        "Library finds a picture by its tags), else makeSticker",
+        "a Library image whose name fits it, else makeSticker",
+        "Stickers, at most 3 in a short",
         "Medium at a top corner, 2 s, at most one per 8 s",
         "animate last with pop or bounce",
-        "at most one per 5 s, none over the first words said but the hook's entrance",
-        "whoosh or swoosh on a cut, a transition or text sliding in",
-        "pop on a sticker or text popping in",
+        "at most one per 5 s: rise under the hook, the only sound over the opening words",
+        "whoosh or swoosh on a cut (the first words after it) or text sliding in",
+        "pop on a sticker or text popping in, as animate's sound, never also addSound there",
         "ding or chime on a number, a key point or a reveal",
-        "rise under the hook",
         "impact or bass drop on a punchline or a big claim",
         "addMusic",
         "Place every layer inside the parts you keep",
@@ -1610,14 +1610,15 @@ fn the_prompt_is_one_fixed_text_and_small() {
     // The caps every lane's prompt lines and tools share: 914 prompt tokens measured with the clip tools' line and the
     // recordings' line, 1,126 with autoZoom's line and the short's recipe, about 335 more with the composing tools' lines
     // and the catalogues they name (presets, effects, looks, fonts), about 180 more with the short's stickers and sound
-    // effects placed on the words said (1,774 in all); 4,555 tools tokens with the clip tools (setClip,
+    // effects placed on the words said (1,787 in all); 4,555 tools tokens with the clip tools (setClip,
     // setTransition), setBackground (about 210), freezeFrame (about 105), addText's font (about 25), the recording tools
     // (about 1,010) and followSubject's focus (about 117), about 390 more with animate, the words' entrance, autoZoom
     // and the shorts' two caption styles, about 1,030 more with the tools that compose any edit (setMotion,
-    // animateText, setLayer, styleText, setEffects), and about 165 more with atWords on addSound, addText, addImage and
-    // makeSticker (6,497 in all).
+    // animateText, setLayer, styleText, setEffects), and about 200 more with atWords on addSound, addText, addImage and
+    // makeSticker and atSec saying what it does beside it (6,530 in all). The tools cap rose from 6,500 to 6,600 for
+    // that last part.
     assert!(prompt_tokens <= 1_800, "prompt {prompt_tokens} tokens");
-    assert!(tools_tokens <= 6_500, "tools {tools_tokens} tokens");
+    assert!(tools_tokens <= 6_600, "tools {tools_tokens} tokens");
 }
 
 #[test]
