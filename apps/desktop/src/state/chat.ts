@@ -19,6 +19,7 @@ import { pictureActions } from './chatPictures';
 import { dropStale, proposalActions, replaceOpen, showOpenProposal } from './chatProposals';
 import { currentView } from './editorView';
 import { useProject } from './project';
+import { useReversing } from './reversing';
 import { useSpeech } from './speech';
 
 export { MAX_MESSAGES, type Message, type ReplyMessage, type FailedMessage } from './chatMessages';
@@ -184,6 +185,8 @@ export const useChat = create<ChatStore>((set, get) => {
         });
         // Each picture it asked for is drawn now, for its card.
         for (const picture of outcome.pictures) void get().drawPicture(id, picture.id);
+        // Each clip it plays backward is written backward now, as the clip menu's Reverse does.
+        for (const clipId of outcome.reverse) useReversing.getState().backward(clipId);
       } catch (error) {
         if (!live()) return;
         // Its times were on a revision the project left: sent again it would be refused again, so it says to ask anew.

@@ -7,10 +7,10 @@ use klipolo_model::project::Project;
 use klipolo_model::speech::run_spans;
 
 /// Whether `after`'s pages can differ from `before`'s for the same speech: a committed revision's feed carries no ops,
-/// so it compares what pages are made from. Captions turned on or off, another style or look, other formats,
-/// fixes or looks (shared lists: a pointer compare while untouched), a different speech map (clips, speeds, source
-/// nudges and mixes, through `run_spans`: O(clips)), or a transition added or removed (it makes a split a cut, which
-/// ends a page; O(clips)). Colours, fonts and places don't page. The app's caption pages for the
+/// so it compares what pages are made from. Captions turned on or off, another style, look, size or case, other
+/// formats, fixes or looks (shared lists: a pointer compare while untouched), a different speech map (clips, speeds,
+/// source nudges and mixes, through `run_spans`: O(clips)), or a transition added or removed (it makes a split a cut,
+/// which ends a page; O(clips)). Colours, fonts and places don't page. The app's caption pages for the
 /// lane and the canvas keep their build by it too.
 pub fn pages_may_differ(before: &Project, after: &Project) -> bool {
     let (a, b) = (&before.captions, &after.captions);
@@ -20,6 +20,8 @@ pub fn pages_may_differ(before: &Project, after: &Project) -> bool {
     a.enabled != b.enabled
         || a.style != b.style
         || a.variant != b.variant
+        || a.size != b.size
+        || a.upper != b.upper
         || before.settings.formats != after.settings.formats
         || before.word_fixes != after.word_fixes
         || before.word_looks != after.word_looks
@@ -41,12 +43,14 @@ pub fn pages_may_differ(before: &Project, after: &Project) -> bool {
 /// frame); otherwise they keep the committed ones. An op not listed here counts as moving them.
 pub(crate) fn may_move_captions(p: &Project, op: &Op) -> bool {
     match op {
-        // Turning captions on or off changes the pages, and so may a style or look, whose rules differ; a colour, a
-        // font or a place doesn't.
+        // Turning captions on or off changes the pages, and so may a style or look, whose rules differ, or a size or a
+        // case (each word's width); a colour, a font or a place doesn't.
         Op::SetCaptions { captions } => {
             captions.enabled != p.captions.enabled
                 || captions.style != p.captions.style
                 || captions.variant != p.captions.variant
+                || captions.size != p.captions.size
+                || captions.upper != p.captions.upper
         }
         Op::UpdateClip { patch, .. } => patch.speed.is_some(),
         // A transition makes a split a cut (a page ends there), and removing one joins the shot again.
@@ -132,6 +136,29 @@ mod tests {
         assert!(may_move_captions(&p, &restyled));
         assert!(may_move_captions(&p, &darker));
         assert!(!may_move_captions(&p, &recoloured));
+        // A size or a case changes how wide each word is, so the lines; the words' colour doesn't.
+        let bigger = CaptionSettings {
+            size: Some(1.3),
+            ..p.captions.clone()
+        };
+        let upper = CaptionSettings {
+            upper: Some(true),
+            ..p.captions.clone()
+        };
+        let yellow = CaptionSettings {
+            color: Some("#FFD02E".into()),
+            ..p.captions.clone()
+        };
+        assert!(may_move_captions(&p, &set(bigger.clone())));
+        assert!(may_move_captions(&p, &set(upper.clone())));
+        assert!(!may_move_captions(&p, &set(yellow.clone())));
+        let with = |captions: CaptionSettings| Project {
+            captions,
+            ..p.clone()
+        };
+        assert!(pages_may_differ(&p, &with(bigger)));
+        assert!(pages_may_differ(&p, &with(upper)));
+        assert!(!pages_may_differ(&p, &with(yellow)));
     }
 
     /// A committed revision keeps the previous pages unless what they're made from changed: a rename or a colour

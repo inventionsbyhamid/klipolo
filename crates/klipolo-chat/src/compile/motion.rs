@@ -7,18 +7,22 @@
 //! - A preset is the model's built-in of that word (`slide` with its side, a loop with its strength), lasting what was
 //!   asked or as `animate`'s do (`animate::ENTER_US`, `EXIT_US`, `EMPHASIS_US`), cut to the layer's length; `none`
 //!   takes its slot's away. A typewriter is for words.
+//! - On a main clip, the keys move a recording's camera bubble (`bubble_motion`); on a clip with none, scale keys push in
+//!   slowly on its footage, one push zoom (`push_in`).
 
 use std::collections::BTreeMap;
 
 use klipolo_model::Project;
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::contrib::builtin;
-use klipolo_model::ids::Id;
+use klipolo_model::ids::{Id, new_id};
+use klipolo_model::layout::{Anchor, BoxN, Layout};
 use klipolo_model::motion::{self, Key, MAX_KEYS, Motion, MotionKeys, MotionUse};
-use klipolo_model::ops::{ClipPatch, ItemPatch, Op};
+use klipolo_model::ops::{ClipPatch, ItemPatch, Op, TrackTarget};
 use klipolo_model::params::ParamValue;
+use klipolo_model::query::clip_starts;
 use klipolo_model::time::Us;
-use klipolo_model::timeline::{Item, ItemContent};
+use klipolo_model::timeline::{Item, ItemContent, ZoomTarget};
 
 use super::animate::{EMPHASIS_STRENGTH, EMPHASIS_US, ENTER_US, EXIT_US, noun};
 use super::{Edit, Refused, label, to_model};
@@ -225,7 +229,8 @@ pub(super) fn set_motion(
 /// `setMotion` on the main track's clip `id`, named `said`: the keys of its recording's camera bubble, which moves and
 /// scales (x, y, scale) but takes no presets. Keys come from the clip's start, in its timeline time, and are kept in
 /// the recording's own time, as the bubble's keys are (`CameraLayout::bubble`), so cuts and speed changes keep them on
-/// the content. Each property listed gets exactly these keys; an empty list takes them all away.
+/// the content. Each property listed gets exactly these keys; an empty list takes them all away. A clip with no camera
+/// bubble pushes in on its footage instead (`push_in`).
 pub(super) fn bubble_motion(
     work: &Project,
     (id, said): (&Id, &str),
@@ -235,10 +240,9 @@ pub(super) fn bubble_motion(
     let Some(clip) = work.timeline.main.iter().find(|c| &c.id == id) else {
         return Err(to_model(format!("setMotion: {said} is gone.")));
     };
+    // No camera bubble: the keys push in on the clip's footage.
     let Some(camera) = &clip.camera else {
-        return Err(to_model(format!(
-            "setMotion: {said} has no camera bubble. setMotion moves layers (t1, i1, v1) and a recording's camera."
-        )));
+        return push_in(work, (id, said), keys, presets);
     };
     if !presets.is_empty() {
         return Err(to_model(format!(
@@ -290,5 +294,136 @@ pub(super) fn bubble_motion(
     Ok(Edit {
         ops,
         label: label("setMotion", vec![("layer", ErrorParam::from("camera"))]),
+    })
+}
+
+/// The most a push zooms in: a zoom item's own most (`model.layer.zoom`).
+pub const PUSH_MOST: f64 = 5.0;
+
+/// `setMotion` on the main track's clip `id`, named `said`, that has no camera bubble: its scale keys push in on its
+/// footage, slowly. The first scale key is where the push starts (the footage whole there; one key alone starts it at
+/// the clip's start), the last where it reaches its scale (more than 1, at most `PUSH_MOST`); an x and a y key say the
+/// point it pushes toward, as shares of the picture (0.5 is the middle, as when none is given). It is one push zoom
+/// (`ZoomTarget::Push`) on a zoom track, attached to the clip so it moves with it, held from the last key to the clip's
+/// end: the engine eases it in and out, the same in the preview and an export. An empty list takes the pushes over the
+/// clip away. No presets.
+pub(super) fn push_in(
+    work: &Project,
+    (id, said): (&Id, &str),
+    keys: Option<&[KeyIn]>,
+    presets: &[PresetIn],
+) -> Result<Edit, Refused> {
+    let main = &work.timeline.main;
+    let Some(i) = main.iter().position(|c| &c.id == id) else {
+        return Err(to_model(format!("setMotion: {said} is gone.")));
+    };
+    let starts = clip_starts(main);
+    let (from, to) = (starts[i], starts[i].saturating_add(main[i].duration_us()));
+    let refuse = |why: String| Err(to_model(format!("setMotion: {said}: {why}")));
+    if !presets.is_empty() {
+        return refuse(
+            "a clip's footage takes scale keys to push in (with an x and a y for the point), no presets.".to_owned(),
+        );
+    }
+    let keys = keys.unwrap_or_default();
+    let label = || label("setMotion", vec![("layer", ErrorParam::from("zoom"))]);
+    if keys.is_empty() {
+        let ops: Vec<Op> = (work.timeline.tracks.iter())
+            .flat_map(|t| &t.items)
+            .filter(|z| {
+                matches!(
+                    z.content,
+                    ItemContent::Zoom {
+                        target: ZoomTarget::Push { .. },
+                        ..
+                    }
+                ) && z.start_us < to
+                    && from < z.end_us()
+            })
+            .map(|z| Op::RemoveItem { id: z.id.clone() })
+            .collect();
+        return Ok(Edit {
+            ops,
+            label: label(),
+        });
+    }
+    if let Some(k) = keys
+        .iter()
+        .find(|k| matches!(k.property, Property::Rotation | Property::Opacity))
+    {
+        return refuse(format!(
+            "a clip's footage takes scale keys to push in (with an x and a y for the point), not {}.",
+            word(k.property)
+        ));
+    }
+    let mut scales: Vec<&KeyIn> = keys
+        .iter()
+        .filter(|k| k.property == Property::Scale)
+        .collect();
+    scales.sort_by_key(|k| k.at_us);
+    let (first, last) = match scales.as_slice() {
+        [only] => (0, *only),
+        [a, b] => (a.at_us, *b),
+        [] => return refuse("give a scale key: the size it pushes in to, and when.".to_owned()),
+        _ => {
+            return refuse(
+                "a push takes one or two scale keys: where it starts (1) and the size it reaches."
+                    .to_owned(),
+            );
+        }
+    };
+    let duration = to - from;
+    if last.at_us <= first || last.at_us > duration {
+        return refuse(format!(
+            "its last scale key must come after its first, within the clip's {} s.",
+            secs(duration)
+        ));
+    }
+    if last.value <= 1.0 || last.value > PUSH_MOST {
+        return refuse(format!(
+            "a push's scale must be more than 1 and at most {PUSH_MOST}, not {}.",
+            last.value
+        ));
+    }
+    let point = |property: Property| -> Result<f64, Refused> {
+        let at = (keys.iter().rev()).find(|k| k.property == property);
+        match at.map(|k| k.value) {
+            None => Ok(0.5),
+            Some(v) if (0.0..=1.0).contains(&v) => Ok(v),
+            Some(v) => Err(to_model(format!(
+                "setMotion: {said}: the point to push toward is a share of the picture, 0 to 1, not {v}."
+            ))),
+        }
+    };
+    let (x, y) = (point(Property::X)?, point(Property::Y)?);
+    let side = 1.0 / last.value;
+    let corner = |c: f64| (c - side / 2.0).clamp(0.0, 1.0 - side);
+    let item = Item {
+        id: new_id(),
+        start_us: from + first,
+        duration_us: duration - first,
+        attach: None,
+        layout: Layout::new(Anchor::Center, BoxN::FULL),
+        content: ItemContent::Zoom {
+            target: ZoomTarget::Push {
+                rect: BoxN {
+                    x: corner(x),
+                    y: corner(y),
+                    w: side,
+                    h: side,
+                },
+                ramp_us: last.at_us - first,
+            },
+            scale: last.value,
+        },
+        effects: Vec::new(),
+    };
+    Ok(Edit {
+        ops: vec![Op::AddItem {
+            track: TrackTarget::Auto,
+            item,
+            attach: true,
+        }],
+        label: label(),
     })
 }

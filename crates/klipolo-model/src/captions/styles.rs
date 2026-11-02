@@ -6,12 +6,13 @@
 //! fails while the folder and the list disagree.
 
 use std::collections::BTreeMap;
+use std::ops::RangeInclusive;
 use std::sync::{Arc, OnceLock};
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use super::style::CaptionStyleDef;
+use super::style::{hex_ok, BoxOn, CaptionStyleDef, Paint, TextCase};
 use crate::coded::CodedError;
 use crate::contrib::{ContribDef, ContribId, ContribKind};
 use crate::messages::code;
@@ -179,7 +180,36 @@ impl CaptionStyles {
             ),
         };
         let variant = s.variant.as_deref().filter(|_| !missing);
-        (Arc::new(base.with(variant, s.accent.as_deref())), missing)
+        let mut style = base.with(variant, s.accent.as_deref());
+        persons(&mut style, s);
+        (Arc::new(style), missing)
+    }
+}
+
+/// The factors the person's caption size takes (`CaptionSettings::size`): half to twice the style's own.
+pub const CAPTION_SIZES: RangeInclusive<f64> = 0.5..=2.0;
+
+/// The person's size, words' colour and case (`s`) over `style`: the size in every format, the colour on the words and
+/// on the words over a line's box (a box on the said word keeps its own), the case as asked.
+fn persons(style: &mut CaptionStyleDef, s: &CaptionSettings) {
+    if let Some(k) = s.size.filter(|k| CAPTION_SIZES.contains(k)) {
+        let size = &mut style.size;
+        size.portrait *= k;
+        size.landscape *= k;
+        size.square = size.square.map(|v| v * k);
+    }
+    if let Some(color) = s.color.as_deref().filter(|c| hex_ok(c)) {
+        style.fill = Paint(color.to_owned());
+        if let Some(b) = style.boxes.as_mut().filter(|b| b.on == BoxOn::Line) {
+            b.text = Some(Paint(color.to_owned()));
+        }
+    }
+    if let Some(upper) = s.upper {
+        style.case = if upper {
+            TextCase::Upper
+        } else {
+            TextCase::AsSaid
+        };
     }
 }
 

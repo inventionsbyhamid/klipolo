@@ -158,3 +158,10 @@ pub(super) fn schema(description: &str) -> Value {
         description,
     )
 }
+
+/// [`schema`], or null.
+pub(super) fn nullable_schema(description: &str) -> Value {
+    let mut out = schema(description);
+    out["type"] = json!(["array", "null"]);
+    out
+}

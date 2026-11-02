@@ -1,6 +1,7 @@
-//! A message's jobs (`klipolo_chat::Job`): work for a runner rather than ops. Following a subject runs before the
-//! message lands (`follow`), when the session has a speaker following; without one, and for blurring, which isn't in
-//! Klipolo yet, the reply says they are coming and nothing changes for them. A picture to draw goes to
+//! A message's jobs (`klipolo_chat::Job`): work for a runner rather than ops. A clip to play backward goes to the page,
+//! which writes its reversed copy as the clip menu's Reverse does (`Started::reverse`). Following a subject runs
+//! before the message lands (`follow`), when the session has a speaker following; without one, and for blurring, which
+//! isn't in Klipolo yet, the reply says they are coming and nothing changes for them. A picture to draw goes to
 //! `pictures` (`PictureAsk`), which draws it when the page asks and places it on Use.
 //!
 //! Every kind of job is matched in `one`, for chat's messages (`start`) and other apps' calls (`picture_for`): a new kind
@@ -15,12 +16,16 @@ use super::pictures::PictureAsk;
 pub const FOLLOW_COMING: &str = "Following a subject isn't in Klipolo yet. It's coming soon.";
 /// Said for `blurObjects`.
 pub const BLUR_COMING: &str = "Blurring isn't in Klipolo yet. It's coming soon.";
+/// Said for a clip to reverse where only a picture is drawn: the page writes reversed copies.
+const REVERSE_ON_PAGE: &str = "The reversed copy is made in Klipolo's window.";
 
 /// What a message's jobs came to.
 #[derive(Default)]
 pub(crate) struct Started {
     /// Pictures to draw.
     pub pictures: Vec<PictureAsk>,
+    /// The clips to play backward, by id: the page writes each one's reversed copy (`ChatReply::reverse`).
+    pub reverse: Vec<String>,
     /// A sentence for each kind of job Klipolo can't run yet.
     pub coming: Vec<&'static str>,
     /// Their tools, for the turn's note.
@@ -41,6 +46,10 @@ impl Started {
 pub(crate) fn start(compiled: &Compiled) -> Started {
     let mut started = Started::default();
     for job in &compiled.jobs {
+        if let Job::Reverse { clip_id } = job {
+            started.reverse.push(clip_id.clone());
+            continue;
+        }
         match one(job) {
             Ok(ask) => started.pictures.push(ask),
             Err((said, tool)) => {
@@ -69,5 +78,7 @@ fn one(job: &Job) -> Result<PictureAsk, (&'static str, &'static str)> {
         Job::MakeTitleBackground {
             prompt, title_id, ..
         } => Ok(media_jobs::title_background(prompt, title_id)),
+        // The page writes the copy (`Started::reverse`), never a picture.
+        Job::Reverse { .. } => Err((REVERSE_ON_PAGE, "reverseClip")),
     }
 }

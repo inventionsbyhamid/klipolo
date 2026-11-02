@@ -2,4 +2,4 @@
 import type { BoxN } from "./BoxN";
 import type { FocusKind } from "./FocusKind";
 
-export type ZoomTarget = { "type": "auto", using?: Array<FocusKind>, } | { "type": "rect", rect: BoxN, };
+export type ZoomTarget = { "type": "auto", using?: Array<FocusKind>, } | { "type": "rect", rect: BoxN, } | { "type": "push", rect: BoxN, rampUs: number, };

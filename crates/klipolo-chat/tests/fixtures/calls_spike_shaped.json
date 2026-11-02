@@ -203,6 +203,10 @@
     {
       "request": "make the title yellow with a black outline",
       "calls": [{"name": "styleText", "call_id": "call_50", "arguments": "{\"layer\": \"t1\", \"set\": [{\"key\": \"color\", \"value\": \"#ffd02e\"}, {\"key\": \"outline\", \"value\": \"#000000\"}]}"}]
+    },
+    {
+      "request": "play the second clip backward",
+      "calls": [{"name": "reverseClip", "call_id": "call_51", "arguments": "{\"clip\": \"c2\", \"backward\": true}"}]
     }
   ]
 }

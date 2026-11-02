@@ -520,20 +520,23 @@ fn in_font(c: &Compiler, ops: &mut [Op], name: &str) -> Result<(), Refused> {
     Ok(())
 }
 
-/// What the reply says of `addText`'s font when it isn't on this computer yet (a Google font): it shows in Inter until
-/// the person downloads it, which the missing-fonts note over the preview offers. None for any other call or font.
+/// What the reply says of `addText`'s or `setCaptions`' font when it isn't on this computer yet (a Google font): it shows
+/// in Inter until the person downloads it, which the missing-fonts note over the preview offers. None for any other call
+/// or font.
 pub(super) fn font_note(c: &Compiler, call: &ToolCall) -> Option<String> {
-    let ToolCall::AddText {
-        font: Some(name), ..
-    } = call
-    else {
-        return None;
+    let (name, what) = match call {
+        ToolCall::AddText {
+            font: Some(name), ..
+        } => (name, "words"),
+        // The captions' font, as `setCaptions` sets it.
+        ToolCall::SetCaptions { look, .. } => (look.font.as_ref()?.as_ref()?, "captions"),
+        _ => return None,
     };
     let named = c.inputs.fonts.named(name, 400, false)?;
     named.download_bytes?;
     let family = named.font.family;
     Some(format!(
-        "{family} isn't on this Mac yet, so the words show in Inter until you download it over the preview."
+        "{family} isn't on this Mac yet, so the {what} show in Inter until you download it over the preview."
     ))
 }
 

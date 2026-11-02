@@ -478,6 +478,13 @@ pub enum ZoomTarget {
     Rect {
         rect: BoxN,
     },
+    /// A slow push toward `rect`'s centre: the main footage whole at the item's start, at its scale `ramp_us` into it,
+    /// eased in and out, and held there to its end.
+    #[serde(rename_all = "camelCase")]
+    Push {
+        rect: BoxN,
+        ramp_us: Us,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS, schemars::JsonSchema)]

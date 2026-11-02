@@ -24,7 +24,8 @@
 //!   over.
 //! - **Jobs:** following a subject and blurring aren't in Klipolo yet: the reply says they are coming (`jobs`). A
 //!   picture (a sticker, a title card's background) is named in the reply, drawn when the page asks, and placed on Use
-//!   as one undo step (`pictures`).
+//!   as one undo step (`pictures`). A clip to play backward is named in the reply too: the page writes its reversed copy
+//!   as the clip menu's Reverse does, and turns the clip with it as one undo step.
 //! - **Undo chips** name the revision their change left (`undo_last`): one takes its change back only while nothing
 //!   came after it.
 //! - **Spend:** every model call's cost goes into the session's AI spend (`SpendCounter`); nothing is shown per
@@ -731,6 +732,7 @@ impl ChatSession {
             let rest = committed
                 || !out.compiled.questions.is_empty()
                 || !jobs.pictures.is_empty()
+                || !jobs.reverse.is_empty()
                 || !jobs.coming.is_empty();
             if landed.lost.is_none() && !rest {
                 landed.lost = Some(MOVED);
@@ -800,6 +802,10 @@ impl ChatSession {
         if landed.lost.is_none() && same_project {
             for ask in jobs.pictures.drain(..) {
                 reply = reply.picture(self.pictures.ask(Some(now.at.clone()), ask));
+            }
+            // The page writes each reversed copy, as the clip menu's Reverse does.
+            for clip_id in &jobs.reverse {
+                reply = reply.reverse(clip_id);
             }
         }
         let turn = Turn {
