@@ -25,6 +25,7 @@
 pub mod animate;
 mod args;
 pub mod background;
+pub mod captions;
 pub mod clips;
 pub mod effects;
 mod error;
@@ -51,6 +52,7 @@ use serde_json::{Map, Value, json};
 pub use animate::{Emphasis, Entrance, Exit, LayerRef};
 use args::{Args, kind};
 pub use background::BackgroundChoice;
+pub use captions::{CaptionChange, CaptionPlace};
 pub use clips::{ClipRef, TransitionKind};
 pub use effects::{EffectChange, SettingValue};
 pub use error::{Problem, ToolError};
@@ -193,10 +195,12 @@ pub enum ToolCall {
         format: FormatKind,
         keep_others: bool,
     },
-    /// Show or hide captions; `style` None keeps the current style (or the formats' default when there is none).
+    /// Show or hide captions; `style` None keeps the current style (or the formats' default when there is none), and
+    /// `look` goes over it.
     SetCaptions {
         on: bool,
         style: Option<BuiltinCaptionStyle>,
+        look: Box<CaptionChange>,
     },
     /// Make every shown word matching `find` read `replace` in captions and the transcript.
     FixCaptionWords { find: String, replace: String },
@@ -743,7 +747,9 @@ const TOOLS: &[Tool] = &[
     },
     Tool {
         name: "setCaptions",
-        description: "Turn captions on or off, or change their style.",
+        description: "Turn captions on or off, or change their style. set goes over it: font, size (1 is the \
+                      style's; 0.5 to 2), position (top, middle, bottom or y 0.05 to 0.95), color (#hex words), \
+                      highlight (#hex lit words), upper (true or false); none is the style's own.",
         parameters: || {
             vec![
                 ("on", boolean("True shows captions, false hides them.")),
@@ -751,12 +757,14 @@ const TOOLS: &[Tool] = &[
                     "style",
                     nullable_words(&chat_styles(), &style_description()),
                 ),
+                ("set", sets::nullable_schema("Look keys.")),
             ]
         },
         read: |a| {
             Ok(ToolCall::SetCaptions {
                 on: a.flag("on")?,
                 style: a.nullable_word("style", &chat_styles())?,
+                look: Box::new(captions::read_look(a)?),
             })
         },
     },

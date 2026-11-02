@@ -801,6 +801,10 @@ impl Compiler<'_> {
                     }
                     // What a recording tool left as it was.
                     notes.extend(recorded.drain(..).map(|said| (i, said)));
+                    // The captions' font still to download is named, as `addText`'s is.
+                    if let Some(said) = media::font_note(self, call) {
+                        notes.push((i, said));
+                    }
                     adding.keep(tried, i);
                 }
                 Err(r) => refuse(&mut out, i, r),
@@ -1310,7 +1314,9 @@ impl Compiler<'_> {
                 format,
                 keep_others,
             } => Ok(additions::set_format(work, *format, *keep_others)),
-            ToolCall::SetCaptions { on, style } => Ok(additions::set_captions(work, *on, *style)),
+            ToolCall::SetCaptions { on, style, look } => {
+                additions::set_captions(self, work, *on, *style, look)
+            }
             ToolCall::SetBackground {
                 kind,
                 color,

@@ -1,6 +1,8 @@
 //! The additions, on the additions' working copy (the snapshot as the earlier additions of the answer leave it).
 //! - `setFormat`: `SetSettings`, the format made the main one, joining the others or replacing them.
-//! - `setCaptions`: `SetCaptions` with the other caption settings kept; no style keeps the current one.
+//! - `setCaptions`: `SetCaptions` with the other caption settings kept; no style keeps the current one, and the look
+//!   (`set`) goes over it: a font named from the app's fonts, a size of 1 the style's own, a position in each format
+//!   the video has (the Captions panel's place words), `none` the style's own.
 //! - `fixCaptionWords`: one `FixWords` per place the words are shown, matched whole and ignoring case and the
 //!   punctuation around them, in the file's sound time (the transcript's: neither file nor timeline time). The
 //!   punctuation around the words shown stays around the fix ("Caden," reads "Kaiden,").
@@ -13,7 +15,7 @@
 use std::collections::BTreeSet;
 
 use klipolo_model::Project;
-use klipolo_model::captions::styles::BuiltinCaptionStyle;
+use klipolo_model::captions::styles::{BuiltinCaptionStyle, CaptionStyles};
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::ops::Op;
 use klipolo_model::project::{FormatKind, Settings};
@@ -23,7 +25,7 @@ use klipolo_model::time::Us;
 
 use super::{Compiler, Edit, Refused, label, to_model, us};
 use crate::context::{secs, within_video};
-use crate::tools::FREEZE_DEFAULT_US;
+use crate::tools::{CaptionChange, CaptionPlace, FREEZE_DEFAULT_US};
 
 /// The format's word, as the tool takes it.
 pub(super) fn format_word(format: FormatKind) -> &'static str {
@@ -67,24 +69,81 @@ pub(super) fn set_format(work: &Project, format: FormatKind, keep_others: bool) 
     }
 }
 
-pub(super) fn set_captions(work: &Project, on: bool, style: Option<BuiltinCaptionStyle>) -> Edit {
+/// Where the Captions panel's place words put the captions' centre, per format (`captionOps.ts`' `PLACE_Y`).
+fn place_y(place: CaptionPlace, format: FormatKind) -> f64 {
+    let (portrait, square, landscape) = match place {
+        CaptionPlace::Top => (0.22, 0.18, 0.14),
+        CaptionPlace::Middle => (0.5, 0.5, 0.5),
+        CaptionPlace::Bottom => (0.7, 0.85, 0.88),
+        CaptionPlace::At(y) => (y, y, y),
+    };
+    match format {
+        FormatKind::Portrait => portrait,
+        FormatKind::Square => square,
+        FormatKind::Landscape => landscape,
+    }
+}
+
+pub(super) fn set_captions(
+    c: &Compiler,
+    work: &Project,
+    on: bool,
+    style: Option<BuiltinCaptionStyle>,
+    look: &CaptionChange,
+) -> Result<Edit, Refused> {
     let mut captions = work.captions.clone();
     captions.enabled = on;
     if let Some(style) = style {
         captions.style = Some(style.id());
     }
+    if let Some(font) = &look.font {
+        captions.font = match font {
+            Some(name) => {
+                // The face nearest the style's own weight and slant: the drawer picks it again from the family.
+                let (drawn, _) =
+                    CaptionStyles::builtin().for_settings(&captions, &work.settings.formats);
+                let named = (c.inputs.fonts)
+                    .named(name, drawn.font.weight, drawn.font.italic)
+                    .ok_or_else(|| {
+                        to_model(format!(
+                            "setCaptions: no font is named {name:?}, here or at Google. Leave font out to keep the \
+                             captions' font."
+                        ))
+                    })?;
+                Some(named.font)
+            }
+            None => None,
+        };
+    }
+    if let Some(size) = look.size {
+        captions.size = (size != 1.0).then_some(size);
+    }
+    if let Some(place) = look.position {
+        for &format in &work.settings.formats {
+            captions.place.insert(format, place_y(place, format));
+        }
+    }
+    if let Some(color) = &look.color {
+        captions.color = color.clone();
+    }
+    if let Some(color) = &look.highlight {
+        captions.accent = color.clone();
+    }
+    if let Some(upper) = look.upper {
+        captions.upper = upper;
+    }
     let mut params = vec![("on", ErrorParam::from(if on { "on" } else { "off" }))];
     if let Some(style) = style {
         params.push(("style", ErrorParam::from(style.key())));
     }
-    Edit {
+    Ok(Edit {
         ops: if captions == work.captions {
             Vec::new()
         } else {
             vec![Op::SetCaptions { captions }]
         },
         label: label("setCaptions", params),
-    }
+    })
 }
 
 pub(super) fn split_at(c: &Compiler, work: &Project, at_us: Us) -> Result<Edit, Refused> {

@@ -262,6 +262,7 @@ fn every_tool_schema_is_strict() {
             "setBackground.colorEnd",
             "setBackground.kind",
             "setBackground.padding",
+            "setCaptions.set",
             "setCaptions.style",
             "followSubject.focus",
             "addMusic.atSec",
@@ -322,6 +323,7 @@ fn parses_each_tool_from_spike_shaped_calls() {
     let karaoke = SetCaptions {
         on: true,
         style: Some(BuiltinCaptionStyle::Karaoke),
+        look: Default::default(),
     };
     let expected: Vec<(&str, Vec<ToolCall>)> = vec![
         ("Make this vertical for TikTok", vec![portrait.clone()]),
@@ -445,6 +447,7 @@ fn parses_each_tool_from_spike_shaped_calls() {
             vec![SetCaptions {
                 on: false,
                 style: None,
+                look: Default::default(),
             }],
         ),
         (
@@ -838,6 +841,7 @@ fn style_enum_matches_caption_style_ids() {
         let ToolCall::SetCaptions {
             on: true,
             style: Some(style),
+            ..
         } = parsed
         else {
             panic!("{word}: {parsed:?}");
@@ -870,7 +874,8 @@ fn style_enum_matches_caption_style_ids() {
             ToolCall::parse(&call("setCaptions", args)).unwrap(),
             ToolCall::SetCaptions {
                 on: true,
-                style: None
+                style: None,
+                look: Default::default(),
             }
         );
     }
@@ -1269,6 +1274,7 @@ fn every_tool_in_the_schema_has_a_reader_that_reads_it() {
                 args["volumeKeys"] = json!([{"atSec": 0, "value": 1, "ease": "out"}]);
             }
             "styleText" => args["set"] = json!([{"key": "bold", "value": true}]),
+            "setCaptions" => args["set"] = json!([{"key": "upper", "value": true}]),
             _ => {}
         }
         let parsed = ToolCall::parse(&call(name, &args.to_string()))

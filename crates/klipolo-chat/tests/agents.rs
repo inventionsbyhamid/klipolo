@@ -556,6 +556,7 @@ fn every_call() -> Vec<(ToolCall, bool)> {
             ToolCall::SetCaptions {
                 on: true,
                 style: Some(BuiltinCaptionStyle::Karaoke),
+                look: Default::default(),
             },
             false,
         ),
