@@ -26,6 +26,7 @@ describe('choices', () => {
       camera: null,
       showCamera: true,
       mirror: true,
+      cameras: { screen: null, yourself: null },
     });
   });
 
@@ -88,13 +89,32 @@ describe('choices', () => {
 
   it('choosing_record_yourself_takes_the_camera_the_setup_offers', () => {
     const setup = recorderSetup({ cameras: [device('facetime'), device('desk')] });
-    expect(kindPicks(setup, picks(), 'camera')).toEqual({ kind: 'camera', camera: 'facetime' });
-    expect(kindPicks({ ...setup, camera: 'desk' }, picks(), 'camera')).toEqual({ kind: 'camera', camera: 'desk' });
-    // A camera that went is never offered; one the person chose stays.
-    expect(kindPicks({ ...setup, camera: 'gone' }, picks(), 'camera')).toEqual({ kind: 'camera', camera: 'facetime' });
-    expect(kindPicks(setup, picks({ camera: 'desk' }), 'camera')).toEqual({ kind: 'camera' });
-    expect(kindPicks(recorderSetup({ cameras: [] }), picks(), 'camera')).toEqual({ kind: 'camera', camera: null });
-    expect(kindPicks(setup, picks(), 'app')).toEqual({ kind: 'app' });
+    const camera = (over: Partial<Picks>, s = setup) => ({ ...picks(over), ...kindPicks(s, picks(over), 'camera') }).camera;
+    expect(camera({})).toBe('facetime');
+    expect(camera({}, { ...setup, camera: 'desk' })).toBe('desk');
+    // A camera that went is never offered; with none listed there is none to take.
+    expect(camera({}, { ...setup, camera: 'gone' })).toBe('facetime');
+    expect(camera({}, recorderSetup({ cameras: [] }))).toBeNull();
+  });
+
+  it('each_mode_keeps_its_own_camera', () => {
+    const setup = recorderSetup({ cameras: [device('facetime'), device('desk')] });
+    const to = (now: Picks, kind: Picks['kind']) => ({ ...now, ...kindPicks(setup, now, kind) });
+    // A screen take with no camera; Record yourself takes the camera offered, and the person picks another.
+    let now = to(picks(), 'camera');
+    expect(now.camera).toBe('facetime');
+    now = { ...now, camera: 'desk' };
+    // Back to the whole screen: no camera, as it had, so no bubble comes with it.
+    now = to(now, 'screen');
+    expect(now.camera).toBeNull();
+    expect(armOptions(now)).toMatchObject({ camera: null, cameraBubble: false });
+    // A camera chosen for the screen goes with it to one app, and comes back after Record yourself.
+    now = to({ ...now, camera: 'facetime' }, 'app');
+    expect(now.camera).toBe('facetime');
+    now = to(now, 'camera');
+    expect(now.camera).toBe('desk');
+    now = to(now, 'screen');
+    expect(now.camera).toBe('facetime');
   });
 });
 
