@@ -740,7 +740,11 @@ async fn a_camera_take_follows_whoever_speaks_with_its_mic_s_sound() {
         markers: vec![],
         game: None,
     }];
-    let mut clip = Clip::new(ClipSource::Recording { id: "take".into() }, s(60.5), s(120.5));
+    let mut clip = Clip::new(
+        ClipSource::Recording { id: "take".into() },
+        s(60.5),
+        s(120.5),
+    );
     clip.id = "c1".into();
     clip.camera = Some(CameraLayout {
         mirror: false,
@@ -772,9 +776,16 @@ async fn a_camera_take_follows_whoever_speaks_with_its_mic_s_sound() {
     let beside = copy.beside.lock().unwrap().clone();
     assert_eq!(beside.len(), 3, "{beside:?}");
     for (path, lead) in &beside {
-        assert_eq!((path.as_path(), *lead), (Path::new("/media/mic.caf"), -s(0.5)));
+        assert_eq!(
+            (path.as_path(), *lead),
+            (Path::new("/media/mic.caf"), -s(0.5))
+        );
     }
-    assert_eq!(copy.own_sound.load(Ordering::SeqCst), 0, "never the camera's silence");
+    assert_eq!(
+        copy.own_sound.load(Ordering::SeqCst),
+        0,
+        "never the camera's silence"
+    );
     let next = apply_ops(&p, &followed.ops(&p)).unwrap();
     let (path, keep, people) = focus(&next);
     // A speaks to 80 s of the mic (79.5 s of the camera, 80 s of the take), B to 100 s, then A again.

@@ -241,10 +241,7 @@ fn a_camera_take_s_voice_is_its_mic_lined_up_beside_the_camera() {
         vec![turn(1.0, 5.0), turn(10.0, 20.0), turn(299.5, 302.0)]
     });
     // Cut to where the camera's file and the mic both play: from the camera's first frame to the mic's end.
-    assert_eq!(
-        turns,
-        [turn(1.0, 4.0), turn(9.0, 19.0), turn(298.5, 299.0)]
-    );
+    assert_eq!(turns, [turn(1.0, 4.0), turn(9.0, 19.0), turn(298.5, 299.0)]);
     // An imported video, a screen take and a camera take without a mic have none.
     for file in ["talk", "screen"] {
         assert!(camera_voice(&p, file).is_empty(), "{file}");

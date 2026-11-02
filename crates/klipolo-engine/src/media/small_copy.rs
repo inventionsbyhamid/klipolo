@@ -289,9 +289,8 @@ fn write_to(
         Err(e) => return Err(failed("encoder", e)),
     };
     let (heard, lead) = sound.unwrap_or((src, probe.audio_lead_us));
-    let sound_decodes = (sound.is_some() || probe.has_audio)
-        && spec.audio_bps > 0
-        && decode::probe(heard).is_ok();
+    let sound_decodes =
+        (sound.is_some() || probe.has_audio) && spec.audio_bps > 0 && decode::probe(heard).is_ok();
     let sound_encoder = if sound_decodes {
         let info = AudioInfo::new_raw(Sample::F32(SampleType::Packed), RATE, 1);
         Some(
