@@ -1,4 +1,4 @@
-import { act } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { mockIPC } from '@tauri-apps/api/mocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -46,6 +46,7 @@ const { fakeChat, reply } = await import('../bridge/chatFake');
 const { useChat } = await import('../state/chat');
 const { useChatPanel } = await import('../state/chatPanel');
 const { useCaptionsView } = await import('../state/captionsView');
+const { useLibraryPanel } = await import('../state/libraryPanel');
 const { useProject } = await import('../state/project');
 const { useSelection } = await import('../state/selection');
 const { useUi } = await import('../state/ui');
@@ -56,12 +57,12 @@ const { Preview } = await import('../preview/Preview');
 const { Timeline } = await import('../features/timeline/Timeline');
 const { PlayerBar } = await import('../player/PlayerBar');
 
-/** The window's regions, the more specific first (the inspector and the header are in the preview). */
+/** The window's regions, the more specific first (the inspector is in the left column, the header in the preview). */
 const REGIONS = [
   ['top bar', '.topbar'],
+  ['inspector', '.inspector'],
   ['library', '.library'],
   ['preview header', '.stage-head'],
-  ['inspector', '.inspector'],
   // The frame under the header, and what is drawn on it.
   ['preview', '.stage'],
   ['timeline header', '.tl-head'],
@@ -113,7 +114,8 @@ beforeEach(() => {
   useChatPanel.setState({ collapsed: false });
   useUi.setState({ libraryTab: 'clips' });
   useCaptionsView.setState({ view: 'library' });
-  // A clip selected, so its card docks beside the frame.
+  useLibraryPanel.setState({ collapsed: false, aside: null });
+  // A clip selected, so its card shows in the left column, over the library.
   useSelection.setState({ selectedId: 'a' });
 });
 
@@ -144,19 +146,29 @@ describe('the editor from the keyboard', () => {
     const order = stops.map(regionOf).filter((r, i, all) => r !== all[i - 1]);
     expect(order).toEqual([
       'top bar',
-      'library',
+      'inspector',
       'preview header',
       'preview',
-      'inspector',
       'timeline header',
       'timeline',
       'chat',
       'player bar',
     ]);
+    // The column's first stop is the card's Back to library; the library under the card is out of reach.
+    expect(stops.find((s) => regionOf(s) === 'inspector')).toHaveAccessibleName('Back to library');
+    expect(stops.filter((s) => s.closest('.library-body'))).toEqual([]);
+  });
+
+  it('Back to library leaves the keyboard on the panel, and Tab goes on to each of the library’s view tabs', async () => {
+    renderWithProviders(<Editor />);
+    await act(() => new Promise((r) => setTimeout(r, 40)));
+    act(() => screen.getByRole('button', { name: 'Back to library' }).focus());
+    await userEvent.keyboard('{Enter}');
+    expect(document.querySelector('.library')).toHaveFocus();
     // The library's view tabs, each its own stop.
     for (const name of ['Library', 'Captions', 'Looks']) {
-      const tab = [...document.querySelectorAll<HTMLElement>('.view-tab')].find((el) => el.textContent === name)!;
-      expect(stops).toContain(tab);
+      await userEvent.tab();
+      expect(screen.getByRole('tab', { name })).toHaveFocus();
     }
   });
 });

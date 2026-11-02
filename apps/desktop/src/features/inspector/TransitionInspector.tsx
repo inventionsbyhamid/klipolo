@@ -17,7 +17,7 @@ import { commitLatest } from '../../state/latest';
 import { useProject } from '../../state/project';
 import { transitionClipId, useSelection } from '../../state/selection';
 import { removeTransition, transitionName, transitionNow, transitionOp } from '../timeline/commands';
-import { cardEscape } from './common';
+import { BackToLibrary, cardEscape } from './common';
 import { Field, Select, Swatches } from './fields';
 import { textSwatches } from './TextInspector';
 import { ToolSlider } from './ToolSlider';
@@ -94,6 +94,7 @@ export function TransitionInspector({ project, clip, index, transition }: Inspec
       onKeyDown={cardEscape(close)}
     >
       <div className="insp-head">
+        <BackToLibrary />
         <h3>
           <Icon name="blend" />
           {t({ id: 'inspector.transition', message: 'Transition' })}

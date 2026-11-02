@@ -8,7 +8,7 @@ import { cameraLayer } from '../../lib/camera';
 import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
 import { CameraFields, SeparatedCamera } from './CameraFields';
-import { cardEscape } from './common';
+import { BackToLibrary, cardEscape } from './common';
 
 /**
  * The Camera card, in the left column: a recording's camera, selected on the video. Its header has the camera
@@ -30,6 +30,7 @@ export function CameraInspector({ clip, camera, format }: { clip: Clip; camera: 
       onKeyDown={cardEscape(close)}
     >
       <div className="insp-head">
+        <BackToLibrary />
         <h3>
           <Icon name="camera" />
           {title}

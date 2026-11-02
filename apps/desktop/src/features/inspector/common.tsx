@@ -1,9 +1,12 @@
 import { useLingui } from '@lingui/react/macro';
+import { ChevronLeft } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 import type { Anchor } from '../../bindings/Anchor';
 import type { FormatKind } from '../../bindings/FormatKind';
 import type { Item } from '../../bindings/Item';
+import { IconButton } from '../../design/IconButton';
 import { FORMAT_SIZE } from '../../lib/layout';
+import { useLibraryPanel } from '../../state/libraryPanel';
 import { formatPrecise } from '../../lib/time';
 import { Field, PositionGrid, Select, ValueField } from './fields';
 import {
@@ -37,6 +40,22 @@ export function cardEscape(close: () => void) {
     e.stopPropagation();
     close();
   };
+}
+
+/**
+ * Back to library, at the start of a card's head: the left column shows the library again (its view, tab, search and
+ * scroll as they were) and the selection stays. Picking anything, even the same thing again, brings the card back.
+ */
+export function BackToLibrary() {
+  const { t } = useLingui();
+  return (
+    <IconButton
+      icon={ChevronLeft}
+      className="insp-back"
+      label={t({ id: 'inspector.backToLibrary', message: 'Back to library' })}
+      onClick={() => useLibraryPanel.getState().stepAside()}
+    />
+  );
 }
 
 /** The shortest a layer can be made in the inspector (the model's least is 10 ms). */
