@@ -82,7 +82,7 @@ def test_turn_ending_before_it_starts_is_skipped():
 
 
 def test_turn_without_alignable_words_is_skipped():
-    _, skipped = plan([Turn(0, 1000, "... — !"), Turn(0, 1000, "日本語")], seconds(5))
+    _, skipped = plan([Turn(0, 1000, "... — !"), Turn(0, 1000, "🙂 ♪")], seconds(5))
     assert [(s.turn, s.reason) for s in skipped] == [(0, NOTHING_TO_ALIGN), (1, NOTHING_TO_ALIGN)]
 
 
@@ -130,6 +130,15 @@ def test_plan_keeps_every_word_and_its_aligner_form():
 def test_number_forms_become_one_aligner_word():
     (turn,), _ = plan([Turn(0, 3000, "42 cats")], seconds(5))
     assert turn.tokens == ["fortytwo", "cats"]
+
+
+def test_turns_in_other_scripts_get_one_aligner_word_per_word():
+    (hindi, arabic), skipped = plan(
+        [Turn(0, 2000, "नमस्ते, आज हम वीडियो बना रहे हैं।"), Turn(2000, 4000, "مرحبا، هذا سهل جدا.")], seconds(5)
+    )
+    assert skipped == []
+    assert hindi.tokens == ["namaste", "aaj", "ham", "viiddiyo", "banaa", "rahe", "haim"]
+    assert arabic.tokens == ["mrhba", "htha", "shl", "jda"]
 
 
 # Emission frames and windows.
@@ -402,7 +411,7 @@ def test_odd_text_and_turns_never_give_a_500(mms_client):
         (5, NO_TEXT),
     ]
     assert {w["turn"] for w in body["words"]} == {1, 4}
-    assert [w["score"] for w in body["words"] if w["text"] in ("—", "日本")] == [0.0, 0.0]
+    assert [w["score"] for w in body["words"] if w["text"] == "—"] == [0.0]
     team = [w for w in body["words"] if w["turn"] == 4]
     print(f"\nclamped turn: {[(w['text'], w['startMs'], w['score']) for w in team]}")
     # The turn runs past the audio; its words are still found where they are

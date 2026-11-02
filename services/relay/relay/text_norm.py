@@ -6,12 +6,34 @@ English as they are usually spoken, punctuation dropped. One form can hold
 several aligner words separated by spaces ("42" becomes "forty two"). A word
 with nothing alignable maps to "" and is still kept, so the caller can give
 it interpolated times and a zero score while showing the original text.
+
+A word with letters of a script other than Latin (Devanagari, Arabic, Hebrew,
+Cyrillic, Thai, CJK and so on) is first romanized with uroman, the romanizer
+the MMS aligner was trained with ("नमस्ते" becomes "namaste", "مرحبا"
+becomes "mrhba"), and then goes through the same steps. Words in Latin
+letters never reach uroman, so their forms do not depend on it. Digits in
+other scripts come back as 0-9 and are spelled in English like any number.
+
+uroman takes about 10 s to load its tables, so it loads once: at the startup
+warm-up (`load_romanizer`) or on the first word that needs it.
 """
 
+import logging
 import re
+import threading
 import unicodedata
 
+import regex
+import uroman
+
+logger = logging.getLogger(__name__)
+
 ALIGNABLE = frozenset("abcdefghijklmnopqrstuvwxyz'")
+
+# A letter (or digit) of any script but Latin. Common characters (0-9,
+# punctuation, symbols) and Inherited ones (combining accents) never call for
+# romanizing on their own.
+_OTHER_SCRIPT = regex.compile(r"[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}\p{Script=Unknown}]")
 
 _APOSTROPHES = str.maketrans({"’": "'", "‘": "'", "ʼ": "'", "`": "'", "´": "'"})
 _SYMBOLS = {"&": " and ", "%": " percent ", "+": " plus ", "@": " at "}
@@ -51,12 +73,40 @@ _NUMBER = re.compile(
 )
 
 
+_romanizer: uroman.Uroman | None = None
+# uroman keeps caches it writes while romanizing, so one word at a time.
+_romanizer_lock = threading.Lock()
+
+
 def normalize(text: str) -> list[tuple[str, str]]:
     """Each whitespace-separated word of `text` with its aligner form."""
     return [(word, _normalize_word(word)) for word in text.split()]
 
 
+def load_romanizer() -> uroman.Uroman:
+    """uroman with its tables loaded, once (about 10 s)."""
+    global _romanizer
+    with _romanizer_lock:
+        if _romanizer is None:
+            _romanizer = uroman.Uroman()
+        return _romanizer
+
+
+def romanize(word: str) -> str:
+    """`word` in Latin letters, or the word itself if uroman fails on it."""
+    romanizer = load_romanizer()
+    try:
+        with _romanizer_lock:
+            return romanizer.romanize_string(word)
+    except Exception:
+        # The text is never logged.
+        logger.exception("could not romanize a word of %d characters", len(word))
+        return word
+
+
 def _normalize_word(word: str) -> str:
+    if _OTHER_SCRIPT.search(word):
+        word = romanize(word)
     word = unicodedata.normalize("NFKD", word.translate(_APOSTROPHES))
     word = "".join(char for char in word if not unicodedata.combining(char)).casefold()
     word = _NUMBER.sub(lambda match: f" {_spell_number(match)} ", word)

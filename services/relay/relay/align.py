@@ -50,7 +50,7 @@ from relay.config import Settings
 from relay.deps import AppSettings, Conn
 from relay.devices import Device
 from relay.errors import RelayError, error_response
-from relay.text_norm import normalize
+from relay.text_norm import load_romanizer, normalize
 
 logger = logging.getLogger(__name__)
 
@@ -377,16 +377,21 @@ class MmsAligner:
 
 
 def warm_up(aligner: Aligner) -> None:
-    """Load the model in the background, so the server answers at once and
-    the first alignment does not wait for it."""
+    """Load the model and the romanizer in the background, each on its own
+    thread, so the server answers at once and the first alignment does not
+    wait for them."""
 
-    def load() -> None:
+    def load(what: str, loader: Callable[[], Any]) -> None:
         try:
-            aligner.load()
+            loader()
         except Exception:
-            logger.exception("alignment model could not load at startup; will retry on first use")
+            logger.exception("%s could not load at startup; will retry on first use", what)
 
-    threading.Thread(target=load, name="align-warmup", daemon=True).start()
+    for name, what, loader in (
+        ("align-warmup", "alignment model", aligner.load),
+        ("romanizer-warmup", "romanizer", load_romanizer),
+    ):
+        threading.Thread(target=load, args=(what, loader), name=name, daemon=True).start()
 
 
 # The endpoint.
