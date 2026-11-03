@@ -204,7 +204,7 @@ pub(super) fn face_in_portrait(
     let footage = match &clip.source {
         ClipSource::Asset { id } => (p.asset(id))
             .is_some_and(|a| a.kind == AssetKind::Video)
-            .then(|| id.as_str()),
+            .then_some(id.as_str()),
         ClipSource::Recording { id } => match p.recording(id) {
             Some(r) if r.screen().is_none() => Some(""),
             _ => None,

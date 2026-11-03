@@ -797,7 +797,7 @@ fn a_kinetic_hook_with_no_face_in_9x16_and_other_words_keep_their_place() {
     let mut p = project();
     p.settings.formats = vec![FormatKind::Landscape, FormatKind::Portrait];
     // Nobody found in the footage: the template, as before.
-    let out = run(&p, "a title Day one", &[kinetic.clone()]);
+    let out = run(&p, "a title Day one", std::slice::from_ref(&kinetic));
     assert!(template(&out, &p));
     // Letterboxed 9:16 (Fit): the template, though the answer follows someone.
     let mut fit = p.clone();
