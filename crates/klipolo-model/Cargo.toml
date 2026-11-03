@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 license.workspace = true
 publish = false
-description = "Klipolo project model v2: types, operations, validation and undo"
+description = "Klipolo's project model: types, operations, validation and undo"
 
 [dependencies]
 # Fixed-capacity arrays for a caption page's lines (`captions::lines`): breaking a page allocates nothing.
