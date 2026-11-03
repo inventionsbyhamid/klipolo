@@ -939,7 +939,11 @@ fn a_killed_worker_restarts_from_its_segments_twice_then_waits_for_try_again() {
         let launched = worker.launched.lock().unwrap().clone();
         assert_eq!(launched.len(), 4);
         assert!(launched[3].2 > launched[2].2, "{launched:?}");
-        assert!(preview.last().contains_key(&*a.to_string_lossy()));
+        // The list says Done as the copy finishes; the preview gets it at the end of that turn.
+        eventually("the copy reaches the preview", &jobs, || {
+            preview.last().contains_key(&*a.to_string_lossy())
+        })
+        .await;
     });
 }
 
