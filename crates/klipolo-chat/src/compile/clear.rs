@@ -17,6 +17,7 @@
 //!
 //! A short's sticker goes beside the speaker's head instead (`beside_speaker`), as `cues` times it: at the head's
 //! height, on the side with more room, never on the head or, where nothing says where the speaker is, the face zone.
+//! The person's own picture with no place given (a logo) goes in a top corner beside the face zone (`own_corner`).
 
 use std::collections::HashMap;
 
@@ -25,6 +26,7 @@ use klipolo_model::fill_focus::FillFocus;
 use klipolo_model::framing::effective_framing;
 use klipolo_model::layout::{Anchor, BoxN};
 use klipolo_model::media::image::{IMAGE_MARGIN, Spot, corner_rect};
+use klipolo_model::media::text::PORTRAIT_CLEAR;
 use klipolo_model::ops::Op;
 use klipolo_model::project::{Asset, AssetKind, FormatKind};
 use klipolo_model::query::clip_at;
@@ -486,8 +488,94 @@ pub(super) fn beside_speaker(
     (out, chosen)
 }
 
+/// The person's own picture with no place given, in a short (a logo): its share of the 9:16 width where it fits beside
+/// `FACE_ZONE`.
+const CORNER_W: f64 = 0.2;
+
+/// Where the person's own picture with no place given goes in a short ("put my logo at the start"), in each of `p`'s
+/// formats at timeline `at_us`: in 9:16 a top corner out at the frame's edge, as wide as fits beside `FACE_ZONE` (about
+/// 18 % of the width, `CORNER_W` at most), from the top of the area the apps keep clear down to well above the hook and
+/// the captions, so it is off the face wherever the face is. It takes the left, or the right where a follow's path puts
+/// the speaker's head in the left one. The other formats take the same corner, as many pixels wide, at their own
+/// margins. The boxes by format, and the corner.
+pub(super) fn own_corner(
+    p: &Project,
+    at_us: Us,
+    asset: &Asset,
+    follows: bool,
+) -> (Vec<(FormatKind, BoxN)>, Spot) {
+    let aspect = if asset.width > 0 && asset.height > 0 {
+        f64::from(asset.width) / f64::from(asset.height)
+    } else {
+        1.0
+    };
+    let (fw, fh) = frame(FormatKind::Portrait);
+    let edge = GAP * fw.min(fh) / fw;
+    let mut w = CORNER_W.min(FACE_ZONE.x - ZONE_GAP - edge);
+    let top = PORTRAIT_CLEAR.y;
+    // A tall picture no lower than a gap above the hook.
+    let tallest = UNDER_FACE.y - GAP * fw.min(fh) / fh - top;
+    let mut h = w * fw / (fh * aspect);
+    if h > tallest {
+        h = tallest;
+        w = h * fh * aspect / fw;
+    }
+    let left_clear = match speaker_at(p, at_us, FormatKind::Portrait, follows) {
+        // Held at the picture's left edge, the speaker may be in the left corner.
+        Some(Seen {
+            toward: Some(Side::Left),
+            ..
+        }) => false,
+        Some(Seen { x, .. }) => {
+            let half = HEAD_HALF_H * fh / fw;
+            let (room_l, room_r) = (x - half - edge, 1.0 - edge - (x + half));
+            room_l >= w + GAP || room_l >= room_r
+        }
+        None => true,
+    };
+    let (spot, x) = if left_clear {
+        (Spot::TopLeft, edge)
+    } else {
+        (Spot::TopRight, 1.0 - edge - w)
+    };
+    let portrait = BoxN { x, y: top, w, h };
+    let boxes = (p.settings.formats.iter())
+        .map(|&format| {
+            let rect = match format {
+                FormatKind::Portrait => portrait,
+                other => {
+                    let (ow, _) = frame(other);
+                    corner_rect(asset.width, asset.height, w * fw / ow, spot, other)
+                }
+            };
+            (format, rect)
+        })
+        .collect();
+    (boxes, spot)
+}
+
+/// `ops`' picture layer placed in the corner `own_corner` says: its own box in the primary format, the others as
+/// overrides.
+pub(super) fn place_in_corner(
+    p: &Project,
+    ops: &mut [Op],
+    (boxes, spot): (&[(FormatKind, BoxN)], Spot),
+) {
+    let anchor = if spot == Spot::TopRight {
+        Anchor::TopRight
+    } else {
+        Anchor::TopLeft
+    };
+    place_at(p, ops, boxes, anchor);
+}
+
 /// `ops`' picture layer placed as `beside_speaker` says: its own box in the primary format, the others as overrides.
 pub(super) fn place_beside(p: &Project, ops: &mut [Op], boxes: &[(FormatKind, BoxN)]) {
+    place_at(p, ops, boxes, Anchor::Center);
+}
+
+/// `ops`' picture layer at `boxes`: its own box (from `anchor`) in the primary format, the others as overrides.
+fn place_at(p: &Project, ops: &mut [Op], boxes: &[(FormatKind, BoxN)], anchor: Anchor) {
     let primary = p.settings.primary_format;
     for op in ops {
         let Op::AddItem { item, .. } = op else {
@@ -500,7 +588,7 @@ pub(super) fn place_beside(p: &Project, ops: &mut [Op], boxes: &[(FormatKind, Bo
         for &(format, rect) in boxes {
             if format == primary {
                 item.layout.rect = rect;
-                item.layout.anchor = Anchor::Center;
+                item.layout.anchor = anchor;
             } else {
                 item.layout.overrides.insert(format, rect);
             }

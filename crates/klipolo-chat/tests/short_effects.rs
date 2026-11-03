@@ -1235,6 +1235,89 @@ fn a_whoosh_trusts_voice_labels_only_within_one_transcription_part() {
     assert!(near(whooshes[0], cuts[3]), "{sounds:?} {cuts:?}");
 }
 
+/// Where the person's own picture with no place given may sit in a short's 9:16 version: in a top corner, about a fifth
+/// of the width, off the face zone, the hook and the captions.
+fn in_a_safe_corner(b: BoxN) -> bool {
+    let face = BoxN {
+        x: 0.2,
+        y: 0.08,
+        w: 0.6,
+        h: 0.38,
+    };
+    (0.17..=0.22).contains(&b.w)
+        && (b.x <= 0.05 || b.x + b.w >= 0.95)
+        && b.y <= 0.2
+        && !overlaps(b, face)
+        && !overlaps(b, WORDS)
+}
+
+#[test]
+fn the_persons_own_picture_with_no_place_goes_in_a_top_corner_of_a_short_off_the_face_and_the_words()
+ {
+    let logo = |at: f64, duration: Value| {
+        call(
+            "addImage",
+            json!({"file": "logo.png", "size": null, "position": null, "atSec": at, "atWords": null,
+                   "durationSec": duration}),
+        )
+    };
+    // In the answer that makes the short: from its start, for about 3 s.
+    let p = project();
+    let mut calls = base();
+    calls.push(logo(0.5, Value::Null));
+    let out = compile(
+        &p,
+        &with_own_pictures(&p, "Make a 60 second short and put my logo at the start"),
+        &calls,
+    );
+    let after = short(&out);
+    let (pictures, _) = layers(&after);
+    assert_eq!(pictures.len(), 1, "{pictures:?}");
+    let (_, at, len, item) = &pictures[0];
+    assert!(
+        near(*at, in_short(&after, 0.5)) && near(*len, 3.0),
+        "{pictures:?}"
+    );
+    let b = portrait_box(&after, item);
+    assert!(in_a_safe_corner(b) && b.x < 0.5, "{b:?}");
+    // Its 16:9 version: the same corner, as many pixels wide.
+    let wide = item.layout.overrides[&FormatKind::Landscape];
+    assert!(
+        wide.x < 0.05 && wide.y < 0.1 && (0.09..=0.12).contains(&wide.w),
+        "{wide:?}"
+    );
+
+    // A message about the short made before: the same corner, for the time asked.
+    let p = applied_short();
+    let out = compile(
+        &p,
+        &with_own_pictures(&p, "put my logo at the start for 4 seconds"),
+        &[logo(0.0, json!(4.0))],
+    );
+    assert_eq!(out.refusals, vec![], "{:#?}", out.refusals);
+    let after = added(&p, &out);
+    let (pictures, _) = layers(&after);
+    let (_, at, len, item) = &pictures[0];
+    assert!(near(*at, 0.0) && near(*len, 4.0), "{pictures:?}");
+    let b = portrait_box(&after, item);
+    assert!(in_a_safe_corner(b) && b.x < 0.5, "{b:?}");
+
+    // Where the follow holds the crop at the picture's left edge, the speaker may stand in the left corner: the right
+    // one.
+    let mut p = applied_short();
+    held_at_left_edge(&mut p);
+    let out = compile(
+        &p,
+        &with_own_pictures(&p, "put my logo at the start"),
+        &[logo(0.0, Value::Null)],
+    );
+    let after = added(&p, &out);
+    let (pictures, _) = layers(&after);
+    let b = portrait_box(&after, &pictures[0].3);
+    let head_right = 0.1 / CROP + 0.22;
+    assert!(in_a_safe_corner(b) && b.x >= head_right, "{b:?}");
+}
+
 /// The share of a 16:9 picture's width a 9:16 crop shows.
 const CROP: f64 = 9.0 / 16.0 / (16.0 / 9.0);
 

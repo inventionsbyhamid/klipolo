@@ -13,7 +13,8 @@
 //!   `media::text::add_text_ops` exactly as the canvas's Add title and the library's presets place it: each format's
 //!   own place, in 9:16 inside the area the apps keep clear.
 //! - `addImage`: the picture as the library's + puts one (`media::image::add_image_ops_at`), at a size and in a corner of
-//!   each format's own area (in 9:16 the area the apps keep clear) when one was asked for.
+//!   each format's own area (in 9:16 the area the apps keep clear) when one was asked for. In a short, the person's own
+//!   picture with no place given (a logo) goes in a top corner off the face instead (`clear::own_corner`), for 3 s.
 //! - `makeSticker`: a `Job::MakeSticker` only, on the project as the message's additions leave it, anchored to the
 //!   footage it shows over as a layer attaches (`Attach`); once the picture is drawn the app places it with
 //!   `sticker_ops` (where and how long `sticker_placement` says, on the project as it is then). A job's prompt names the
@@ -36,7 +37,7 @@ use klipolo_model::coded::ErrorParam;
 use klipolo_model::contrib::Catalog;
 use klipolo_model::font::FontRef;
 use klipolo_model::ids::Id;
-use klipolo_model::media::image::{IMAGE_US, add_image_ops_at};
+use klipolo_model::media::image::{IMAGE_SIZE, IMAGE_US, add_image_ops_at};
 use klipolo_model::media::music::{MusicOpts, add_music_ops};
 use klipolo_model::media::sound::add_sound_ops;
 use klipolo_model::media::text::TextPreset as ModelTextPreset;
@@ -47,7 +48,7 @@ use klipolo_model::media::text_motion::{self, TextMotion, Unit};
 use klipolo_model::motion::{self, Ease, Motion};
 use klipolo_model::ops::Op;
 use klipolo_model::params::{ParamKind, ParamValue};
-use klipolo_model::project::{Asset, AssetKind};
+use klipolo_model::project::{Asset, AssetKind, FormatKind};
 use klipolo_model::query::{anchor_at, main_track_duration, resolve_attach, video_duration};
 use klipolo_model::scene::check_scene;
 use klipolo_model::speech::{WordKind, is_mark, joins_unspaced, word_ranges};
@@ -758,6 +759,18 @@ pub(super) fn is_sticker(c: &Compiler, file: &str, position: Option<Position>) -
     position.is_none() && item.pack && !background && item.asset.kind == AssetKind::Image
 }
 
+/// How long the person's own picture with no place given shows in a short, unless asked: about as long as a logo takes
+/// to read.
+const CORNER_US: Us = 3_000_000;
+
+/// Whether a picture at timeline `start` of `work` goes in a short: this answer makes one (`cues`), or the video is
+/// vertical and its 9:16 version shows a face there.
+fn in_short(c: &Compiler, work: &Project, start: Us) -> bool {
+    c.cues.as_ref().is_some_and(|q| q.makes_short)
+        || (work.settings.primary_format == FormatKind::Portrait
+            && clear::face_in_portrait(work, start, c.follows, &c.inputs.scenes))
+}
+
 pub(super) fn add_image(
     c: &Compiler,
     work: &Project,
@@ -792,6 +805,22 @@ pub(super) fn add_image(
                 item.layout.motion = popping(len);
             }
         }
+        return Ok(Edit {
+            ops: lasting(ops, len),
+            label: label(
+                "addImage",
+                vec![("file", ErrorParam::from(item.name.as_str()))],
+            ),
+        });
+    }
+    // The person's own picture with no place given, in a short ("put my logo at the start"): a top corner off the
+    // face, the hook and the captions, for the time asked or `CORNER_US`; the middle would be over the speaker.
+    if !item.pack && position.is_none() && in_short(c, work, start) {
+        let len = length(work, start, duration.or(Some(CORNER_US)), IMAGE_US);
+        let mut ops = add_image_ops_at(work, &item.asset, start, IMAGE_SIZE, Spot::TopLeft)
+            .map_err(|e| to_model(format!("addImage: {e}")))?;
+        let (boxes, spot) = clear::own_corner(work, start, &item.asset, c.follows);
+        clear::place_in_corner(work, &mut ops, (&boxes, spot));
         return Ok(Edit {
             ops: lasting(ops, len),
             label: label(
