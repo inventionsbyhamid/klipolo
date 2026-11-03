@@ -107,7 +107,8 @@ their question, keep the question first. Fewer, whole thoughts beat many scraps:
 3 sentences and leave out repeats and false starts, with a range for each piece.\n\
 - Cut where speech breaks: start a part where a line starts and end it where a line ends, at a sentence end, a \
 [pause] or a change of speaker. Never start a part on and, but, so, because or that; never end one on and, but, so, \
-that or the; never keep the next speaker's first word, or a pause, at a part's end.\n\
+that or the; never keep the next speaker's first word, or a pause, at a part's end. Klipolo moves a part's edge \
+that falls inside a phrase to the nearest break.\n\
 - followSubject in a short: where the speaker is off camera (a question), give focus to who the words name or who \
 answers next (P1 is leftmost, as Scenes places them).\n\
 - fixCaptionWords for a stutter or a misheard name in the parts you keep (\"these these first\" reads \"these \

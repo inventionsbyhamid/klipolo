@@ -1531,6 +1531,8 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "When answers need their question, keep the question first",
         "Cut where speech breaks: start a part where a line starts and end it where a line ends",
         "never keep the next speaker's first word, or a pause, at a part's end",
+        // What the compiler holds the cut to as well (`keepOnly`'s parts, `evidence::Evidence::keep_range`).
+        "Klipolo moves a part's edge that falls inside a phrase to the nearest break",
         "A long turn's lines end at its sentences and breaths",
         "one or two short, plain, friendly sentences",
         // Closing words: what was done and what waits for approval, never a promise of later work.
