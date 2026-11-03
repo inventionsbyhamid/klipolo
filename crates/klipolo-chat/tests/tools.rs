@@ -1516,13 +1516,22 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "Stickers, at most 3 in a short",
         "Medium at a top corner, 2 s, at most one per 8 s",
         "animate last with pop or bounce",
-        "at most one per 5 s: rise under the hook, the only sound over the opening words",
-        "whoosh or swoosh on a cut except the opening (the first words after it) or text sliding in",
+        "may take one per 5 s at most: rise under the hook, the only sound over the opening words",
+        "Sound effects match the mood",
+        "A calm, serious or moving talk takes 2 to 4 in all",
+        "whoosh or swoosh on a cut to a new topic or speaker, never on every cut, or text sliding in",
         "pop on a sticker or text popping in, as animate's sound, never also addSound there",
         "ding or chime on a number, a key point or a reveal",
         "impact or bass drop on a punchline or a big claim",
         "addMusic",
         "Place every layer inside the parts you keep",
+        // A short's story and its cuts: a hook, a turn, a payoff, an ending, each part a whole thought.
+        "A short tells one story",
+        "never a greeting, a name or the middle of a thought",
+        "When answers need their question, keep the question first",
+        "Cut where speech breaks: start a part where a line starts and end it where a line ends",
+        "never keep the next speaker's first word, or a pause, at a part's end",
+        "A long turn's lines end at its sentences and breaths",
         "one or two short, plain, friendly sentences",
         // Closing words: what was done and what waits for approval, never a promise of later work.
         "Your last words say what you did and what waits for their approval; never promise more work later",
@@ -1616,8 +1625,9 @@ fn the_prompt_is_one_fixed_text_and_small() {
     // and the shorts' two caption styles, about 1,030 more with the tools that compose any edit (setMotion,
     // animateText, setLayer, styleText, setEffects), and about 200 more with atWords on addSound, addText, addImage and
     // makeSticker and atSec saying what it does beside it (6,530 in all). The tools cap rose from 6,500 to 6,600 for
-    // that last part.
-    assert!(prompt_tokens <= 1_800, "prompt {prompt_tokens} tokens");
+    // that last part. The short's story, its cuts where speech breaks, its follow on a question and its caption fixes,
+    // with sound effects that match the mood, take about 370 prompt tokens more: the prompt cap rose from 1,800 to 2,200.
+    assert!(prompt_tokens <= 2_200, "prompt {prompt_tokens} tokens");
     assert!(tools_tokens <= 6_600, "tools {tools_tokens} tokens");
 }
 
