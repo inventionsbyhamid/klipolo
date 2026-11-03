@@ -8,8 +8,12 @@
 //! - **A vertical or square version** of camera footage made without asking to follow: footage tracked before follows
 //!   at no charge; otherwise the reply offers it with its price.
 //!
-//! Where two or more people are on screen, `followSubject`'s focus (`keeps_for`) keeps who chat names over its parts
-//! of the timeline, as each clip's source time, and whoever speaks elsewhere.
+//! A person is followed as a person (`phrase_of`), whatever chat calls them ("the speaker", "woman astronaut", "the
+//! person on the left"): SAM finds people, never one person by their looks or place, and footage tracked before (the
+//! clip card's follow) is read from the cache at no charge. Where two or more people are on screen, who is kept is
+//! chosen among the people the follow found, left to right: who `followSubject`'s focus names over its parts of the
+//! timeline (`keeps_for`), as each clip's source time, and whoever speaks elsewhere; else the person its words place
+//! ("on the left", `follow_as_asked`); else whoever speaks.
 //!
 //! Without a follower (tests that don't give one), `followSubject` is said to be coming, as before.
 
@@ -57,6 +61,139 @@ const SPEAKER_WORDS: [&str; 12] = [
     "talking person",
     "whoever is talking",
 ];
+
+/// Words that name a person in a follow's description (and their plurals with an s): a person is tracked for any of
+/// them, and told apart from others only by place.
+const PERSON_WORDS: [&str; 52] = [
+    "person",
+    "people",
+    "man",
+    "men",
+    "woman",
+    "women",
+    "guy",
+    "girl",
+    "boy",
+    "lady",
+    "ladies",
+    "gentleman",
+    "gentlemen",
+    "kid",
+    "child",
+    "children",
+    "baby",
+    "astronaut",
+    "speaker",
+    "presenter",
+    "host",
+    "guest",
+    "interviewer",
+    "interviewee",
+    "student",
+    "teacher",
+    "narrator",
+    "moderator",
+    "panelist",
+    "reporter",
+    "anchor",
+    "actor",
+    "actress",
+    "singer",
+    "dancer",
+    "player",
+    "coach",
+    "doctor",
+    "nurse",
+    "chef",
+    "customer",
+    "friend",
+    "mom",
+    "dad",
+    "mother",
+    "father",
+    "me",
+    "him",
+    "her",
+    "them",
+    "someone",
+    "somebody",
+];
+
+/// Words that only say which one, beside a place ("the one on the left").
+const WHICH_WORDS: [&str; 16] = [
+    "the", "a", "an", "on", "at", "in", "to", "of", "side", "one", "ones", "who", "is", "standing",
+    "sitting", "frame",
+];
+
+/// Where a follow's words place the person to keep, among the people on screen from the left.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Place {
+    Left,
+    Middle,
+    Right,
+    Everyone,
+}
+
+/// `description`'s words, lower case.
+fn words(description: &str) -> Vec<String> {
+    (description
+        .to_lowercase()
+        .split(|c: char| !c.is_alphanumeric()))
+    .filter(|w| !w.is_empty())
+    .map(str::to_owned)
+    .collect()
+}
+
+/// The place a word names, if it names one.
+fn place_word(word: &str) -> Option<Place> {
+    match word {
+        "left" | "leftmost" => Some(Place::Left),
+        "middle" | "center" | "centre" => Some(Place::Middle),
+        "right" | "rightmost" => Some(Place::Right),
+        "both" | "everyone" | "everybody" | "all" | "together" => Some(Place::Everyone),
+        _ => None,
+    }
+}
+
+/// Whether `word` names a person, as itself or as a plural with an s.
+fn person_word(word: &str) -> bool {
+    PERSON_WORDS.contains(&word)
+        || word
+            .strip_suffix('s')
+            .is_some_and(|one| PERSON_WORDS.contains(&one))
+}
+
+/// Whether `description` names a person: the speaker's words, a word for a person ("woman astronaut"), or only a place
+/// ("the one on the left").
+pub fn names_a_person(description: &str) -> bool {
+    let plain = description.trim().to_lowercase();
+    if SPEAKER_WORDS.contains(&plain.as_str()) {
+        return true;
+    }
+    let words = words(description);
+    words.iter().any(|w| person_word(w))
+        || (words.iter().any(|w| place_word(w).is_some())
+            && (words.iter()).all(|w| place_word(w).is_some() || WHICH_WORDS.contains(&w.as_str())))
+}
+
+/// Where `description` places the person to keep ("the person on the left"); None when it names no person, or no
+/// place.
+pub fn place_of(description: &str) -> Option<Place> {
+    if !names_a_person(description) {
+        return None;
+    }
+    words(description).iter().find_map(|w| place_word(w))
+}
+
+/// What chat's follow tracks: a person whenever its focus names who to keep (People's P1, P2 are the people a follow of
+/// a person found) or its description names a person ([`names_a_person`]); else what the description names
+/// ([`phrase_for`]).
+pub fn phrase_of(description: &str, focus: &[FollowFocus]) -> String {
+    if !focus.is_empty() || names_a_person(description) {
+        return PERSON.to_owned();
+    }
+    phrase_for(description)
+}
 
 /// The phrase SAM looks for, for `description`: a person for the speaker, and a noun phrase without its article.
 pub fn phrase_for(description: &str) -> String {
@@ -113,10 +250,7 @@ pub(super) async fn follow_jobs(
     let formats = target.settings.formats.clone();
     let mut follows = Follows::default();
     if let Some((description, focus)) = asked.first() {
-        let phrase = phrase_for(description);
-        // Chat's times are the timeline's the message was sent on: each clip's source time stays put, and a piece a
-        // cut in the same answer makes keeps what its clip keeps.
-        let keeps = on_pieces(&target, &keeps_for(&now.project, focus));
+        let phrase = phrase_of(description, focus);
         let estimate = speaker
             .estimate(&target, &clip_ids, &formats, &phrase)
             .await;
@@ -128,7 +262,12 @@ pub(super) async fn follow_jobs(
             follows.note = format!("Nothing to follow {phrase} in: no clip can follow.");
             return follows;
         }
-        match (speaker.follow_keeping(&target, &clip_ids, &formats, &phrase, &keeps)).await {
+        let asked_for = Asked {
+            description,
+            focus,
+            named_on: &now.project,
+        };
+        match follow_as_asked(speaker, &target, &clip_ids, &formats, &asked_for).await {
             Err(why) => {
                 follows.note = format!("Following {phrase} failed: {why}");
                 follows.said.push(why);
@@ -151,7 +290,7 @@ pub(super) async fn follow_jobs(
                     } else {
                         "now"
                     };
-                    let kept = kept_in_frame(&target, &formats, &phrase);
+                    let kept = kept_in_frame(&target, &formats, &who_kept(&phrase, &followed));
                     follows.said.push(format!("{kept} {when}. {cost}"));
                     follows.note = format!(
                         "Followed {phrase} ({when}), for {}.",
@@ -210,6 +349,115 @@ pub(super) async fn follow_jobs(
     ));
     follows.note = format!("Offered to follow the speaker for {}.", about(estimate.usd));
     follows
+}
+
+/// A follow as chat asked for it: what `description` names, who `focus` keeps (timeline ranges on `named_on`, the
+/// project the message was sent on).
+pub struct Asked<'a> {
+    pub description: &'a str,
+    pub focus: &'a [FollowFocus],
+    pub named_on: &'a Project,
+}
+
+/// Follows what `asked` names (`phrase_of`) in `clip_ids` of `target` in `formats`. Where two or more people are on
+/// screen: who its focus names, on the clips' source time, so a piece a cut in the same answer makes keeps what its
+/// clip keeps (`on_pieces`); else, when its words place the person ("on the left"), that person among the people the
+/// follow found, made from what it just tracked and matched at no further charge (`Speaker::keep`); else whoever
+/// speaks. Why it couldn't run, in one sentence.
+pub async fn follow_as_asked(
+    speaker: &Speaker,
+    target: &Project,
+    clip_ids: &[Id],
+    formats: &[FormatKind],
+    asked: &Asked<'_>,
+) -> Result<Followed, String> {
+    let phrase = phrase_of(asked.description, asked.focus);
+    let keeps = on_pieces(target, &keeps_for(asked.named_on, asked.focus));
+    let mut followed = (speaker.follow_keeping(target, clip_ids, formats, &phrase, &keeps)).await?;
+    let place = if asked.focus.is_empty() {
+        place_of(asked.description)
+    } else {
+        None
+    };
+    let placed = place
+        .map(|place| placed_keeps(&followed, place))
+        .unwrap_or_default();
+    if placed.is_empty() {
+        return Ok(followed);
+    }
+    let ids: Vec<Id> = placed.keys().cloned().collect();
+    // Only what was just tracked and matched: it never pays. Should the cache be gone meanwhile, whoever speaks stays.
+    match speaker.keep(target, &ids, formats, &placed).await {
+        Ok(kept) => {
+            for (id, paths) in kept.paths {
+                match followed.paths.iter_mut().find(|(own, _)| *own == id) {
+                    Some(own) => own.1 = paths,
+                    None => followed.paths.push((id, paths)),
+                }
+            }
+            followed.kept.extend(kept.kept);
+        }
+        Err(why) => tracing::warn!(%why, "chat: who its words place couldn't be kept"),
+    }
+    Ok(followed)
+}
+
+/// Who `place` keeps in each clip `followed` chooses between two or more people in, by their place from the left: the
+/// leftmost, the rightmost, the one in the middle of an odd number, or everyone.
+fn placed_keeps(followed: &Followed, place: Place) -> BTreeMap<Id, Keep> {
+    (followed.kept.iter())
+        .filter_map(|(id, (_, people))| {
+            let n = u8::try_from(people.len()).ok().filter(|n| *n >= 2)?;
+            let keep = match place {
+                Place::Left => Keep::Person { person: 1 },
+                Place::Right => Keep::Person { person: n },
+                Place::Middle if n % 2 == 1 => Keep::Person { person: n / 2 + 1 },
+                Place::Middle => return None,
+                Place::Everyone => Keep::Both,
+            };
+            Some((id.clone(), keep))
+        })
+        .collect()
+}
+
+/// Who a follow of `phrase` keeps in frame, as the reply names them: the thing followed; for a person, the speaker, or
+/// who chat kept where two or more people are (`Followed::kept`): the person on the left or on the right, everyone,
+/// or the people asked for when that is anyone else, or differs from clip to clip.
+pub fn who_kept(phrase: &str, followed: &Followed) -> String {
+    if phrase != PERSON {
+        return phrase.to_owned();
+    }
+    let mut named: Vec<&str> = Vec::new();
+    for (keep, people) in followed
+        .kept
+        .values()
+        .filter(|(_, people)| people.len() >= 2)
+    {
+        let n = people.len();
+        let whos: Vec<Who> = match keep {
+            Keep::Speaker => continue,
+            Keep::Person { person } => vec![Who::Person { person: *person }],
+            Keep::Both => vec![Who::Both],
+            Keep::Ranges { ranges } => ranges.iter().map(|r| r.who).collect(),
+        };
+        for who in whos {
+            let name = match who {
+                Who::Speaker => continue,
+                Who::Person { person: 1 } => "person on the left",
+                Who::Person { person } if usize::from(person) == n => "person on the right",
+                Who::Person { .. } => "people you asked for",
+                Who::Both => "everyone",
+            };
+            if !named.contains(&name) {
+                named.push(name);
+            }
+        }
+    }
+    match named.as_slice() {
+        [] => "speaker".to_owned(),
+        [one] => (*one).to_owned(),
+        _ => "people you asked for".to_owned(),
+    }
 }
 
 /// Who each clip of `p` keeps for chat's `focus` (timeline ranges on `p`): the parts of it they cover, in its source
@@ -342,10 +590,11 @@ fn attach(out: &mut PlanOut, work: &Project, ops: Vec<Op>, phrase: &str) -> bool
     true
 }
 
-/// "The vertical version keeps the speaker in frame": what a follow of `phrase` in `formats` of `p` did.
-pub fn kept_in_frame(p: &Project, formats: &[FormatKind], phrase: &str) -> String {
+/// "The vertical version keeps the speaker in frame": what a follow in `formats` of `p` did, keeping `who`
+/// ([`who_kept`]).
+pub fn kept_in_frame(p: &Project, formats: &[FormatKind], who: &str) -> String {
     let (which, keep) = versions(p, formats);
-    format!("The {which} {keep} the {} in frame", shown(phrase))
+    format!("The {which} {keep} the {who} in frame")
 }
 
 /// "Tracking cost $0.02.", or that it cost nothing.
@@ -382,11 +631,6 @@ fn versions(p: &Project, formats: &[FormatKind]) -> (String, &'static str) {
             "keep",
         ),
     }
-}
-
-/// The phrase as the reply says it: "speaker" for a person.
-fn shown(phrase: &str) -> &str {
-    if phrase == PERSON { "speaker" } else { phrase }
 }
 
 /// "$0.02", or "less than $0.01".

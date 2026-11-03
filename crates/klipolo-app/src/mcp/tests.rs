@@ -833,6 +833,35 @@ fn an_apps_follow_subject_tracks_and_lands_as_its_own_step() {
     assert!(told[0]["reply"]["reply"]["applied"].is_object(), "{told:?}");
 }
 
+/// Another app names the person as a scene log does: they are followed as a person, as chat follows them.
+#[test]
+fn an_apps_follow_of_a_named_person_tracks_a_person() {
+    let r = Rig::new();
+    let dir = tempfile::tempdir().unwrap();
+    r.chat
+        .set_speaker(Arc::new(klipolo_app::speaker::Speaker::new(
+            Arc::new(PaysOnePerson),
+            Arc::new(CountingCopy),
+            dir.path().join("analysis"),
+            dir.path().join("work"),
+            Arc::new(|_| {}),
+        )));
+    let follow = Job::Follow {
+        description: "woman astronaut".into(),
+        focus: vec![],
+    };
+    let Ok(Started::Done { said, .. }) = r.host.start_paid("Muse Spark agent", &follow) else {
+        panic!("not done at once")
+    };
+    assert!(
+        said.starts_with("The vertical version keeps the speaker in frame."),
+        "{said}"
+    );
+    let (_, label, params) = r.newest_step().unwrap();
+    assert_eq!(label, "chat.followSubject");
+    assert_eq!(params, json!({"description": "person"}));
+}
+
 /// An access code whose relay credit is below the estimate, or turned off, refuses before any picture is asked for;
 /// with credit, the picture is asked for as chat asks, its prompt cleaned and capped.
 #[test]

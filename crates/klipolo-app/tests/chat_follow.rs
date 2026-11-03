@@ -11,19 +11,19 @@ use std::sync::{Arc, Mutex};
 use klipolo_analysis::VideoError;
 use klipolo_analysis::providers::images::ImageMaker;
 use klipolo_analysis::providers::{
-    BoxFuture, Heard, ProviderError, ScreenBox, SubjectTracker, TrackedBox, TrackedFrame,
-    Tracking, VoiceAnswer, VoiceMatcher,
+    BoxFuture, Heard, ProviderError, ScreenBox, SubjectTracker, TrackedBox, TrackedFrame, Tracking,
+    VoiceAnswer, VoiceMatcher,
 };
 use klipolo_analysis::subject::voices::VoiceTurn;
 use klipolo_analysis::subject::{PERSON, SubjectCopy, frames_for};
 use klipolo_app::analysis::AssetAnalysis;
-use klipolo_app::chat::follow::NO_ONE_THERE;
+use klipolo_app::chat::follow::{NO_ONE_THERE, Place, names_a_person, phrase_of, place_of};
 use klipolo_app::chat::{
     ChatOutcome, ChatRequest, ChatSession, Findings, MemoryProjects, Models, Projects, Readiness,
 };
 use klipolo_app::speaker::{Speaker, Trackers, Voices};
 use klipolo_chat::{
-    AnalysisState, FunctionCall, LanguageModel, ModelError, ModelRequest,
+    AnalysisState, FollowFocus, FunctionCall, LanguageModel, ModelError, ModelRequest,
     ModelResponse,
 };
 use klipolo_model::apply_ops;
@@ -313,7 +313,10 @@ fn setup() -> Setup {
     let mut clip = Clip::new(ClipSource::Asset { id: "talk".into() }, s(60.0), s(120.0));
     clip.id = "c1".into();
     project.timeline.main = vec![clip];
-    let (sam, spark) = (Arc::new(TwoPeople::default()), Arc::new(FakeSpark::default()));
+    let (sam, spark) = (
+        Arc::new(TwoPeople::default()),
+        Arc::new(FakeSpark::default()),
+    );
     let speaker = Arc::new(
         Speaker::new(
             Arc::new(FakeTrackers {
@@ -358,7 +361,11 @@ fn kept(p: &Project) -> (Keep, usize) {
 }
 
 /// A chat on `setup`'s project with its speaker, the model answering `calls` and then `closing`.
-fn chat(setup: &Setup, calls: Vec<FunctionCall>, closing: &str) -> (Arc<ChatSession>, Arc<MemoryProjects>) {
+fn chat(
+    setup: &Setup,
+    calls: Vec<FunctionCall>,
+    closing: &str,
+) -> (Arc<ChatSession>, Arc<MemoryProjects>) {
     let model = Steps::new(vec![
         ModelResponse {
             text: String::new(),
@@ -439,7 +446,11 @@ async fn chat_keeps_the_person_on_the_left_from_the_cards_follow_at_no_charge() 
             .unwrap(),
     );
     assert_eq!(setup.sam.asked(), tracked, "nothing tracked again");
-    assert_eq!(setup.spark.asked.load(Ordering::SeqCst), matched, "nothing matched again");
+    assert_eq!(
+        setup.spark.asked.load(Ordering::SeqCst),
+        matched,
+        "nothing matched again"
+    );
     assert_eq!(setup.speaker.spent_usd(), spent, "nothing paid");
     assert_eq!(
         r["text"],
@@ -511,7 +522,12 @@ async fn a_follow_that_finds_nobody_says_so_instead_of_done() {
         )],
         "Done. The red balloon stays in frame.",
     );
-    let r = reply(&session.send(request("Follow the red balloon.")).await.unwrap());
+    let r = reply(
+        &session
+            .send(request("Follow the red balloon."))
+            .await
+            .unwrap(),
+    );
     assert_eq!(setup.sam.asked(), ["red balloon"]);
     // A minute at 2 frames a second: 120 frames.
     assert_eq!(
@@ -558,4 +574,144 @@ async fn a_follow_that_finds_nobody_beside_an_edit_says_only_what_landed() {
         "{r:#}"
     );
     assert!(r["applied"].is_object(), "{r:#}");
+}
+
+/// The one-message short's own follow ("followSubject on the speaker", beside its cut and its format): whatever the
+/// model calls the person, the people come from the person the card tracked, at no charge, and who is kept is chosen
+/// among them by place; the follow lands with the cut once it is applied.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_shorts_follow_reuses_the_cards_tracking_whatever_it_calls_the_person() {
+    for (description, keep, who) in [
+        ("speaker", Keep::Speaker, "speaker"),
+        ("the speaker", Keep::Speaker, "speaker"),
+        ("person", Keep::Speaker, "speaker"),
+        ("woman astronaut", Keep::Speaker, "speaker"),
+        (
+            "person on the left",
+            Keep::Person { person: 1 },
+            "person on the left",
+        ),
+        (
+            "the one on the right",
+            Keep::Person { person: 2 },
+            "person on the right",
+        ),
+    ] {
+        let mut setup = setup();
+        followed_by_the_card(&mut setup).await;
+        let (tracked, matched, spent) = (
+            setup.sam.asked(),
+            setup.spark.asked.load(Ordering::SeqCst),
+            setup.speaker.spent_usd(),
+        );
+        let follow = format!(r#"{{"description": "{description}", "focus": null}}"#);
+        let (session, projects) = chat(
+            &setup,
+            vec![
+                fc(
+                    "k",
+                    "keepOnly",
+                    r#"{"ranges": [{"startSec": 0, "endSec": 40}]}"#,
+                ),
+                fc(
+                    "v",
+                    "setFormat",
+                    r#"{"format": "portrait", "keepOthers": true}"#,
+                ),
+                fc("f", "followSubject", &follow),
+            ],
+            "Here is your vertical short. Review the cut below.",
+        );
+        let r = reply(
+            &session
+                .send(request("Make a vertical short of 0:00 to 0:40."))
+                .await
+                .unwrap(),
+        );
+        assert_eq!(
+            setup.sam.asked(),
+            tracked,
+            "{description}: nothing tracked again"
+        );
+        assert_eq!(
+            setup.spark.asked.load(Ordering::SeqCst),
+            matched,
+            "{description}: nothing matched again"
+        );
+        assert_eq!(
+            setup.speaker.spent_usd(),
+            spent,
+            "{description}: nothing paid"
+        );
+        assert_eq!(
+            r["text"],
+            "Here is your vertical short. Review the cut below."
+        );
+        assert_eq!(
+            r["notes"],
+            serde_json::json!([format!(
+                "The vertical version keeps the {who} in frame once you apply this. No charge: that footage was tracked before."
+            )]),
+            "{description}: {r:#}"
+        );
+        let id = r["proposal"]["id"].as_str().expect("the cut").to_owned();
+        session.apply(&id).unwrap();
+        let now = projects.now().unwrap().project;
+        let clip = &now.timeline.main[0];
+        assert_eq!(
+            (clip.source_in_us, clip.source_out_us),
+            (s(60.0), s(100.0)),
+            "{description}"
+        );
+        assert_eq!(kept(&now), (keep, 2), "{description}");
+    }
+}
+
+/// What chat tracks for a follow: a person whenever its focus names who to keep (People's P1, P2 are the people a
+/// follow of a person found) or its words name a person, whatever they call them; else the thing its words name. Who
+/// its words place is read only for a person.
+#[test]
+fn a_follow_of_a_person_tracks_a_person_and_reads_their_place() {
+    let p1 = [FollowFocus {
+        range: RangeUs {
+            start: 0,
+            end: s(60.0),
+        },
+        who: Who::Person { person: 1 },
+    }];
+    for person in [
+        "speaker",
+        "the speaker",
+        "person",
+        "the person",
+        "woman astronaut",
+        "two astronauts",
+        "person on the left",
+        "the one on the right",
+        "left",
+        "both of them",
+        "the host",
+        "me",
+    ] {
+        assert!(names_a_person(person), "{person}");
+        assert_eq!(phrase_of(person, &[]), PERSON, "{person}");
+    }
+    for thing in [
+        "the dog",
+        "red balloon",
+        "license plate",
+        "the car on the left",
+        "all the cars",
+    ] {
+        assert!(!names_a_person(thing), "{thing}");
+        assert_eq!(place_of(thing), None, "{thing}");
+    }
+    assert_eq!(phrase_of("the dog", &[]), "dog");
+    assert_eq!(phrase_of("the dog", &p1), PERSON, "a focus names people");
+    assert_eq!(phrase_of("woman astronaut", &p1), PERSON);
+    assert_eq!(place_of("person on the left"), Some(Place::Left));
+    assert_eq!(place_of("the rightmost speaker"), Some(Place::Right));
+    assert_eq!(place_of("the woman in the middle"), Some(Place::Middle));
+    assert_eq!(place_of("both of them"), Some(Place::Everyone));
+    assert_eq!(place_of("woman astronaut"), None);
 }

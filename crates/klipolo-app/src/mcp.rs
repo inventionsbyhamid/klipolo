@@ -26,7 +26,7 @@ use std::time::Duration;
 
 use klipolo_app::analysis::AnalysisState;
 use klipolo_app::chat::follow::{
-    NO_CROP, NO_ONE_THERE, cost_said, keeps_for, kept_in_frame, phrase_for,
+    Asked, NO_CROP, NO_ONE_THERE, cost_said, follow_as_asked, kept_in_frame, phrase_of, who_kept,
 };
 use klipolo_app::chat::{
     At, ChatReply, ChatSession, Decided, ExternalReply, Findings, Gone, PictureAsk, Projects,
@@ -188,13 +188,14 @@ impl<S: SessionOf> AppHost<S> {
         Projects::now(&*self.projects.session()).map(|now| now.at)
     }
 
-    /// What following `description` costs on the open project as it is: None without a speaker following or a project.
-    fn follow_estimate(&self, description: &str) -> Option<SpeakerEstimate> {
+    /// What following `description` with `focus` costs on the open project as it is: None without a speaker following
+    /// or a project.
+    fn follow_estimate(&self, description: &str, focus: &[FollowFocus]) -> Option<SpeakerEstimate> {
         let speaker = self.chat.speaker()?;
         let now = Projects::now(&*self.projects.session())?;
         let p = &now.project;
         let ids: Vec<String> = p.timeline.main.iter().map(|c| c.id.clone()).collect();
-        let phrase = phrase_for(description);
+        let phrase = phrase_of(description, focus);
         Some(
             self.rt
                 .block_on(speaker.estimate(p, &ids, &p.settings.formats, &phrase)),
@@ -215,7 +216,7 @@ impl<S: SessionOf> AppHost<S> {
         if someone_else(self.chat.slot().waiting().as_ref(), client) {
             return Err(HostError::Moved);
         }
-        let estimate = self.follow_estimate(description).ok_or(HostError::Moved)?;
+        let estimate = (self.follow_estimate(description, focus)).ok_or(HostError::Moved)?;
         if estimate.clips.is_empty() {
             return Err(HostError::Refused(NO_CROP.to_owned()));
         }
@@ -225,10 +226,20 @@ impl<S: SessionOf> AppHost<S> {
         let now = Projects::now(&*self.projects.session()).ok_or(HostError::Moved)?;
         let p = now.project.clone();
         let ids: Vec<String> = p.timeline.main.iter().map(|c| c.id.clone()).collect();
-        let phrase = phrase_for(description);
-        let keeps = keeps_for(&p, focus);
+        let phrase = phrase_of(description, focus);
+        let asked = Asked {
+            description,
+            focus,
+            named_on: &p,
+        };
         let followed = (self.rt)
-            .block_on(speaker.follow_keeping(&p, &ids, &p.settings.formats, &phrase, &keeps))
+            .block_on(follow_as_asked(
+                &speaker,
+                &p,
+                &ids,
+                &p.settings.formats,
+                &asked,
+            ))
             .map_err(HostError::Refused)?;
         let tx = {
             let session = self.projects.session();
@@ -259,7 +270,7 @@ impl<S: SessionOf> AppHost<S> {
             .applied(done.patch, undo_label(&tx))
             .on_revision(done.at.revision);
         self.told(client, done.at.opening, applied);
-        let kept = kept_in_frame(&p, &p.settings.formats, &phrase);
+        let kept = kept_in_frame(&p, &p.settings.formats, &who_kept(&phrase, &followed));
         let mut cost = cost_said(followed.paid_usd);
         // Who speaks couldn't be told: said too.
         if let Some(why) = &followed.note {
@@ -508,8 +519,8 @@ impl<S: SessionOf> Host for AppHost<S> {
             Job::MakeSticker(_) | Job::MakeTitleBackground { .. } => {
                 klipolo_meta::pricing::image_usd(1)
             }
-            Job::Follow { description, .. } => {
-                self.follow_estimate(description).map_or(0.0, |e| e.usd)
+            Job::Follow { description, focus } => {
+                (self.follow_estimate(description, focus)).map_or(0.0, |e| e.usd)
             }
             // Not in Klipolo yet: nothing runs, nothing is spent. A reversed copy is written on this Mac, for free.
             Job::Blur { .. } | Job::Reverse { .. } => 0.0,
