@@ -172,6 +172,9 @@ pub struct Inputs {
     pub speech: Speech,
     /// Scene logs by asset id.
     pub scenes: HashMap<String, SceneLog>,
+    /// Each file's speaker turns by asset id, as the context reads them: who speaks either side of a short's cut
+    /// (`cues`).
+    pub turns: HashMap<String, Vec<crate::context::SpeakerTurn>>,
     /// Each file's analysis, by asset id.
     pub analysis: HashMap<String, AnalysisState>,
     /// The files whose rough words the preview's header offers to time again (Time words again), by asset id: a

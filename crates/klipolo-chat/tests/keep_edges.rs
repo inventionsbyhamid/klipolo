@@ -100,6 +100,7 @@ fn inputs(p: &Project, words: Vec<Word>, scenes: Vec<SceneEntry>, message: &str)
         );
     }
     Inputs {
+        turns: Default::default(),
         message: message.into(),
         view: View::default(),
         refs: Refs::of(p),

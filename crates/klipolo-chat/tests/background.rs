@@ -58,6 +58,7 @@ fn wide() -> Project {
 
 fn inputs(p: &Project) -> Inputs {
     Inputs {
+        turns: Default::default(),
         message: "put a blurred background behind it".into(),
         view: View::default(),
         refs: Refs::of(p),

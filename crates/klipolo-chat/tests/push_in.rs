@@ -54,6 +54,7 @@ fn project() -> Project {
 
 fn inputs(p: &Project) -> Inputs {
     Inputs {
+        turns: Default::default(),
         message: "slowly zoom into the speaker over five seconds".into(),
         view: View::default(),
         refs: Refs::of(p),

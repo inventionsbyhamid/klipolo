@@ -98,6 +98,8 @@ pub fn inputs_for(
         refs: Refs::of(project),
         speech,
         scenes,
+        // Who speaks when, for a short's whooshes where the speaker changes.
+        turns: turns.clone(),
         analysis,
         time_again,
         library,

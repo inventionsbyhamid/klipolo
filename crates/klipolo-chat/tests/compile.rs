@@ -97,6 +97,7 @@ fn project(assets: Vec<Asset>, clips: Vec<Clip>) -> Project {
 /// analyzed, the playhead at 0 and no selection.
 fn inputs(project: &Project, speech: Speech, message: &str) -> Inputs {
     Inputs {
+        turns: Default::default(),
         message: message.into(),
         view: View::default(),
         refs: Refs::of(project),

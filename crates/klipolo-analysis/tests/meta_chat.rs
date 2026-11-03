@@ -109,6 +109,7 @@ fn talk() -> (Project, Inputs, ChatContext) {
         }),
     );
     let inputs = Inputs {
+        turns: Default::default(),
         message: String::new(),
         view: View::default(),
         refs: Refs::of(&p),

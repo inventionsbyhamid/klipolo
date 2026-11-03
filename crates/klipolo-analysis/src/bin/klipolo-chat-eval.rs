@@ -494,6 +494,7 @@ fn run(args: &Args) -> Result<bool, String> {
         };
         let ctx = build_context(project, &fx.speech, &fx.turns, &fx.scenes, &view, &library);
         let inputs = Inputs {
+            turns: fx.turns.clone(),
             message: case.message.clone(),
             view,
             refs: ctx.refs.clone(),

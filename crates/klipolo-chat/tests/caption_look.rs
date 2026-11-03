@@ -54,6 +54,7 @@ fn project() -> Project {
 
 fn inputs(p: &Project) -> Inputs {
     Inputs {
+        turns: Default::default(),
         message: "make the captions bigger and yellow".into(),
         view: View::default(),
         refs: Refs::of(p),
