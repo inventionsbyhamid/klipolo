@@ -47,7 +47,8 @@
 //! `clips` (a clip's speed, volume, mute and framing, and the transitions at its cuts), `background` (what shows
 //! behind the video), `recorded` (a recording's camera, in `cameras` and `bubble`, and its sounds, in `sources`),
 //! `animate` (a layer's animation, with its sound), `zooms` (a recording's clicks as auto zooms), `clear` (a picture in
-//! 9:16 kept off the person on screen), `quote` (a moment by the words said there), `map`.
+//! 9:16 kept off the person on screen, a short's sticker beside the speaker's head), `cues` (a short's stickers and
+//! sound effects, placed and timed by what it shows), `quote` (a moment by the words said there), `map`.
 
 mod additions;
 mod animate;

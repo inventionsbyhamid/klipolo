@@ -14,6 +14,9 @@
 //! near the top, land on the eyes. The hook goes `UNDER_FACE` there (`hook_under_face`): below the face, above the
 //! captions, inside the clear area. Letterboxed 9:16 (Fit), screen recordings, footage with nobody found and the other
 //! formats keep the kinetic title as it is, and other words go where their preset puts them.
+//!
+//! A short's sticker goes beside the speaker's head instead (`beside_speaker`), as `cues` times it: at the head's
+//! height, on the side with more room, never on the head or, where nothing says where the speaker is, the face zone.
 
 use std::collections::HashMap;
 
