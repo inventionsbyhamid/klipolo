@@ -998,9 +998,13 @@ impl Compiler<'_> {
             } = call
             {
                 // A short's sticker comes in and goes out as Klipolo times it, with its sound.
-                if self.cued_sticker(calls, layer, i) {
+                if let Some(sticker) = self.cued_sticker(calls, layer, i) {
                     adding.unchanged.push(i);
-                    told.push((i, cues::ANIMATED_ALREADY.to_owned()));
+                    let said = match sticker {
+                        cues::Sticker::At { .. } => cues::ANIMATED_ALREADY,
+                        cues::Sticker::Left(_) => cues::LEFT_WITH_STICKER,
+                    };
+                    told.push((i, said.to_owned()));
                     continue;
                 }
                 let change = animate::Change {
@@ -1239,11 +1243,16 @@ impl Compiler<'_> {
         out
     }
 
-    /// Whether `animate` call `i` of `layer` names a sticker call of a short, which Klipolo animates (`cues`): `last`
-    /// after one.
-    fn cued_sticker(&self, calls: &[ToolCall], layer: &LayerRef, i: usize) -> bool {
+    /// The sticker call of a short that `animate` call `i` of `layer` names (`last` after one), which Klipolo animates
+    /// (`cues`), as Klipolo placed it or left it out.
+    fn cued_sticker(
+        &self,
+        calls: &[ToolCall],
+        layer: &LayerRef,
+        i: usize,
+    ) -> Option<&cues::Sticker> {
         let (Some(cues), LayerRef::Last) = (&self.cues, layer) else {
-            return false;
+            return None;
         };
         let adds = |c: &ToolCall| {
             matches!(
@@ -1254,10 +1263,8 @@ impl Compiler<'_> {
                     | ToolCall::MakeSticker { .. }
             )
         };
-        (0..i)
-            .rev()
-            .find(|&j| calls.get(j).is_some_and(adds))
-            .is_some_and(|j| cues.stickers.contains_key(&j))
+        let j = (0..i).rev().find(|&j| calls.get(j).is_some_and(adds))?;
+        cues.stickers.get(&j)
     }
 
     /// The layer call `i` (of `tool`, which would `verb` it) names: by its ref from the context, or the one the last call

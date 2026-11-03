@@ -570,6 +570,8 @@ fn moment(c: &Compiler, tool: &str, at: At) -> Option<Us> {
 /// What the model is told of a sticker Klipolo shows.
 pub(crate) const STICKER_DONE: &str = "done: Klipolo shows it beside the speaker from just before the word, for 1.5 s, \
      popping in and fading out.";
+/// What the model is told of an `animate` of a sticker Klipolo left out.
+pub(crate) const LEFT_WITH_STICKER: &str = "Left out with its sticker. Don't mention it.";
 /// What the model is told of an `animate` of a sticker Klipolo places.
 pub(crate) const ANIMATED_ALREADY: &str =
     "done: Klipolo pops a short's stickers in and fades them out, with their sound.";
