@@ -152,7 +152,7 @@ pub fn packed(bytes: &[u8], stride: u32, size: (u32, u32)) -> Vec<u8> {
         .collect()
 }
 
-/// The backend the app's engine session runs on (`commands/engine.rs`): the warm-up's, else its own.
+/// The backend the app's engine session runs on (the app's `engine.rs`): the warm-up's, else its own.
 pub async fn app_preview_backend() -> GpuBackend {
     GpuBackend::for_preview(Some(Warmup::start(RenderMode::Interactive)))
         .await

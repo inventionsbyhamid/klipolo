@@ -1,6 +1,6 @@
 //! How a compositor treats shaders that aren't built in.
 //!
-//! - **`Interactive`** is only the app's preview (the engine session `commands/engine.rs` builds). A `Checked` shader's
+//! - **`Interactive`** is only the app's preview (the session the app's `engine.rs` builds). A `Checked` shader's
 //!   pipeline compiles on a thread of its own (`effects::compile_thread`), so the drawing thread never waits for a
 //!   driver's compile, and it is drawn only once the app said its crash-guard mark is on disk: until then the layer
 //!   draws without the effect. Its passes are sampled and slowed down when over budget (`effects::sampling`).

@@ -7,7 +7,7 @@ use super::mode::RenderMode;
 use super::warm::Warmup;
 
 impl GpuBackend {
-    /// The backend the app's preview runs on (`commands/engine.rs`): the GPU warm-up's (`Interactive`, started at launch)
+    /// The backend the preview runs on (the app's `engine.rs`): the GPU warm-up's (`Interactive`, started at launch)
     /// unless its device was lost meanwhile, else a new one, `Interactive` too.
     pub async fn for_preview(warmup: Option<Warmup>) -> Result<Self, String> {
         let warmed = match warmup {

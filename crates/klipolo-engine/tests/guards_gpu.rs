@@ -221,7 +221,7 @@ async fn an_export_draws_a_slow_pass_in_tiles_with_the_same_result() {
 #[ignore = "needs a GPU (lavapipe in CI)"]
 async fn the_apps_preview_stays_interactive_also_after_a_device_loss() {
     // The engine session the app builds, through every place that makes its compositor.
-    let mut backend = app_preview_backend().await; // what `commands/engine.rs` builds
+    let mut backend = app_preview_backend().await; // what the app's `engine.rs` builds
     assert_eq!(backend.mode(), RenderMode::Interactive);
     assert_eq!(
         backend.warm_compositor_mode().await,
