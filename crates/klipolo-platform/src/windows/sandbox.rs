@@ -3,7 +3,7 @@
 
 use crate::process::sandbox::{Applied, SandboxProfile};
 
-/// W validates the profile with the rules its job object needs (`canonicalize` gives `\\?\` paths here).
+/// Windows will validate the profile with the rules its job object needs (`canonicalize` gives `\\?\` paths here).
 pub(crate) fn sandbox_self(_profile: &SandboxProfile) -> Result<Applied, String> {
     Ok(Applied::Unsupported)
 }

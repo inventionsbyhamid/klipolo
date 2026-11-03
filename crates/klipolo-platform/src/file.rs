@@ -120,7 +120,7 @@ pub struct PlacedIdentity {
     pub file: u64,
 }
 
-/// `path`'s [`PlacedIdentity`], or None when the OS won't say (it is gone, or on W for now). Two stats, and on macOS
+/// `path`'s [`PlacedIdentity`], or None when the OS won't say (it is gone, or on Windows for now). Two stats, and on macOS
 /// one `getattrlist`: call it when a folder is opened or compared, not per frame.
 pub fn placed_identity(path: &Path) -> Option<PlacedIdentity> {
     crate::imp::placed_identity(path)

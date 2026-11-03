@@ -52,7 +52,7 @@ pub trait Backend: Send + Sync {
     fn preview(&self, camera: &str) -> Result<Box<dyn PreviewPipe>, PipeError>;
     /// The recorder's live view of `target` (the one exception to capture only after a press): a small, slow picture of
     /// a screen, window or game, no sound, nothing written. Building it opens nothing, and its `start` never asks for a
-    /// permission: it runs only while screen recording is allowed already. Default: Unsupported (Windows' capture tasks
+    /// permission: it runs only while screen recording is allowed already. Default: Unsupported (Windows' capture will
     /// add it; Linux's ScreenCast portal would ask at every opening).
     fn live_view(&self, _target: &Target) -> Result<Box<dyn PreviewPipe>, PipeError> {
         Err(PipeError::Unsupported)
@@ -216,7 +216,7 @@ pub struct CaptureCaps {
 }
 
 impl CaptureCaps {
-    /// A computer that can't record yet: every API None. The OS backends start here until their tasks.
+    /// A computer that can't record yet: every API None. The OS backends start here until they can record.
     pub fn none(indicator: IndicatorPlace, picker: PickerKind) -> Self {
         Self {
             screen: ScreenApi::None,
