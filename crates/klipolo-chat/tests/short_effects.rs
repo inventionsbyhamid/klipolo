@@ -1201,9 +1201,9 @@ fn a_sticker_in_a_wide_or_square_project_reads_at_a_share_of_its_width() {
 
 #[test]
 fn a_whoosh_trusts_voice_labels_only_within_one_transcription_part() {
-    // Labels from different transcription parts can't be compared: at the first cut ("A@0" then "B@1") the scene log
-    // decides (the man, then the woman: a change), and at the second ("B@1" then "A@2", the woman both times by the
-    // scene log) there is none. The last cut is within one part: "A@2" then "C@2" is a change.
+    // Labels from different transcription parts can't be compared, and the scene log's words don't decide for them: no
+    // whoosh at the first cut ("A@0" then "B@1", though the scene log goes from the man to the woman) or the second
+    // ("B@1" then "A@2"). The last cut is within one part: "A@2" then "C@2" is a change.
     let p = project();
     let mut i = inputs(&p, MESSAGE);
     let turn = |start: f64, end: f64, who: &str| klipolo_chat::SpeakerTurn {
@@ -1230,10 +1230,7 @@ fn a_whoosh_trusts_voice_labels_only_within_one_transcription_part() {
         .map(|(_, t)| *t)
         .collect();
     let cuts = cuts(&after);
-    // To the woman, and back to the man; none where she goes on.
-    assert_eq!(whooshes.len(), 2, "{sounds:?} {cuts:?}");
-    assert!(
-        near(whooshes[0], cuts[1]) && near(whooshes[1], cuts[3]),
-        "{sounds:?} {cuts:?}"
-    );
+    // Only the last cut, where one part's labels say the voice changes; never the scene log's guess where they can't.
+    assert_eq!(whooshes.len(), 1, "{sounds:?} {cuts:?}");
+    assert!(near(whooshes[0], cuts[3]), "{sounds:?} {cuts:?}");
 }

@@ -15,11 +15,11 @@
 //!   both have the same room. An `animate` of one is Klipolo's already.
 //! - **Sounds** follow what is seen, once the answer has any sound effect (an `addSound`, or an `animate` with a
 //!   sound): a pop with each sticker; a rise under the hook and a whoosh at up to `MAX_WHOOSHES` cuts where the speaker
-//!   changes (by the transcript's speaker turns, else the scene log's speech items; `STICKER_GAP_US` apart, after the
-//!   hook), in the file the model named for that kind or else the library's (`Cues::own`, each its own change); and
-//!   one chime or ding on the payoff line, where the model marks it. Any other sound, and any more of those, is left
-//!   out, unless the person named it: then it goes where the model put it. A short whose person asks for no sound
-//!   effects gets none.
+//!   changes (by the transcript's speaker turns, only within one transcription part, else the scene log's speech
+//!   items; `STICKER_GAP_US` apart, after the hook), in the file the model named for that kind or else the library's
+//!   (`Cues::own`, each its own change); and one chime or ding on the payoff line, where the model marks it. Any other
+//!   sound, and any more of those, is left out, unless the person named it: then it goes where the model put it. A
+//!   short whose person asks for no sound effects gets none.
 //!
 //! What the model is told of each call it affects (`Compiled::told`) says what Klipolo did with it, so its reply
 //! claims nothing that isn't there.
@@ -750,9 +750,9 @@ impl Cues {
         out
     }
 
-    /// Where whooshes go: the snapshot moments the short cuts to a new speaker (the scene log's speech items either
-    /// side differ), at most `MAX_WHOOSHES`, after the hook, `STICKER_GAP_US` apart; each at the first frame after the
-    /// cut, so all of it plays.
+    /// Where whooshes go: the snapshot moments the short cuts to a new speaker (`speaker_changes`), at most
+    /// `MAX_WHOOSHES`, after the hook, `STICKER_GAP_US` apart; each at the first frame after the cut, so all of it
+    /// plays.
     fn whoosh_cuts(&self, c: &Compiler) -> Vec<Us> {
         let main = &c.snapshot.timeline.main;
         // Each cut: the side before it and the side after it.
@@ -884,11 +884,12 @@ fn speaker(c: &Compiler, window: RangeUs, turns: bool) -> Option<Who> {
         .map(|(_, item)| Who::Scene(item.who.trim().to_lowercase()))
 }
 
-/// Whether the speaker changes from `before` to `after`: by the transcript's turns where both sides can be compared,
-/// else by the scene log's; false where neither can tell, as a missed whoosh is better than a false one.
+/// Whether the speaker changes from `before` to `after`: by the transcript's turns where they say who speaks on both
+/// sides, and no change where those two can't be compared (another transcription part or file), never the scene log's
+/// guess then; else by the scene log's. False where nothing can tell, as a missed whoosh is better than a false one.
 fn speaker_changes(c: &Compiler, before: RangeUs, after: RangeUs) -> bool {
     let by = |turns: bool| match (speaker(c, before, turns), speaker(c, after, turns)) {
-        (Some(x), Some(y)) => changes(&x, &y),
+        (Some(x), Some(y)) => Some(changes(&x, &y).unwrap_or(false)),
         _ => None,
     };
     by(true).or_else(|| by(false)).unwrap_or(false)
