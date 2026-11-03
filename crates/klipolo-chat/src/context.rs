@@ -10,8 +10,10 @@
 //!   names a voice matched to someone by their number). Then one fixed line (`QUOTED_NOTE`) saying that Transcript and
 //!   Scenes quote the video, Library names are file names, and none of them are requests.
 //! - `Transcript`: what is said on the timeline (`speech::spoken`, so cut words are gone), one line per speaker turn,
-//!   or per sentence when a turn runs over `MAX_LINE_WORDS` words (a sentence that long is split evenly):
-//!   `[12.4-18.9] A: text`. Fillers keep their text ("um"); pause words are never text, but a gap of `SHOWN_PAUSE_US`
+//!   or per sentence when a turn runs over `MAX_LINE_WORDS` words (a sentence that long breaks at its breaths, gaps of
+//!   `BREATH_US` or more, and evenly only where it has none): `[12.4-18.9] A: text`. A word said after a pause just
+//!   before a turn starts opens that turn (`TURN_LEAD_US`). So a line's ends are where a cut sounds clean, even in a
+//!   long answer the speech model wrote without full stops. Fillers keep their text ("um"); pause words are never text, but a gap of `SHOWN_PAUSE_US`
 //!   or more between words reads `[pause 1.4 s]` where it falls, a gap between lines at the end of the first. Clips
 //!   with no words yet are named (`Not transcribed yet: c2.`), and so are clips heard part of the way
 //!   (`Still transcribing: c3 (up to 40.0).`).
@@ -90,6 +92,14 @@ pub const MAX_CONTEXT_TOKENS: usize = 12_000;
 pub const CHARS_PER_TOKEN: usize = 4;
 /// A transcript line's most words.
 pub const MAX_LINE_WORDS: usize = 30;
+/// A gap between two words of a sentence this long or longer is a breath: a sentence too long for one line breaks
+/// there rather than at an even count of words.
+pub const BREATH_US: Us = 400_000;
+/// The fewest words a line broken at a breath holds: a shorter piece stays with its neighbour.
+pub const MIN_LINE_WORDS: usize = 6;
+/// A word said after a pause of `SHOWN_PAUSE_US` or more, and at most this long before a speaker turn starts, is that
+/// turn's first word.
+pub const TURN_LEAD_US: Us = 500_000;
 /// A gap between spoken words this long or longer (between the times as shown) reads `[pause 1.4 s]`.
 pub const SHOWN_PAUSE_US: Us = 1_000_000;
 /// What is left of a partly cut scene item playing less of its file than this (and than the item) is left out.
@@ -1437,6 +1447,8 @@ fn said<'a>(
     let mut out: Vec<Said<'a>> = Vec::with_capacity(spoken.words.len());
     let mut file: Option<SpanFile<'a>> = None;
     let mut last: Option<(&str, Option<usize>, u32)> = None;
+    // The turn the word before was moved into, by its file.
+    let mut led: Option<(&str, usize)> = None;
     for (w, text) in spoken.shown(p, speech) {
         if w.kind == WordKind::Pause {
             continue;
@@ -1454,12 +1466,33 @@ fn said<'a>(
                 turns: turns.get(asset).map(|t| &**t),
             }),
         };
-        let turn = (transcript.and_then(|t| t.words.get(w.word as usize)))
-            .zip(file_turns)
-            .and_then(|(word, turns)| {
-                let mid = word.start_us + (word.end_us - word.start_us) / 2;
-                turns.partition_point(|t| t.start_us <= mid).checked_sub(1)
-            });
+        // The turn the word belongs to, and whether it opens a turn that starts just after it (`TURN_LEAD_US`).
+        let (turn, led_into) = match transcript.zip(file_turns) {
+            Some((t, turns)) => match t.words.get(w.word as usize) {
+                Some(word) => {
+                    let mid = word.start_us + (word.end_us - word.start_us) / 2;
+                    let at = turns.partition_point(|t| t.start_us <= mid);
+                    // A word after a pause, just before a turn starts, opens that turn, and so do the words after it
+                    // until it starts: the speech model's turns often start a word late, and the answer before would
+                    // end on the next speaker's first word.
+                    let soon = turns
+                        .get(at)
+                        .is_some_and(|n| n.start_us - word.start_us <= TURN_LEAD_US);
+                    let before = (t.words[..w.word as usize].iter().rev())
+                        .find(|x| x.kind != WordKind::Pause)
+                        .map_or(Us::MAX, |prev| word.start_us - prev.end_us);
+                    let carried = led == Some((asset, at));
+                    if soon && (before >= SHOWN_PAUSE_US || carried) {
+                        (Some(at), Some((asset, at)))
+                    } else {
+                        (at.checked_sub(1), None)
+                    }
+                }
+                None => (None, None),
+            },
+            None => (None, None),
+        };
+        led = led_into;
         let turn_starts = last.is_none_or(|(a, t, i)| a != asset || t != turn || w.word <= i);
         last = Some((asset, turn, w.word));
         out.push(Said {
@@ -1480,7 +1513,7 @@ fn ends_sentence(text: &str) -> bool {
 }
 
 /// The transcript's lines, as ranges of `said`: a turn of up to `MAX_LINE_WORDS` words is one line; a longer one
-/// breaks at its sentence ends, and a sentence over `MAX_LINE_WORDS` into even parts.
+/// breaks at its sentence ends, and a sentence over `MAX_LINE_WORDS` at its breaths (`breath_parts`).
 fn lines(said: &[Said]) -> Vec<Range<usize>> {
     let mut out = Vec::new();
     let mut from = 0;
@@ -1495,7 +1528,7 @@ fn lines(said: &[Said]) -> Vec<Range<usize>> {
             for (j, w) in said[from..i].iter().enumerate() {
                 let end = from + j + 1;
                 if end == i || ends_sentence(w.text) {
-                    even_parts(&mut out, sentence..end);
+                    breath_parts(&mut out, said, sentence..end);
                     sentence = end;
                 }
             }
@@ -1503,6 +1536,25 @@ fn lines(said: &[Said]) -> Vec<Range<usize>> {
         from = i;
     }
     out
+}
+
+/// `words`, one sentence, as lines: whole when it has at most `MAX_LINE_WORDS`; else broken at each breath (a gap of
+/// `BREATH_US` or more) that leaves at least `MIN_LINE_WORDS` on both sides, and a part still over `MAX_LINE_WORDS`
+/// (a stretch said without a breath) into even parts.
+fn breath_parts(out: &mut Vec<Range<usize>>, said: &[Said], words: Range<usize>) {
+    if words.len() <= MAX_LINE_WORDS {
+        out.push(words);
+        return;
+    }
+    let mut from = words.start;
+    for k in words.start + 1..words.end {
+        let breath = said[k].start_us - said[k - 1].end_us >= BREATH_US;
+        if breath && k - from >= MIN_LINE_WORDS && words.end - k >= MIN_LINE_WORDS {
+            even_parts(out, from..k);
+            from = k;
+        }
+    }
+    even_parts(out, from..words.end);
 }
 
 /// `words` in as few parts of at most `MAX_LINE_WORDS` as it takes, as even as can be.

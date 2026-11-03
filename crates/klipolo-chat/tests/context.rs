@@ -571,6 +571,53 @@ fn long_turns_break_at_sentence_ends_and_fillers_keep_their_text() {
     );
 }
 
+/// "talk.mov" saying `words`, in speaker `turns`.
+fn talk_of(words: Vec<Word>, turns: Vec<SpeakerTurn>) -> Inputs {
+    let mut inputs = talk();
+    let speech = Arc::get_mut(inputs.speech.transcripts.get_mut("talk").unwrap()).unwrap();
+    speech.words = words;
+    inputs.turns = HashMap::from([("talk".to_owned(), turns)]);
+    inputs
+}
+
+#[test]
+fn long_unpunctuated_turns_break_at_breaths_and_a_turn_takes_its_first_word() {
+    // A's answer: 40 words with no full stop (as the speech model writes long answers), a breath of 0.5 s after the
+    // 14th. Then B's first two words after a pause, said before B's turn starts (turns start a word late).
+    let a: Vec<String> = (1..=40).map(|i| format!("w{i}")).collect();
+    let script = format!(
+        "{} |0.5 {} |1.5 Our |0.0 next question",
+        a[..14].join(" "),
+        a[14..].join(" ")
+    );
+    let words = said(&script);
+    let our = words.iter().position(|w| w.text == "Our").unwrap();
+    let turns = vec![
+        SpeakerTurn {
+            start_us: words[0].start_us,
+            end_us: words[our - 2].end_us,
+            speaker: Some("A".into()),
+        },
+        SpeakerTurn {
+            start_us: words[our].start_us + 500_000,
+            end_us: words.last().unwrap().end_us,
+            speaker: Some("B".into()),
+        },
+    ];
+    let text = talk_of(words, turns).context(&view_at(0.0)).text;
+    let lines = timed_lines(&text, "Transcript");
+    assert_eq!(lines.len(), 3, "{lines:#?}");
+    // The line ends at the breath, not after an even 20 words.
+    assert!(lines[0].ends_with(&format!("] A: {}", a[..14].join(" "))), "{}", lines[0]);
+    assert!(
+        lines[1].ends_with(&format!("] A: {} [pause 1.5 s]", a[14..].join(" "))),
+        "{}",
+        lines[1]
+    );
+    // B's first word opens B's line: the answer before ends on its own last word.
+    assert!(lines[2].ends_with("] B: Our next question"), "{}", lines[2]);
+}
+
 #[test]
 fn clips_without_analysis_are_named() {
     let inputs = two_clips();
