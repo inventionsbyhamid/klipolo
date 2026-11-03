@@ -1,4 +1,4 @@
-//! Klipolo project model v2. Pure data + rules: no IO, no platform code.
+//! Klipolo's project model. Pure data + rules: no IO, no platform code.
 
 pub mod analysed;
 pub mod apply;
