@@ -792,6 +792,7 @@ main > section:not(.hero) {
 .join__line { font-size: var(--t-lede); line-height: 1.45; color: var(--quiet); max-width: 48ch; text-wrap: pretty; }
 .join__ship { margin-top: clamp(40px, 8vh, 104px); }
 .join__after { color: var(--quiet); }
+.join__soon { font-size: var(--t-small); }
 
 /* ---------- questions ---------- */
 
