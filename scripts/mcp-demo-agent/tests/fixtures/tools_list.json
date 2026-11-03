@@ -1729,7 +1729,7 @@
       "annotations": {
         "readOnlyHint": false
       },
-      "description": "Undo the last change.",
+      "description": "Undo the person's last change, from before this message: only before any other change of this message, never to take back your own call (change or remove that with its own tool).",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {},
