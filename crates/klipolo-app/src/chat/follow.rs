@@ -280,18 +280,10 @@ pub(super) async fn follow_jobs(
             }
             Ok(followed) => {
                 let ops = followed.ops(&target);
-                // The stickers Klipolo placed beside the speaker go beside them where the path now keeps them.
-                if !ops.is_empty()
-                    && !out.compiled.beside.is_empty()
-                    && let Ok(followed_target) = apply_ops(&target, &ops)
-                    && let Some(tx) = &mut out.compiled.additions
-                {
-                    klipolo_chat::place_beside_again(
-                        &followed_target,
-                        &mut tx.ops,
-                        &out.compiled.beside,
-                    );
-                }
+                // Where the stickers Klipolo placed beside the speaker go once the path lands with these changes.
+                let followed_target = (!ops.is_empty() && !out.compiled.beside.is_empty())
+                    .then(|| apply_ops(&target, &ops).ok())
+                    .flatten();
                 let cost = cost_said(followed.paid_usd);
                 if ops.is_empty() {
                     follows.said.push(format!("{NO_ONE_THERE} {cost}"));
@@ -305,6 +297,16 @@ pub(super) async fn follow_jobs(
                     follows.note = format!("Following {phrase} didn't fit the changes.");
                     follows.failed = true;
                 } else {
+                    // Attached: the stickers go beside the head where the path keeps the speaker.
+                    if let (Some(followed_target), Some(tx)) =
+                        (&followed_target, &mut out.compiled.additions)
+                    {
+                        klipolo_chat::place_beside_again(
+                            followed_target,
+                            &mut tx.ops,
+                            &out.compiled.beside,
+                        );
+                    }
                     let when = if out.compiled.proposal.is_some() {
                         "once you apply this"
                     } else {
