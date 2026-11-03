@@ -1697,3 +1697,50 @@ fn follow_subject_keeps_who_chat_names_over_parts_of_the_timeline() {
         json!(["description", "focus"])
     );
 }
+
+#[test]
+fn optional_words_written_as_the_text_null_are_left_out() {
+    // As a paid run wrote them: each optional word "null" reads as left out, never as a sound or preset named "null".
+    let animate = ToolCall::parse(&call(
+        "animate",
+        r#"{"emphasis": "null", "enter": "pop", "exit": "null", "layer": "t1", "sound": "null"}"#,
+    ))
+    .unwrap();
+    let ToolCall::Animate {
+        enter,
+        exit,
+        emphasis,
+        sound,
+        ..
+    } = animate
+    else {
+        panic!("{animate:?}");
+    };
+    assert_eq!((exit, emphasis, sound), (None, None, None));
+    assert!(enter.is_some());
+    let text = ToolCall::parse(&call(
+        "addText",
+        r#"{"animation": "kinetic", "atSec": "null", "atWords": "what do these firsts", "durationSec": 3.0, "font": "null", "preset": "title", "text": "This Is Human History"}"#,
+    ))
+    .unwrap();
+    assert!(
+        matches!(
+            text,
+            ToolCall::AddText {
+                font: None,
+                at_us: None,
+                ..
+            }
+        ),
+        "{text:?}"
+    );
+    let sound = ToolCall::parse(&call(
+        "addSound",
+        r#"{"atSec": "null", "atWords": ["what do these firsts"], "name": "Rise"}"#,
+    ))
+    .unwrap();
+    assert!(
+        matches!(&sound, ToolCall::AddSound { at_us, .. } if at_us.is_empty()),
+        "{sound:?}"
+    );
+}
