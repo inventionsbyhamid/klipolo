@@ -6,9 +6,10 @@
 //! function `tools`, `tool_choice: "auto"`, parallel calls, `max_output_tokens` within the relay's cap, `store: false`
 //! (Meta keeps no copy of the answer) and `input`. No call refers to stored state (no `previous_response_id` or
 //! `conversation`) and no reasoning item is sent back: a refusal round sends the whole input again. Reasoning effort is
-//! Meta's default (the field is left out). The context is the first input item, as the person's message, so the
-//! instructions, the tools and the context stay one prefix Meta's cache reuses. The app always asks with
-//! `ChatSetup::default()`; the development eval may name another model or effort (`MetaChat::with_setup`).
+//! `CHAT_REASONING_EFFORT` (high), the same through the relay and with the person's own key. The context is the first
+//! input item, as the person's message, so the instructions, the tools and the context stay one prefix Meta's cache
+//! reuses. The app always asks with `ChatSetup::default()`; the development eval may name another model or effort
+//! (`MetaChat::with_setup`).
 //!
 //! The relay takes 4 Meta calls at once from a device; the analysis holds 3 (`meta::RELAY_META_CALLS`) and chat the
 //! fourth: `MetaChat` keeps its own single slot, shared by its clones, and never takes one of `Meta::call`'s. A busy
@@ -49,6 +50,11 @@ pub const CHAT_BUSY_WAIT_MAX: Duration = Duration::from_secs(5);
 /// it), billed all the same.
 pub const CHAT_ANSWER_TIMEOUT: Duration = Duration::from_secs(180);
 
+/// Chat's reasoning effort. In paid runs of the one-message short at Meta's default effort, 2 of 2 took back their own
+/// work partway (10 model calls, about $0.28 each); at high, 2 of 2 planned it whole in 3 calls, about $0.08 each, and
+/// the longest answer used about 10,200 of the 16,384 output tokens.
+pub const CHAT_REASONING_EFFORT: &str = "high";
+
 /// What a chat call asks Meta for besides the request: the model, the reasoning effort (None: Meta's default, the
 /// field left out) and the output cap, reasoning included.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -59,11 +65,11 @@ pub struct ChatSetup {
 }
 
 impl Default for ChatSetup {
-    /// What the app asks for: `CHAT_MODEL` at Meta's default effort, within `CHAT_MAX_OUTPUT_TOKENS`.
+    /// What the app asks for: `CHAT_MODEL` at `CHAT_REASONING_EFFORT`, within `CHAT_MAX_OUTPUT_TOKENS`.
     fn default() -> Self {
         Self {
             model: CHAT_MODEL.to_owned(),
-            reasoning_effort: None,
+            reasoning_effort: Some(CHAT_REASONING_EFFORT.to_owned()),
             max_output_tokens: CHAT_MAX_OUTPUT_TOKENS,
         }
     }
