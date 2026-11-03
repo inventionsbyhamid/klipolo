@@ -31,7 +31,7 @@ import {
 } from './analysis';
 import './analysis.css';
 
-/** The icons the banner needs, from the design's sprite (24 px grid, 1.8 px stroke). */
+/** The icons the banner needs, from the icon sprite (24 px grid, 1.8 px stroke). */
 const ICONS = {
   wave: <path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" />,
   key: (

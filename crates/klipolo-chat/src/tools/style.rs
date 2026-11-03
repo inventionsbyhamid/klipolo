@@ -77,7 +77,7 @@ impl Word for Look {
 const WHITE: &str = "#FFFFFF";
 const BLACK: &str = "#000000";
 const YELLOW: &str = "#FFD02E";
-/// The box behind the words: the design's navy at 86 %.
+/// The box behind the words: navy at 86 %.
 const BOX_COLOR: &str = "#121A33DB";
 
 /// The card's looks, in its order.

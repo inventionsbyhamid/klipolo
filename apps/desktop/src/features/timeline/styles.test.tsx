@@ -97,7 +97,7 @@ describe('the timeline draws with classes app.css defines', () => {
   });
 
   it('the small controls in the gutter and on the Video lane reach out with a pad that takes presses', () => {
-    // Marker flags, lane buttons and track toggles are under the design's 28 px: each has an invisible pad.
+    // Marker flags, lane buttons and track toggles are under the 28 px target: each has an invisible pad.
     const pads = ['.tl-marker::before', '.icon-btn.tl-lane-btn::before', '.icon-btn.tl-track-toggle::before'];
     for (const selector of pads) {
       const rule = new RegExp(`${selector.replace(/[.]/g, '\\.')}[^{]*\\{([^}]*)\\}`).exec(appCss);

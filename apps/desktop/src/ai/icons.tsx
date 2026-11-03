@@ -1,5 +1,5 @@
 /**
- * The design sprite's icons the AI surfaces need that `layout/Icon` doesn't carry yet (key, ticket, close). Same grid,
+ * The icon sprite's icons the AI surfaces need that `layout/Icon` doesn't carry yet (key, ticket, close). Same grid,
  * stroke and class as `Icon`; they can move into its table when the shared icon set grows.
  */
 const PATHS = {

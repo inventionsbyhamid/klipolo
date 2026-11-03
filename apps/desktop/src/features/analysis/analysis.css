@@ -108,7 +108,7 @@
   font-size: var(--text-sm);
 }
 
-/* The clip's art: the design system's `.art-clip` frame (the library's), at the row's 56 px, on a panel-coloured tile
+/* The clip's art: the shared `.art-clip` frame (the library's), at the row's 56 px, on a panel-coloured tile
    with a hairline edge so it shows on the raised card. */
 .analysis-job .art-clip {
   width: 56px;

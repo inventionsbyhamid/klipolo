@@ -1,4 +1,4 @@
-/** The icon set (24 px grid, 1.8 px stroke, round caps; play, pause and stop are filled), from the design's sprite. */
+/** The icon set (24 px grid, 1.8 px stroke, round caps; play, pause and stop are filled), from the icon sprite. */
 const PATHS = {
   play: <path className="ico-fill" d="M7 4.9v14.2a.9.9 0 0 0 1.4.8l11.2-7.1a.9.9 0 0 0 0-1.6L8.4 4.1A.9.9 0 0 0 7 4.9z" />,
   pause: (

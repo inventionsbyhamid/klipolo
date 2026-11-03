@@ -17,7 +17,7 @@ import './start.css';
  */
 const QUIET_MS = 200;
 
-/** The start screen's own icons, on the design's 24 px grid (1.8 px stroke, `currentColor`). */
+/** The start screen's own icons, on the 24 px icon grid (1.8 px stroke, `currentColor`). */
 const ICONS = {
   // A ring with a filled 8 px dot: in the button's ink, never red.
   record: (

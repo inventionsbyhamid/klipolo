@@ -1305,7 +1305,7 @@
   pointer-events: auto;
 }
 
-/* Under the design's 28 px: a pad that takes presses reaches out from the flag, down into the clips' top. */
+/* Under the 28 px target: a pad that takes presses reaches out from the flag, down into the clips' top. */
 .tl-marker::before {
   content: "";
   position: absolute;
@@ -1787,7 +1787,7 @@
   padding: 0 var(--space-2);
 }
 
-/* The gutter's small buttons sit side by side: their pads reach up and down only, toward the design's 28 px. */
+/* The gutter's small buttons sit side by side: their pads reach up and down only, toward the 28 px target. */
 .icon-btn.tl-lane-btn::before,
 .icon-btn.tl-track-toggle::before {
   content: "";

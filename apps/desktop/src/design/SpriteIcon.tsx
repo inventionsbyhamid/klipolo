@@ -1,5 +1,5 @@
 /**
- * The design sprite's icons the captions and chat panels need that `layout/Icon` doesn't carry yet. Same grid, stroke
+ * The icon sprite's icons the captions and chat panels need that `layout/Icon` doesn't carry yet. Same grid, stroke
  * and class as `Icon`; they can move into its table when the shared icon set grows.
  */
 const PATHS = {
