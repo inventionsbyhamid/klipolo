@@ -608,7 +608,11 @@ fn long_unpunctuated_turns_break_at_breaths_and_a_turn_takes_its_first_word() {
     let lines = timed_lines(&text, "Transcript");
     assert_eq!(lines.len(), 3, "{lines:#?}");
     // The line ends at the breath, not after an even 20 words.
-    assert!(lines[0].ends_with(&format!("] A: {}", a[..14].join(" "))), "{}", lines[0]);
+    assert!(
+        lines[0].ends_with(&format!("] A: {}", a[..14].join(" "))),
+        "{}",
+        lines[0]
+    );
     assert!(
         lines[1].ends_with(&format!("] A: {} [pause 1.5 s]", a[14..].join(" "))),
         "{}",
