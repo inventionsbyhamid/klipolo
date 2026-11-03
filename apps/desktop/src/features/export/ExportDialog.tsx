@@ -141,7 +141,7 @@ function trapFocus(e: KeyboardEvent<HTMLDivElement>, root: HTMLElement | null) {
   }
 }
 
-/** The formats, then the choices (f0), the progress (f1) or what went wrong (failed). */
+/** The formats, then the choices, the progress or what went wrong. */
 function Working({ view, onClose }: { view: Exclude<View, 'done'>; onClose: () => void }) {
   const locale = useIntlLocale();
   const { name, durationUs, primaryFormat } = useProject(
