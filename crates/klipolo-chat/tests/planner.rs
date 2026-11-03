@@ -2007,3 +2007,68 @@ fn an_undo_the_person_asked_for_after_another_change_is_said_to_be_undone() {
     assert!(out.reply.starts_with("It's square now."), "{}", out.reply);
     assert!(out.reply.contains("couldn't"), "{}", out.reply);
 }
+
+#[test]
+fn an_undo_the_person_asked_for_done_by_taking_the_thing_away_is_not_said_to_be_left_undone() {
+    // "Make it square and undo the picture": the undo is refused back after the format change, and the model takes the
+    // picture away with setLayer, as the refusal says. Nothing is left undone: the reply never says part of it wasn't.
+    let (mut p, speech) = talk();
+    let picture = Asset {
+        id: "logo".into(),
+        kind: AssetKind::Image,
+        path: "/media/logo.png".into(),
+        name: "logo.png".into(),
+        duration_us: 0,
+        width: 512,
+        height: 512,
+        fps: 0.0,
+        rotation: None,
+        has_audio: false,
+        audio_lead_us: None,
+        made_with: None,
+    };
+    let ops = klipolo_model::media::image::add_image_ops(&p, &picture, 0).unwrap();
+    p = klipolo_model::apply_ops(&p, &ops).unwrap();
+    let i = inputs(&p, speech);
+    let model = Fake::new(vec![
+        answer(
+            "",
+            vec![
+                fc(
+                    "call_1",
+                    "setFormat",
+                    r#"{"format": "square", "keepOthers": true}"#,
+                ),
+                fc("call_2", "undo", "{}"),
+            ],
+            0.001,
+        ),
+        answer(
+            "",
+            vec![fc(
+                "call_3",
+                "setLayer",
+                r#"{"layer": "i1", "set": [{"key": "remove", "value": true}]}"#,
+            )],
+            0.001,
+        ),
+        answer(
+            "It's square, and the picture goes once you apply the change.",
+            vec![],
+            0.001,
+        ),
+    ]);
+    let out = send(&model, &[], "make it square and undo the picture", &i, &p).unwrap();
+    assert_eq!(
+        output_for(&model.seen()[1], "call_2"),
+        klipolo_chat::UNDO_AFTER_CHANGES
+    );
+    assert!(
+        out.compiled.proposal.is_some(),
+        "the picture's removal is proposed"
+    );
+    assert_eq!(
+        out.reply,
+        "It's square, and the picture goes once you apply the change."
+    );
+}

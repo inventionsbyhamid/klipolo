@@ -367,7 +367,12 @@ pub async fn plan(
                 (Ok(call), Outcome::Back(_)) => pending.push(call.name().to_owned()),
                 (Err(_), _) => pending.push(answer.calls[k].name.clone()),
                 (Ok(call), _) if fresh.contains(call) => {
-                    if let Some(at) = pending.iter().position(|p| p == call.name()) {
+                    // An undo the person asked for, done instead by taking the thing away with its own tool, as the
+                    // refusal says: nothing is left undone.
+                    let undone = takes_back(call).then(|| pending.iter().position(|p| p == "undo"));
+                    if let Some(at) =
+                        (undone.flatten()).or_else(|| pending.iter().position(|p| p == call.name()))
+                    {
                         pending.remove(at);
                     }
                 }
@@ -422,6 +427,16 @@ pub async fn plan(
             .to_owned();
     }
     Ok(out)
+}
+
+/// Whether `call` takes something away with its own tool, as a refused undo is told to: a layer or song removed, or the
+/// captions turned off.
+fn takes_back(call: &ToolCall) -> bool {
+    match call {
+        ToolCall::SetLayer { change, .. } => change.remove,
+        ToolCall::SetCaptions { on, .. } => !on,
+        _ => false,
+    }
 }
 
 /// Whether `message` asks to take something back: undo, revert or take back.
