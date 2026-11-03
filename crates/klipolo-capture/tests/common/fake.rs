@@ -74,7 +74,7 @@ pub fn manifest_with(sources: &[Source]) -> (Manifest, SessionDir) {
     (m, dir)
 }
 
-/// A manifest run (through serde, so the fields later tasks add take their defaults).
+/// A manifest run (through serde, so fields added since take their defaults).
 pub fn run(file: &str, offset_us: Us, duration_us: Us, drift_ppm: f64) -> ManifestRun {
     serde_json::from_value(serde_json::json!({
         "file": file,
