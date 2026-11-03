@@ -89,7 +89,7 @@ impl MetaClient {
         Ok(out)
     }
 
-    /// A ledger row for a Spark or SAM answer that reports its usage.
+    /// A ledger row for a Spark, Wonder (`pricing::chat_usd`) or SAM answer that reports its usage.
     fn record_response(&self, body: &Value, out: &ResponseOut) {
         if !out.raw.get("usage").is_some_and(Value::is_object) {
             return;
@@ -98,14 +98,14 @@ impl MetaClient {
             .and_then(Value::as_str)
             .unwrap_or_default();
         let usage = out.usage;
-        let row = if model.starts_with("muse-spark-") {
+        let row = if model.starts_with("muse-spark-") || model.starts_with("muse-wonder-") {
             Row {
                 model,
                 purpose: "responses",
                 input_tokens: Some(usage.input_tokens),
                 output_tokens: Some(usage.output_tokens),
                 frames_or_seconds: String::new(),
-                cost_usd: pricing::spark_usd(usage),
+                cost_usd: pricing::chat_usd(model, usage),
             }
         } else if model.starts_with("sam-") {
             Row {

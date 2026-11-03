@@ -30,6 +30,20 @@ pub fn spark_usd(usage: Usage) -> f64 {
         + usage.output_tokens as f64 * SPARK_OUTPUT_USD
 }
 
+/// Muse Wonder (a preview) is said to cost about 3 to 5 times Muse Spark; with no list price here, its calls are
+/// counted at the top of that, so a spending cap never undercounts them.
+pub const WONDER_OVER_SPARK: f64 = 5.0;
+
+/// What a Responses call to the chat model `model` costs: Spark's prices, times `WONDER_OVER_SPARK` for Muse Wonder.
+pub fn chat_usd(model: &str, usage: Usage) -> f64 {
+    let spark = spark_usd(usage);
+    if model.starts_with("muse-wonder-") {
+        spark * WONDER_OVER_SPARK
+    } else {
+        spark
+    }
+}
+
 /// The cost of transcribing `duration_ms` of audio.
 pub fn asr_usd(duration_ms: u64) -> f64 {
     duration_ms as f64 / 3_600_000.0 * ASR_USD_PER_HOUR
