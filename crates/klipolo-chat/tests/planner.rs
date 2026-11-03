@@ -1977,3 +1977,33 @@ fn an_undo_partway_through_a_short_never_wipes_it() {
         "Here is your vertical short. Review the cut below."
     );
 }
+
+#[test]
+fn an_undo_the_person_asked_for_after_another_change_is_said_to_be_undone() {
+    // "Make it square and undo the music": the model changes the format, then calls undo, which is refused back with
+    // how to do it instead. If it never does, the reply says part of it wasn't done.
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let model = Fake::new(vec![
+        answer(
+            "",
+            vec![
+                fc(
+                    "call_1",
+                    "setFormat",
+                    r#"{"format": "square", "keepOthers": true}"#,
+                ),
+                fc("call_2", "undo", "{}"),
+            ],
+            0.001,
+        ),
+        answer("It's square now.", vec![], 0.001),
+    ]);
+    let out = send(&model, &[], "make it square and undo the music", &i, &p).unwrap();
+    assert_eq!(
+        output_for(&model.seen()[1], "call_2"),
+        klipolo_chat::UNDO_AFTER_CHANGES
+    );
+    assert!(out.reply.starts_with("It's square now."), "{}", out.reply);
+    assert!(out.reply.contains("couldn't"), "{}", out.reply);
+}

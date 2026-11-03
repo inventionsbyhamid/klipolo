@@ -360,9 +360,10 @@ pub async fn plan(
         }
         for (k, parsed) in read.parsed.iter().enumerate() {
             match (parsed, &outcomes[k]) {
-                // An undo refused after the message's own changes left nothing the person asked for undone: it was
-                // the model taking back its own call, which the refusal tells it to do another way.
-                (Ok(ToolCall::Undo), Outcome::Back(_)) => {}
+                // An undo refused after the message's own changes, the person not asking for one, was the model taking
+                // back its own call, which the refusal tells it to do another way: nothing they asked for is left
+                // undone. One they asked for ("make it red and undo the music") stays undone until done another way.
+                (Ok(ToolCall::Undo), Outcome::Back(_)) if !asks_undo(user) => {}
                 (Ok(call), Outcome::Back(_)) => pending.push(call.name().to_owned()),
                 (Err(_), _) => pending.push(answer.calls[k].name.clone()),
                 (Ok(call), _) if fresh.contains(call) => {
@@ -421,6 +422,14 @@ pub async fn plan(
             .to_owned();
     }
     Ok(out)
+}
+
+/// Whether `message` asks to take something back: undo, revert or take back.
+fn asks_undo(message: &str) -> bool {
+    let m = message.to_lowercase();
+    ["undo", "revert", "take back", "take it back", "roll back"]
+        .iter()
+        .any(|w| m.contains(w))
 }
 
 /// `text` up to the end of its last whole sentence: a `.`, `!` or `?` and any closing quotes or brackets, then a space

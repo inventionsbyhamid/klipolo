@@ -114,8 +114,9 @@ use trim::Trim;
 /// What the model is told of an `undo` after a change of the same message: it would take back the person's change
 /// before the message and leave this one's out.
 pub const UNDO_AFTER_CHANGES: &str = "undo: not done. Undo takes back the person's change from before this message, \
-     and this message has changes of its own: they would all be lost. To take back one of them, change it or remove \
-     it with its own tool (setLayer remove for a layer), or leave it as it is.";
+     and this message has changes of its own: they would all be lost. To take back something the person names (an \
+     earlier change, or one of this message's), remove it or change it back with its own tool (setLayer remove for a \
+     layer); else leave it as it is.";
 /// What the person is told of the changes asked for after an undo in the same message: they were made on the project
 /// before it, so they wait for the person's next message.
 pub const UNDO_FIRST: &str = "I undid your last change first. Send the rest again and I'll do it.";
