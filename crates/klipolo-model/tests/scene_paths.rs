@@ -52,7 +52,7 @@ fn a_path_takes_a_view_box_and_how_it_fits() {
     assert_eq!(parse_color("Transparent"), Some([0.0; 4]));
 }
 
-/// The plan's polyline rule: a table setting's rows are spread across the box (`x = i / (n − 1)`) and rise with their
+/// The polyline rule: a table setting's rows are spread across the box (`x = i / (n − 1)`) and rise with their
 /// first number (`y = 1 − (v − min) / (max − min)`); a one-column table is enough. Written points stay as written.
 #[test]
 fn a_polyline_from_a_table_is_a_chart_of_its_values() {

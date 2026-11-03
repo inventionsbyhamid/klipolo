@@ -4,7 +4,7 @@
 use super::{Catalog, ContribDef, ContribId, ContribKind, DownsampleSpec};
 use crate::params::{ParamKind, ParamSpec, ParamUnit, PointN, VisibleWhen};
 
-/// (word, name): the words are format 2's and v1's stored values.
+/// (word, name): the word is what a project stores, the name what people see.
 pub const LOOKS: [(&str, &str); 7] = [
     ("warm", "Warm"),
     ("cool", "Cool"),
