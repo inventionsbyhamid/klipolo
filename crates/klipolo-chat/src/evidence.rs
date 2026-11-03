@@ -15,13 +15,13 @@
 //! before what was heard or seen). An edge on a word is padded as `word_cut` pads a cut of the words the range holds,
 //! so a cut never clips a word it keeps or removes; no other edge is padded.
 //!
-//! A part to keep (`keep_range`) is held to where speech breaks as well. A break is a gap of `context::BREATH_US` or
-//! more between words, a sentence's end, a filler, or a clip's edge. An edge the model chose by what was said or seen
-//! that falls inside a run of speech moves to the nearest break within `BREAK_REACH_US`, keeping the words chosen
-//! where it can (a start goes back to its phrase's start, an end on to its phrase's end). A part that ends a few words
-//! into speech that starts after a long pause (the next speaker's first word) ends before the pause, as a part that
-//! ends on a long pause ends before it. So a short never starts or ends in the middle of a phrase, nor on someone
-//! else's word, even when the model takes a line's edge that isn't a break.
+//! A part to keep (`keep_range`) loses what trails after its last words, and nothing else: an end that snapped to a
+//! word or a pause, and that lies a long pause (`TAIL_PAUSE_US`) after the last word said, ends at that word; and an
+//! end that takes one stray word after such a pause (the next speaker's first word, said just before the rest of their
+//! sentence) ends before the pause. A stray word that ends a sentence, or that its speech stops after, is the
+//! speaker's own last word and stays. Starts never move, and an end never moves on: without the speakers' turns the
+//! compiler can't tell a quick change of speaker from a phrase that runs on. An edge near a scene item, a clip's edge,
+//! the video's ends or what the person pointed at or typed stays where it snapped.
 //!
 //! A moment the media tools place something at in seconds (`place`: a sound, a title, a sticker) needs no evidence: it
 //! lands on what the person pointed at within the tolerance, else on the nearest word start or cut (a clip's start, a
@@ -48,13 +48,9 @@ use crate::context::{
 pub const TOLERANCE_US: Us = 300_000;
 /// How far a placed moment snaps to a word's start or a cut (`Evidence::place`).
 pub const PLACE_US: Us = 500_000;
-/// How far `Evidence::keep_range` moves an edge inside a run of speech to the nearest break.
-pub const BREAK_REACH_US: Us = 1_500_000;
-/// A part kept that ends inside a run of speech starting this long a pause after the words before, this few words or
-/// fewer before its end, ends before the pause (`Evidence::keep_range`): those words open what comes next, such as
-/// the next speaker's first word. A pause this long a part ends on goes too.
+/// A pause this long or longer before a kept part's end trims it (`Evidence::keep_range`): a part that ends on it ends
+/// at the word before, and a part that ends on one stray word after it ends before it.
 pub const TAIL_PAUSE_US: Us = 1_000_000;
-pub const TAIL_WORDS: usize = 3;
 
 /// What an edge is. The order is the preference on a tie.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -235,98 +231,58 @@ impl Evidence {
         self.snap(t).map_or(t, |(at, _)| at)
     }
 
-    /// `r` as `range` snaps it, for a part to keep (`keepOnly`), held to where speech breaks (the module says how). Only
-    /// an edge that snapped to a word, a pause or a scene item moves: what the person pointed at or typed, the video's
-    /// ends and a clip's edge stay where they are.
+    /// `r` as `range` snaps it, for a part to keep (`keepOnly`), its end trimmed of what trails after its last words
+    /// (the module says how).
     pub(crate) fn keep_range(&self, r: RangeUs) -> Result<RangeUs, Unfounded> {
         let snapped = self.range(r)?;
-        let by_speech = |t: Us| {
-            self.snap(t).is_some_and(|(_, source)| {
-                matches!(source, Source::Word | Source::Pause | Source::Scene)
-            })
-        };
-        let (move_start, move_end) = (by_speech(r.start), by_speech(r.end));
+        // Only an end the model put on a word or a pause, with nothing else of note near it.
+        let by_speech = self
+            .snap(r.end)
+            .is_some_and(|(_, source)| matches!(source, Source::Word | Source::Pause))
+            && self
+                .near(r.end)
+                .all(|&(_, source)| matches!(source, Source::Word | Source::Pause));
+        if !by_speech {
+            return Ok(snapped);
+        }
         let words = &self.spoken.words;
-        // The words said, as indexes into `words`, and those the part holds.
         let said: Vec<usize> = (0..words.len())
             .filter(|&i| words[i].kind != WordKind::Pause)
             .collect();
-        let Some(mut first) = said.iter().position(|&i| words[i].end_us > snapped.start) else {
+        let Some(first) = said.iter().position(|&i| words[i].end_us > snapped.start) else {
             return Ok(snapped);
         };
         let Some(mut last) = said.iter().rposition(|&i| words[i].start_us < snapped.end) else {
             return Ok(snapped);
         };
-        if last < first {
+        if last <= first {
             return Ok(snapped);
         }
-        // The gap before the `k`-th word said, and whether a break lies there.
         let gap = |k: usize| words[said[k]].start_us - words[said[k - 1]].end_us;
-        let break_before = |k: usize| {
-            k == 0 || gap(k) >= BREATH_US || self.closes[said[k - 1]] || {
-                let (a, b) = (words[said[k - 1]].end_us, words[said[k]].start_us);
-                let at = self.clip_edges.partition_point(|&t| t <= a);
-                self.clip_edges.get(at).is_some_and(|&t| t <= b)
+        // Whether speech runs on from the `k`-th word said without a break (`context::BREATH_US`, a sentence's end, a
+        // filler, or a clip's edge between).
+        let runs_on = |k: usize| {
+            k + 1 < said.len() && gap(k + 1) < BREATH_US && !self.closes[said[k]] && {
+                let (a, b) = (words[said[k]].end_us, words[said[k + 1]].start_us);
+                let at = self.clip_edges.partition_point(|&t| t < a);
+                self.clip_edges.get(at).is_none_or(|&t| t > b)
             }
         };
-        let (was_first, was_last) = (first, last);
-        // The nearest of `breaks` within reach of `at` on the side that keeps the model's words (`keep_side`), else on
-        // the other.
-        let nearest = |breaks: Vec<(usize, Us)>, at: Us, keep_side: fn(Us, Us) -> bool| {
-            let near = |(_, t): &(usize, Us)| t.abs_diff(at) <= BREAK_REACH_US.unsigned_abs();
-            let pick = |side: bool| {
-                (breaks.iter())
-                    .filter(|b| near(b) && keep_side(b.1, at) == side)
-                    .min_by_key(|(k, t)| (t.abs_diff(at), *k))
-                    .map(|&(k, _)| k)
-            };
-            pick(true).or_else(|| pick(false))
-        };
-        if move_start && !break_before(first) {
-            // Back to the phrase's start, else on to the next.
-            let breaks = (0..=last)
-                .filter(|&k| break_before(k))
-                .map(|k| (k, words[said[k]].start_us))
-                .collect();
-            if let Some(k) = nearest(breaks, words[said[first]].start_us, |t, at| t <= at) {
-                first = k;
-            }
+        let mut trimmed = false;
+        // One stray word after a long pause, said into the next sentence: it opens what comes next.
+        if gap(last) >= TAIL_PAUSE_US && runs_on(last) {
+            last -= 1;
+            trimmed = true;
         }
-        let mut end_moved = false;
-        if move_end && !(last + 1 == said.len() || break_before(last + 1)) {
-            // The part ends inside a run of speech. When that run starts after a long pause a few words before the
-            // end, those words open what comes next (the next speaker's first word): they go, with the pause.
-            let from = (last + 1).saturating_sub(TAIL_WORDS).max(first + 1);
-            if let Some(k) = (from..=last).find(|&k| gap(k) >= TAIL_PAUSE_US) {
-                last = k - 1;
-            } else {
-                // On to the phrase's end, else back to the one before.
-                let breaks = (first..said.len())
-                    .filter(|&k| k + 1 == said.len() || break_before(k + 1))
-                    .map(|k| (k, words[said[k]].end_us))
-                    .collect();
-                if let Some(k) = nearest(breaks, words[said[last]].end_us, |t, at| t >= at) {
-                    last = k;
-                }
-            }
-            end_moved = last != was_last;
+        // A long pause the part ends on.
+        if trimmed || snapped.end - words[said[last]].end_us >= TAIL_PAUSE_US {
+            let padded = word_cut(&self.spoken, said[first], said[last], self.fps);
+            return Ok(RangeUs {
+                start: snapped.start,
+                end: padded.end.min(snapped.end),
+            });
         }
-        // A long pause the part ends on goes too.
-        if move_end && snapped.end - words[said[last]].end_us >= TAIL_PAUSE_US {
-            end_moved = true;
-        }
-        if first == was_first && !end_moved {
-            return Ok(snapped);
-        }
-        let padded = word_cut(&self.spoken, said[first], said[last], self.fps);
-        Ok(RangeUs {
-            start: if first != was_first {
-                padded.start
-            } else {
-                snapped.start
-            },
-            end: if end_moved { padded.end } else { snapped.end },
-        })
+        Ok(snapped)
     }
 
     /// `r` with both edges snapped. An edge padded is one that snapped to a word's own edge on that side: the start of

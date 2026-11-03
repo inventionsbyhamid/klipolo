@@ -1614,7 +1614,7 @@ fn a_short_places_its_sticker_and_sounds_on_the_words_said() {
         fc(
             "call_2",
             "keepOnly",
-            r#"{"ranges": [{"startSec": 0.9, "endSec": 7.8}]}"#,
+            r#"{"ranges": [{"startSec": 2.9, "endSec": 7.8}]}"#,
         ),
         fc(
             "call_3",
@@ -1669,8 +1669,8 @@ fn a_short_places_its_sticker_and_sounds_on_the_words_said() {
          Quote 1 to 4 words exactly as Transcript shows them."
     );
     assert_eq!(out.compiled.refusals, vec![], "{:?}", out.compiled.refusals);
-    // In the short as the cut leaves it (from "so" at 0.9 s, padded: the part starts where a phrase does), the sticker
-    // starts on "the" with its pop, and the ding on "a".
+    // In the short as the cut leaves it (from "the" at 2.9 s, padded), the sticker starts on "the" with its pop, and
+    // the ding on "a".
     let short = &out
         .compiled
         .proposal
@@ -1700,7 +1700,7 @@ fn a_short_places_its_sticker_and_sounds_on_the_words_said() {
         starts(TrackKind::Audio, Some("klipolo-pack-ding")),
         [secs(6.7) - from]
     );
-    assert!(video_duration(&short.timeline) < secs(7.5));
+    assert!(video_duration(&short.timeline) < secs(6.0));
 }
 
 #[test]
