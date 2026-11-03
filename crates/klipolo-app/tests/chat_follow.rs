@@ -40,10 +40,12 @@ fn s(seconds: f64) -> Us {
 }
 
 /// SAM as it answered on the demo's footage: two people far apart on every frame for "person" (7 on the left, 3 on
-/// the right), and nobody for any other phrase ("woman astronaut"). Keeps every phrase it was asked for.
+/// the right), and nobody for any other phrase ("woman astronaut"). Keeps every phrase it was asked for. With
+/// `at_edge`, the one on the left stands at the picture's edge.
 #[derive(Default)]
 struct TwoPeople {
     asked: Mutex<Vec<String>>,
+    at_edge: bool,
 }
 
 impl TwoPeople {
@@ -81,8 +83,9 @@ impl SubjectTracker for TwoPeople {
                 bottom: 1.0,
                 confidence: Some(0.9),
             };
+            let left = if self.at_edge { 0.1 } else { 0.25 };
             let people = if phrase == PERSON {
-                vec![at(3, 0.75), at(7, 0.25)]
+                vec![at(3, 0.75), at(7, left)]
             } else {
                 Vec::new()
             };
@@ -290,6 +293,11 @@ struct Setup {
 }
 
 fn setup() -> Setup {
+    setup_with(TwoPeople::default())
+}
+
+/// `setup` with SAM as given.
+fn setup_with(sam: TwoPeople) -> Setup {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("talk.mp4");
     std::fs::write(&file, b"the talk's bytes").unwrap();
@@ -313,10 +321,7 @@ fn setup() -> Setup {
     let mut clip = Clip::new(ClipSource::Asset { id: "talk".into() }, s(60.0), s(120.0));
     clip.id = "c1".into();
     project.timeline.main = vec![clip];
-    let (sam, spark) = (
-        Arc::new(TwoPeople::default()),
-        Arc::new(FakeSpark::default()),
-    );
+    let (sam, spark) = (Arc::new(sam), Arc::new(FakeSpark::default()));
     let speaker = Arc::new(
         Speaker::new(
             Arc::new(FakeTrackers {
@@ -714,4 +719,102 @@ fn a_follow_of_a_person_tracks_a_person_and_reads_their_place() {
     assert_eq!(place_of("the woman in the middle"), Some(Place::Middle));
     assert_eq!(place_of("both of them"), Some(Place::Everyone));
     assert_eq!(place_of("woman astronaut"), None);
+}
+
+/// A sticker with no place given and a follow of the speaker, in one message: once the follow's path lands with it, the
+/// sticker goes beside the speaker's head where the path keeps them. The speaker stands near the picture's left edge,
+/// where the 9:16 crop stops, so their head there is left of the middle and the sticker keeps off it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_sticker_moves_beside_the_head_where_the_follow_keeps_the_speaker() {
+    let setup = setup_with(TwoPeople {
+        at_edge: true,
+        ..TwoPeople::default()
+    });
+    let heart = klipolo_chat::LibraryItem {
+        name: "Heart".into(),
+        kind: klipolo_chat::MediaKind::Image,
+        asset: Asset {
+            id: "klipolo-pack-heart".into(),
+            kind: AssetKind::Image,
+            path: "/pack/heart.png".into(),
+            name: "heart.png".into(),
+            duration_us: 0,
+            width: 1024,
+            height: 1024,
+            fps: 0.0,
+            rotation: None,
+            has_audio: false,
+            audio_lead_us: None,
+            made_with: None,
+        },
+        pack: true,
+        tags: vec!["heart".into()],
+    };
+    let model = Steps::new(vec![
+        ModelResponse {
+            text: String::new(),
+            calls: vec![
+                fc(
+                    "f",
+                    "followSubject",
+                    r#"{"description": "speaker", "focus": null}"#,
+                ),
+                fc(
+                    "h",
+                    "addImage",
+                    r#"{"file": "Heart", "size": null, "position": null, "atSec": 10, "atWords": null, "durationSec": null}"#,
+                ),
+            ],
+            usage_usd: 0.004,
+        },
+        ModelResponse {
+            text: "The speaker stays in frame, with a heart beside them at 0:10.".into(),
+            calls: Vec::new(),
+            usage_usd: 0.002,
+        },
+    ]);
+    let projects = Arc::new(
+        MemoryProjects::open(setup.project.clone(), setup.dir.path().join("talk.klipolo"))
+            .unwrap()
+            .with_pack(vec![heart]),
+    );
+    let session = Arc::new(ChatSession::new(
+        projects.clone(),
+        Arc::new(Found),
+        Arc::new(Paying(model)),
+    ));
+    session.set_speaker(setup.speaker.clone());
+    let r = reply(
+        &session
+            .send(request(
+                "Keep the speaker in frame and add a heart at 0:10.",
+            ))
+            .await
+            .unwrap(),
+    );
+    assert!(r["applied"].is_object(), "{r:#}");
+    let now = projects.now().unwrap().project;
+    let sticker = (now.timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .find(|i| {
+            matches!(
+                i.content,
+                klipolo_model::timeline::ItemContent::Image { .. }
+            )
+        })
+        .expect("the heart");
+    // 9:16 is the main format: its own box. The follow holds the crop at the picture's left edge (0.316 of its width),
+    // so the speaker (at 0.1 of it) sits left of the middle, at 0.316 of the frame, their head 0.22 of the width
+    // either side: the sticker goes right of it.
+    let b = sticker.layout.rect;
+    let head_right = 0.1 / (9.0 / 16.0 / (16.0 / 9.0)) + 0.22;
+    assert!(b.x >= head_right, "on the head: {b:?}");
+    // 16:9 shows the whole picture: beside the head where the path now keeps the speaker (the crop's middle, 0.158 of
+    // the width, 0.07 of it either side), not out at the frame's edge as before the path was known.
+    let wide = sticker.layout.overrides[&Landscape];
+    let path_head_right = 0.158 + 0.124 * 1080.0 / 1920.0;
+    assert!(
+        wide.x >= path_head_right && wide.x - path_head_right < 0.03,
+        "not beside the head in 16:9: {wide:?}"
+    );
 }
