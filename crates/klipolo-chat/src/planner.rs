@@ -360,6 +360,9 @@ pub async fn plan(
         }
         for (k, parsed) in read.parsed.iter().enumerate() {
             match (parsed, &outcomes[k]) {
+                // An undo refused after the message's own changes left nothing the person asked for undone: it was
+                // the model taking back its own call, which the refusal tells it to do another way.
+                (Ok(ToolCall::Undo), Outcome::Back(_)) => {}
                 (Ok(call), Outcome::Back(_)) => pending.push(call.name().to_owned()),
                 (Err(_), _) => pending.push(answer.calls[k].name.clone()),
                 (Ok(call), _) if fresh.contains(call) => {
