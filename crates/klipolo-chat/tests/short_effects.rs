@@ -752,3 +752,32 @@ fn a_drawn_sticker_in_a_short_is_timed_by_its_word_and_placed_beside_the_speaker
     assert!(!overlaps(b, HEAD), "{b:?}");
     assert!(!overlaps(b, WORDS), "{b:?}");
 }
+
+#[test]
+fn a_layer_tool_on_a_sticker_left_out_goes_with_it() {
+    // The model removes or moves a sticker Klipolo left out (here, one under the hook): nothing is refused, and it is
+    // told the sticker and the call went together.
+    let p = project();
+    let mut calls = base();
+    calls.push(sticker("Heart", 4)[0].clone());
+    calls.push(call(
+        "setLayer",
+        json!({"layer": "last", "set": [{"key": "remove", "value": true}]}),
+    ));
+    calls.push(call(
+        "animate",
+        json!({"layer": "i1", "enter": "pop", "exit": null, "emphasis": null, "sound": null}),
+    ));
+    let out = compile(&p, &inputs(&p, MESSAGE), &calls);
+    assert_eq!(out.refusals, vec![], "{:#?}", out.refusals);
+    let told: HashMap<usize, &str> = (out.told.iter()).map(|(i, s)| (*i, s.as_str())).collect();
+    assert!(told[&5].starts_with("Left out"), "{told:?}");
+    assert!(
+        told[&6].starts_with("Left out with its sticker"),
+        "{told:?}"
+    );
+    assert!(
+        told[&7].starts_with("Left out with its sticker"),
+        "{told:?}"
+    );
+}

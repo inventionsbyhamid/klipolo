@@ -965,6 +965,22 @@ impl Compiler<'_> {
             .collect();
         let mut animated: HashMap<usize, Animated> = HashMap::new();
         for (i, call) in layers {
+            // A layer tool on a short's sticker Klipolo left out: it went with it.
+            let tool_layer = match call {
+                ToolCall::SetMotion { layer, .. }
+                | ToolCall::AnimateText { layer, .. }
+                | ToolCall::SetLayer { layer, .. }
+                | ToolCall::StyleText { layer, .. }
+                | ToolCall::SetEffects { target: layer, .. } => Some(layer),
+                _ => None,
+            };
+            if let Some(layer) = tool_layer
+                && let Some(cues::Sticker::Left(_)) = self.cued_sticker(calls, layer, i)
+            {
+                adding.unchanged.push(i);
+                told.push((i, cues::LEFT_WITH_STICKER.to_owned()));
+                continue;
+            }
             if let Some(done) = self.layer_tool(calls, i, call, &added, &mut animated, &adding.work)
             {
                 let done = match done {
