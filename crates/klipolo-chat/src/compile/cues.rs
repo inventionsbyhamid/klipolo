@@ -171,12 +171,48 @@ fn asks_short(message: &[String]) -> bool {
     })
 }
 
-/// Whether `message` asks for no sound effects ("no sound effects", "without sounds", "no sfx").
-fn no_sounds(message: &[String]) -> bool {
-    message.windows(2).any(|w| {
-        matches!(w[0].as_str(), "no" | "without" | "skip")
-            && matches!(w[1].as_str(), "sound" | "sounds" | "sfx" | "effects")
-    })
+/// Whether `message` asks for no sound effects: a no, without, don't, skip or not shortly before sound, sounds,
+/// effects, SFX or whooshes ("without any sound effects", "don't add sound effects", "no whooshes"), or "keep it quiet".
+pub(crate) fn no_sounds(message: &[String]) -> bool {
+    const SOUNDS: [&str; 9] = [
+        "sound", "sounds", "sfx", "effects", "effect", "whoosh", "whooshes", "pops", "noises",
+    ];
+    const NOT: [&str; 8] = [
+        "no", "without", "dont", "skip", "not", "none", "never", "zero",
+    ];
+    // Words that start a new request between the "no" and the sound ("without the pauses, add sound effects").
+    const NEW: [&str; 5] = ["add", "with", "and", "but", "plus"];
+    let quiet = message.windows(3).any(|w| {
+        w[0] == "keep"
+            && matches!(w[1].as_str(), "it" | "this")
+            && matches!(w[2].as_str(), "quiet" | "silent")
+    });
+    quiet
+        || message.iter().enumerate().any(|(k, w)| {
+            SOUNDS.contains(&w.as_str())
+                && (1..=4)
+                    .filter_map(|back| k.checked_sub(back))
+                    .find_map(|j| {
+                        let w = message[j].as_str();
+                        // "don't" is two words here: "don" and "t".
+                        let negates = |i: usize| {
+                            let w = message[i].as_str();
+                            NOT.contains(&w)
+                                || (w == "t"
+                                    && i.checked_sub(1).is_some_and(|d| message[d] == "don"))
+                                || (w == "don" && message.get(i + 1).is_some_and(|n| n == "t"))
+                        };
+                        if negates(j) {
+                            Some(true)
+                        } else if NEW.contains(&w) {
+                            // "don't add sound effects": the new request is itself negated.
+                            Some(j.checked_sub(1).is_some_and(negates))
+                        } else {
+                            None
+                        }
+                    })
+                    == Some(true)
+        })
 }
 
 /// Whether `message` says where to put something on screen.
