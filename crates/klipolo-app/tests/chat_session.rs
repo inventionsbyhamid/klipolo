@@ -3271,7 +3271,9 @@ mod follow {
                 .await
                 .unwrap(),
         );
-        assert_eq!(r["notes"], serde_json::json!([NO_CROP]));
+        // The model's "Done." was written before the follow ran: what it came to is the reply instead.
+        assert_eq!(r["text"], NO_CROP);
+        assert_eq!(r["notes"], serde_json::json!([]));
         assert_eq!(f.sam.calls.load(Ordering::SeqCst), 0);
         assert_eq!(f.chat.project.revision(), 0);
     }
@@ -3319,24 +3321,20 @@ mod follow {
     async fn a_named_subject_is_sent_without_its_article_and_two_versions_keep_them_in_frame() {
         let mut project = talk();
         project.settings.formats = vec![FormatKind::Landscape, FormatKind::Square];
-        let woman = fc(
-            "s",
-            "followSubject",
-            r#"{"description": "the woman in red"}"#,
-        );
-        let f = following_on(project, vec![answer("Done.", vec![portrait(), woman])]);
+        let car = fc("s", "followSubject", r#"{"description": "the red car"}"#);
+        let f = following_on(project, vec![answer("Done.", vec![portrait(), car])]);
         let r = reply(
             &f.chat
                 .session
-                .send(request("vertical, and follow her"))
+                .send(request("vertical, and follow the red car"))
                 .await
                 .unwrap(),
         );
-        assert_eq!(*f.sam.phrases.lock().unwrap(), ["woman in red"]);
+        assert_eq!(*f.sam.phrases.lock().unwrap(), ["red car"]);
         assert_eq!(
             r["notes"],
             serde_json::json!([
-                "The vertical and square versions keep the woman in red in frame now. Tracking cost $0.01."
+                "The vertical and square versions keep the red car in frame now. Tracking cost $0.01."
             ])
         );
     }
