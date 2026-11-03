@@ -2412,7 +2412,9 @@ fn a_time_snaps_to_the_nearest_word_start_or_cut_within_half_a_second() {
 #[test]
 fn a_time_in_a_part_the_answer_cuts_is_refused_and_snaps_only_to_what_is_kept() {
     let p = project();
-    let i = inputs(&p, "keep we went flying today, with a whoosh and a title");
+    // The person names the part's times, so they stand as typed: a part the model chose by the words said would
+    // start at the breath before "So" (`keep_edges`).
+    let i = inputs(&p, "keep 10.3 to 13.0, with a whoosh and a title");
     let keep = call(
         "keepOnly",
         json!({"ranges": [{"startSec": 10.3, "endSec": 13.0}]}),

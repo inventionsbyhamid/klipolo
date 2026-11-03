@@ -640,7 +640,7 @@ impl<'a> Compiler<'a> {
         });
         let kept: Option<Vec<RangeUs>> = keep.and_then(|ranges| {
             (ranges.iter())
-                .map(|&r| self.evidence.range(r).ok())
+                .map(|&r| self.evidence.keep_range(r).ok())
                 .collect()
         });
         if let Some(kept) = kept.filter(|k| !k.is_empty()) {
@@ -1600,23 +1600,35 @@ impl Compiler<'_> {
     }
 
     /// `r` as the evidence snaps it, or the reason it stands on nothing, naming the call's fields.
-    fn checked(
+    fn checked(&self, tool: &str, fields: (&str, &str), r: RangeUs) -> Result<RangeUs, Refused> {
+        self.evidence
+            .range(r)
+            .map_err(|miss| unfounded_range(tool, fields, r, miss))
+    }
+
+    /// `checked` for a part to keep: snapped, then held to where speech breaks (`Evidence::keep_range`).
+    fn checked_keep(
         &self,
         tool: &str,
-        (start, end): (&str, &str),
+        fields: (&str, &str),
         r: RangeUs,
     ) -> Result<RangeUs, Refused> {
-        self.evidence.range(r).map_err(|miss| {
-            to_model(match miss {
-                Unfounded::Start => unfounded(tool, start, r.start),
-                Unfounded::End => unfounded(tool, end, r.end),
-                Unfounded::Empty(at) => format!(
-                    "{tool}: {start} and {end} both fall on {} s, so nothing lies between them.",
-                    secs(at)
-                ),
-            })
-        })
+        self.evidence
+            .keep_range(r)
+            .map_err(|miss| unfounded_range(tool, fields, r, miss))
     }
+}
+
+/// Why `r` (`start` and `end` its fields) could not be snapped.
+fn unfounded_range(tool: &str, (start, end): (&str, &str), r: RangeUs, miss: Unfounded) -> Refused {
+    to_model(match miss {
+        Unfounded::Start => unfounded(tool, start, r.start),
+        Unfounded::End => unfounded(tool, end, r.end),
+        Unfounded::Empty(at) => format!(
+            "{tool}: {start} and {end} both fall on {} s, so nothing lies between them.",
+            secs(at)
+        ),
+    })
 }
 
 /// Why a time stands on nothing.

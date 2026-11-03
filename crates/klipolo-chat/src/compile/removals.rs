@@ -1,8 +1,9 @@
 //! The removals, each one `DeleteRanges` on the removals' working copy (the project as the additions and the earlier
 //! removals of the answer leave it).
 //! - `cutRange`: the range as the evidence snaps it, mapped to where that footage plays now.
-//! - `keepOnly`: each part kept, snapped and mapped the same way; everything else on the main track goes
-//!   (`kept_parts(0, main_track_duration, merge_ranges(keep))`).
+//! - `keepOnly`: each part kept, snapped and held to where speech breaks (`Evidence::keep_range`: never inside a
+//!   phrase, nor ending on a fragment after a long pause), and mapped the same way; everything else on the main track
+//!   goes (`kept_parts(0, main_track_duration, merge_ranges(keep))`).
 //! - `removeSilences`: the pauses in the sound (`timeline_pauses`, from the loudness levels) longer than the length
 //!   asked, `PAUSE_US` when none was.
 //! - `removeFillers`: every filler word, each cut as `word_cut` pads it. None is cut while any is only roughly timed
@@ -73,7 +74,7 @@ fn cut_range(c: &Compiler, work: &Project, range: RangeUs) -> Result<Edit, Refus
 fn keep_only(c: &Compiler, work: &Project, ranges: &[RangeUs]) -> Result<Edit, Refused> {
     let mut keep = Vec::new();
     for (k, &r) in ranges.iter().enumerate() {
-        let snapped = c.checked(
+        let snapped = c.checked_keep(
             "keepOnly",
             (
                 &format!("ranges[{k}].startSec"),

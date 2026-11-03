@@ -1507,7 +1507,7 @@ fn said<'a>(
 }
 
 /// Whether a word ends a sentence ("safe.", "trips?", "great!\"").
-fn ends_sentence(text: &str) -> bool {
+pub(crate) fn ends_sentence(text: &str) -> bool {
     text.trim_end_matches(['"', '\'', '”', '’', ')', ']'])
         .ends_with(['.', '?', '!', '…', '。', '？', '！', '।', '॥', '؟', '۔'])
 }
