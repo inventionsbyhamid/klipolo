@@ -262,6 +262,8 @@ impl Side {
 pub const STICKER_H: f64 = 0.1125;
 /// Its height where only `FACE_ZONE` is known: 18 % of the 9:16 width, which fits beside the zone.
 const ZONE_STICKER_H: f64 = 0.10125;
+/// A sticker's least share of the width in a 16:9 or 1:1 main format.
+const WIDE_STICKER_W: f64 = 0.13;
 /// The smallest it shrinks to, to stay off the head: 15 % of the 9:16 width.
 const MIN_STICKER_H: f64 = 0.084;
 /// Half a followed head's width, beside which a sticker goes, in shares of the frame's height (22 % of the 9:16 width
@@ -372,6 +374,13 @@ pub(super) fn beside_speaker(
                 GAP * short / fw,
                 ZONE_GAP * short / fw,
             ),
+        };
+        // A wide or square main format (a project made in 16:9 or 1:1) reads its sticker at a share of its width, as a
+        // 9:16 one does, where the room beside the head allows.
+        let tall = if format == primary && format != FormatKind::Portrait {
+            tall.max(WIDE_STICKER_W * fw / (fh * aspect))
+        } else {
+            tall
         };
         let (room_l, room_r) = (head.0 - gap - edge, 1.0 - edge - gap - head.1);
         // The side with more room; where both have about the same, the primary format's side in the others.

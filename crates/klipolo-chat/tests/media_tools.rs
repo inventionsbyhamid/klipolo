@@ -1099,11 +1099,9 @@ fn add_image_by_name_places_it_by_size_and_position() {
         ["pack-heart"]
     );
     let heart = &layers(&applied(&p, &out), TrackKind::Overlay)[0];
-    assert!(
-        heart.layout.rect.x > 0.8 && heart.layout.rect.w < 0.1,
-        "{:?}",
-        heart.layout.rect
-    );
+    // A 16:9 project's sticker reads at about an eighth of the width.
+    let r = heart.layout.rect;
+    assert!(r.x > 0.8 && (0.12..=0.15).contains(&r.w), "{r:?}");
     assert_eq!(heart.duration_us, secs(2.0));
     // A sound is no picture.
     let out = compile(
