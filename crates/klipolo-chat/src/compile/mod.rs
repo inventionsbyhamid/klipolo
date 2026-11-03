@@ -1258,33 +1258,33 @@ impl Compiler<'_> {
         out
     }
 
-    /// The sticker call of a short that `animate` call `i` of `layer` names (`last` after one), which Klipolo animates
-    /// (`cues`), as Klipolo placed it or left it out.
+    /// The sticker call of a short that layer call `i` names (`last` after one, or its ref as this message's own
+    /// picture: `own_layer_call`), which Klipolo places and animates (`cues`), as Klipolo placed it or left it out.
     fn cued_sticker(
         &self,
         calls: &[ToolCall],
         layer: &LayerRef,
         i: usize,
     ) -> Option<&cues::Sticker> {
-        let (Some(cues), LayerRef::Last) = (&self.cues, layer) else {
-            return None;
-        };
-        let adds = |c: &ToolCall| {
-            matches!(
-                c,
-                ToolCall::AddText { .. }
-                    | ToolCall::AddImage { .. }
-                    | ToolCall::MakeTitleCard { .. }
-                    | ToolCall::MakeSticker { .. }
-            )
-        };
-        let j = (0..i).rev().find(|&j| calls.get(j).is_some_and(adds))?;
+        let cues = self.cues.as_ref()?;
+        if let LayerRef::One(r) = layer {
+            let refs = &self.inputs.refs;
+            if refs
+                .text(r)
+                .or_else(|| refs.picture(r))
+                .or_else(|| refs.video(r))
+                .is_some()
+            {
+                return None;
+            }
+        }
+        let j = self.own_layer_call(calls, layer, i)?;
         cues.stickers.get(&j)
     }
 
-    /// The layer call `i` (of `tool`, which would `verb` it) names: by its ref from the context, or the one the last call
-    /// before it that adds a layer (`addText`, `addImage`, `makeTitleCard`, `makeSticker`) added (`added`, by call index):
-    /// none when that call was refused, never an earlier one.
+    /// The layer call `i` (of `tool`, which would `verb` it) names: by its ref from the context, or the layer a call of
+    /// this message added that `last` or a ref past Layers names (`own_layer_call`; `added`, by call index): none when
+    /// that call was refused, never an earlier one.
     fn animated_layer(
         &self,
         (tool, verb): (&str, &str),
@@ -1293,41 +1293,74 @@ impl Compiler<'_> {
         i: usize,
         added: &[(usize, Added)],
     ) -> Result<Added, Refused> {
+        let not_done = |j: usize| {
+            to_model(format!(
+                "{tool}: {} was not done, so there is no layer to {verb}.",
+                calls[j].name()
+            ))
+        };
+        let own = |j: usize| {
+            (added.iter())
+                .find(|(k, _)| *k == j)
+                .map(|(_, a)| a.clone())
+                .ok_or_else(|| not_done(j))
+        };
         match layer {
-            LayerRef::Last => {
-                let adds = |c: &ToolCall| {
-                    matches!(
-                        c,
-                        ToolCall::AddText { .. }
-                            | ToolCall::AddImage { .. }
-                            | ToolCall::MakeTitleCard { .. }
-                            | ToolCall::MakeSticker { .. }
-                    )
-                };
-                let Some(j) = (0..i).rev().find(|&j| calls.get(j).is_some_and(adds)) else {
-                    return Err(to_model(format!(
-                        "{tool}: no layer was added before it in this answer. Name one by its ref from Layers, \
-                         such as t1 or i1."
-                    )));
-                };
-                (added.iter())
-                    .find(|(k, _)| *k == j)
-                    .map(|(_, a)| a.clone())
-                    .ok_or_else(|| {
-                        to_model(format!(
-                            "{tool}: {} was not done, so there is no layer to {verb}.",
-                            calls[j].name()
-                        ))
-                    })
-            }
+            LayerRef::Last => match self.own_layer_call(calls, layer, i) {
+                Some(j) => own(j),
+                None => Err(to_model(format!(
+                    "{tool}: no layer was added before it in this answer. Name one by its ref from Layers, such as \
+                     t1 or i1."
+                ))),
+            },
             LayerRef::One(r) => {
                 let refs = &self.inputs.refs;
-                (refs
-                    .text(r)
+                let listed = (refs.text(r))
                     .or_else(|| refs.picture(r))
-                    .or_else(|| refs.video(r)))
-                .map(|id| Added::Item(id.to_owned()))
-                .ok_or_else(|| to_model(format!("{tool}: there is no layer {r}.")))
+                    .or_else(|| refs.video(r));
+                match (listed, self.own_layer_call(calls, layer, i)) {
+                    (Some(id), _) => Ok(Added::Item(id.to_owned())),
+                    (None, Some(j)) => own(j),
+                    (None, None) => Err(to_model(format!("{tool}: there is no layer {r}."))),
+                }
+            }
+        }
+    }
+
+    /// The call of this message, before call `i`, whose layer `layer` names: for `last`, the last call before it that
+    /// adds a layer (`addText`, `addImage`, `makeTitleCard`, `makeSticker`); for a ref past those Layers lists (`t3`
+    /// where Layers has `t1` and `t2`), this message's own layers of that kind in call order, as the next context will
+    /// list them (`t3` the first words it adds, `i1` its first picture where Layers has none).
+    fn own_layer_call(&self, calls: &[ToolCall], layer: &LayerRef, i: usize) -> Option<usize> {
+        let words =
+            |c: &ToolCall| matches!(c, ToolCall::AddText { .. } | ToolCall::MakeTitleCard { .. });
+        let pictures =
+            |c: &ToolCall| matches!(c, ToolCall::AddImage { .. } | ToolCall::MakeSticker { .. });
+        let before = calls.get(..i)?;
+        match layer {
+            LayerRef::Last => (0..i)
+                .rev()
+                .find(|&j| words(&before[j]) || pictures(&before[j])),
+            LayerRef::One(r) => {
+                let refs = &self.inputs.refs;
+                let (kind, listed): (&dyn Fn(&ToolCall) -> bool, usize) = match r.chars().next()? {
+                    't' => (
+                        &words,
+                        (1..)
+                            .take_while(|k| refs.text(&format!("t{k}")).is_some())
+                            .count(),
+                    ),
+                    'i' => (
+                        &pictures,
+                        (1..)
+                            .take_while(|k| refs.picture(&format!("i{k}")).is_some())
+                            .count(),
+                    ),
+                    _ => return None,
+                };
+                let n: usize = r.get(1..)?.parse().ok()?;
+                let nth = n.checked_sub(listed + 1)?;
+                (0..i).filter(|&j| kind(&before[j])).nth(nth)
             }
         }
     }

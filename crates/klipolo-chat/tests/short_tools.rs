@@ -1093,3 +1093,41 @@ fn a_later_keep_only_in_the_same_message_replaces_the_earlier_one() {
     assert_eq!(kept(&out), kept(&alone));
     assert!(kept(&out) > secs(4.0), "{}", kept(&out));
 }
+
+#[test]
+fn a_ref_past_the_layers_listed_names_the_answers_own_new_layer() {
+    // Layers lists none yet: t1 and i1 are the words and the picture this message adds, as the next context will name
+    // them, never refused as layers that don't exist.
+    let p = project();
+    let out = run(
+        &p,
+        "add the title Day one in Lisbon and a heart, popping in",
+        &[
+            (
+                "addText",
+                json!({"text": "Day one in Lisbon", "preset": "title", "atSec": 0.5, "durationSec": 2.0, "animation": null}),
+            ),
+            (
+                "addImage",
+                json!({"file": "Heart", "size": "small", "position": "top-right", "atSec": 10.0, "durationSec": 2.0}),
+            ),
+            ("animate", animate("t1", json!({"enter": "pop"}))),
+            ("animate", animate("i1", json!({"enter": "bounce"}))),
+            ("animate", animate("i2", json!({"enter": "pop"}))),
+        ],
+    );
+    // i2 names nothing: refused as before.
+    assert_eq!(refused_to_model(&out, 4), "animate: there is no layer i2.");
+    let after =
+        klipolo_model::apply_ops(&p, &out.additions.as_ref().expect("additions").ops).unwrap();
+    let overlays = layers(&after, TrackKind::Overlay);
+    let text = (overlays.iter())
+        .find(|i| matches!(i.content, ItemContent::Text { .. }))
+        .expect("the title");
+    let picture = (overlays.iter())
+        .find(|i| matches!(i.content, ItemContent::Image { .. }))
+        .expect("the heart");
+    let enter = |i: &Item| preset(&i.layout.motion.as_ref().expect("motion").enter);
+    assert_eq!(enter(text), named("pop"));
+    assert_eq!(enter(picture), named("bounce"));
+}
