@@ -1234,3 +1234,51 @@ fn a_whoosh_trusts_voice_labels_only_within_one_transcription_part() {
     assert_eq!(whooshes.len(), 1, "{sounds:?} {cuts:?}");
     assert!(near(whooshes[0], cuts[3]), "{sounds:?} {cuts:?}");
 }
+
+/// The share of a 16:9 picture's width a 9:16 crop shows.
+const CROP: f64 = 9.0 / 16.0 / (16.0 / 9.0);
+
+/// `p`'s clips followed in 9:16 with the crop held at the picture's left edge, as a follow holds it for someone near
+/// that edge: its path at the crop's middle there.
+fn held_at_left_edge(p: &mut Project) {
+    for clip in &mut p.timeline.main {
+        clip.fill_focus.insert(
+            FormatKind::Portrait,
+            FillFocus::Speaker {
+                path: FocusPath {
+                    keys: vec![FocusKey {
+                        at_us: 0,
+                        x: CROP / 2.0,
+                        y: 0.5,
+                        cut: false,
+                    }],
+                },
+                keep: Keep::Speaker,
+                people: Vec::new(),
+            },
+        );
+    }
+}
+
+#[test]
+fn a_sticker_keeps_off_a_speaker_the_crop_holds_at_the_pictures_edge() {
+    // The path says the crop's middle, but the speaker may stand anywhere from there to the picture's left edge (at 0.1
+    // of it, 0.316 of the frame): the sticker goes on the right, clear of their head.
+    let p = project();
+    let mut calls = base();
+    calls.extend(sticker("Rocket", 10));
+    let out = compile(&p, &inputs(&p, MESSAGE), &calls);
+    let mut after = short(&out);
+    held_at_left_edge(&mut after);
+    let mut ops = out.additions.as_ref().expect("additions").ops.clone();
+    klipolo_chat::place_beside_again(&after, &mut ops, &out.beside);
+    let (id, _) = &out.beside[0];
+    let item = (ops.iter())
+        .find_map(|op| match op {
+            Op::AddItem { item, .. } if &item.id == id => Some(item.clone()),
+            _ => None,
+        })
+        .expect("the sticker");
+    let b = portrait_box(&after, &item);
+    assert!(b.x >= 0.1 / CROP + 0.22, "on the head: {b:?}");
+}
