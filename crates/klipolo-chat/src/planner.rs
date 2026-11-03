@@ -674,8 +674,8 @@ fn finish(
                 reply = format!("{reply} {said}").trim().to_owned();
             }
         }
-        if !unfinished.is_empty() {
-            reply = format!("{reply} {}", could_not(unfinished, came_of_it));
+        if let Some(said) = could_not(unfinished, came_of_it) {
+            reply = format!("{reply} {said}");
         }
         return PlanOut {
             note: note(&calls, &compiled, unfinished),
@@ -710,9 +710,7 @@ fn finish(
             }
         }
     }
-    if !unfinished.is_empty() {
-        parts.push(could_not(unfinished, came_of_it));
-    }
+    parts.extend(could_not(unfinished, came_of_it));
     if parts.is_empty() {
         parts.extend(compiled.questions.iter().map(|q| full_stop(q.trim())));
     }
@@ -796,9 +794,7 @@ fn instead_of_follow(
             parts.push(said);
         }
     }
-    if !unfinished.is_empty() {
-        parts.push(could_not(unfinished, else_done));
-    }
+    parts.extend(could_not(unfinished, else_done));
     if let Some(why) = stopped {
         parts.push(format!("{} {STOPPED}", full_stop(why.trim())));
     }
@@ -982,9 +978,10 @@ fn full_stop(text: &str) -> String {
     }
 }
 
-/// What a tool does, as the reply says it couldn't.
-fn task(tool: &str) -> &'static str {
-    match tool {
+/// What a tool does, as the reply says it couldn't; None for one the reply never names (a question, `cannotDo`, a
+/// name no tool has).
+fn task(tool: &str) -> Option<&'static str> {
+    Some(match tool {
         "cutRange" => "make the cut",
         "keepOnly" => "keep only that part",
         "removeSilences" => "remove the pauses",
@@ -1015,8 +1012,15 @@ fn task(tool: &str) -> &'static str {
         "setSourceVolume" => "change the volume",
         "separateSound" => "separate the sound",
         "undo" => "undo the last change",
-        _ => "do part of this",
-    }
+        "animate" => "animate the layer",
+        "setMotion" => "add the motion",
+        "animateText" => "animate the words",
+        "setLayer" => "change the layer",
+        "styleText" => "restyle the words",
+        "setEffects" => "change the effects",
+        "autoZoom" => "add the zooms",
+        _ => return None,
+    })
 }
 
 /// Whether a tool works on a part of the video the model names by its times: refused back, that part stood on nothing
@@ -1028,36 +1032,37 @@ fn names_a_part(tool: &str) -> bool {
 /// What the reply says the tools named couldn't do, with what to do next, `else_done` when something else of the
 /// answer went through (so the video wasn't left as it was). Parts of the video it couldn't find: "I couldn't find that
 /// part, so I left the video as it was. Select it on the timeline and ask again." Anything else by what it does: "I
-/// couldn't add the sound, so I left the video as it was. Try asking in other words."
-fn could_not(tools: &[String], else_done: bool) -> String {
+/// couldn't add the sound, so I left the video as it was. Try asking in other words." None when it names nothing.
+fn could_not(tools: &[String], else_done: bool) -> Option<String> {
     let left = if else_done {
         "so I left it out"
     } else {
         "so I left the video as it was"
     };
-    if tools.iter().all(|t| names_a_part(t)) {
-        return format!(
+    if !tools.is_empty() && tools.iter().all(|t| names_a_part(t)) {
+        return Some(format!(
             "I couldn't find that part, {left}. Select it on the timeline and ask again."
-        );
+        ));
     }
     let mut tasks: Vec<&str> = Vec::new();
-    for t in tools {
-        let task = task(t);
+    for task in tools.iter().filter_map(|t| task(t)) {
         if !tasks.contains(&task) {
             tasks.push(task);
         }
     }
     let list = match tasks.as_slice() {
+        [] => return None,
         [one] => (*one).to_owned(),
         [rest @ .., last] => format!("{} or {last}", rest.join(", ")),
-        [] => "do part of this".to_owned(),
     };
     let left = if else_done && tasks.len() > 1 {
         "so I left those out"
     } else {
         left
     };
-    format!("I couldn't {list}, {left}. Try asking in other words.")
+    Some(format!(
+        "I couldn't {list}, {left}. Try asking in other words."
+    ))
 }
 
 /// One line on what `calls` came to, with the tools refused back and never made good (`dropped`): "Applied setFormat.

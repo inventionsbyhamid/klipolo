@@ -2072,3 +2072,29 @@ fn an_undo_the_person_asked_for_done_by_taking_the_thing_away_is_not_said_to_be_
         "It's square, and the picture goes once you apply the change."
     );
 }
+
+#[test]
+fn a_refused_call_is_named_never_said_as_part_of_this() {
+    // Outside a short, an animation refused back and never made good is said by what it does.
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let model = Fake::new(vec![
+        answer(
+            "",
+            vec![fc(
+                "call_1",
+                "animate",
+                r#"{"layer": "i7", "enter": "pop", "exit": null, "emphasis": null, "sound": null}"#,
+            )],
+            0.001,
+        ),
+        answer("Done.", vec![], 0.001),
+    ]);
+    let out = send(&model, &[], "animate the picture", &i, &p).unwrap();
+    assert!(!out.reply.contains("part of this"), "{}", out.reply);
+    assert!(
+        out.reply.contains("I couldn't animate the layer"),
+        "{}",
+        out.reply
+    );
+}
