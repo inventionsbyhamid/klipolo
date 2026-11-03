@@ -424,6 +424,28 @@ pub(super) fn sound_near(c: &Compiler, work: &Project, asset_id: &str, at: Us) -
         })
 }
 
+/// Whether `item` is a whoosh, this answer cuts the video again, and the project had a whoosh within `TOLERANCE_US` of
+/// `at` in `work` before the message: a cut's whoosh again where a short is cut once more would play two at once.
+/// Asked for without a cut ("another whoosh there"), and any other sound there again, it still plays.
+fn whoosh_there(c: &Compiler, work: &Project, item: &LibraryItem, at: Us) -> bool {
+    let whoosh = |name: &str| {
+        (c.inputs.library.items.iter())
+            .find(|l| l.asset.id == name)
+            .is_some_and(|l| cues::sound_kind(l) == cues::Kind::Whoosh)
+    };
+    let had =
+        |id: &Id| (c.snapshot.timeline.tracks.iter()).any(|t| t.items.iter().any(|i| &i.id == id));
+    cues::sound_kind(item) == cues::Kind::Whoosh
+        && !c.cut.is_empty()
+        && (work.timeline.tracks.iter())
+            .flat_map(|t| &t.items)
+            .any(|i| {
+                matches!(&i.content, ItemContent::Audio { asset_id, .. } if whoosh(asset_id))
+                    && i.start_us.abs_diff(at) <= TOLERANCE_US.unsigned_abs()
+                    && had(&i.id)
+            })
+}
+
 pub(super) fn add_sound(
     c: &Compiler,
     work: &Project,
@@ -458,28 +480,13 @@ pub(super) fn add_sound(
             .iter()
             .any(|&s| s.abs_diff(at) <= TOLERANCE_US.unsigned_abs())
             && !sound_near(c, work, &asset.id, at)
+            && !whoosh_there(c, work, item, at)
         {
             starts.push(at);
         }
     }
     // The file comes in once, then a sound at each moment as the library's + puts one (`add_sound_ops`).
-    let mut ops = Vec::with_capacity(starts.len() + 1);
-    let with_file = if work.asset(&asset.id).is_none() {
-        let add = Op::AddAssets {
-            assets: vec![asset.clone()],
-        };
-        let with_file = apply_ops(work, std::slice::from_ref(&add))
-            .map_err(|e| to_model(format!("addSound: {e}")))?;
-        ops.push(add);
-        Cow::Owned(with_file)
-    } else {
-        Cow::Borrowed(work)
-    };
-    for &at in &starts {
-        let sound =
-            add_sound_ops(&with_file, asset, at).map_err(|e| to_model(format!("addSound: {e}")))?;
-        ops.extend(sound);
-    }
+    let ops = sounds_at(work, asset, &starts)?;
     Ok(Edit {
         ops,
         label: label(

@@ -1365,3 +1365,62 @@ fn a_sticker_keeps_off_a_speaker_the_crop_holds_at_the_pictures_edge() {
     let b = portrait_box(&after, &item);
     assert!(b.x >= 0.1 / CROP + 0.22, "on the head: {b:?}");
 }
+
+#[test]
+fn a_whoosh_at_a_cut_that_has_one_already_plays_once_when_the_short_is_cut_again() {
+    // The short made before has a whoosh where it cuts to its second part (14.3 s). Cut once more, the model marks that
+    // cut and the new one with whooshes: only the new one gets one.
+    let p = applied_short();
+    let whoosh = |at: &[f64]| {
+        call(
+            "addSound",
+            json!({"name": "Whoosh", "atSec": at, "atWords": null}),
+        )
+    };
+    let out = compile(
+        &p,
+        &inputs(&p, "add a whoosh at 14.3 s"),
+        &[whoosh(&[14.3])],
+    );
+    let p = added(&p, &out);
+    let (_, sounds) = layers(&p);
+    assert_eq!(sounds.len(), 1, "{sounds:?}");
+    // Drops the second part's last 7.8 s: the third part then starts at 21.3 s.
+    let out = compile(
+        &p,
+        &inputs(&p, "cut the end of the second part"),
+        &[
+            call(
+                "keepOnly",
+                json!({"ranges": [{"startSec": 0.0, "endSec": 21.3}, {"startSec": 29.1, "endSec": 43.9}]}),
+            ),
+            whoosh(&[14.3, 29.1]),
+        ],
+    );
+    let after = short(&out);
+    let (_, sounds) = layers(&after);
+    let at: Vec<f64> = sounds.iter().map(|(_, t)| *t).collect();
+    assert_eq!(at.len(), 2, "{sounds:?}");
+    assert!(near(at[0], 14.3) && near(at[1], 21.3), "{sounds:?}");
+    // Only there already: nothing added, and the model is told so.
+    let out = compile(
+        &p,
+        &inputs(&p, "cut the end of the second part"),
+        &[
+            call(
+                "keepOnly",
+                json!({"ranges": [{"startSec": 0.0, "endSec": 21.3}, {"startSec": 29.1, "endSec": 43.9}]}),
+            ),
+            whoosh(&[14.3]),
+        ],
+    );
+    let (_, sounds) = layers(&short(&out));
+    assert_eq!(sounds.len(), 1, "{sounds:?}");
+    assert!(
+        out.told
+            .iter()
+            .any(|(i, said)| *i == 1 && said.starts_with("Left out")),
+        "{:?}",
+        out.told
+    );
+}

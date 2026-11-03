@@ -1148,6 +1148,15 @@ impl Compiler<'_> {
                     edit.map(|edit| (edit, None))
                 }
                 _ => self.addition(&adding.work, call).map(|edit| {
+                    // A sound that plays nowhere new: the same one (or a whoosh) is at each of its moments already.
+                    if let ToolCall::AddSound {
+                        at_us, at_words, ..
+                    } = call
+                        && edit.ops.is_empty()
+                        && !(at_us.is_empty() && at_words.is_empty())
+                    {
+                        told.push((i, cues::ALREADY_THERE.to_owned()));
+                    }
                     // The short's hook: held at most 2.5 s, the 9:16 captions waiting while it shows in its band.
                     let hook = cued.and_then(|q| q.hook).filter(|(h, _)| *h == i);
                     match hook {
