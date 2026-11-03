@@ -214,6 +214,9 @@ pub fn phrase_for(description: &str) -> String {
 pub(super) struct Follows {
     pub said: Vec<String>,
     pub note: String,
+    /// A follow was asked for and nothing of it landed (nobody found, the tracking failed, no clip can follow): the
+    /// model's words may claim it (`PlanOut::without_follow`).
+    pub failed: bool,
 }
 
 /// Runs `out`'s follow jobs (and the offer for a new vertical or square version) on the project the message leaves
@@ -260,6 +263,7 @@ pub(super) async fn follow_jobs(
                 .said
                 .push((if cropped { NO_FOOTAGE } else { NO_CROP }).to_owned());
             follows.note = format!("Nothing to follow {phrase} in: no clip can follow.");
+            follows.failed = true;
             return follows;
         }
         let asked_for = Asked {
@@ -271,6 +275,7 @@ pub(super) async fn follow_jobs(
             Err(why) => {
                 follows.note = format!("Following {phrase} failed: {why}");
                 follows.said.push(why);
+                follows.failed = true;
             }
             Ok(followed) => {
                 let ops = followed.ops(&target);
@@ -278,12 +283,14 @@ pub(super) async fn follow_jobs(
                 if ops.is_empty() {
                     follows.said.push(format!("{NO_ONE_THERE} {cost}"));
                     follows.note = format!("No {phrase} was found to follow.");
+                    follows.failed = true;
                 } else if !attach(out, &work, ops, &phrase) {
                     // Paid for all the same: the reply says so.
                     follows.said.push(format!(
                         "The follow couldn't be added to these changes. {cost}"
                     ));
                     follows.note = format!("Following {phrase} didn't fit the changes.");
+                    follows.failed = true;
                 } else {
                     let when = if out.compiled.proposal.is_some() {
                         "once you apply this"

@@ -22,7 +22,9 @@
 //! - **The conversation** keeps the last `KEPT_TURNS` exchanges with their notes (what was applied or proposed, and
 //!   later whether the person applied or discarded it), for the project open; another project, or New chat, starts it
 //!   over.
-//! - **Jobs:** following a subject and blurring aren't in Klipolo yet: the reply says they are coming (`jobs`). A
+//! - **Jobs:** a follow runs once the plan is made, before its edits land (`follow`); one that comes to nothing is
+//!   said in place of the model's words, which may claim it (`PlanOut::without_follow`). Without a follower, and for
+//!   blurring, the reply says they are coming (`jobs`). A
 //!   picture (a sticker, a title card's background) is named in the reply, drawn when the page asks, and placed on Use
 //!   as one undo step (`pictures`). A clip to play backward is named in the reply too: the page writes its reversed copy
 //!   as the clip menu's Reverse does, and turns the clip with it as one undo step.
@@ -568,9 +570,20 @@ impl ChatSession {
             Ok(mut out) => {
                 self.spend.message(out.usage_usd, out.answers.len());
                 let speaker = lock(&self.speaker).clone();
-                let follows = follow::follow_jobs(speaker.as_deref(), &now, &mut out).await;
+                let mut follows = follow::follow_jobs(speaker.as_deref(), &now, &mut out).await;
                 if !follows.note.is_empty() {
                     out.note = format!("{} {}", out.note, follows.note).trim().to_owned();
+                }
+                // The model was told the follow was done before it ran: when it came to nothing, its words may claim
+                // it. What else was done is said instead, or else what the follow came to is the reply.
+                if follows.failed
+                    && let Some(instead) = out.without_follow.take()
+                {
+                    out.reply = if instead.is_empty() {
+                        std::mem::take(&mut follows.said).join(" ")
+                    } else {
+                        instead
+                    };
                 }
                 self.land(&request.id, &text, &now, &inputs, out, follows.said)
             }
