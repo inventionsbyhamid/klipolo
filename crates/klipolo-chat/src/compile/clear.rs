@@ -50,12 +50,12 @@ pub const FACE_ZONE: BoxN = BoxN {
     h: 0.38,
 };
 /// Where the hook goes in 9:16 instead of over the face: under it, above the captions (word pop's are centred at 0.69),
-/// inside the apps' clear area (`media::text::PORTRAIT_CLEAR`). Two lines of the hook's 120 pixels fit its height.
+/// inside the apps' clear area (`media::text::PORTRAIT_CLEAR`). Two lines of the hook's 130 pixels fit its height.
 pub const UNDER_FACE: BoxN = BoxN {
     x: 0.06,
     y: 0.465,
     w: 0.81,
-    h: 0.15,
+    h: 0.155,
 };
 
 /// The width and height of the picture clip `i` of `p` shows: its file, or a recording's primary source's first file.

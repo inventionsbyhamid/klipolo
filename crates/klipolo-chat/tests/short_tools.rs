@@ -759,14 +759,14 @@ fn a_kinetic_hook_over_a_face_in_9x16_rises_on_two_big_lines_under_the_face() {
             panic!("animated words: {layer:?}");
         };
         // Not the template that fills the frame: words of their own, on two lines, whose letters rise in one by one,
-        // clearly bigger than word pop's 96-pixel captions.
+        // in a condensed face at 130 pixels, bigger than word pop's 96-pixel captions.
         assert_eq!(source.as_str(), klipolo_model::media::text_motion::SOURCE);
         assert_eq!(
             params.get("title"),
             Some(&ParamValue::Text("DAY ONE\nIN LISBON".into()))
         );
         assert_eq!(params.get("by"), Some(&ParamValue::Text("letter".into())));
-        assert_eq!(params.get("size"), Some(&ParamValue::Number(120.0)));
+        assert_eq!(params.get("size"), Some(&ParamValue::Number(130.0)));
         assert_eq!((layer.start_us, layer.duration_us), (secs(0.5), secs(3.0)));
         let b = portrait_box(layer, after.settings.primary_format);
         assert_eq!(b, klipolo_chat::compile::UNDER_FACE);

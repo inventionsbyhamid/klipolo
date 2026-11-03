@@ -553,7 +553,7 @@ pub(super) fn add_text(
     let start = start(c, work, "addText", at.field(), at)?;
     // Kinetic words are the kinetic title template, near the top whatever the preset, in its own font; but where the
     // 9:16 version shows a face there (`clear::face_in_portrait`), the template would put them on it, so they are words
-    // on a layer of their own in the template's look, on two lines, whose letters rise in one by one as its do
+    // on a layer of their own (`kinetic_look`), on two lines, whose letters rise in one by one as its do
     // (`rising_letters`), under the face (`clear::hook_under_face`).
     let kinetic = animation == Some(Entrance::Kinetic);
     let under_face =
@@ -621,9 +621,9 @@ pub(super) fn add_text(
     })
 }
 
-/// The hook's size in pixels at a 1080-pixel short side: clearly bigger than word pop's 96-pixel captions, shrunk only
-/// where a line is too long for the band.
-pub const HOOK_PX: f64 = 120.0;
+/// The hook's size in pixels at a 1080-pixel short side, in Anton (condensed, so a line of 13 capitals fits the band
+/// at full size): its capitals stand about 1.3 times word pop's 96-pixel captions'.
+pub const HOOK_PX: f64 = 130.0;
 
 /// `text` on two lines, broken at the space that makes the longer line shortest (one word stays one line).
 fn two_lines(text: &str) -> String {
@@ -638,8 +638,8 @@ fn two_lines(text: &str) -> String {
     }
 }
 
-/// The kinetic title's look on `ops`' words: Montserrat at its heaviest, `HOOK_PX`, white with a black outline and a
-/// shadow.
+/// The hook's look on `ops`' words, as bold as the kinetic title's but condensed to stay big on two lines: Anton,
+/// `HOOK_PX`, white with a black outline and a shadow.
 fn kinetic_look(ops: &mut [Op]) {
     for op in ops {
         let Op::AddItem { item, .. } = op else {
@@ -648,8 +648,8 @@ fn kinetic_look(ops: &mut [Op]) {
         let ItemContent::Text { style, .. } = &mut item.content else {
             continue;
         };
-        style.font = FontRef::bundled("Montserrat");
-        style.weight = 900;
+        style.font = FontRef::bundled("Anton");
+        style.weight = 400;
         style.size = HOOK_PX;
         style.outline = Some(Outline {
             color: "#000000".into(),
