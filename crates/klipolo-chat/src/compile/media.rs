@@ -551,12 +551,14 @@ pub(super) fn add_text(
 ) -> Result<Edit, Refused> {
     let words = screen_words(c, ("addText", "text"), text)?;
     let start = start(c, work, "addText", at.field(), at)?;
-    // Kinetic words in a video with no 9:16 version are the kinetic title template, near the top whatever the preset,
-    // in its own font. With one, the template would fill the 9:16 frame with its words on the face: they are words on
-    // a layer of their own instead, in the template's look, whose letters rise in one by one as its do
-    // (`rising_letters`), placed where a title goes and kept off the face like any words (`clear::words_off_face`).
+    // Kinetic words are the kinetic title template, near the top whatever the preset, in its own font; but where the
+    // 9:16 version shows a face there (`clear::face_in_portrait`), the template would put them on it, so they are words
+    // on a layer of their own in the template's look, on two lines, whose letters rise in one by one as its do
+    // (`rising_letters`), under the face (`clear::hook_under_face`).
     let kinetic = animation == Some(Entrance::Kinetic);
-    if kinetic && !c.portrait {
+    let under_face =
+        kinetic && c.portrait && clear::face_in_portrait(work, start, c.follows, &c.inputs.scenes);
+    if kinetic && !under_face {
         let (ops, _) = title_ops(
             work,
             TitleTemplate::KineticTitle,
@@ -576,7 +578,7 @@ pub(super) fn add_text(
         });
     }
     let (shown, layout) = if kinetic {
-        (words.to_uppercase(), ModelTextPreset::Title)
+        (two_lines(&words.to_uppercase()), ModelTextPreset::Title)
     } else {
         (words.clone(), preset.preset())
     };
@@ -602,9 +604,7 @@ pub(super) fn add_text(
     }
     if kinetic {
         rising_letters(&mut ops, &shown);
-    }
-    if c.portrait {
-        clear::words_off_face(work, &mut ops);
+        clear::hook_under_face(work, &mut ops);
     }
     Ok(Edit {
         ops: lasting(ops, length(work, start, duration, TEXT_US)),
@@ -621,7 +621,24 @@ pub(super) fn add_text(
     })
 }
 
-/// The kinetic title's look on `ops`' words: Montserrat at its heaviest, 100 pixels, white with a black outline and a
+/// The hook's size in pixels at a 1080-pixel short side: clearly bigger than word pop's 96-pixel captions, shrunk only
+/// where a line is too long for the band.
+pub const HOOK_PX: f64 = 120.0;
+
+/// `text` on two lines, broken at the space that makes the longer line shortest (one word stays one line).
+fn two_lines(text: &str) -> String {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let best = (1..words.len()).min_by_key(|&k| {
+        let (a, b) = (words[..k].join(" "), words[k..].join(" "));
+        a.chars().count().max(b.chars().count())
+    });
+    match best {
+        Some(k) => format!("{}\n{}", words[..k].join(" "), words[k..].join(" ")),
+        None => words.join(" "),
+    }
+}
+
+/// The kinetic title's look on `ops`' words: Montserrat at its heaviest, `HOOK_PX`, white with a black outline and a
 /// shadow.
 fn kinetic_look(ops: &mut [Op]) {
     for op in ops {
@@ -633,7 +650,7 @@ fn kinetic_look(ops: &mut [Op]) {
         };
         style.font = FontRef::bundled("Montserrat");
         style.weight = 900;
-        style.size = 100.0;
+        style.size = HOOK_PX;
         style.outline = Some(Outline {
             color: "#000000".into(),
             width: 6.0,

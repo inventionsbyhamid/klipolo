@@ -97,7 +97,7 @@ use crate::tools::{
     EffectChange, FollowFocus, KeyIn, LayerRef, Moment, PictureSize, Position, PresetIn, ToolCall,
 };
 pub(crate) use cameras::every_camera;
-pub use clear::{FACE_ZONE, UNDER_FACE, keep_words_off_face};
+pub use clear::{FACE_ZONE, UNDER_FACE};
 pub use clips::{NO_ROOM, NO_ROOM_ANYWHERE, NO_TRANSITIONS, REVERSING};
 use map::Map;
 use media::At;
@@ -594,9 +594,11 @@ struct Compiler<'a> {
     said: OnceCell<quote::Said>,
     /// The snapshot footage the answer's removals take out (`cut_by`): a quote said there and elsewhere is elsewhere.
     cut: Vec<RangeUs>,
-    /// The video has a 9:16 version, or a call of the answer gives it one: kinetic words are then words on a layer of
-    /// their own, placed off the face (`media::add_text`).
+    /// The video has a 9:16 version, or a call of the answer gives it one: a kinetic hook over a face there is words on
+    /// a layer of their own, placed off the face (`media::add_text`).
     portrait: bool,
+    /// A call of the answer follows someone (`followSubject`): its footage shows people.
+    follows: bool,
 }
 
 impl<'a> Compiler<'a> {
@@ -630,6 +632,7 @@ impl<'a> Compiler<'a> {
                         }
                     )
                 }),
+            follows: (calls.iter()).any(|call| matches!(call, ToolCall::FollowSubject { .. })),
         };
         c.cut = c.cut_by(calls);
         c

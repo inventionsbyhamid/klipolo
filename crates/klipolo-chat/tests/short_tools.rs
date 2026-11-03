@@ -732,82 +732,101 @@ fn off_the_face(b: klipolo_model::layout::BoxN) -> bool {
 }
 
 #[test]
-fn kinetic_words_in_a_vertical_video_rise_letter_by_letter_off_the_face() {
+fn a_kinetic_hook_over_a_face_in_9x16_rises_on_two_big_lines_under_the_face() {
     use klipolo_model::project::FormatKind;
     let p = project();
     let kinetic = (
         "addText",
-        json!({"text": "Day one", "preset": "title", "atSec": 0.5, "durationSec": null, "animation": "kinetic"}),
+        json!({"text": "Day one in Lisbon", "preset": "title", "atSec": 0.5, "durationSec": null, "animation": "kinetic"}),
     );
     let vertical = (
         "setFormat",
         json!({"format": "portrait", "keepOthers": true}),
     );
-    // The format comes before the words in the answer, or after them: either way the video has a 9:16 version.
+    let follow = (
+        "followSubject",
+        json!({"description": "person", "focus": null}),
+    );
+    // The answer follows the person, so the 9:16 crop shows a face; the format comes before the words or after them.
     for calls in [
-        vec![vertical.clone(), kinetic.clone()],
-        vec![kinetic.clone(), vertical.clone()],
+        vec![vertical.clone(), follow.clone(), kinetic.clone()],
+        vec![kinetic.clone(), follow.clone(), vertical.clone()],
     ] {
-        let out = run(&p, "a short with a title Day one", &calls);
+        let out = run(&p, "a short with a title Day one in Lisbon", &calls);
         let after = applied(&p, &out);
         let layer = &layers(&after, TrackKind::Overlay)[0];
         let ItemContent::Generator { source, params, .. } = &layer.content else {
             panic!("animated words: {layer:?}");
         };
-        // Not the template that fills the frame: words of their own, whose letters rise in one by one.
+        // Not the template that fills the frame: words of their own, on two lines, whose letters rise in one by one,
+        // clearly bigger than word pop's 96-pixel captions.
         assert_eq!(source.as_str(), klipolo_model::media::text_motion::SOURCE);
         assert_eq!(
             params.get("title"),
-            Some(&ParamValue::Text("DAY ONE".into()))
+            Some(&ParamValue::Text("DAY ONE\nIN LISBON".into()))
         );
         assert_eq!(params.get("by"), Some(&ParamValue::Text("letter".into())));
+        assert_eq!(params.get("size"), Some(&ParamValue::Number(120.0)));
         assert_eq!((layer.start_us, layer.duration_us), (secs(0.5), secs(3.0)));
         let b = portrait_box(layer, after.settings.primary_format);
+        assert_eq!(b, klipolo_chat::compile::UNDER_FACE);
         assert!(off_the_face(b), "{b:?}");
-        assert_ne!(b, klipolo_model::layout::BoxN::FULL);
         assert_eq!(after.settings.primary_format, FormatKind::Portrait);
     }
 }
 
 #[test]
-fn a_title_in_a_vertical_video_goes_under_the_face_and_a_caption_stays() {
+fn a_kinetic_hook_with_no_face_in_9x16_and_other_words_keep_their_place() {
     use klipolo_model::media::text::{TextPreset as Preset, preset_rect};
     use klipolo_model::project::FormatKind;
+    use klipolo_model::timeline::{Framing, FramingMode};
+    let kinetic = (
+        "addText",
+        json!({"text": "Day one", "preset": "title", "atSec": 0.5, "durationSec": null, "animation": "kinetic"}),
+    );
+    let template = |out: &Compiled, p: &Project| {
+        let after = applied(p, out);
+        let layer = layers(&after, TrackKind::Overlay)[0].clone();
+        match &layer.content {
+            ItemContent::Generator { source, .. } => {
+                source.as_str() == "klipolo.builtin/scene.kinetic-title"
+            }
+            _ => false,
+        }
+    };
     let mut p = project();
     p.settings.formats = vec![FormatKind::Landscape, FormatKind::Portrait];
-    let words = |preset: &str| {
-        (
-            "addText",
-            json!({"text": "Day one", "preset": preset, "atSec": 0.5, "durationSec": null, "animation": null}),
-        )
-    };
-    // At the top of the apps' clear area, a title would sit on the eyes.
-    assert!(!off_the_face(preset_rect(
-        Preset::Title,
-        FormatKind::Portrait
-    )));
-    let out = run(&p, "a title Day one", &[words("title")]);
-    let after = applied(&p, &out);
-    let title = &layers(&after, TrackKind::Overlay)[0];
-    assert!(
-        matches!(title.content, ItemContent::Text { .. }),
-        "{title:?}"
+    // Nobody found in the footage: the template, as before.
+    let out = run(&p, "a title Day one", &[kinetic.clone()]);
+    assert!(template(&out, &p));
+    // Letterboxed 9:16 (Fit): the template, though the answer follows someone.
+    let mut fit = p.clone();
+    fit.timeline.main[0].framing.insert(
+        FormatKind::Portrait,
+        Framing {
+            mode: FramingMode::Fit,
+            focus_x: 0.5,
+            focus_y: 0.5,
+            follow: None,
+        },
     );
-    let b = portrait_box(title, FormatKind::Landscape);
-    assert_eq!(b, klipolo_chat::compile::UNDER_FACE);
-    assert!(off_the_face(b));
-    // The landscape version keeps its place at the top.
-    assert_eq!(
-        title.layout.rect,
-        preset_rect(Preset::Title, FormatKind::Landscape)
+    let follow = (
+        "followSubject",
+        json!({"description": "person", "focus": null}),
     );
-    // A caption at the bottom is clear of the face already.
-    let out = run(&p, "a caption Day one", &[words("caption")]);
+    let out = run(&fit, "a title Day one", &[follow.clone(), kinetic.clone()]);
+    assert!(template(&out, &fit));
+    // Other words keep their preset's place in 9:16, at the top, over a face or not.
+    let title = (
+        "addText",
+        json!({"text": "Day one", "preset": "title", "atSec": 0.5, "durationSec": null, "animation": null}),
+    );
+    let out = run(&p, "a title Day one", &[follow, title]);
     let after = applied(&p, &out);
-    let caption = &layers(&after, TrackKind::Overlay)[0];
+    let layer = &layers(&after, TrackKind::Overlay)[0];
     assert_eq!(
-        portrait_box(caption, FormatKind::Landscape),
-        preset_rect(Preset::Caption, FormatKind::Portrait)
+        portrait_box(layer, FormatKind::Landscape),
+        preset_rect(Preset::Title, FormatKind::Portrait)
     );
 }
 

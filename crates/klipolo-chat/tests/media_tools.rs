@@ -984,9 +984,7 @@ fn every_text_preset_lands_where_the_canvas_puts_it_in_every_format() {
                 )],
             );
             let layer = the_layer(&p, &out);
-            let mut made = text_item(preset, "a day at the studio", primary, secs(2.0));
-            // In 9:16 a title, or words in the middle, would cover a face: they go under it.
-            klipolo_chat::compile::keep_words_off_face(&mut made.layout, primary);
+            let made = text_item(preset, "a day at the studio", primary, secs(2.0));
             assert_eq!(
                 (
                     &layer.content,
@@ -1000,19 +998,11 @@ fn every_text_preset_lands_where_the_canvas_puts_it_in_every_format() {
             assert!(layer.attach.is_some(), "{word}: moves with its clip");
             for format in formats {
                 let r = resolve_rect(&layer.layout, primary, format);
-                // Its preset's place, but in 9:16 under the face where that place would reach into it.
-                let placed = preset_rect(preset, format);
-                let face = klipolo_chat::compile::FACE_ZONE;
-                let on_face = placed.x < face.x + face.w
-                    && placed.x + placed.w > face.x
-                    && placed.y < face.y + face.h
-                    && placed.y + placed.h > face.y;
-                let want = if format == FormatKind::Portrait && on_face {
-                    klipolo_chat::compile::UNDER_FACE
-                } else {
-                    placed
-                };
-                assert_eq!(r, want, "{word} in {primary:?}, {format:?}");
+                assert_eq!(
+                    r,
+                    preset_rect(preset, format),
+                    "{word} in {primary:?}, {format:?}"
+                );
                 if format == FormatKind::Portrait {
                     let c = PORTRAIT_CLEAR;
                     let inside = r.x >= c.x - 1e-9

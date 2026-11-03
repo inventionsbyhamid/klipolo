@@ -8,20 +8,27 @@
 //! out to the frame's edge. Without follow data it does that at once, in the corner asked for. Only the 9:16 box
 //! changes; a picture in the middle, at a bottom corner, or in a project with no 9:16 version is left as placed.
 //!
-//! Words chat puts on screen keep off the face in 9:16 too (`words_off_face`). A 9:16 crop of a talk shows the source's
-//! full height, so the face sits in `FACE_ZONE` whatever the shot (high in a seated wide shot, down to the chin in a
-//! close-up), and a title at the top of the apps' clear area lands on the eyes. Words whose 9:16 box reaches into it
-//! go `UNDER_FACE` instead: below the face, above the captions, inside the clear area, where they shrink to fit.
+//! A short's kinetic hook keeps off the face in 9:16 too, where the 9:16 version shows a face (`face_in_portrait`): a
+//! 9:16 Fill crop of camera footage of people shows the source's full height, so the face sits in `FACE_ZONE`
+//! whatever the shot (high in a seated wide shot, down to the chin in a close-up), and the kinetic title's words,
+//! near the top, land on the eyes. The hook goes `UNDER_FACE` there (`hook_under_face`): below the face, above the
+//! captions, inside the clear area. Letterboxed 9:16 (Fit), screen recordings, footage with nobody found and the other
+//! formats keep the kinetic title as it is, and other words go where their preset puts them.
+
+use std::collections::HashMap;
 
 use klipolo_model::Project;
 use klipolo_model::fill_focus::FillFocus;
-use klipolo_model::layout::{Anchor, BoxN, Layout};
+use klipolo_model::framing::effective_framing;
+use klipolo_model::layout::{Anchor, BoxN};
 use klipolo_model::media::image::{IMAGE_MARGIN, Spot, corner_rect};
 use klipolo_model::ops::Op;
-use klipolo_model::project::{Asset, FormatKind};
+use klipolo_model::project::{Asset, AssetKind, FormatKind};
 use klipolo_model::query::clip_at;
 use klipolo_model::time::Us;
-use klipolo_model::timeline::{ClipSource, ItemContent};
+use klipolo_model::timeline::{ClipSource, FramingMode, ItemContent};
+
+use crate::context::SceneLog;
 
 /// A picture's share of the width where no corner is clear of the person.
 pub const CLEAR_SHARE: f64 = 0.28;
@@ -42,13 +49,13 @@ pub const FACE_ZONE: BoxN = BoxN {
     w: 0.6,
     h: 0.38,
 };
-/// Where words go in 9:16 instead of over the face: under it, above the captions, inside the apps' clear area
-/// (`media::text::PORTRAIT_CLEAR`).
+/// Where the hook goes in 9:16 instead of over the face: under it, above the captions (word pop's are centred at 0.69),
+/// inside the apps' clear area (`media::text::PORTRAIT_CLEAR`). Two lines of the hook's 120 pixels fit its height.
 pub const UNDER_FACE: BoxN = BoxN {
     x: 0.06,
-    y: 0.47,
+    y: 0.465,
     w: 0.81,
-    h: 0.11,
+    h: 0.15,
 };
 
 /// The width and height of the picture clip `i` of `p` shows: its file, or a recording's primary source's first file.
@@ -181,42 +188,56 @@ pub(super) fn clear_of_person(
     }
 }
 
-/// `ops`' words (a text layer, or animated words) moved in 9:16 off the face (`keep_words_off_face`). Other layers,
-/// and other formats, keep their place.
-pub(super) fn words_off_face(p: &Project, ops: &mut [Op]) {
+/// Whether the 9:16 version shows a face where words at timeline `at_us` of `p` would sit: the clip there is camera
+/// footage (an imported video, or a take with no screen) that Fill crops in 9:16, and people are found in it: its 9:16
+/// crop follows a speaker, the answer follows someone (`follows`), or its scene log says who is on screen.
+pub(super) fn face_in_portrait(
+    p: &Project,
+    at_us: Us,
+    follows: bool,
+    scenes: &HashMap<String, SceneLog>,
+) -> bool {
+    let Some((i, _)) = clip_at(&p.timeline.main, at_us) else {
+        return false;
+    };
+    let clip = &p.timeline.main[i];
+    let footage = match &clip.source {
+        ClipSource::Asset { id } => (p.asset(id))
+            .is_some_and(|a| a.kind == AssetKind::Video)
+            .then(|| id.as_str()),
+        ClipSource::Recording { id } => match p.recording(id) {
+            Some(r) if r.screen().is_none() => Some(""),
+            _ => None,
+        },
+    };
+    let Some(asset) = footage else {
+        return false;
+    };
+    if effective_framing(p, clip, FormatKind::Portrait).mode != FramingMode::Fill {
+        return false;
+    }
+    let followed = matches!(
+        clip.fill_focus.get(&FormatKind::Portrait),
+        Some(FillFocus::Speaker { .. })
+    );
+    let named = (scenes.get(asset))
+        .is_some_and(|log| (log.items.iter()).any(|item| !item.who.trim().is_empty()));
+    followed || follows || named
+}
+
+/// `ops`' layers placed `UNDER_FACE` in 9:16: their own box where 9:16 is `p`'s main format, else their 9:16 place.
+pub(super) fn hook_under_face(p: &Project, ops: &mut [Op]) {
     for op in ops {
         let Op::AddItem { item, .. } = op else {
             continue;
         };
-        let words = match &item.content {
-            ItemContent::Text { .. } => true,
-            ItemContent::Generator { source, .. } => {
-                source.as_str() == klipolo_model::media::text_motion::SOURCE
-            }
-            _ => false,
-        };
-        if words {
-            keep_words_off_face(&mut item.layout, p.settings.primary_format);
+        if p.settings.primary_format == FormatKind::Portrait {
+            item.layout.rect = UNDER_FACE;
+            item.layout.anchor = Anchor::TopCenter;
+        } else {
+            item.layout
+                .overrides
+                .insert(FormatKind::Portrait, UNDER_FACE);
         }
-    }
-}
-
-/// Words laid out by `layout`, in a project whose main format is `primary`, kept off the face in 9:16, as the module
-/// says: their 9:16 box (the layout's own where 9:16 is the main format, else its 9:16 place) becomes `UNDER_FACE`
-/// where it reaches into `FACE_ZONE`.
-pub fn keep_words_off_face(layout: &mut Layout, primary: FormatKind) {
-    let rect = if primary == FormatKind::Portrait {
-        Some(layout.rect)
-    } else {
-        layout.overrides.get(&FormatKind::Portrait).copied()
-    };
-    if rect.is_none_or(|r| overlap(r, FACE_ZONE) <= 0.0) {
-        return;
-    }
-    if primary == FormatKind::Portrait {
-        layout.rect = UNDER_FACE;
-        layout.anchor = Anchor::TopCenter;
-    } else {
-        layout.overrides.insert(FormatKind::Portrait, UNDER_FACE);
     }
 }
