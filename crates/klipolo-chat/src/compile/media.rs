@@ -34,22 +34,26 @@ use std::collections::BTreeMap;
 
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::contrib::Catalog;
+use klipolo_model::font::FontRef;
 use klipolo_model::ids::Id;
 use klipolo_model::media::image::{IMAGE_US, add_image_ops_at};
 use klipolo_model::media::music::{MusicOpts, add_music_ops};
 use klipolo_model::media::sound::add_sound_ops;
+use klipolo_model::media::text::TextPreset as ModelTextPreset;
 use klipolo_model::media::text::{
     TEMPLATE_US, TEXT_US, TitleTemplate, add_template_ops, add_text_ops,
 };
-use klipolo_model::motion::{self, Motion};
+use klipolo_model::media::text_motion::{self, TextMotion, Unit};
+use klipolo_model::motion::{self, Ease, Motion};
 use klipolo_model::ops::Op;
 use klipolo_model::params::{ParamKind, ParamValue};
 use klipolo_model::project::{Asset, AssetKind};
 use klipolo_model::query::{anchor_at, main_track_duration, resolve_attach, video_duration};
+use klipolo_model::scene::check_scene;
 use klipolo_model::speech::{WordKind, is_mark, joins_unspaced, word_ranges};
 use klipolo_model::text_safety::clean_shown;
 use klipolo_model::time::{MIN_DURATION_US, Us};
-use klipolo_model::timeline::ItemContent;
+use klipolo_model::timeline::{ItemContent, Outline};
 use klipolo_model::validate::MAX_TEXT;
 use klipolo_model::{Project, apply_ops};
 
@@ -547,8 +551,14 @@ pub(super) fn add_text(
 ) -> Result<Edit, Refused> {
     let words = screen_words(c, ("addText", "text"), text)?;
     let start = start(c, work, "addText", at.field(), at)?;
-    // Kinetic words are the kinetic title template, near the top whatever the preset, in its own font.
-    if animation == Some(Entrance::Kinetic) {
+    // Kinetic words are the kinetic title template, near the top whatever the preset, in its own font; but where the
+    // 9:16 version shows a face there (`clear::face_in_portrait`), the template would put them on it, so they are words
+    // on a layer of their own (`kinetic_look`), on two lines, whose letters rise in one by one as its do
+    // (`rising_letters`), under the face (`clear::hook_under_face`).
+    let kinetic = animation == Some(Entrance::Kinetic);
+    let under_face =
+        kinetic && c.portrait && clear::face_in_portrait(work, start, c.follows, &c.inputs.scenes);
+    if kinetic && !under_face {
         let (ops, _) = title_ops(
             work,
             TitleTemplate::KineticTitle,
@@ -567,9 +577,16 @@ pub(super) fn add_text(
             ),
         });
     }
-    let mut ops = add_text_ops(work, preset.preset(), &words, start)
-        .map_err(|e| to_model(format!("addText: {e}")))?;
-    if let Some(animation) = animation {
+    let (shown, layout) = if kinetic {
+        (two_lines(&words.to_uppercase()), ModelTextPreset::Title)
+    } else {
+        (words.clone(), preset.preset())
+    };
+    let mut ops =
+        add_text_ops(work, layout, &shown, start).map_err(|e| to_model(format!("addText: {e}")))?;
+    if kinetic {
+        kinetic_look(&mut ops);
+    } else if let Some(animation) = animation {
         for op in &mut ops {
             if let Op::AddItem { item, .. } = op {
                 let change = animate::Change {
@@ -585,16 +602,104 @@ pub(super) fn add_text(
     if let Some(name) = font {
         in_font(c, &mut ops, name)?;
     }
+    if kinetic {
+        rising_letters(&mut ops, &shown);
+        clear::hook_under_face(work, &mut ops);
+    }
     Ok(Edit {
         ops: lasting(ops, length(work, start, duration, TEXT_US)),
         label: label(
             "addText",
             vec![
                 ("text", ErrorParam::from(words.as_str())),
-                ("preset", ErrorParam::from(preset.key())),
+                (
+                    "preset",
+                    ErrorParam::from(if kinetic { "kinetic" } else { preset.key() }),
+                ),
             ],
         ),
     })
+}
+
+/// The hook's size in pixels at a 1080-pixel short side, in Anton (condensed, so a line of 13 capitals fits the band
+/// at full size): its capitals stand about 1.3 times word pop's 96-pixel captions'.
+pub const HOOK_PX: f64 = 130.0;
+
+/// `text` on two lines, broken at the space that makes the longer line shortest (one word stays one line).
+fn two_lines(text: &str) -> String {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let best = (1..words.len()).min_by_key(|&k| {
+        let (a, b) = (words[..k].join(" "), words[k..].join(" "));
+        a.chars().count().max(b.chars().count())
+    });
+    match best {
+        Some(k) => format!("{}\n{}", words[..k].join(" "), words[k..].join(" ")),
+        None => words.join(" "),
+    }
+}
+
+/// The hook's look on `ops`' words, as bold as the kinetic title's but condensed to stay big on two lines: Anton,
+/// `HOOK_PX`, white with a black outline and a shadow.
+fn kinetic_look(ops: &mut [Op]) {
+    for op in ops {
+        let Op::AddItem { item, .. } = op else {
+            continue;
+        };
+        let ItemContent::Text { style, .. } = &mut item.content else {
+            continue;
+        };
+        style.font = FontRef::bundled("Anton");
+        style.weight = 400;
+        style.size = HOOK_PX;
+        style.outline = Some(Outline {
+            color: "#000000".into(),
+            width: 6.0,
+        });
+        style.shadow = true;
+    }
+}
+
+/// `ops`' words as animated words whose letters rise in one by one, as the kinetic title's do (60 pixels up from
+/// clear, 0.45 s each, 0.04 s apart), or word by word where there are too many letters to draw in time. Words the
+/// scene check refuses stay plain words, fading in.
+fn rising_letters(ops: &mut [Op], text: &str) {
+    for op in ops {
+        let Op::AddItem { item, .. } = op else {
+            continue;
+        };
+        let ItemContent::Text { style, .. } = &item.content else {
+            continue;
+        };
+        let mut m = TextMotion {
+            unit: Unit::Letter,
+            from: text_motion::From {
+                y: Some(60.0),
+                opacity: Some(0.0),
+                ..text_motion::From::default()
+            },
+            unit_secs: Some(0.45),
+            ease: Some(Ease::Power3Out),
+            stagger_secs: Some(0.04),
+            order: None,
+            exit: false,
+        };
+        if text_motion::problem(text, &m).is_some() {
+            m.unit = Unit::Word;
+            m.stagger_secs = None;
+        }
+        let scene = text_motion::scene(text, style, &m);
+        if text_motion::problem(text, &m).is_some()
+            || check_scene(&scene, Catalog::builtin()).is_err()
+        {
+            continue;
+        }
+        let params = text_motion::params(text, style, &m);
+        item.content = ItemContent::generator(text_motion::source(), params);
+        if let Some(mut moves) = item.layout.motion.take() {
+            moves.enter = None;
+            item.layout.motion = motion::kept(moves);
+        }
+    }
 }
 
 /// The new text in the font `name` names, at its face nearest the preset's weight and style; refused to the model when

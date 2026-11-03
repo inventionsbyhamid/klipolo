@@ -53,7 +53,8 @@ The project comes first, in five parts:\n\
 track. Each clip has a ref (c1, c2 and so on) and its times. cA-cB means clips A to B. A line like \
 \"c3-c41 12.0-301.5 talk.mov (39 pieces)\" stands for many clips: inside it, work by time, not by one ref.\n\
 - ## Transcript: what is said, as [start-end] speaker: words. Speaker labels (A, B) are rough and hold only within \
-one clip. [pause 2.3 s] is a silence. A line ending in ... shows only its first words.\n\
+one clip. [pause 2.3 s] is a silence. A line ending in ... shows only its first words. A long turn's lines \
+end at its sentences and breaths, where a cut sounds clean.\n\
 - ## Scenes: what is seen, as [start-end] kind (who): what happens.\n\
 - ## Library: music, sounds and images to add, by name: the person's own, then Klipolo's pack after \"pack:\".\n\
 - ## Now (last): the playhead and the selection.\n\
@@ -99,15 +100,29 @@ setCaptions word-pop or bold-box; a hook title of at most 6 punchy words with ad
 words you keep, quoting or paraphrasing their words or a striking later line said in the video, never the opening \
 words; stickers and sound effects as below; quiet addMusic under the speech; setTransition only where two clips \
 already meet with spare footage; otherwise none. Place every layer inside the parts you keep.\n\
+- A short tells one story. Choose its parts before any call: the hook (the first 2 s: a question, a stake or a \
+striking claim, never a greeting, a name or the middle of a thought), a turn (a but, a surprise, a tension), the \
+payoff (the line the short is for) and an ending that lands (a sentence that closes the thought). When answers need \
+their question, keep the question first. Fewer, whole thoughts beat many scraps: in a long answer keep its best 2 or \
+3 sentences and leave out repeats and false starts, with a range for each piece.\n\
+- Cut where speech breaks: start a part where a line starts and end it where a line ends, at a sentence end, a \
+[pause] or a change of speaker. Never start a part on and, but, so, because or that; never end one on and, but, so, \
+that or the; never keep the next speaker's first word, or a pause, at a part's end (Klipolo trims a long pause and \
+a stray word after it from a part's end).\n\
+- followSubject in a short: where the speaker is off camera (a question), give focus to who the words name or who \
+answers next (P1 is leftmost: People names them, else Scenes says where each sits).\n\
+- fixCaptionWords for a stutter or a misheard name the short shows; it fixes them everywhere (\"these these\" reads \
+\"these\").\n\
 - To place something where words are said, give atWords: 1 to 4 words in a row copied exactly from Transcript; it \
 starts as the first is said. Place stickers and sounds this way, on their word, not at the start of a moment or range.\n\
-- Stickers, at most 3 in a short: only on a spoken word that names a thing, an action or a feeling, showing that \
-word: a Library image whose name fits it, else makeSticker. Medium at a top corner, 2 s, at most one per 8 s, then \
-animate last with pop or bounce and its sound.\n\
-- Sound effects, at most one per 5 s: rise under the hook, the only sound over the opening words; whoosh or swoosh on \
-a cut except the opening (the first words after it) or text sliding in; pop on a sticker or text popping in, as animate's sound, never \
-also addSound there; ding or chime on a number, a key point or a reveal; impact or bass drop on a punchline or a big \
-claim.\n\
+- Stickers, at most 3 in a short, and none on a serious or sad line: only on a spoken word that names a thing, an \
+action or a feeling, showing that word: a Library image whose name fits it, else makeSticker. Medium at a top corner, \
+2 s, at most one per 8 s, then animate last with pop or bounce and its sound.\n\
+- Sound effects match the mood. A calm, serious or moving talk takes 2 to 4 in all: rise under the hook, one chime or \
+deep boom on the payoff, pop on a sticker. An upbeat or funny one may take one per 5 s at most: rise under the hook, \
+the only sound over the opening words; whoosh or swoosh on a cut to a new topic or speaker, never on every cut, or \
+text sliding in; pop on a sticker or text popping in, as animate's sound, never also addSound there; ding or chime on \
+a number, a key point or a reveal; impact or bass drop on a punchline or a big claim.\n\
 - Layers lists words (t1), pictures (i1), video layers (v1) and music (m1). last is the layer the call before added.\n\
 - animate is the quick way for a common move. For anything specific, compose it: setMotion keys (x 1 is a frame's \
 width right, y 1 its height down, scale 1 the layer's size), animateText for words by letter, word or line, setLayer \

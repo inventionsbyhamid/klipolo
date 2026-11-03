@@ -712,6 +712,124 @@ fn a_short_planned_in_one_answer_applies_its_look_and_proposes_its_cut() {
     assert_eq!(sounds[0].start_us, sticker.start_us);
 }
 
+/// The 9:16 box `item` has in a project whose main format is `primary`.
+fn portrait_box(
+    item: &Item,
+    primary: klipolo_model::project::FormatKind,
+) -> klipolo_model::layout::BoxN {
+    use klipolo_model::project::FormatKind;
+    if primary == FormatKind::Portrait {
+        item.layout.rect
+    } else {
+        item.layout.overrides[&FormatKind::Portrait]
+    }
+}
+
+/// Whether `b` stays out of the face's zone of a 9:16 crop.
+fn off_the_face(b: klipolo_model::layout::BoxN) -> bool {
+    let face = klipolo_chat::compile::FACE_ZONE;
+    b.y >= face.y + face.h || b.y + b.h <= face.y || b.x >= face.x + face.w || b.x + b.w <= face.x
+}
+
+#[test]
+fn a_kinetic_hook_over_a_face_in_9x16_rises_on_two_big_lines_under_the_face() {
+    use klipolo_model::project::FormatKind;
+    let p = project();
+    let kinetic = (
+        "addText",
+        json!({"text": "Day one in Lisbon", "preset": "title", "atSec": 0.5, "durationSec": null, "animation": "kinetic"}),
+    );
+    let vertical = (
+        "setFormat",
+        json!({"format": "portrait", "keepOthers": true}),
+    );
+    let follow = (
+        "followSubject",
+        json!({"description": "person", "focus": null}),
+    );
+    // The answer follows the person, so the 9:16 crop shows a face; the format comes before the words or after them.
+    for calls in [
+        vec![vertical.clone(), follow.clone(), kinetic.clone()],
+        vec![kinetic.clone(), follow.clone(), vertical.clone()],
+    ] {
+        let out = run(&p, "a short with a title Day one in Lisbon", &calls);
+        let after = applied(&p, &out);
+        let layer = &layers(&after, TrackKind::Overlay)[0];
+        let ItemContent::Generator { source, params, .. } = &layer.content else {
+            panic!("animated words: {layer:?}");
+        };
+        // Not the template that fills the frame: words of their own, on two lines, whose letters rise in one by one,
+        // in a condensed face at 130 pixels, bigger than word pop's 96-pixel captions.
+        assert_eq!(source.as_str(), klipolo_model::media::text_motion::SOURCE);
+        assert_eq!(
+            params.get("title"),
+            Some(&ParamValue::Text("DAY ONE\nIN LISBON".into()))
+        );
+        assert_eq!(params.get("by"), Some(&ParamValue::Text("letter".into())));
+        assert_eq!(params.get("size"), Some(&ParamValue::Number(130.0)));
+        assert_eq!((layer.start_us, layer.duration_us), (secs(0.5), secs(3.0)));
+        let b = portrait_box(layer, after.settings.primary_format);
+        assert_eq!(b, klipolo_chat::compile::UNDER_FACE);
+        assert!(off_the_face(b), "{b:?}");
+        assert_eq!(after.settings.primary_format, FormatKind::Portrait);
+    }
+}
+
+#[test]
+fn a_kinetic_hook_with_no_face_in_9x16_and_other_words_keep_their_place() {
+    use klipolo_model::media::text::{TextPreset as Preset, preset_rect};
+    use klipolo_model::project::FormatKind;
+    use klipolo_model::timeline::{Framing, FramingMode};
+    let kinetic = (
+        "addText",
+        json!({"text": "Day one", "preset": "title", "atSec": 0.5, "durationSec": null, "animation": "kinetic"}),
+    );
+    let template = |out: &Compiled, p: &Project| {
+        let after = applied(p, out);
+        let layer = layers(&after, TrackKind::Overlay)[0].clone();
+        match &layer.content {
+            ItemContent::Generator { source, .. } => {
+                source.as_str() == "klipolo.builtin/scene.kinetic-title"
+            }
+            _ => false,
+        }
+    };
+    let mut p = project();
+    p.settings.formats = vec![FormatKind::Landscape, FormatKind::Portrait];
+    // Nobody found in the footage: the template, as before.
+    let out = run(&p, "a title Day one", std::slice::from_ref(&kinetic));
+    assert!(template(&out, &p));
+    // Letterboxed 9:16 (Fit): the template, though the answer follows someone.
+    let mut fit = p.clone();
+    fit.timeline.main[0].framing.insert(
+        FormatKind::Portrait,
+        Framing {
+            mode: FramingMode::Fit,
+            focus_x: 0.5,
+            focus_y: 0.5,
+            follow: None,
+        },
+    );
+    let follow = (
+        "followSubject",
+        json!({"description": "person", "focus": null}),
+    );
+    let out = run(&fit, "a title Day one", &[follow.clone(), kinetic.clone()]);
+    assert!(template(&out, &fit));
+    // Other words keep their preset's place in 9:16, at the top, over a face or not.
+    let title = (
+        "addText",
+        json!({"text": "Day one", "preset": "title", "atSec": 0.5, "durationSec": null, "animation": null}),
+    );
+    let out = run(&p, "a title Day one", &[follow, title]);
+    let after = applied(&p, &out);
+    let layer = &layers(&after, TrackKind::Overlay)[0];
+    assert_eq!(
+        portrait_box(layer, FormatKind::Landscape),
+        preset_rect(Preset::Title, FormatKind::Portrait)
+    );
+}
+
 #[test]
 fn kinetic_words_are_the_kinetic_title_template() {
     let p = project();

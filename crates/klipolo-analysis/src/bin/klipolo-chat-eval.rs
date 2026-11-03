@@ -8,7 +8,8 @@
 //!
 //! It calls Meta for real with `MODEL_API_KEY` (a Meta key) from the environment, never from a file, and never prints
 //! it. `KLIPOLO_SPEND_LEDGER` (a CSV file), when set, gets one row per model call; `KLIPOLO_META_BASE` points the calls
-//! elsewhere; `KLIPOLO_PLAN_DIR` (a folder), when set, gets `<case id>-plan.json` per case answered: the message, the
+//! elsewhere; `KLIPOLO_EVAL_CHAT_MODEL` and `KLIPOLO_EVAL_REASONING_EFFORT` run another chat model or reasoning effort
+//! than the app's (`chat_setup`); `KLIPOLO_PLAN_DIR` (a folder), when set, gets `<case id>-plan.json` per case answered: the message, the
 //! reply and every call as the model made it, with its step, to compile and render again. It exits 0 when at least `--min-pass` cases pass (`MIN_PASS` by default, or every case run with
 //! `--only`), 1 when fewer do, 2 when it could not run.
 //!
@@ -24,8 +25,11 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
+use std::time::Duration;
 
-use klipolo_analysis::providers::meta_chat::MetaChat;
+use klipolo_analysis::providers::meta_chat::{
+    CHAT_ANSWER_TIMEOUT, CHAT_MODEL, ChatSetup, MetaChat,
+};
 use klipolo_chat::tools::{CaptionChange, CaptionPlace, LayerRef};
 use klipolo_chat::{
     AnalysisState, Audience, ChatError, CursorTakes, Inputs, Job, Library, LibraryItem, MediaKind,
@@ -46,6 +50,15 @@ use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 const KEY_ENV: &str = "MODEL_API_KEY";
+/// Another chat model for the eval (`chat_setup`); the app always runs `CHAT_MODEL`.
+const EVAL_MODEL_ENV: &str = "KLIPOLO_EVAL_CHAT_MODEL";
+/// A reasoning effort for the eval (`chat_setup`); the app leaves Meta's default.
+const EVAL_EFFORT_ENV: &str = "KLIPOLO_EVAL_REASONING_EFFORT";
+/// An eval answer's output cap with another model or effort: twice the app's, for the reasoning a higher effort spends.
+const EVAL_MAX_OUTPUT_TOKENS: u32 = 32_768;
+/// An eval answer's time with another model or effort: a full `EVAL_MAX_OUTPUT_TOKENS` answer at Spark's pace (about
+/// 96 s per 16,384 tokens) is about 190 s, and a slower model takes longer.
+const EVAL_ANSWER_TIMEOUT: Duration = Duration::from_secs(600);
 const USAGE: &str =
     "usage: klipolo-chat-eval [--cases <cases.json>] [--only <id>]... [--min-pass <n>]";
 /// The planner's target: at least this many of the 39 cases.
@@ -375,6 +388,41 @@ fn levels(transcript: &Transcript, length: Us) -> Levels {
     Levels { db: db.into() }
 }
 
+/// The chat setup the eval runs: the app's (`ChatSetup::default()`, `CHAT_ANSWER_TIMEOUT`), or another model or
+/// reasoning effort from `KLIPOLO_EVAL_CHAT_MODEL` and `KLIPOLO_EVAL_REASONING_EFFORT` (a word such as high). With
+/// either, an answer may take `EVAL_MAX_OUTPUT_TOKENS` output tokens and `EVAL_ANSWER_TIMEOUT`, so more reasoning or a
+/// slower model is not cut off (the eval calls Meta with the key directly, past the relay's caps).
+fn chat_setup() -> Result<(ChatSetup, Duration), String> {
+    let var = |name: &str| {
+        std::env::var(name)
+            .ok()
+            .map(|v| v.trim().to_owned())
+            .filter(|v| !v.is_empty())
+    };
+    let (model, effort) = (var(EVAL_MODEL_ENV), var(EVAL_EFFORT_ENV));
+    if model.is_none() && effort.is_none() {
+        return Ok((ChatSetup::default(), CHAT_ANSWER_TIMEOUT));
+    }
+    let word = |v: &String| {
+        !v.is_empty()
+            && v.len() <= 40
+            && (v.bytes())
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'.')
+    };
+    if let Some(m) = model.as_ref().filter(|m| !word(m)) {
+        return Err(format!("{EVAL_MODEL_ENV} {m:?} is not a model name."));
+    }
+    if let Some(e) = effort.as_ref().filter(|e| !word(e)) {
+        return Err(format!("{EVAL_EFFORT_ENV} {e:?} is not an effort."));
+    }
+    let setup = ChatSetup {
+        model: model.unwrap_or_else(|| CHAT_MODEL.to_owned()),
+        reasoning_effort: effort,
+        max_output_tokens: EVAL_MAX_OUTPUT_TOKENS,
+    };
+    Ok((setup, EVAL_ANSWER_TIMEOUT))
+}
+
 fn secs_to_us(s: f64) -> Us {
     (s * 1e6).round() as Us
 }
@@ -407,7 +455,22 @@ fn run(args: &Args) -> Result<bool, String> {
         .map(|v| v.trim().to_owned())
         .filter(|v| !v.is_empty())
         .ok_or_else(|| format!("Set {KEY_ENV}."))?;
-    let model = MetaChat::new(MetaClient::direct(SecretString::from(key)));
+    let (setup, answer_timeout) = chat_setup()?;
+    if setup != ChatSetup::default() {
+        println!(
+            "chat model {}, reasoning effort {}, at most {} output tokens, {} s an answer",
+            setup.model,
+            setup
+                .reasoning_effort
+                .as_deref()
+                .unwrap_or("Meta's default"),
+            setup.max_output_tokens,
+            answer_timeout.as_secs()
+        );
+    }
+    let model = MetaChat::new(MetaClient::direct(SecretString::from(key)))
+        .with_setup(setup)
+        .with_answer_timeout(answer_timeout);
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()

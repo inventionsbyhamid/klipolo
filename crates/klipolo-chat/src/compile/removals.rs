@@ -1,10 +1,12 @@
 //! The removals, each one `DeleteRanges` on the removals' working copy (the project as the additions and the earlier
 //! removals of the answer leave it).
 //! - `cutRange`: the range as the evidence snaps it, mapped to where that footage plays now.
-//! - `keepOnly`: each part kept, snapped and mapped the same way; everything else on the main track goes
-//!   (`kept_parts(0, main_track_duration, merge_ranges(keep))`).
+//! - `keepOnly`: each part kept, snapped and held to where speech breaks (`Evidence::keep_range`: never inside a
+//!   phrase, nor ending on a fragment after a long pause), and mapped the same way; everything else on the main track
+//!   goes (`kept_parts(0, main_track_duration, merge_ranges(keep))`).
 //! - `removeSilences`: the pauses in the sound (`timeline_pauses`, from the loudness levels) longer than the length
-//!   asked, `PAUSE_US` when none was.
+//!   asked, `PAUSE_US` when none was, but not one in a screen recording where the person clicks or types: a step of
+//!   a lesson shown in silence stays (`clicks_and_typing`, from each take's facts as `autoZoom` reads them).
 //! - `removeFillers`: every filler word, each cut as `word_cut` pads it. None is cut while any is only roughly timed
 //!   (its word's confidence 0: spread over its turn when word timing failed), naming the clip: the person is told to
 //!   press Time words again when the preview's header offers it for that clip (`ROUGH_FILLERS`), else only why
@@ -14,13 +16,16 @@
 //! the person (`NO_FILLERS`, "There are no pauses longer than 1.0 s to remove."): asking the model again could not
 //! change it.
 
+use klipolo_cursor::timeline::on_timeline_between;
 use klipolo_model::Project;
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::ops::Op;
-use klipolo_model::query::main_track_duration;
+use klipolo_model::project::Recording;
+use klipolo_model::query::{clip_starts, main_track_duration};
 use klipolo_model::speech::silence::timeline_pauses;
 use klipolo_model::speech::{PAUSE_US, Speech, Spoken, SpokenWord, WordKind, spoken, word_cut};
 use klipolo_model::time::{RangeUs, Us, kept_parts, merge_ranges};
+use klipolo_model::timeline::ClipSource;
 
 use super::{
     Audience, Compiler, Edit, NO_FILLERS, ROUGH_FILLERS, ROUGH_FILLERS_STAY, Refused, label,
@@ -73,7 +78,7 @@ fn cut_range(c: &Compiler, work: &Project, range: RangeUs) -> Result<Edit, Refus
 fn keep_only(c: &Compiler, work: &Project, ranges: &[RangeUs]) -> Result<Edit, Refused> {
     let mut keep = Vec::new();
     for (k, &r) in ranges.iter().enumerate() {
-        let snapped = c.checked(
+        let snapped = c.checked_keep(
             "keepOnly",
             (
                 &format!("ranges[{k}].startSec"),
@@ -103,7 +108,19 @@ fn keep_only(c: &Compiler, work: &Project, ranges: &[RangeUs]) -> Result<Edit, R
 }
 
 fn remove_silences(c: &Compiler, work: &Project, min_pause_us: Us) -> Result<Edit, Refused> {
-    let pauses = timeline_pauses(work, &c.inputs.speech, min_pause_us, None);
+    let quiet = timeline_pauses(work, &c.inputs.speech, min_pause_us, None);
+    // A quiet stretch of a screen recording where the person clicks or types is a step being shown, not a pause.
+    let busy = clicks_and_typing(c, work);
+    let pauses: Vec<RangeUs> = (quiet.iter())
+        .filter(|r| !busy.iter().any(|b| b.start < r.end && r.start < b.end))
+        .copied()
+        .collect();
+    if pauses.is_empty() && !quiet.is_empty() {
+        return Err(to_person(format!(
+            "The pauses longer than {} s all have clicks or typing in them, so I kept them.",
+            secs(min_pause_us)
+        )));
+    }
     if pauses.is_empty() {
         return Err(to_person(format!(
             "There are no pauses longer than {} s to remove.",
@@ -121,6 +138,33 @@ fn remove_silences(c: &Compiler, work: &Project, min_pause_us: Us) -> Result<Edi
             ],
         ),
     })
+}
+
+/// Where the person clicks (a moment each) or types in the screen recordings on `work`'s main track, on the timeline,
+/// from each take's facts (`Inputs::cursor`, as `autoZoom` reads its clicks). None without recordings or facts.
+fn clicks_and_typing(c: &Compiler, work: &Project) -> Vec<RangeUs> {
+    let main = &work.timeline.main;
+    let recorded = (main.iter()).any(|clip| matches!(clip.source, ClipSource::Recording { .. }));
+    let Some(takes) = c.inputs.cursor.as_ref().filter(|_| recorded) else {
+        return Vec::new();
+    };
+    let take = |r: &Recording| takes.facts(r);
+    let facts = on_timeline_between(
+        work,
+        &clip_starts(main),
+        &take,
+        0,
+        main_track_duration(main),
+    );
+    let clicks = (facts.clicks.iter()).map(|k| RangeUs {
+        start: k.timeline_us,
+        end: k.timeline_us + 1,
+    });
+    let typing = (facts.typing.iter()).map(|t| RangeUs {
+        start: t.from_us,
+        end: t.to_us,
+    });
+    clicks.chain(typing).collect()
 }
 
 fn remove_fillers(c: &Compiler, work: &Project) -> Result<Edit, Refused> {
