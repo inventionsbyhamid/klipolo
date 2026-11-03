@@ -20,7 +20,7 @@ beforeEach(resetCaptions);
 const cards = () => within(screen.getByRole('radiogroup', { name: 'Caption style' })).getAllByRole('radio');
 
 describe('caption style cards', () => {
-  it('shows Off and the seven styles, each an existing builtin, in the design’s order with the shorts’ two last', () => {
+  it('shows Off and the seven styles, each an existing builtin, in their order with the shorts’ two last', () => {
     backend();
     renderWithProviders(<StyleCards />);
     expect(cards().map((c) => c.getAttribute('aria-label'))).toEqual([
