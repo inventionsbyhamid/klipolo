@@ -23,7 +23,8 @@
 //!   each other, frame everyone in it when they fit, else whoever said more there. Silence, or a voice nobody on
 //!   screen has, holds who is framed. A shot opens on its first speaker (else the last one, else its main subject). A
 //!   switch further than `CUT_AWAY` crop widths is a cut at the start of the speech; a nearer one eases. `Keep` can
-//!   name one person, everyone, or who when instead. Without anyone heard, or with everyone fitting, a shot is framed
+//!   name one person, everyone, or who when instead (a moment of a shot those ranges leave out, too short for anyone's
+//!   talk to count, goes with its neighbour). Without anyone heard, or with everyone fitting, a shot is framed
 //!   as above.
 
 use klipolo_cursor::smooth::step;
@@ -519,27 +520,45 @@ fn switch(targets: &mut Vec<(Us, Target)>, cur: &mut Option<Target>, at: Us, t: 
     }
 }
 
-/// `keep` over a shot: (from, to, who) in order, covering it.
+/// `keep` over a shot: (from, to, who) in order, covering it. A stretch no range covers that is shorter than
+/// `MIN_TALK_US` goes with the range after it (at the shot's end, the one before): chat's ranges are its timeline's
+/// tenths of a second, so a part's first or last moments can fall outside them, and a stretch too short for anyone's
+/// talk to count would open the shot on its main subject, held `MIN_HOLD_US` before the speaker takes the frame.
+/// Neighbours that keep alike are one stretch.
 fn spans(keep: &Keep, (start, end): (Us, Us)) -> Vec<(Us, Us, Who)> {
     let Keep::Ranges { ranges } = keep else {
         return vec![(start, end, keep.who_at(start))];
     };
-    let mut out = Vec::new();
+    let mut out: Vec<(Us, Us, Who)> = Vec::new();
     let mut at = start;
     for r in ranges
         .iter()
         .filter(|r| r.start_us < end && start < r.end_us)
     {
-        let (from, to) = (r.start_us.max(start), r.end_us.min(end));
+        let (mut from, to) = (r.start_us.max(start), r.end_us.min(end));
         if from > at {
-            out.push((at, from, Who::Speaker));
+            if from - at < MIN_TALK_US {
+                from = at;
+            } else {
+                out.push((at, from, Who::Speaker));
+            }
         }
         out.push((from, to, r.who));
         at = to;
     }
     if at < end {
-        out.push((at, end, Who::Speaker));
+        match out.last_mut() {
+            Some(last) if end - at < MIN_TALK_US => last.1 = end,
+            _ => out.push((at, end, Who::Speaker)),
+        }
     }
+    out.dedup_by(|later, earlier| {
+        let alike = earlier.2 == later.2 && earlier.1 == later.0;
+        if alike {
+            earlier.1 = later.1;
+        }
+        alike
+    });
     out
 }
 
