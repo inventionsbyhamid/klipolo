@@ -119,7 +119,8 @@ pub(crate) fn named(message: &[String], item: &LibraryItem) -> bool {
                 })
             })
     };
-    if says(&item.name) {
+    // A file of the person's by its name with or without its extension ("my logo", "logo.png").
+    if says(&item.name) || says(&crate::library::plain(&item.name)) {
         return true;
     }
     // A sticker by its name only: its tags ("like", "look", "new") are everyday words.
@@ -154,18 +155,60 @@ const GENERIC: [&str; 21] = [
     "dark",
 ];
 
-/// Whether `message` asks for a short: a short, a reel or a TikTok, never only short pauses or silences.
-fn asks_short(message: &[String]) -> bool {
+/// Whether `message` asks for a short: "make a short", "into a short", "a 60 second short", "short video", a reel, a
+/// TikTok or Shorts. Never "the short" (one already made: "is the short too long", "undo the short"), nor "short" said
+/// of something else ("a short title", "short pauses").
+pub(crate) fn asks_short(message: &[String]) -> bool {
+    // Words that make "short" say how long something else is.
+    const OF_SOMETHING: [&str; 30] = [
+        "title",
+        "titles",
+        "text",
+        "caption",
+        "captions",
+        "pause",
+        "pauses",
+        "silence",
+        "silences",
+        "gap",
+        "gaps",
+        "break",
+        "breaks",
+        "bit",
+        "while",
+        "time",
+        "sentence",
+        "intro",
+        "outro",
+        "delay",
+        "fade",
+        "transition",
+        "sound",
+        "music",
+        "song",
+        "line",
+        "phrase",
+        "word",
+        "words",
+        "moment",
+    ];
+    let duration = |w: &str| {
+        matches!(
+            w,
+            "second" | "seconds" | "sec" | "secs" | "s" | "minute" | "min"
+        ) || (!w.is_empty() && w.trim_end_matches('s').chars().all(|c| c.is_ascii_digit()))
+    };
     message.iter().enumerate().any(|(k, w)| {
+        let prev = k.checked_sub(1).map(|j| message[j].as_str());
         let next = message.get(k + 1).map(String::as_str);
         match w.as_str() {
-            "short" | "shorts" => !matches!(
-                next,
-                Some(
-                    "pause" | "pauses" | "silence" | "silences" | "gap" | "gaps" | "bit" | "while"
-                )
-            ),
             "reel" | "reels" | "tiktok" | "tiktoks" => true,
+            "shorts" => !matches!(prev, Some("my" | "his" | "her" | "their" | "in")),
+            "short" => {
+                matches!(next, Some("video" | "videos" | "form" | "version"))
+                    || (prev.is_some_and(|p| matches!(p, "a" | "an") || duration(p))
+                        && !next.is_some_and(|n| OF_SOMETHING.contains(&n)))
+            }
             _ => false,
         }
     })
@@ -280,8 +323,12 @@ pub(crate) struct Cues {
     /// Klipolo's own sound effects where the model asked for none of their kind (a rise under the hook, the whooshes
     /// where the speaker changes): each file and its snapshot times.
     pub own: Vec<Own>,
-    /// The short has sound effects: the person didn't ask for none.
+    /// The short has sound effects: this answer makes it, and the person didn't ask for none.
     pub sound_effects: bool,
+    /// This answer makes the short itself: it cuts, and makes a 9:16 version or the short's hook.
+    pub makes_short: bool,
+    /// The sticker calls that place a picture of the person's own: never told "Don't mention it".
+    pub own_pictures: Vec<usize>,
     /// By sticker call: the sound it comes in with instead of the pop, where the model's `animate` of it names a sound
     /// the person asked for.
     pub sticker_sounds: HashMap<usize, (String, Asset)>,
@@ -303,7 +350,11 @@ impl Cues {
                 }
             )
         });
-        if c.by_app || !(asks_short(&message) || (cuts && goes_vertical)) {
+        // An undo that stands takes back the change before this message: nothing of a short is made on top of it.
+        let first_change = calls.iter().position(super::is_edit);
+        let undo_stands = (calls.iter().position(|c| matches!(c, ToolCall::Undo)))
+            .is_some_and(|u| first_change.is_none_or(|e| u < e));
+        if c.by_app || undo_stands || !(asks_short(&message) || (cuts && goes_vertical)) {
             return None;
         }
         let duration = main_track_duration(&c.snapshot.timeline.main);
@@ -311,10 +362,39 @@ impl Cues {
             parts: kept_parts(0, duration, &c.cut),
             ..Cues::default()
         };
-        cues.hook = cues.hook_of(c, calls);
-        cues.stickers = cues.place_stickers(c, calls, &message);
+        let hook = cues.hook_of(c, calls);
+        // Klipolo's own sounds and the hook's hold only where this answer makes the short itself: it cuts, and makes a
+        // 9:16 version or the short's hook. A follow-up ("is the short too long?") adds none.
+        cues.makes_short = cuts && (goes_vertical || hook.is_some());
+        cues.hook = hook.filter(|_| cues.makes_short);
+        let (stickers, own_pictures) = cues.place_stickers(c, calls, &message);
+        cues.stickers = stickers;
+        cues.own_pictures = own_pictures;
         // A short's sound effects are Klipolo's unless the person wants none.
-        cues.sound_effects = !no_sounds(&message);
+        cues.sound_effects = cues.makes_short && !no_sounds(&message);
+        if !cues.makes_short {
+            // Klipolo's sounds aren't this answer's: a sticker's sound is what the model's animate of it gives.
+            for (a, call) in calls.iter().enumerate() {
+                let ToolCall::Animate {
+                    layer,
+                    sound: Some(name),
+                    ..
+                } = call
+                else {
+                    continue;
+                };
+                let Some(j) = c.own_layer_call(calls, layer, a) else {
+                    continue;
+                };
+                if matches!(cues.stickers.get(&j), Some(Sticker::At { .. }))
+                    && let Ok(item) = super::media::pick(c, "animate", name, &[MediaKind::Sound])
+                {
+                    cues.sticker_sounds
+                        .insert(j, (item.name.clone(), item.asset.clone()));
+                }
+            }
+            return Some(cues);
+        }
         if !cues.sound_effects {
             // None at all, but a sound the person named.
             for (i, call) in calls.iter().enumerate() {
@@ -440,8 +520,9 @@ impl Cues {
         c: &Compiler,
         calls: &[ToolCall],
         message: &[String],
-    ) -> HashMap<usize, Sticker> {
+    ) -> (HashMap<usize, Sticker>, Vec<usize>) {
         let mut out = HashMap::new();
+        let mut own_pictures = Vec::new();
         let says_where = places(message);
         // Each sticker moment: call, start, length, and whether the person named that sticker.
         let mut found: Vec<(usize, Us, Us, bool)> = Vec::new();
@@ -459,12 +540,16 @@ impl Cues {
                         continue;
                     };
                     let background = item.tags.iter().any(|t| t == "background");
-                    // The person's own picture is a sticker only in the recipe's form, with no place given.
+                    // The person's own picture is a sticker only in the recipe's form, with no place given, and
+                    // never one the message names ("my logo"): that goes where asked.
                     if background
                         || item.asset.kind != AssetKind::Image
-                        || (!item.pack && position.is_some())
+                        || (!item.pack && (position.is_some() || named(message, item)))
                     {
                         continue;
+                    }
+                    if !item.pack {
+                        own_pictures.push(i);
                     }
                     let at = At::of(at_us, at_words.as_deref());
                     ("addImage", at, *position, named(message, item))
@@ -542,7 +627,7 @@ impl Cues {
             side = side.other();
             kept.push(at);
         }
-        out
+        (out, own_pictures)
     }
 
     /// A rise under the hook (where there is one) and the whooshes where the speaker changes, when no `addSound` call
@@ -857,10 +942,15 @@ const NO_SPEAKER_CHANGE: &str = "Left out: a whoosh plays only at a cut where th
                                  none after the hook. Don't mention it.";
 const PAYOFF_DONE: &str = "done: on the payoff line.";
 
-/// What the model is told of a sticker call Klipolo placed or left out.
-pub(crate) fn told_of(sticker: &Sticker) -> String {
+/// What the model is told of a sticker call Klipolo placed or left out; one of the person's own pictures left out is
+/// one they may have asked for, so the model is never told to keep quiet about it.
+pub(crate) fn told_of(sticker: &Sticker, own: bool) -> String {
     match sticker {
         Sticker::At { .. } => STICKER_DONE.to_owned(),
+        Sticker::Left(why) if own => format!(
+            "{} Say so if the person asked for it.",
+            why.trim_end_matches(" Don't mention it.")
+        ),
         Sticker::Left(why) => (*why).to_owned(),
     }
 }

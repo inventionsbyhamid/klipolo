@@ -982,3 +982,258 @@ fn a_sticker_placed_before_the_follow_moves_beside_the_head_where_the_path_puts_
         assert!(b.x - head_right < 0.05, "far from the head: {b:?}");
     }
 }
+
+/// The short already applied: three parts of the talk (the man, the woman, the man), vertical only.
+fn applied_short() -> Project {
+    let mut p = project();
+    p.settings.formats = vec![FormatKind::Portrait];
+    p.settings.primary_format = FormatKind::Portrait;
+    let part = |id: &str, a: f64, b: f64| {
+        let mut clip = Clip::new(ClipSource::Asset { id: "panel".into() }, secs(a), secs(b));
+        clip.id = id.into();
+        clip
+    };
+    p.timeline.main = vec![
+        part("p1", 0.5, 14.8),
+        part("p2", 32.0, 46.8),
+        part("p3", 92.0, 106.8),
+    ];
+    p
+}
+
+/// What the answer adds, applied to `p`, or `p` when it adds nothing.
+fn added(p: &Project, out: &Compiled) -> Project {
+    match &out.additions {
+        Some(tx) => klipolo_model::apply_ops(p, &tx.ops).unwrap(),
+        None => p.clone(),
+    }
+}
+
+#[test]
+fn a_follow_up_message_about_an_applied_short_adds_no_sounds() {
+    // A question, a title change and an undo on the short made before: never a whoosh at its old cuts or a rise.
+    let p = applied_short();
+    for message in ["Is the short too long?", "make the short's title bigger"] {
+        let out = compile(&p, &inputs(&p, message), &[]);
+        assert_eq!(out.additions, None, "{message}");
+        assert!(out.told.is_empty(), "{message}");
+    }
+    let out = compile(
+        &p,
+        &inputs(&p, "undo the short"),
+        &[call("undo", json!({}))],
+    );
+    assert!(out.undo);
+    assert_eq!(out.additions, None);
+}
+
+#[test]
+fn a_short_title_is_no_shorts_hook() {
+    // "short" says how long the title is: it keeps the length asked for, with no rise or whoosh.
+    let p = applied_short();
+    let out = compile(
+        &p,
+        &inputs(&p, "add a short title at the start"),
+        &[call(
+            "addText",
+            json!({"text": "w1 w2", "preset": "title", "atSec": 0.0, "atWords": null, "durationSec": 5.0,
+                   "animation": "pop", "font": null}),
+        )],
+    );
+    assert_eq!(out.refusals, vec![], "{:#?}", out.refusals);
+    let after = added(&p, &out);
+    let words: Vec<&Item> = after
+        .timeline
+        .tracks
+        .iter()
+        .flat_map(|t| &t.items)
+        .collect();
+    assert_eq!(words.len(), 1, "{words:#?}");
+    assert_eq!(words[0].duration_us, secs(5.0));
+    assert!(out.told.is_empty());
+}
+
+#[test]
+fn a_short_is_asked_for_only_in_so_many_words() {
+    // A pack sticker with no place, on a vertical project: Klipolo times it as a short's (and tells the model) only where
+    // the message asks for a short.
+    let mut p = project();
+    p.settings.formats = vec![FormatKind::Portrait];
+    p.settings.primary_format = FormatKind::Portrait;
+    let heart = || {
+        call(
+            "addImage",
+            json!({"file": "Heart", "size": null, "position": null, "atSec": null, "atWords": w(40), "durationSec": null}),
+        )
+    };
+    for message in [
+        "Convert this long video into a 60 second short with nice animations",
+        "make a short of this",
+        "turn it into a short",
+        "a 30s short please",
+        "make a short video with stickers",
+        "cut a reel from this",
+        "make a TikTok",
+        "for YouTube Shorts",
+    ] {
+        let out = compile(&p, &inputs(&p, message), &[heart()]);
+        assert!(!out.told.is_empty(), "{message}: no short");
+    }
+    for message in [
+        "Is the short too long?",
+        "make the short's title bigger",
+        "undo the short",
+        "add a short title at the start",
+        "remove the short pauses",
+        "keep it short",
+    ] {
+        let out = compile(&p, &inputs(&p, message), &[heart()]);
+        assert!(out.told.is_empty(), "{message}: a short");
+    }
+}
+
+#[test]
+fn every_common_way_of_asking_for_no_sound_effects_gets_none() {
+    let mut calls = base();
+    calls.extend(sticker("Rocket", 10));
+    calls.push(sound("Chime", 130));
+    let p = project();
+    for message in [
+        "Make a 60 second short without any sound effects",
+        "Make a 60 second short, don't add sound effects",
+        "Make a 60 second short, no sounds",
+        "Make a 60 second short, no whooshes",
+        "Make a 60 second short, no sound effects",
+        "Make a 60 second short and keep it quiet",
+        "Make a 60 second short without SFX",
+        "Make a 60 second short, don't add any SFX",
+        "Make a 60 second short, skip the sound effects",
+    ] {
+        let out = compile(&p, &inputs(&p, message), &calls);
+        let (_, sounds) = layers(&short(&out));
+        assert!(sounds.is_empty(), "{message}: {sounds:?}");
+    }
+    // Asked for, they play.
+    let out = compile(
+        &p,
+        &inputs(
+            &p,
+            "Make a 60 second short with nice animations, sound effects and text animations",
+        ),
+        &calls,
+    );
+    let (_, sounds) = layers(&short(&out));
+    assert!(!sounds.is_empty());
+}
+
+/// `inputs` with the person's own pictures `logo.png` and `holiday.jpg` in the library.
+fn with_own_pictures(p: &Project, message: &str) -> Inputs {
+    let mut i = inputs(p, message);
+    for (id, name) in [("logo", "logo.png"), ("holiday", "holiday.jpg")] {
+        i.library.items.insert(
+            0,
+            LibraryItem {
+                name: name.into(),
+                kind: MediaKind::Image,
+                asset: asset(id, "image", name, 5.0, (512, 512)),
+                pack: false,
+                tags: Vec::new(),
+            },
+        );
+    }
+    i
+}
+
+#[test]
+fn the_persons_own_picture_named_in_a_short_goes_where_asked_and_is_never_kept_quiet() {
+    let p = project();
+    let own = |file: &str, word: usize| {
+        call(
+            "addImage",
+            json!({"file": file, "size": null, "position": null, "atSec": null, "atWords": w(word), "durationSec": null}),
+        )
+    };
+    // "my logo": named, so not a sticker Klipolo times: placed as the call asks, never left out.
+    let mut calls = base();
+    calls.push(own("logo.png", 4));
+    let out = compile(
+        &p,
+        &with_own_pictures(&p, "Make a 60 second short and put my logo at the start"),
+        &calls,
+    );
+    assert!(!out.told.iter().any(|(i, _)| *i == 5), "{:?}", out.told);
+    let (pictures, _) = layers(&short(&out));
+    assert_eq!(pictures.len(), 1, "{pictures:?}");
+    // A picture of theirs the message doesn't name, under the hook: left out, and the model may say so.
+    let mut calls = base();
+    calls.push(own("holiday.jpg", 4));
+    let out = compile(&p, &with_own_pictures(&p, MESSAGE), &calls);
+    let told: HashMap<usize, &str> = (out.told.iter()).map(|(i, s)| (*i, s.as_str())).collect();
+    assert!(told[&5].starts_with("Left out"), "{told:?}");
+    assert!(!told[&5].contains("Don't mention it"), "{told:?}");
+}
+
+#[test]
+fn a_sticker_in_a_wide_or_square_project_reads_at_a_share_of_its_width() {
+    for format in [FormatKind::Landscape, FormatKind::Square] {
+        let mut p = project();
+        p.settings.formats = vec![format];
+        p.settings.primary_format = format;
+        let calls = vec![call(
+            "addImage",
+            json!({"file": "Heart", "size": null, "position": null, "atSec": null, "atWords": w(10), "durationSec": null}),
+        )];
+        let out = compile(&p, &inputs(&p, "add a heart on w10"), &calls);
+        let after = added(&p, &out);
+        let (pictures, _) = layers(&after);
+        let b = pictures[0].3.layout.rect;
+        assert!((0.12..=0.15).contains(&b.w), "{format:?}: {b:?}");
+        assert!(
+            b.y > 0.0 && b.x > 0.0 && b.x + b.w < 1.0,
+            "{format:?}: {b:?}"
+        );
+        assert!(
+            b.x + b.w <= 0.2 + 1e-9 || b.x >= 0.8 - 1e-9,
+            "{format:?} in the middle: {b:?}"
+        );
+    }
+}
+
+#[test]
+fn a_whoosh_trusts_voice_labels_only_within_one_transcription_part() {
+    // Labels from different transcription parts can't be compared: at the first cut ("A@0" then "B@1") the scene log
+    // decides (the man, then the woman: a change), and at the second ("B@1" then "A@2", the woman both times by the
+    // scene log) there is none. The last cut is within one part: "A@2" then "C@2" is a change.
+    let p = project();
+    let mut i = inputs(&p, MESSAGE);
+    let turn = |start: f64, end: f64, who: &str| klipolo_chat::SpeakerTurn {
+        start_us: secs(start),
+        end_us: secs(end),
+        speaker: Some(who.into()),
+    };
+    i.turns.insert(
+        "panel".into(),
+        vec![
+            turn(0.0, 20.0, "A@0"),
+            turn(20.0, 61.0, "B@1"),
+            turn(61.0, 91.0, "A@2"),
+            turn(91.0, 120.0, "C@2"),
+        ],
+    );
+    let mut calls = base();
+    calls.push(sound("Chime", 130));
+    let out = compile(&p, &i, &calls);
+    let after = short(&out);
+    let (_, sounds) = layers(&after);
+    let whooshes: Vec<f64> = (sounds.iter())
+        .filter(|(n, _)| n == "Whoosh")
+        .map(|(_, t)| *t)
+        .collect();
+    let cuts = cuts(&after);
+    // To the woman, and back to the man; none where she goes on.
+    assert_eq!(whooshes.len(), 2, "{sounds:?} {cuts:?}");
+    assert!(
+        near(whooshes[0], cuts[1]) && near(whooshes[1], cuts[3]),
+        "{sounds:?} {cuts:?}"
+    );
+}

@@ -1044,9 +1044,7 @@ impl Compiler<'_> {
                         .and_then(|j| self.cues.as_ref()?.sticker_sounds.get(&j));
                     let said = match (sticker, asked_sound) {
                         (cues::Sticker::At { .. }, Some((name, _))) => {
-                            format!(
-                                "done: Klipolo pops it in with {name}, as the person asked, and fades it out."
-                            )
+                            format!("done: Klipolo pops it in with {name} and fades it out.")
                         }
                         (cues::Sticker::At { .. }, None) => cues::ANIMATED_ALREADY.to_owned(),
                         (cues::Sticker::Left(_), _) => cues::LEFT_WITH_STICKER.to_owned(),
@@ -1101,7 +1099,8 @@ impl Compiler<'_> {
                     if cued.is_some_and(|q| q.stickers.contains_key(&i)) =>
                 {
                     let sticker = &cued.expect("cued").stickers[&i];
-                    told.push((i, cues::told_of(sticker)));
+                    let own = cued.is_some_and(|q| q.own_pictures.contains(&i));
+                    told.push((i, cues::told_of(sticker, own)));
                     let edit = media::cued_sticker(self, &adding.work, (i, file), sticker);
                     if let (Ok(edit), cues::Sticker::At { prefer, .. }) = (&edit, sticker) {
                         beside.extend(media::picture_id(edit).map(|id| {
@@ -1245,7 +1244,7 @@ impl Compiler<'_> {
             let times = (At::of(at_us, at_words.as_deref()), *duration_us);
             // A short's drawn sticker: Klipolo's time and place, or left out.
             if let Some(sticker) = self.cues.as_ref().and_then(|q| q.stickers.get(&i)) {
-                told.push((i, cues::told_of(sticker)));
+                told.push((i, cues::told_of(sticker, false)));
                 match media::cued_make_sticker(self, &with_additions, prompt, sticker) {
                     Ok(Some(job)) => jobs.push((i, job)),
                     Ok(None) => adding.unchanged.push(i),

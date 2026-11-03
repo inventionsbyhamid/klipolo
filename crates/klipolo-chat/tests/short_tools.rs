@@ -770,8 +770,8 @@ fn a_kinetic_hook_over_a_face_in_9x16_rises_on_two_big_lines_under_the_face() {
         );
         assert_eq!(params.get("by"), Some(&ParamValue::Text("letter".into())));
         assert_eq!(params.get("size"), Some(&ParamValue::Number(130.0)));
-        // A short's hook shows at most 2.5 s.
-        assert_eq!((layer.start_us, layer.duration_us), (secs(0.5), secs(2.5)));
+        // No cut in this answer: the words keep their length (a short's hook made with its cut holds 2.5 s at most).
+        assert_eq!((layer.start_us, layer.duration_us), (secs(0.5), secs(3.0)));
         let b = portrait_box(layer, after.settings.primary_format);
         assert_eq!(b, klipolo_chat::compile::UNDER_FACE);
         assert!(off_the_face(b), "{b:?}");

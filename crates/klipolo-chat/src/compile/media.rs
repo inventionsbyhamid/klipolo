@@ -1086,10 +1086,19 @@ pub(super) fn picture_id(edit: &Edit) -> Option<Id> {
 /// One of a short's own sound effects (`cues::Own`: a rise under the hook, the whooshes where the speaker changes) as
 /// its own change, labelled as `addSound`'s; None when none of its moments fits.
 pub(super) fn own_sound(c: &Compiler, work: &Project, own: &cues::Own) -> Option<Edit> {
+    // One the project has there already, from this message or an earlier one, isn't added again.
+    let there = |now: Us| {
+        (work.timeline.tracks.iter())
+            .flat_map(|t| &t.items)
+            .any(|item| {
+                matches!(&item.content, ItemContent::Audio { asset_id, .. } if *asset_id == own.asset.id)
+                    && item.start_us.abs_diff(now) <= TOLERANCE_US.unsigned_abs()
+            })
+    };
     let starts: Vec<Us> = (own.at.iter())
         .filter_map(|&t| c.map.time(work, t))
         .filter(|&now| video_duration(&work.timeline).saturating_sub(now) >= MIN_DURATION_US)
-        .filter(|&now| !sound_near(c, work, &own.asset.id, now))
+        .filter(|&now| !there(now))
         .collect();
     if starts.is_empty() {
         return None;
