@@ -332,7 +332,8 @@ fn speaker_at(
 /// allows. Where nothing says where the speaker is, the face may be anywhere in `FACE_ZONE` across: the sticker is a
 /// little smaller and sits out at the frame's edge, clear of the zone. Sizes are shares of the frame's height, so it
 /// stands as tall beside the head in every format; the hook and the captions sit lower (from 0.465 in 9:16). Other
-/// formats take the primary format's side. The boxes by format, and the side chosen in the primary format.
+/// formats take the primary format's side where their two sides have about the same room. The boxes by format, and the
+/// side chosen in the primary format.
 pub(super) fn beside_speaker(
     p: &Project,
     at_us: Us,
@@ -373,14 +374,15 @@ pub(super) fn beside_speaker(
             ),
         };
         let (room_l, room_r) = (head.0 - gap - edge, 1.0 - edge - gap - head.1);
-        let side = if format != primary {
-            chosen
-        } else if (room_l - room_r).abs() > 0.02 {
+        // The side with more room; where both have about the same, the primary format's side in the others.
+        let side = if (room_l - room_r).abs() > 0.02 {
             if room_l > room_r {
                 Side::Left
             } else {
                 Side::Right
             }
+        } else if format != primary {
+            chosen
         } else {
             match speaker.and_then(|(_, sx)| sx) {
                 Some(sx) if sx < 0.5 => Side::Left,
