@@ -56,6 +56,7 @@ mod bubble;
 mod cameras;
 mod clear;
 mod clips;
+mod cues;
 mod effects;
 mod layer;
 mod map;
@@ -255,6 +256,9 @@ pub struct Compiled {
     /// is fitted (`media::music::with_music_refit`): what the edits do to the music, not the edits themselves. Another
     /// app's batch is judged and committed without them, its host fitting the music as it does for the person.
     pub music_refit: usize,
+    /// What the model is told of a call instead of that it is done, by call index: what Klipolo did with a short's
+    /// stickers and sound effects (`cues`), placed and timed by what the short shows, or left out.
+    pub told: Vec<(usize, String)>,
 }
 
 /// Removals for the person to approve.
@@ -319,6 +323,16 @@ pub struct MakeSticker {
     pub motion: Option<Box<Motion>>,
     /// Plays where its animation starts: as it comes in, or as it goes out when its motion has only an exit.
     pub sound: Option<Box<Asset>>,
+    /// A short's sticker: placed beside the speaker (`clear::beside_speaker`) rather than at `position`.
+    pub beside: Option<Beside>,
+}
+
+/// How a short's drawn sticker is placed beside the speaker once it comes: whether the answer followed the speaker
+/// (the follow keeps them in the middle of a cropped format), and the side it takes when both have the same room.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Beside {
+    pub follows: bool,
+    pub right: bool,
 }
 
 /// A call that compiled to nothing, and why, in one plain sentence on one line.
@@ -599,6 +613,8 @@ struct Compiler<'a> {
     portrait: bool,
     /// A call of the answer follows someone (`followSubject`): its footage shows people.
     follows: bool,
+    /// A short's stickers and sound effects, as Klipolo places them (`cues`); None when the answer plans no short.
+    cues: Option<cues::Cues>,
 }
 
 impl<'a> Compiler<'a> {
@@ -633,8 +649,10 @@ impl<'a> Compiler<'a> {
                     )
                 }),
             follows: (calls.iter()).any(|call| matches!(call, ToolCall::FollowSubject { .. })),
+            cues: None,
         };
         c.cut = c.cut_by(calls);
+        c.cues = cues::Cues::plan(&c, calls);
         c
     }
 
@@ -699,6 +717,8 @@ impl Compiler<'_> {
         let mut pictures = 0;
         // Klipolo's notes on what the additions did, by call index (`Compiled::notes`).
         let mut notes: Vec<(usize, String)> = Vec::new();
+        // What the model is told of a short's stickers and sounds (`Compiled::told`).
+        let mut told: Vec<(usize, String)> = Vec::new();
         for (i, call) in calls.iter().enumerate() {
             // A recording tool's notes, said once its edit is kept.
             let mut recorded: Vec<String> = Vec::new();
@@ -976,6 +996,12 @@ impl Compiler<'_> {
                 sound,
             } = call
             {
+                // A short's sticker comes in and goes out as Klipolo times it, with its sound.
+                if self.cued_sticker(calls, layer, i) {
+                    adding.unchanged.push(i);
+                    told.push((i, cues::ANIMATED_ALREADY.to_owned()));
+                    continue;
+                }
                 let change = animate::Change {
                     enter: *enter,
                     exit: *exit,
@@ -1009,6 +1035,7 @@ impl Compiler<'_> {
                 }
                 continue;
             }
+            let cued = self.cues.as_ref();
             let tried = match call {
                 ToolCall::MakeTitleCard {
                     title,
@@ -1017,7 +1044,33 @@ impl Compiler<'_> {
                     ..
                 } => media::make_title_card(self, &adding.work, title, (*at_us, *duration_us))
                     .map(|(edit, title_id)| (edit, Some(title_id))),
-                _ => self.addition(&adding.work, call).map(|edit| (edit, None)),
+                // A short's sticker, placed and timed by Klipolo, or left out.
+                ToolCall::AddImage { file, .. }
+                    if cued.is_some_and(|q| q.stickers.contains_key(&i)) =>
+                {
+                    let sticker = &cued.expect("cued").stickers[&i];
+                    told.push((i, cues::told_of(sticker)));
+                    media::cued_sticker(self, &adding.work, file, sticker).map(|edit| (edit, None))
+                }
+                // A short's sound effect, at what is seen there, or left out.
+                ToolCall::AddSound { name, .. }
+                    if cued.is_some_and(|q| q.sounds.contains_key(&i)) =>
+                {
+                    let cue = &cued.expect("cued").sounds[&i];
+                    told.push((i, cue.told.clone()));
+                    media::cued_sound(self, &adding.work, name, &cue.at).map(|edit| (edit, None))
+                }
+                _ => self.addition(&adding.work, call).map(|edit| {
+                    // The short's hook in its 9:16 band: the captions under it wait until it fades.
+                    let hook = cued.and_then(|q| q.hook).filter(|(h, _)| *h == i);
+                    match hook {
+                        Some(_) => {
+                            let edit = media::captions_after_hook(self, &adding.work, edit);
+                            (media::with_own_sounds(self, &adding.work, edit), None)
+                        }
+                        None => (edit, None),
+                    }
+                }),
             }
             .and_then(|(edit, title_id)| {
                 let tried = (adding.try_edit(edit))
@@ -1077,6 +1130,16 @@ impl Compiler<'_> {
                 continue;
             };
             let times = (At::of(at_us, at_words.as_deref()), *duration_us);
+            // A short's drawn sticker: Klipolo's time and place, or left out.
+            if let Some(sticker) = self.cues.as_ref().and_then(|q| q.stickers.get(&i)) {
+                told.push((i, cues::told_of(sticker)));
+                match media::cued_make_sticker(self, &with_additions, prompt, sticker) {
+                    Ok(Some(job)) => jobs.push((i, job)),
+                    Ok(None) => adding.unchanged.push(i),
+                    Err(r) => refuse(&mut out, i, r),
+                }
+                continue;
+            }
             match media::make_sticker(self, &with_additions, prompt, *position, times) {
                 Ok(mut job) => {
                     if let (Job::MakeSticker(sticker), Some(a)) = (&mut job, animated.remove(&i)) {
@@ -1169,7 +1232,31 @@ impl Compiler<'_> {
         }
         out.waits = waits.into_iter().map(|(_, said)| said).collect();
         out.refusals.sort_by_key(|r| r.call_index);
+        told.retain(|(i, _)| !out.refusals.iter().any(|r| r.call_index == *i));
+        told.sort_by_key(|(i, _)| *i);
+        out.told = told;
         out
+    }
+
+    /// Whether `animate` call `i` of `layer` names a sticker call of a short, which Klipolo animates (`cues`): `last`
+    /// after one.
+    fn cued_sticker(&self, calls: &[ToolCall], layer: &LayerRef, i: usize) -> bool {
+        let (Some(cues), LayerRef::Last) = (&self.cues, layer) else {
+            return false;
+        };
+        let adds = |c: &ToolCall| {
+            matches!(
+                c,
+                ToolCall::AddText { .. }
+                    | ToolCall::AddImage { .. }
+                    | ToolCall::MakeTitleCard { .. }
+                    | ToolCall::MakeSticker { .. }
+            )
+        };
+        (0..i)
+            .rev()
+            .find(|&j| calls.get(j).is_some_and(adds))
+            .is_some_and(|j| cues.stickers.contains_key(&j))
     }
 
     /// The layer call `i` (of `tool`, which would `verb` it) names: by its ref from the context, or the one the last call

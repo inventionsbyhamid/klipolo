@@ -1309,9 +1309,14 @@ fn a_short_is_a_look_then_one_batch_then_words() {
             "chat.setCaptions",
             "chat.addText",
             "chat.addImage",
-            "chat.animate",
             "chat.addMusic"
         ]
+    );
+    // The sticker pops in as Klipolo times a short's stickers: the model's animate of it changes nothing more.
+    assert!(
+        out.compiled.unchanged.contains(&7),
+        "{:?}",
+        out.compiled.unchanged
     );
     assert!(out.compiled.proposal.is_some(), "the cut is proposed");
     assert_eq!(out.compiled.jobs.len(), 1, "the follow");
@@ -1845,9 +1850,11 @@ fn a_message_that_runs_out_of_steps_says_what_its_edits_did() {
     assert_eq!(model.seen().len(), MAX_STEPS);
     assert_eq!(out.compiled.refusals, vec![], "{:?}", out.compiled.refusals);
     assert!(!out.reply.contains("Now I'm adding"), "{}", out.reply);
+    // An 8 s short shows one sticker (one per 12 s at most, never under the hook), with its pop; the model's own pop on a
+    // word is left out.
     assert!(
         out.reply.starts_with(
-            "I made it vertical and added captions, a title, 2 stickers, 2 sounds and music. Approve the cut to keep \
+            "I made it vertical and added captions, a title, a sticker, a sound and music. Approve the cut to keep \
              the "
         ),
         "{}",

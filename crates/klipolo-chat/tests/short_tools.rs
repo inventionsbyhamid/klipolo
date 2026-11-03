@@ -680,10 +680,11 @@ fn a_short_planned_in_one_answer_applies_its_look_and_proposes_its_cut() {
             "chat.setCaptions",
             "chat.addText",
             "chat.addImage",
-            "chat.animate",
             "chat.addMusic"
         ]
     );
+    // The sticker comes in as Klipolo times a short's stickers, with its pop: the model's animate adds nothing more.
+    assert!(out.unchanged.contains(&6), "{:?}", out.unchanged);
     assert_eq!(out.proposed_calls, vec![1]);
     let proposal = out.proposal.as_ref().expect("the cut is proposed");
     // Applied, the short is the two parts kept (each snapped to the words it stands on), its layers on them.

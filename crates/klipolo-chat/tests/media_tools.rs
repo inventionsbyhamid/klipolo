@@ -1330,6 +1330,7 @@ fn make_sticker_becomes_a_job_not_an_op() {
             anchor: Some(talk_at(12.0)),
             motion: None,
             sound: None,
+            beside: None,
         })]
     );
     // The prompt names the picture in the library too: no dashes.

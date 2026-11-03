@@ -57,14 +57,21 @@ use klipolo_model::timeline::{ItemContent, Outline};
 use klipolo_model::validate::MAX_TEXT;
 use klipolo_model::{Project, apply_ops};
 
+use super::clear::Side;
 use super::{
-    Compiler, Edit, Job, MakeSticker, Refused, animate, clear, label, quote, to_model, unfounded,
+    Beside, Compiler, Edit, Job, MakeSticker, Refused, animate, clear, cues, label, quote,
+    to_model, unfounded,
 };
 use crate::context::{secs, within_video};
 use crate::evidence::{TOLERANCE_US, in_cut};
 use crate::library::{Found, LibraryItem, MediaKind, is_generic};
 use crate::sanitize;
-use crate::tools::{Entrance, PictureSize, Position, TextPreset, ToolCall};
+use crate::tools::{Entrance, Exit, PictureSize, Position, TextPreset, ToolCall};
+use klipolo_model::captions::looks::Look;
+use klipolo_model::media::image::Spot;
+use klipolo_model::query::clip_at;
+use klipolo_model::time::RangeUs;
+use klipolo_model::timeline::ClipSource;
 
 /// The most names a refusal lists, then how many more there are: as many as Library shows of a kind.
 const LISTED: usize = crate::context::LIBRARY_NAMES;
@@ -796,8 +803,22 @@ pub fn sticker_placement(p: &Project, job: &MakeSticker) -> Option<(Us, Us)> {
 pub fn sticker_ops(p: &Project, job: &MakeSticker, asset: &Asset) -> Option<Vec<Op>> {
     let (start, duration) = sticker_placement(p, job)?;
     let mut ops = add_image_ops_at(p, asset, start, job.size.share(), job.position.spot()).ok()?;
-    let placed = (job.size.share(), job.position.spot());
-    clear::clear_of_person(p, &mut ops, asset, placed, start);
+    match job.beside {
+        // A short's: beside the speaker, on the project as it is now (its follow's path, once it has one).
+        Some(beside) => {
+            let prefer = if beside.right {
+                Side::Right
+            } else {
+                Side::Left
+            };
+            let (boxes, _) = clear::beside_speaker(p, start, asset, beside.follows, prefer);
+            clear::place_beside(p, &mut ops, &boxes);
+        }
+        None => {
+            let placed = (job.size.share(), job.position.spot());
+            clear::clear_of_person(p, &mut ops, asset, placed, start);
+        }
+    }
     if let Some(m) = &job.motion {
         for op in &mut ops {
             if let Op::AddItem { item, .. } = op {
@@ -859,7 +880,267 @@ pub(super) fn make_sticker(
         anchor: anchor_at(&with_additions.timeline.main, start),
         motion: None,
         sound: None,
+        beside: None,
     }))
+}
+
+/// A short's drawn sticker (`cues::Sticker::At`): its job at Klipolo's time, from `start` on the snapshot's timeline
+/// for its `duration`, popping in and fading out with the short's pop, placed beside the speaker once it comes
+/// (`MakeSticker::beside`). None for one left out.
+pub(super) fn cued_make_sticker(
+    c: &Compiler,
+    with_additions: &Project,
+    prompt: &str,
+    sticker: &cues::Sticker,
+) -> Result<Option<Job>, Refused> {
+    let cues::Sticker::At {
+        start,
+        duration,
+        prefer,
+    } = *sticker
+    else {
+        return Ok(None);
+    };
+    let at = (c.map.time(with_additions, start)).ok_or_else(|| {
+        to_model(
+            "makeSticker: its words were taken out by an earlier change in this answer.".to_owned(),
+        )
+    })?;
+    Ok(Some(Job::MakeSticker(MakeSticker {
+        prompt: sanitize::reply(prompt),
+        at_us: at,
+        duration_us: length(with_additions, at, Some(duration), IMAGE_US),
+        position: Position::TopRight,
+        size: PictureSize::Medium,
+        anchor: anchor_at(&with_additions.timeline.main, at),
+        motion: popping(duration).map(Box::new),
+        sound: (c.cues.as_ref()).and_then(|q| q.pop.clone()).map(Box::new),
+        beside: Some(Beside {
+            follows: c.follows,
+            right: prefer == Side::Right,
+        }),
+    })))
+}
+
+/// A short's sticker's motion for a layer `len_us` long: in with a pop, out with a fade.
+fn popping(len_us: Us) -> Option<Motion> {
+    let change = animate::Change {
+        enter: Some(Entrance::Pop),
+        exit: Some(Exit::Fade),
+        emphasis: None,
+    };
+    animate::animated(None, &change, len_us, None)
+}
+
+/// A short's sticker `file` (`cues::Sticker`): shown from `start` on the snapshot's timeline for its `duration`, beside
+/// the speaker (`clear::beside_speaker`), popping in and fading out, with the short's pop as it comes in. One left out
+/// adds nothing.
+pub(super) fn cued_sticker(
+    c: &Compiler,
+    work: &Project,
+    file: &str,
+    sticker: &cues::Sticker,
+) -> Result<Edit, Refused> {
+    let item = pick(c, "addImage", file, &[MediaKind::Image])?;
+    let label = label(
+        "addImage",
+        vec![("file", ErrorParam::from(item.name.as_str()))],
+    );
+    let cues::Sticker::At {
+        start,
+        duration,
+        prefer,
+    } = *sticker
+    else {
+        return Ok(Edit {
+            ops: Vec::new(),
+            label,
+        });
+    };
+    let at = (c.map.time(work, start)).ok_or_else(|| {
+        to_model(
+            "addImage: its words were taken out by an earlier change in this answer.".to_owned(),
+        )
+    })?;
+    let mut ops = add_image_ops_at(
+        work,
+        &item.asset,
+        at,
+        PictureSize::Medium.share(),
+        Spot::TopRight,
+    )
+    .map_err(|e| to_model(format!("addImage: {e}")))?;
+    let (boxes, _) = clear::beside_speaker(work, at, &item.asset, c.follows, prefer);
+    clear::place_beside(work, &mut ops, &boxes);
+    for op in &mut ops {
+        if let Op::AddItem { item, .. } = op {
+            item.layout.motion = popping(duration);
+        }
+    }
+    let duration = length(work, at, Some(duration), IMAGE_US);
+    let mut ops = lasting(ops, duration);
+    if let Some(pop) = c.cues.as_ref().and_then(|q| q.pop.as_ref()) {
+        let with = apply_ops(work, &ops).map_err(|e| to_model(format!("addImage: {e}")))?;
+        if !sound_near(c, &with, &pop.id, at) {
+            ops.extend(
+                add_sound_ops(&with, pop, at).map_err(|e| to_model(format!("addImage: {e}")))?,
+            );
+        }
+    }
+    Ok(Edit { ops, label })
+}
+
+/// A short's sound effect `name` at Klipolo's moments (`cues::Cue`, on the snapshot's timeline), as `addSound` places
+/// one; none (left out) adds nothing.
+pub(super) fn cued_sound(
+    c: &Compiler,
+    work: &Project,
+    name: &str,
+    at: &[Us],
+) -> Result<Edit, Refused> {
+    let item = pick(c, "addSound", name, &[MediaKind::Sound])?;
+    let mut starts: Vec<Us> = Vec::new();
+    for &t in at {
+        let Some(now) = c.map.time(work, t) else {
+            continue;
+        };
+        if video_duration(&work.timeline).saturating_sub(now) >= MIN_DURATION_US
+            && !starts.contains(&now)
+            && !sound_near(c, work, &item.asset.id, now)
+        {
+            starts.push(now);
+        }
+    }
+    let ops = sounds_at(work, &item.asset, &starts)?;
+    Ok(Edit {
+        ops,
+        label: label(
+            "addSound",
+            vec![
+                ("name", ErrorParam::from(item.name.as_str())),
+                ("count", ErrorParam::from(starts.len())),
+            ],
+        ),
+    })
+}
+
+/// The short's hook `edit` with Klipolo's own sound effects (`cues::Cues::own`: a rise under it, the whooshes where the
+/// speaker changes) played with it. One that no longer fits is left out.
+pub(super) fn with_own_sounds(c: &Compiler, work: &Project, mut edit: Edit) -> Edit {
+    let Some(cues) = c.cues.as_ref() else {
+        return edit;
+    };
+    for (asset, at) in &cues.own {
+        let starts: Vec<Us> = (at.iter())
+            .filter_map(|&t| c.map.time(work, t))
+            .filter(|&now| video_duration(&work.timeline).saturating_sub(now) >= MIN_DURATION_US)
+            .collect();
+        // Each its own file, so each adds its file to the project itself.
+        if let Ok(ops) = sounds_at(work, asset, &starts) {
+            edit.ops.extend(ops);
+        }
+    }
+    edit
+}
+
+/// The ops that play `asset` at each of `starts` of `work`: the file once (when the project hasn't got it), then a
+/// sound at each moment as the library's + puts one (`add_sound_ops`).
+fn sounds_at(work: &Project, asset: &Asset, starts: &[Us]) -> Result<Vec<Op>, Refused> {
+    let mut ops = Vec::with_capacity(starts.len() + 1);
+    if starts.is_empty() {
+        return Ok(ops);
+    }
+    let with_file = if work.asset(&asset.id).is_none() {
+        let add = Op::AddAssets {
+            assets: vec![asset.clone()],
+        };
+        let with_file = apply_ops(work, std::slice::from_ref(&add))
+            .map_err(|e| to_model(format!("addSound: {e}")))?;
+        ops.push(add);
+        Cow::Owned(with_file)
+    } else {
+        Cow::Borrowed(work)
+    };
+    for &at in starts {
+        let sound =
+            add_sound_ops(&with_file, asset, at).map_err(|e| to_model(format!("addSound: {e}")))?;
+        ops.extend(sound);
+    }
+    Ok(ops)
+}
+
+/// The short's hook `edit` with the captions' words under it hidden until it starts to fade, where it sits in its
+/// 9:16 band (`clear::UNDER_FACE`, just above the captions): the words said while it shows, across the short's cuts,
+/// in each file's own time (a caption look, so they follow the words). A file whose words there have a look already
+/// keeps its captions, as does a hook placed anywhere else.
+pub(super) fn captions_after_hook(c: &Compiler, work: &Project, mut edit: Edit) -> Edit {
+    let (Some(cues), Some(hook)) = (
+        c.cues.as_ref(),
+        (edit.ops.iter()).find_map(|op| match op {
+            Op::AddItem { item, .. } => Some(item.clone()),
+            _ => None,
+        }),
+    ) else {
+        return edit;
+    };
+    let Some((_, span)) = cues.hook else {
+        return edit;
+    };
+    if !clear::under_face(work, &hook) {
+        return edit;
+    }
+    let fade = (hook.layout.motion.as_ref())
+        .and_then(|m| m.exit.as_ref())
+        .map_or(0, |e| e.duration_us);
+    let shown = hook.duration_us.saturating_sub(fade);
+    let main = &c.snapshot.timeline.main;
+    let mut hidden: BTreeMap<String, (Us, Us)> = BTreeMap::new();
+    for part in cues.played_from(span.start, shown) {
+        let mut t = part.start;
+        while t < part.end {
+            let Some((i, start)) = clip_at(main, t) else {
+                break;
+            };
+            let clip = &main[i];
+            let end = part.end.min(start + clip.duration_us());
+            if let ClipSource::Asset { id } = &clip.source
+                && let Some(words) = c.inputs.speech.transcripts.get(id)
+            {
+                let source = |at: Us| clip.source_in_us + ((at - start) as f64 * clip.speed) as Us;
+                let (a, b) = (source(t), source(end));
+                for w in (words.words.iter()).filter(|w| w.kind != WordKind::Pause) {
+                    if w.start_us >= a && w.start_us < b {
+                        let range = hidden.entry(id.clone()).or_insert((w.start_us, w.end_us));
+                        range.0 = range.0.min(w.start_us);
+                        range.1 = range.1.max(w.end_us);
+                    }
+                }
+            }
+            if end <= t {
+                break;
+            }
+            t = end;
+        }
+    }
+    for (asset_id, (start_us, end_us)) in hidden {
+        let looked = (work.word_looks.iter())
+            .any(|l| l.asset_id == asset_id && l.start_us < end_us && start_us < l.end_us);
+        if looked {
+            continue;
+        }
+        edit.ops.push(Op::SetWordLook {
+            asset_id,
+            ranges: vec![RangeUs {
+                start: start_us,
+                end: end_us,
+            }],
+            look: Look {
+                hidden: Some(true),
+                ..Look::default()
+            },
+        });
+    }
+    edit
 }
 
 /// `makeTitleCard`'s title, an addition on the additions' working copy, and its layer's id for the background's job.
