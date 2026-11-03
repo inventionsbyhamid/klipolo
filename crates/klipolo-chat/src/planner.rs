@@ -574,7 +574,10 @@ impl Read {
                         Some(r) if r.audience == Audience::Model => Outcome::Back(r.reason.clone()),
                         Some(_) => Outcome::Told,
                         None if compiled.proposed_calls.contains(&i) => Outcome::Proposed,
-                        None => Outcome::Done,
+                        // What Klipolo did with a short's sticker or sound, instead of "done".
+                        None => (compiled.told.iter())
+                            .find(|(k, _)| *k == i)
+                            .map_or(Outcome::Done, |(_, said)| Outcome::Said(said.clone())),
                     }
                 }
             })
@@ -590,6 +593,8 @@ enum Outcome {
     Told,
     Proposed,
     Done,
+    /// Done, or left out, as Klipolo says (`Compiled::told`).
+    Said(String),
 }
 
 impl Outcome {
@@ -604,6 +609,7 @@ impl Outcome {
             Outcome::Told => TOLD_PERSON,
             Outcome::Proposed => PROPOSED_OUTPUT,
             Outcome::Done => DONE_OUTPUT,
+            Outcome::Said(said) => said,
         }
     }
 }
