@@ -186,8 +186,6 @@ pub const ENGLISH: Messages = &[
     // Windows' Recycle Bin can't take it (too big, or the drive has none): never deleted outright.
     ("capture.recovered.trashTooBig", "This recording is too big for the Recycle Bin, so it's still in its folder."),
     ("capture.busy", "A recording is already running. Stop it from {place}."),
-    // Arming while v1 dictation listens to the mic: the mic is the dictation's until it ends.
-    ("capture.busyDictating", "Finish dictating first, then record."),
     ("capture.orphan", "Klipolo closed. The recording goes on until you stop it here."),
     ("capture.quit.ask", "A recording is running. Stop and save it, then quit?"),
     ("capture.import.noVideo", "This take has no picture to edit. Its sound files are in the recording's folder."),
