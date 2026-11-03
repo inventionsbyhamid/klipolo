@@ -10,8 +10,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use klipolo_chat::{
-    AnalysisState, Compiled, FunctionCall, Inputs, Library, LibraryItem, MediaKind, Refs,
-    SceneEntry, SceneLog, ToolCall, View, compile,
+    AnalysisState, Compiled, FunctionCall, Inputs, Job, Library, LibraryItem, MediaKind, Refs,
+    SceneEntry, SceneLog, ToolCall, View, compile, sticker_ops,
 };
 use klipolo_model::Project;
 use klipolo_model::fill_focus::{FillFocus, FocusKey, FocusPath, Keep};
@@ -498,6 +498,8 @@ fn stickers_show_from_their_word_spaced_out_and_never_under_the_hook_or_at_the_e
     assert!(told[&7].starts_with("done"), "{told:?}");
     assert!(told[&8].starts_with("done"), "{told:?}");
     assert!(told[&9].starts_with("Left out"), "{told:?}");
+    // The animate of a sticker left out goes with it.
+    assert!(told[&6].starts_with("Left out"), "{told:?}");
     assert!(told.values().all(|s| !s.contains(['\u{2013}', '\u{2014}'])));
 }
 
@@ -698,4 +700,55 @@ fn the_captions_come_back_at_the_cut_that_ends_the_hook() {
         .collect();
     // "w1" (1.0 s) to "w4" (2.5 to 2.8 s), the first part's last words.
     assert_eq!(hidden, vec![(secs(1.0), secs(2.8))]);
+}
+
+#[test]
+fn a_drawn_sticker_in_a_short_is_timed_by_its_word_and_placed_beside_the_speaker_when_it_comes() {
+    let p = project();
+    let mut calls = base();
+    calls.push(call(
+        "makeSticker",
+        json!({"prompt": "a rocket", "position": "top-left", "atSec": null, "atWords": w(10), "durationSec": 3.0}),
+    ));
+    calls.push(sound("Chime", 130));
+    let out = compile(&p, &inputs(&p, MESSAGE), &calls);
+    assert_eq!(out.refusals, vec![], "{:#?}", out.refusals);
+    let job = (out.jobs.iter())
+        .find_map(|j| match j {
+            Job::MakeSticker(job) => Some(job.clone()),
+            _ => None,
+        })
+        .expect("the sticker's job");
+    // From 0.1 s before "w10" (5.5 s) for 1.5 s, popping in and fading out with the pop.
+    assert_eq!((job.at_us, job.duration_us), (secs(5.4), secs(1.5)));
+    let m = job.motion.as_ref().expect("motion");
+    assert!(
+        m.enter
+            .as_ref()
+            .is_some_and(|u| u.preset.as_str().ends_with("motion.pop"))
+    );
+    assert!(
+        m.exit
+            .as_ref()
+            .is_some_and(|u| u.preset.as_str().ends_with("motion.fade"))
+    );
+    assert_eq!(job.sound.as_ref().map(|a| a.name.as_str()), Some("Pop.wav"));
+    assert!(job.beside.is_some());
+    // Once drawn: beside the speaker the follow keeps in the middle, not in the corner the model named.
+    let with =
+        klipolo_model::apply_ops(&p, &out.additions.as_ref().expect("additions").ops).unwrap();
+    let drawn = asset("drawn-rocket", "image", "rocket.png", 5.0, (1024, 1024));
+    let ops = sticker_ops(&with, &job, &drawn).expect("placed");
+    let item = (ops.iter())
+        .find_map(|op| match op {
+            Op::AddItem { item, .. } if matches!(item.content, ItemContent::Image { .. }) => {
+                Some(item.clone())
+            }
+            _ => None,
+        })
+        .expect("the picture");
+    let b = portrait_box(&with, &item);
+    assert!((0.18..=0.24).contains(&b.w), "{b:?}");
+    assert!(!overlaps(b, HEAD), "{b:?}");
+    assert!(!overlaps(b, WORDS), "{b:?}");
 }
