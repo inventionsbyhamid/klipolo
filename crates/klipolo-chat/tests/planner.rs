@@ -2073,6 +2073,92 @@ fn an_undo_the_person_asked_for_done_by_taking_the_thing_away_is_not_said_to_be_
     );
 }
 
+/// A short's cut, 9:16 version and captions, as the recipe makes them on the talk.
+fn short_calls() -> Vec<FunctionCall> {
+    vec![
+        fc(
+            "call_1",
+            "keepOnly",
+            r#"{"ranges": [{"startSec": 0.5, "endSec": 7.8}]}"#,
+        ),
+        fc(
+            "call_2",
+            "setFormat",
+            r#"{"format": "portrait", "keepOthers": true}"#,
+        ),
+        fc(
+            "call_3",
+            "setCaptions",
+            r#"{"on": true, "style": "word-pop"}"#,
+        ),
+    ]
+}
+
+#[test]
+fn a_shorts_styling_refused_back_is_never_said_as_left_undone() {
+    // The short is made; an animation of a layer that isn't there is refused back and never made good. Klipolo's own
+    // rules decide a short's styling, so the reply says nothing went undone.
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let mut calls = short_calls();
+    calls.push(fc(
+        "call_4",
+        "animate",
+        r#"{"layer": "i7", "enter": "pop", "exit": null, "emphasis": null, "sound": null}"#,
+    ));
+    let model = Fake::new(vec![
+        answer("", calls, 0.002),
+        answer(
+            "Here is your vertical short. Review the cut below.",
+            vec![],
+            0.001,
+        ),
+    ]);
+    let out = send(
+        &model,
+        &[],
+        "make a 30 second short with nice animations",
+        &i,
+        &p,
+    )
+    .unwrap();
+    assert_ne!(output_for(&model.seen()[1], "call_4"), DONE_OUTPUT);
+    assert!(out.compiled.short);
+    assert_eq!(
+        out.reply,
+        "Here is your vertical short. Review the cut below."
+    );
+}
+
+#[test]
+fn a_sound_the_person_named_that_fails_in_a_short_is_still_said() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let mut calls = short_calls();
+    calls.push(fc(
+        "call_4",
+        "addSound",
+        r#"{"name": "Cha ching", "atSec": [1.0], "atWords": null}"#,
+    ));
+    let model = Fake::new(vec![
+        answer("", calls, 0.002),
+        answer("Here is your vertical short.", vec![], 0.001),
+    ]);
+    let out = send(
+        &model,
+        &[],
+        "make a 30 second short with a cha ching sound at the start",
+        &i,
+        &p,
+    )
+    .unwrap();
+    assert!(
+        out.reply.contains("I couldn't add the sound"),
+        "{}",
+        out.reply
+    );
+}
+
 #[test]
 fn a_refused_call_is_named_never_said_as_part_of_this() {
     // Outside a short, an animation refused back and never made good is said by what it does.

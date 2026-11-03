@@ -97,7 +97,7 @@ pub(crate) fn sound_kind(item: &LibraryItem) -> Kind {
 }
 
 /// The message's words, lower case.
-fn words(text: &str) -> Vec<String> {
+pub(crate) fn words(text: &str) -> Vec<String> {
     (text.split(|c: char| !c.is_alphanumeric()))
         .filter(|w| !w.is_empty())
         .map(str::to_lowercase)
