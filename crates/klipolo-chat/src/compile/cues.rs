@@ -232,14 +232,12 @@ impl Cues {
             .find(|p| p.start <= t && t < p.end)
     }
 
-    /// The hook's span in the short's time.
+    /// The hook's span in the short's time: a layer over footage the short cuts ends where that footage is cut, as a
+    /// cut's ripple shortens it.
     fn hook_span(&self) -> Option<RangeUs> {
-        self.hook.map(|(_, r)| {
-            let start = self.short_time(r.start);
-            RangeUs {
-                start,
-                end: start + r.len(),
-            }
+        self.hook.map(|(_, r)| RangeUs {
+            start: self.short_time(r.start),
+            end: self.short_time(r.end),
         })
     }
 
@@ -606,24 +604,17 @@ pub(crate) fn told_of(sticker: &Sticker) -> String {
 }
 
 impl Cues {
-    /// The snapshot's stretches the short plays for `len` from snapshot moment `start`, across its cuts.
-    pub(crate) fn played_from(&self, start: Us, len: Us) -> Vec<RangeUs> {
-        let mut left = len;
-        let mut out = Vec::new();
-        for p in &self.parts {
-            if left <= 0 || p.end <= start {
-                continue;
-            }
-            let from = p.start.max(start);
-            let to = p.end.min(from + left);
-            if to > from {
-                out.push(RangeUs {
-                    start: from,
-                    end: to,
-                });
-                left -= to - from;
-            }
-        }
-        out
+    /// The snapshot's stretches from `start` for `len` that the short keeps: where a layer placed there still shows
+    /// once the cut is applied (it ends at the first cut it meets).
+    pub(crate) fn kept_within(&self, start: Us, len: Us) -> Vec<RangeUs> {
+        let end = start + len;
+        let first = self.part_of(start);
+        (first.into_iter())
+            .map(|p| RangeUs {
+                start,
+                end: p.end.min(end),
+            })
+            .filter(|r| !r.is_empty())
+            .collect()
     }
 }

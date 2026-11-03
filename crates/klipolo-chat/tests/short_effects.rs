@@ -670,3 +670,32 @@ fn outside_a_short_stickers_and_sounds_go_where_asked() {
     assert_eq!(sounds, vec![("Impact".to_owned(), 35.5)]);
     assert!(out.told.is_empty());
 }
+
+#[test]
+fn the_captions_come_back_at_the_cut_that_ends_the_hook() {
+    // The first part ends 2.8 s into the talk, before the hook's 3 s are up: the hook ends at that cut, and the
+    // captions of the second part show from its first word.
+    let p = project();
+    let mut calls = base();
+    calls[0] = call(
+        "keepOnly",
+        json!({"ranges": [
+            {"startSec": 0.5, "endSec": 2.8},
+            {"startSec": 32.0, "endSec": 46.8},
+            {"startSec": 62.0, "endSec": 76.8},
+            {"startSec": 92.0, "endSec": 106.8},
+        ]}),
+    );
+    let out = compile(&p, &inputs(&p, MESSAGE), &calls);
+    let ops = &out.additions.as_ref().expect("additions").ops;
+    let hidden: Vec<(Us, Us)> = (ops.iter())
+        .filter_map(|op| match op {
+            Op::SetWordLook { ranges, look, .. } if look.hidden == Some(true) => {
+                Some((ranges[0].start, ranges[0].end))
+            }
+            _ => None,
+        })
+        .collect();
+    // "w1" (1.0 s) to "w4" (2.5 to 2.8 s), the first part's last words.
+    assert_eq!(hidden, vec![(secs(1.0), secs(2.8))]);
+}

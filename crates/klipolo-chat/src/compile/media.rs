@@ -1070,8 +1070,8 @@ fn sounds_at(work: &Project, asset: &Asset, starts: &[Us]) -> Result<Vec<Op>, Re
 }
 
 /// The short's hook `edit` with the captions' words under it hidden until it starts to fade, where it sits in its
-/// 9:16 band (`clear::UNDER_FACE`, just above the captions): the words said while it shows, across the short's cuts,
-/// in each file's own time (a caption look, so they follow the words). A file whose words there have a look already
+/// 9:16 band (`clear::UNDER_FACE`, just above the captions): the words said while it shows, up to the short's first
+/// cut, where it ends, in each file's own time (a caption look, so they follow the words). A file whose words there have a look already
 /// keeps its captions, as does a hook placed anywhere else.
 pub(super) fn captions_after_hook(c: &Compiler, work: &Project, mut edit: Edit) -> Edit {
     let (Some(cues), Some(hook)) = (
@@ -1095,7 +1095,7 @@ pub(super) fn captions_after_hook(c: &Compiler, work: &Project, mut edit: Edit) 
     let shown = hook.duration_us.saturating_sub(fade);
     let main = &c.snapshot.timeline.main;
     let mut hidden: BTreeMap<String, (Us, Us)> = BTreeMap::new();
-    for part in cues.played_from(span.start, shown) {
+    for part in cues.kept_within(span.start, shown) {
         let mut t = part.start;
         while t < part.end {
             let Some((i, start)) = clip_at(main, t) else {
