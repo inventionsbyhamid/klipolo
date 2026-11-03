@@ -52,7 +52,7 @@ use serde_json::{Map, Value, json};
 const KEY_ENV: &str = "MODEL_API_KEY";
 /// Another chat model for the eval (`chat_setup`); the app always runs `CHAT_MODEL`.
 const EVAL_MODEL_ENV: &str = "KLIPOLO_EVAL_CHAT_MODEL";
-/// A reasoning effort for the eval (`chat_setup`); the app leaves Meta's default.
+/// A reasoning effort for the eval (`chat_setup`), or "default" for Meta's; the app asks `CHAT_REASONING_EFFORT`.
 const EVAL_EFFORT_ENV: &str = "KLIPOLO_EVAL_REASONING_EFFORT";
 /// An eval answer's output cap with another model or effort: twice the app's, for the reasoning a higher effort spends.
 const EVAL_MAX_OUTPUT_TOKENS: u32 = 32_768;
@@ -389,7 +389,8 @@ fn levels(transcript: &Transcript, length: Us) -> Levels {
 }
 
 /// The chat setup the eval runs: the app's (`ChatSetup::default()`, `CHAT_ANSWER_TIMEOUT`), or another model or
-/// reasoning effort from `KLIPOLO_EVAL_CHAT_MODEL` and `KLIPOLO_EVAL_REASONING_EFFORT` (a word such as high). With
+/// reasoning effort from `KLIPOLO_EVAL_CHAT_MODEL` and `KLIPOLO_EVAL_REASONING_EFFORT` (a word such as low, or
+/// "default" for Meta's default with the field left out; unset, the app's `CHAT_REASONING_EFFORT`). With
 /// either, an answer may take `EVAL_MAX_OUTPUT_TOKENS` output tokens and `EVAL_ANSWER_TIMEOUT`, so more reasoning or a
 /// slower model is not cut off (the eval calls Meta with the key directly, past the relay's caps).
 fn chat_setup() -> Result<(ChatSetup, Duration), String> {
@@ -415,9 +416,14 @@ fn chat_setup() -> Result<(ChatSetup, Duration), String> {
     if let Some(e) = effort.as_ref().filter(|e| !word(e)) {
         return Err(format!("{EVAL_EFFORT_ENV} {e:?} is not an effort."));
     }
+    let reasoning_effort = match effort.as_deref() {
+        None => ChatSetup::default().reasoning_effort,
+        Some("default") => None,
+        Some(word) => Some(word.to_owned()),
+    };
     let setup = ChatSetup {
         model: model.unwrap_or_else(|| CHAT_MODEL.to_owned()),
-        reasoning_effort: effort,
+        reasoning_effort,
         max_output_tokens: EVAL_MAX_OUTPUT_TOKENS,
     };
     Ok((setup, EVAL_ANSWER_TIMEOUT))
@@ -488,6 +494,7 @@ fn run(args: &Args) -> Result<bool, String> {
         };
         let ctx = build_context(project, &fx.speech, &fx.turns, &fx.scenes, &view, &library);
         let inputs = Inputs {
+            turns: fx.turns.clone(),
             message: case.message.clone(),
             view,
             refs: ctx.refs.clone(),

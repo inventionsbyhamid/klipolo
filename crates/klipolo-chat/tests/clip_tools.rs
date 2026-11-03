@@ -310,6 +310,7 @@ fn card(clip_id: &str, patch: ClipPatch) -> Op {
 
 fn inputs(p: &Project) -> Inputs {
     Inputs {
+        turns: Default::default(),
         message: String::new(),
         view: View::default(),
         refs: Refs::of(p),

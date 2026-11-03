@@ -4,7 +4,8 @@
 //!   SAM looks for (the speaker, the host or "me" is a person). It tracks the footage that plays once the message's
 //!   edits are in, cuts waiting for approval included, so a short pays only for its own seconds. The clips that can
 //!   follow then follow in every format whose Fill crops them, as part of the message's additions (one undo step), or
-//!   of its proposal when it has one (they land when the person applies it). The reply says what it cost.
+//!   of its proposal when it has one (they land when the person applies it). The reply says what it cost. The stickers
+//!   chat placed beside the speaker (`Compiled::beside`) are placed again beside the head where the path keeps them.
 //! - **A vertical or square version** of camera footage made without asking to follow: footage tracked before follows
 //!   at no charge; otherwise the reply offers it with its price.
 //!
@@ -279,6 +280,10 @@ pub(super) async fn follow_jobs(
             }
             Ok(followed) => {
                 let ops = followed.ops(&target);
+                // Where the stickers Klipolo placed beside the speaker go once the path lands with these changes.
+                let followed_target = (!ops.is_empty() && !out.compiled.beside.is_empty())
+                    .then(|| apply_ops(&target, &ops).ok())
+                    .flatten();
                 let cost = cost_said(followed.paid_usd);
                 if ops.is_empty() {
                     follows.said.push(format!("{NO_ONE_THERE} {cost}"));
@@ -292,6 +297,16 @@ pub(super) async fn follow_jobs(
                     follows.note = format!("Following {phrase} didn't fit the changes.");
                     follows.failed = true;
                 } else {
+                    // Attached: the stickers go beside the head where the path keeps the speaker.
+                    if let (Some(followed_target), Some(tx)) =
+                        (&followed_target, &mut out.compiled.additions)
+                    {
+                        klipolo_chat::place_beside_again(
+                            followed_target,
+                            &mut tx.ops,
+                            &out.compiled.beside,
+                        );
+                    }
                     let when = if out.compiled.proposal.is_some() {
                         "once you apply this"
                     } else {

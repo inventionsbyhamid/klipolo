@@ -60,17 +60,14 @@ fn range(start: f64, end: f64) -> Value {
     json!({"startSec": start, "endSec": end})
 }
 
-fn sticker(file: &str, at: f64) -> Value {
-    json!({"file": file, "size": "medium", "position": "top-right", "atSec": at, "durationSec": 2.5})
-}
-
-fn animate(enter: &str, sound: &str) -> Value {
-    json!({"layer": "last", "enter": enter, "exit": null, "emphasis": "pulse", "sound": sound})
+/// A sticker moment as the recipe asks for one: the picture and its word, no place, size or time.
+fn moment(file: &str, words: &str) -> Value {
+    json!({"file": file, "size": null, "position": null, "atSec": null, "atWords": words, "durationSec": null})
 }
 
 /// A short of the talk's first 155 s as the recipe plans it: four turns kept (about 60 s), vertical, following the
-/// astronaut, word pop captions, a hook quoting a later line, two medium pack stickers popping in with sounds, music
-/// under it.
+/// astronaut, word pop captions, a hook quoting a later line, two pack stickers on their words and the payoff line
+/// marked with a chime, music under it.
 fn talk_plan() -> Vec<(&'static str, Value)> {
     vec![
         (
@@ -92,10 +89,12 @@ fn talk_plan() -> Vec<(&'static str, Value)> {
             json!({"text": "how to fix problems", "preset": "title", "atSec": 0.06, "durationSec": 2.0,
                    "animation": "kinetic"}),
         ),
-        ("addImage", sticker("Sparkles", 30.0)),
-        ("animate", animate("pop", "Pop")),
-        ("addImage", sticker("Lightbulb", 66.0)),
-        ("animate", animate("bounce", "Ding")),
+        ("addImage", moment("Sparkles", "super rewarding")),
+        ("addImage", moment("Lightbulb", "how to hold")),
+        (
+            "addSound",
+            json!({"name": "Chime", "atSec": null, "atWords": ["super rewarding"]}),
+        ),
         (
             "addMusic",
             json!({"file": "Upbeat loop", "volume": null, "duck": null, "atSec": null}),
@@ -122,8 +121,11 @@ fn recording_plan() -> Vec<(&'static str, Value)> {
             json!({"text": "it's also super rewarding", "preset": "title", "atSec": 27.18, "durationSec": 2.0,
                    "animation": "typewriter"}),
         ),
-        ("addImage", sticker("Thumbs up", 30.0)),
-        ("animate", animate("pop", "Pop")),
+        ("addImage", moment("Thumbs up", "super rewarding")),
+        (
+            "addSound",
+            json!({"name": "Chime", "atSec": null, "atWords": ["super rewarding"]}),
+        ),
         (
             "addMusic",
             json!({"file": "Chill beat", "volume": null, "duck": null, "atSec": null}),

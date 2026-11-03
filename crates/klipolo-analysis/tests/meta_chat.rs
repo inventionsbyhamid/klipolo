@@ -109,6 +109,7 @@ fn talk() -> (Project, Inputs, ChatContext) {
         }),
     );
     let inputs = Inputs {
+        turns: Default::default(),
         message: String::new(),
         view: View::default(),
         refs: Refs::of(&p),
@@ -233,8 +234,8 @@ fn assert_relay_takes(body: &Value) {
     ] {
         assert!(body.get(f).is_none(), "{f} is sent");
     }
-    // Default reasoning effort: the field is left out.
-    assert!(body.get("reasoning").is_none());
+    // Chat plans at high effort, through the relay as with the person's own key.
+    assert_eq!(body["reasoning"], json!({"effort": "high"}));
     let max = body["max_output_tokens"].as_u64().expect("an output cap");
     assert!((1..=RELAY_MAX_OUTPUT_TOKENS).contains(&max), "{max}");
     // Room for long reasoning, the relay's own cap: billed only when used.
@@ -447,17 +448,23 @@ async fn the_cached_prefix_is_the_same_bytes_on_the_wire_for_two_messages() {
 }
 
 #[test]
-fn the_app_asks_spark_at_metas_default_effort_and_the_eval_may_ask_another_setup() {
+fn the_app_asks_spark_at_high_effort_and_the_eval_may_ask_another_setup() {
     let request = ModelRequest {
         system: "Be brief.".into(),
         tools: json!([]),
         input: vec![Item::User { text: "hi".into() }],
     };
-    // The app's body: Spark, its output cap, no reasoning field.
+    // The app's body: Spark, its output cap, reasoning effort high.
     let app = wire_body(&request);
     assert_eq!(app["model"], CHAT_MODEL);
     assert_eq!(app["max_output_tokens"], CHAT_MAX_OUTPUT_TOKENS);
-    assert!(app.get("reasoning").is_none(), "{app}");
+    assert_eq!(app["reasoning"], json!({"effort": "high"}), "{app}");
+    // Meta's own default, for the eval only: the field left out.
+    let metas = ChatSetup {
+        reasoning_effort: None,
+        ..ChatSetup::default()
+    };
+    assert!(wire_body_with(&request, &metas).get("reasoning").is_none());
     assert_eq!(app, wire_body_with(&request, &ChatSetup::default()));
     // Another model and effort, for the development eval only.
     let setup = ChatSetup {
@@ -1037,4 +1044,30 @@ async fn an_answer_that_never_comes_times_out_and_frees_the_slot() {
         e,
         ModelError::Unavailable(Some("Meta took too long to answer. Try again.".into()))
     );
+}
+
+#[tokio::test]
+async fn chat_asks_for_high_effort_with_an_access_code_and_with_the_persons_own_key() {
+    // Through the relay, as with an access code.
+    let server = MockServer::start().await;
+    answer_once(&server, ok(spark(vec![message("Hi.")], 10, 0, 5))).await;
+    chat(&server).respond(&neutral_request()).await.unwrap();
+    // Straight to Meta with the person's own key.
+    let meta = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/responses"))
+        .respond_with(ok(spark(vec![message("Hi.")], 10, 0, 5)))
+        .mount(&meta)
+        .await;
+    let direct = MetaChat::new(
+        MetaClient::direct(SecretString::from("test-meta-key-not-real"))
+            .with_meta_base(meta.uri())
+            .with_ledger(None),
+    );
+    direct.respond(&neutral_request()).await.unwrap();
+    for sent in [bodies(&server).await, bodies(&meta).await] {
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0]["reasoning"], json!({"effort": "high"}));
+        assert_eq!(sent[0]["model"], CHAT_MODEL);
+    }
 }

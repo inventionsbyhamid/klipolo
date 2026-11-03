@@ -61,6 +61,7 @@ pub fn inputs_for(
 ) -> (Inputs, HashMap<String, Vec<SpeakerTurn>>) {
     let mut speech = Speech::default();
     let mut turns: HashMap<String, Vec<SpeakerTurn>> = HashMap::new();
+    let mut cue_turns: HashMap<String, Vec<SpeakerTurn>> = HashMap::new();
     let mut scenes: HashMap<String, SceneLog> = HashMap::new();
     let mut analysis: HashMap<String, ChatAnalysis> = HashMap::new();
     let mut time_again: HashSet<String> = HashSet::new();
@@ -86,6 +87,19 @@ pub fn inputs_for(
             // A voice matched to someone on screen reads as that person's number, as the People line names them.
             let people = people_voices(project, id);
             turns.insert(id.clone(), person_turns(&found.turns, &people));
+            // For the compiler, a bare voice label also names its transcription part ("A@3"): a label holds only
+            // within one, so a short's whoosh compares two only there.
+            let parted = (person_turns(&found.turns, &people)
+                .into_iter()
+                .zip(&found.turns))
+            .map(|(mut t, raw)| {
+                if t.speaker.as_ref() == raw.speaker.as_ref() {
+                    t.speaker = t.speaker.map(|label| format!("{label}@{}", raw.chunk));
+                }
+                t
+            })
+            .collect();
+            cue_turns.insert(id.clone(), parted);
         }
         if let Some(log) = &found.scenes {
             scenes.insert(id.clone(), scene_entries(log));
@@ -98,6 +112,8 @@ pub fn inputs_for(
         refs: Refs::of(project),
         speech,
         scenes,
+        // Who speaks when, for a short's whooshes where the speaker changes.
+        turns: cue_turns,
         analysis,
         time_again,
         library,

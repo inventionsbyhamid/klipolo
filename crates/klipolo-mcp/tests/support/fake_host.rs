@@ -356,6 +356,7 @@ impl Host for FakeHost {
         let doc = s.doc.as_ref()?;
         let project = doc.shared();
         let inputs = Inputs {
+            turns: Default::default(),
             message: s.message.clone(),
             view: s.view,
             refs: Refs::of(&project),

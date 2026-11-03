@@ -14,6 +14,9 @@
 //! near the top, land on the eyes. The hook goes `UNDER_FACE` there (`hook_under_face`): below the face, above the
 //! captions, inside the clear area. Letterboxed 9:16 (Fit), screen recordings, footage with nobody found and the other
 //! formats keep the kinetic title as it is, and other words go where their preset puts them.
+//!
+//! A short's sticker goes beside the speaker's head instead (`beside_speaker`), as `cues` times it: at the head's
+//! height, on the side with more room, never on the head or, where nothing says where the speaker is, the face zone.
 
 use std::collections::HashMap;
 
@@ -49,14 +52,9 @@ pub const FACE_ZONE: BoxN = BoxN {
     w: 0.6,
     h: 0.38,
 };
-/// Where the hook goes in 9:16 instead of over the face: under it, above the captions (word pop's are centred at 0.69),
-/// inside the apps' clear area (`media::text::PORTRAIT_CLEAR`). Two lines of the hook's 130 pixels fit its height.
-pub const UNDER_FACE: BoxN = BoxN {
-    x: 0.06,
-    y: 0.465,
-    w: 0.81,
-    h: 0.155,
-};
+/// Where the hook goes in 9:16 instead of over the face: under it, above the captions, inside the apps' clear area
+/// (`captions::HOOK_BAND`); while it shows there, the 9:16 captions wait (`captions::hook_holds_captions`).
+pub const UNDER_FACE: BoxN = klipolo_model::captions::HOOK_BAND;
 
 /// The width and height of the picture clip `i` of `p` shows: its file, or a recording's primary source's first file.
 fn picture_size(p: &Project, source: &ClipSource) -> Option<(f64, f64)> {
@@ -238,6 +236,241 @@ pub(super) fn hook_under_face(p: &Project, ops: &mut [Op]) {
             item.layout
                 .overrides
                 .insert(FormatKind::Portrait, UNDER_FACE);
+        }
+    }
+}
+
+/// Which side of the speaker a short's sticker goes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Side {
+    Left,
+    Right,
+}
+
+impl Side {
+    /// The other side.
+    pub fn other(self) -> Side {
+        match self {
+            Side::Left => Side::Right,
+            Side::Right => Side::Left,
+        }
+    }
+}
+
+/// A short's sticker in shares of the frame's height (every format shows a 16:9 picture's full height, so a head is as
+/// tall in each): 0.1125 is 20 % of the 9:16 frame's width for a square picture, where the speaker's head is known.
+pub const STICKER_H: f64 = 0.1125;
+/// Its height where only `FACE_ZONE` is known: 18 % of the 9:16 width, which fits beside the zone.
+const ZONE_STICKER_H: f64 = 0.10125;
+/// A sticker's least share of the width in a 16:9 or 1:1 main format.
+const WIDE_STICKER_W: f64 = 0.13;
+/// The smallest it shrinks to, to stay off the head: 15 % of the 9:16 width.
+const MIN_STICKER_H: f64 = 0.084;
+/// Half a followed head's width, beside which a sticker goes, in shares of the frame's height (22 % of the 9:16 width
+/// each side of where the follow keeps the speaker: their head, and where the crop lets them drift before it moves).
+pub const HEAD_HALF_H: f64 = 0.124;
+/// Where a head is down the frame: a sticker's middle sits at this share of the frame's height.
+pub const HEAD_Y: f64 = 0.22;
+/// Kept clear at the frame's edges and beside the head, in shares of the frame's shorter side.
+const EDGE: f64 = 0.04;
+const GAP: f64 = 0.02;
+/// Kept clear of `FACE_ZONE`, which has room around the face already.
+const ZONE_GAP: f64 = 0.002;
+
+/// A format's frame in pixels (`resolve_rect`'s sizes).
+fn frame(format: FormatKind) -> (f64, f64) {
+    match format {
+        FormatKind::Landscape => (1920.0, 1080.0),
+        FormatKind::Portrait => (1080.0, 1920.0),
+        FormatKind::Square => (1080.0, 1080.0),
+    }
+}
+
+/// Where the speaker is across `format`'s frame at timeline `at_us` of `p` (the clip there Fill crops its picture in
+/// that format), and across the picture when a follow's path says: from the clip's path in that format; or from its
+/// path in another where that format shows the whole picture's width; or the middle where this answer follows the
+/// speaker (`follows`) and the format crops the picture, as the follow will keep them there. None when nothing says.
+fn speaker_at(
+    p: &Project,
+    at_us: Us,
+    format: FormatKind,
+    follows: bool,
+) -> Option<(f64, Option<f64>)> {
+    let (i, start) = clip_at(&p.timeline.main, at_us)?;
+    let clip = &p.timeline.main[i];
+    if effective_framing(p, clip, format).mode != FramingMode::Fill {
+        return None;
+    }
+    let (w, h) = picture_size(p, &clip.source)?;
+    let (fw, fh) = frame(format);
+    // The share of the picture's width the frame shows.
+    let crop = ((fw / fh) / (w / h)).min(1.0);
+    let source_us = clip.source_in_us + ((at_us - start) as f64 * clip.speed) as Us;
+    let path_x = |f: FormatKind| match clip.fill_focus.get(&f) {
+        Some(FillFocus::Speaker { path, .. }) => path.centre_at(source_us).map(|(x, _)| x),
+        _ => None,
+    };
+    let own = path_x(format);
+    let any = own.or_else(|| {
+        [FormatKind::Portrait, FormatKind::Square]
+            .into_iter()
+            .find_map(path_x)
+    });
+    match (own, any) {
+        (Some(sx), _) => {
+            let left = sx.clamp(crop / 2.0, 1.0 - crop / 2.0) - crop / 2.0;
+            Some(((sx - left) / crop, Some(sx)))
+        }
+        (None, Some(sx)) if crop >= 0.999 => Some((sx, Some(sx))),
+        _ if follows && crop < 0.999 => Some((0.5, None)),
+        _ => None,
+    }
+}
+
+/// Where a short's sticker of `asset` goes in each of `p`'s formats at timeline `at_us`: beside the speaker's head, at
+/// its height, on the side of the frame with more room (`prefer` when the two are alike; with a follow's path, the
+/// side toward the picture's nearer edge, where a group's outside is), never on the head. The head is where the follow
+/// keeps the speaker (`speaker_at`), `HEAD_HALF_H` either side, and the sticker goes as near it as the frame's edge
+/// allows. Where nothing says where the speaker is, the face may be anywhere in `FACE_ZONE` across: the sticker is a
+/// little smaller and sits out at the frame's edge, clear of the zone. Sizes are shares of the frame's height, so it
+/// stands as tall beside the head in every format; the hook and the captions sit lower (from 0.465 in 9:16). Other
+/// formats take the primary format's side where their two sides have about the same room. The boxes by format, and the
+/// side chosen in the primary format.
+pub(super) fn beside_speaker(
+    p: &Project,
+    at_us: Us,
+    asset: &Asset,
+    follows: bool,
+    prefer: Side,
+) -> (Vec<(FormatKind, BoxN)>, Side) {
+    let aspect = if asset.width > 0 && asset.height > 0 {
+        f64::from(asset.width) / f64::from(asset.height)
+    } else {
+        1.0
+    };
+    let primary = p.settings.primary_format;
+    let mut formats = p.settings.formats.clone();
+    formats.sort_by_key(|f| *f != primary);
+    let mut out = Vec::new();
+    let mut chosen = prefer;
+    for format in formats {
+        let (fw, fh) = frame(format);
+        let short = fw.min(fh);
+        let speaker = speaker_at(p, at_us, format, follows);
+        // The head across the frame, how tall the sticker is, how far from the edge and from the head it keeps.
+        let (head, tall, edge, gap) = match speaker {
+            Some((x, _)) => {
+                let half = HEAD_HALF_H * fh / fw;
+                (
+                    (x - half, x + half),
+                    STICKER_H,
+                    EDGE * short / fw,
+                    GAP * short / fw,
+                )
+            }
+            None => (
+                (FACE_ZONE.x, FACE_ZONE.x + FACE_ZONE.w),
+                ZONE_STICKER_H,
+                GAP * short / fw,
+                ZONE_GAP * short / fw,
+            ),
+        };
+        // A wide or square main format (a project made in 16:9 or 1:1) reads its sticker at a share of its width, as a
+        // 9:16 one does, where the room beside the head allows.
+        let tall = if format == primary && format != FormatKind::Portrait {
+            tall.max(WIDE_STICKER_W * fw / (fh * aspect))
+        } else {
+            tall
+        };
+        let (room_l, room_r) = (head.0 - gap - edge, 1.0 - edge - gap - head.1);
+        // The side with more room; where both have about the same, the primary format's side in the others.
+        let side = if (room_l - room_r).abs() > 0.02 {
+            if room_l > room_r {
+                Side::Left
+            } else {
+                Side::Right
+            }
+        } else if format != primary {
+            chosen
+        } else {
+            match speaker.and_then(|(_, sx)| sx) {
+                Some(sx) if sx < 0.5 => Side::Left,
+                Some(_) => Side::Right,
+                None => prefer,
+            }
+        };
+        // As tall as asked where that fits the room on `side`, else as tall as the room lets it be; None under
+        // `MIN_STICKER_H`.
+        let fit = |side: Side| {
+            let room = match side {
+                Side::Left => room_l,
+                Side::Right => room_r,
+            };
+            let h = tall.min(room * fw / (fh * aspect));
+            (h >= MIN_STICKER_H - 1e-9).then(|| {
+                let w = h * fh * aspect / fw;
+                let x = match (side, speaker) {
+                    (Side::Left, Some(_)) => (head.0 - gap - w).max(edge),
+                    (Side::Right, Some(_)) => (head.1 + gap).min(1.0 - edge - w),
+                    (Side::Left, None) => edge,
+                    (Side::Right, None) => 1.0 - edge - w,
+                };
+                BoxN {
+                    x,
+                    y: HEAD_Y - h / 2.0,
+                    w,
+                    h,
+                }
+            })
+        };
+        let (rect, side) = match fit(side) {
+            Some(b) => (b, side),
+            None => match fit(side.other()) {
+                Some(b) => (b, side.other()),
+                // No room beside the head either side: out at the frame's edge, at the least size.
+                None => {
+                    let w = MIN_STICKER_H * fh * aspect / fw;
+                    let x = if side == Side::Left {
+                        edge
+                    } else {
+                        1.0 - edge - w
+                    };
+                    let b = BoxN {
+                        x,
+                        y: HEAD_Y - MIN_STICKER_H / 2.0,
+                        w,
+                        h: MIN_STICKER_H,
+                    };
+                    (b, side)
+                }
+            },
+        };
+        if format == primary {
+            chosen = side;
+        }
+        out.push((format, rect));
+    }
+    (out, chosen)
+}
+
+/// `ops`' picture layer placed as `beside_speaker` says: its own box in the primary format, the others as overrides.
+pub(super) fn place_beside(p: &Project, ops: &mut [Op], boxes: &[(FormatKind, BoxN)]) {
+    let primary = p.settings.primary_format;
+    for op in ops {
+        let Op::AddItem { item, .. } = op else {
+            continue;
+        };
+        if !matches!(item.content, ItemContent::Image { .. }) {
+            continue;
+        }
+        item.layout.overrides.clear();
+        for &(format, rect) in boxes {
+            if format == primary {
+                item.layout.rect = rect;
+                item.layout.anchor = Anchor::Center;
+            } else {
+                item.layout.overrides.insert(format, rect);
+            }
         }
     }
 }

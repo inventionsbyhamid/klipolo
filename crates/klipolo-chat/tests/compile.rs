@@ -97,6 +97,7 @@ fn project(assets: Vec<Asset>, clips: Vec<Clip>) -> Project {
 /// analyzed, the playhead at 0 and no selection.
 fn inputs(project: &Project, speech: Speech, message: &str) -> Inputs {
     Inputs {
+        turns: Default::default(),
         message: message.into(),
         view: View::default(),
         refs: Refs::of(project),
@@ -1619,7 +1620,9 @@ fn moments_snap_to_the_evidence_and_invented_ones_are_refused() {
 }
 
 #[test]
-fn undo_with_edits_refuses_the_edits() {
+fn undo_first_undoes_and_the_changes_after_it_wait_for_the_person() {
+    // "Undo that and make it square": the undo stands; the change after it was made on the project before the undo, so
+    // the person is asked to send it again, never the model to retry it.
     let p = broll(30.0);
     let i = inputs(&p, Speech::default(), "undo that and make it square");
     let out = compile(
@@ -1632,10 +1635,48 @@ fn undo_with_edits_refuses_the_edits() {
     );
     assert!(out.undo);
     assert_eq!(out.additions, None);
-    assert!(refused_to_model(&out, 1).starts_with("setFormat: "));
+    let [r] = &out.refusals[..] else {
+        panic!("{:?}", out.refusals);
+    };
+    assert_eq!((r.call_index, r.audience), (1, Audience::Person));
+    assert_eq!(r.reason, klipolo_chat::UNDO_FIRST);
     let alone = compile(&p, &i, &[call("undo", "{}")]);
     assert!(alone.undo);
     assert_eq!(alone.refusals, vec![]);
+    // A question before it changes nothing: the undo is still the first change.
+    let asked = compile(
+        &p,
+        &i,
+        &[
+            call("askUser", r#"{"question": "Which one?"}"#),
+            call("undo", "{}"),
+        ],
+    );
+    assert!(asked.undo);
+    assert_eq!(asked.refusals, vec![]);
+}
+
+#[test]
+fn an_undo_after_the_messages_own_changes_is_refused_and_the_changes_stand() {
+    // The model changes its mind about its own call and reaches for undo: that would take back the person's change
+    // from before the message and refuse everything this message made. It is refused back instead.
+    let p = broll(30.0);
+    let i = inputs(&p, Speech::default(), "make it square");
+    let out = compile(
+        &p,
+        &i,
+        &[
+            call("setFormat", r#"{"format": "square", "keepOthers": true}"#),
+            call("undo", "{}"),
+            call("setFormat", r#"{"format": "portrait", "keepOthers": true}"#),
+        ],
+    );
+    assert!(!out.undo);
+    assert_eq!(refused_to_model(&out, 1), klipolo_chat::UNDO_AFTER_CHANGES);
+    let tx = out.additions.as_ref().expect("the changes stand");
+    let after = klipolo_model::apply_ops(&p, &tx.ops).unwrap();
+    assert!(after.settings.formats.contains(&FormatKind::Square));
+    assert!(after.settings.formats.contains(&FormatKind::Portrait));
 }
 
 #[test]

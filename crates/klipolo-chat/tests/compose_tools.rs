@@ -129,6 +129,7 @@ fn font_names() -> klipolo_chat::FontNames {
 
 fn inputs(p: &Project, message: &str) -> Inputs {
     Inputs {
+        turns: Default::default(),
         message: message.into(),
         view: View::default(),
         refs: Refs::of(p),

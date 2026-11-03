@@ -113,6 +113,7 @@ fn talk() -> (Project, Speech) {
 /// empty: the planner reads the person's message from its own argument.
 fn inputs(project: &Project, speech: Speech) -> Inputs {
     Inputs {
+        turns: Default::default(),
         message: String::new(),
         view: View::default(),
         refs: Refs::of(project),
@@ -1309,9 +1310,14 @@ fn a_short_is_a_look_then_one_batch_then_words() {
             "chat.setCaptions",
             "chat.addText",
             "chat.addImage",
-            "chat.animate",
             "chat.addMusic"
         ]
+    );
+    // The sticker pops in as Klipolo times a short's stickers: the model's animate of it changes nothing more.
+    assert!(
+        out.compiled.unchanged.contains(&7),
+        "{:?}",
+        out.compiled.unchanged
     );
     assert!(out.compiled.proposal.is_some(), "the cut is proposed");
     assert_eq!(out.compiled.jobs.len(), 1, "the follow");
@@ -1691,10 +1697,12 @@ fn a_short_places_its_sticker_and_sounds_on_the_words_said() {
             .map(|item| item.start_us)
             .collect()
     };
-    assert_eq!(starts(TrackKind::Overlay, None), [secs(2.9) - from]);
+    // The sticker from just before its word, as a short's are, with its pop.
+    let sticker = (secs(2.8).max(from)) - from;
+    assert_eq!(starts(TrackKind::Overlay, None), [sticker]);
     assert_eq!(
         starts(TrackKind::Audio, Some("klipolo-pack-pop")),
-        [secs(2.9) - from]
+        [sticker]
     );
     assert_eq!(
         starts(TrackKind::Audio, Some("klipolo-pack-ding")),
@@ -1845,9 +1853,11 @@ fn a_message_that_runs_out_of_steps_says_what_its_edits_did() {
     assert_eq!(model.seen().len(), MAX_STEPS);
     assert_eq!(out.compiled.refusals, vec![], "{:?}", out.compiled.refusals);
     assert!(!out.reply.contains("Now I'm adding"), "{}", out.reply);
+    // An 8 s short shows one sticker (one per 12 s at most, never under the hook), with its pop; the model's own pop on a
+    // word is left out.
     assert!(
         out.reply.starts_with(
-            "I made it vertical and added captions, a title, 2 stickers, 2 sounds and music. Approve the cut to keep \
+            "I made it vertical and added captions, a title, a sticker, a sound and music. Approve the cut to keep \
              the "
         ),
         "{}",
@@ -1855,4 +1865,145 @@ fn a_message_that_runs_out_of_steps_says_what_its_edits_did() {
     );
     assert!(out.reply.contains(" s version."), "{}", out.reply);
     assert_plain(&out.reply);
+}
+
+#[test]
+fn an_undo_partway_through_a_short_never_wipes_it() {
+    // As a paid run went: the short's batch, one more layer, its removal, then an undo to take that back, then an
+    // animation with optional words written as the text "null". The undo would take back the person's change from
+    // before the message and refuse every change of this one; it is refused back instead, and the short stands.
+    let (p, speech) = talk();
+    let i = with_pack(inputs(&p, speech));
+    let steps = vec![
+        answer("", vec![find_call("call_1")], 0.001),
+        answer(
+            "",
+            vec![
+                fc(
+                    "call_2",
+                    "keepOnly",
+                    r#"{"ranges": [{"startSec": 0.5, "endSec": 7.8}]}"#,
+                ),
+                fc(
+                    "call_3",
+                    "setFormat",
+                    r#"{"format": "portrait", "keepOthers": true}"#,
+                ),
+                fc(
+                    "call_4",
+                    "setCaptions",
+                    r#"{"on": true, "style": "word-pop"}"#,
+                ),
+                fc(
+                    "call_5",
+                    "addText",
+                    r#"{"text": "the new module", "preset": "title", "atSec": 0.5, "durationSec": 2.0, "animation": "kinetic", "font": "null"}"#,
+                ),
+                fc(
+                    "call_6",
+                    "addMusic",
+                    r#"{"file": "Soft ambient", "volume": 0.15, "duck": true, "atSec": null}"#,
+                ),
+            ],
+            0.002,
+        ),
+        answer(
+            "",
+            vec![fc(
+                "call_7",
+                "addText",
+                r#"{"text": "the new module", "preset": "caption", "atSec": 4.0, "durationSec": 2.0, "animation": null, "font": null}"#,
+            )],
+            0.001,
+        ),
+        answer(
+            "",
+            vec![fc(
+                "call_8",
+                "setLayer",
+                r#"{"layer": "last", "set": [{"key": "remove", "value": true}]}"#,
+            )],
+            0.001,
+        ),
+        answer("", vec![fc("call_9", "undo", "{}")], 0.001),
+        answer(
+            "",
+            vec![fc(
+                "call_10",
+                "animate",
+                r#"{"layer": "last", "enter": "pop", "exit": "null", "emphasis": "null", "sound": "null"}"#,
+            )],
+            0.001,
+        ),
+        answer(
+            "Here is your vertical short. Review the cut below.",
+            vec![],
+            0.001,
+        ),
+    ];
+    let model = Fake::new(steps);
+    let out = send(&model, &[], "make a 60 s short with animations", &i, &p).unwrap();
+    let seen = model.seen();
+    assert_eq!(seen.len(), 7);
+    // The undo is refused back with why and what to do instead; nothing else is refused.
+    assert_eq!(
+        output_for(&seen[5], "call_9"),
+        klipolo_chat::UNDO_AFTER_CHANGES
+    );
+    assert!(!out.compiled.undo);
+    let refused: Vec<(usize, &str)> = (out.compiled.refusals.iter())
+        .map(|r| (r.call_index, out.calls[r.call_index].name()))
+        .collect();
+    assert_eq!(refused, vec![], "the undo is never kept: {refused:?}");
+    assert!(!out.calls.iter().any(|c| matches!(c, ToolCall::Undo)));
+    // The short stands: its look applies, its cut is proposed.
+    let changes: Vec<&str> = (out.compiled.changes.iter())
+        .map(|c| c.code.as_str())
+        .collect();
+    for change in [
+        "chat.setFormat",
+        "chat.setCaptions",
+        "chat.addText",
+        "chat.addMusic",
+    ] {
+        assert!(changes.contains(&change), "{changes:?}");
+    }
+    assert!(out.compiled.proposal.is_some(), "the cut is proposed");
+    // The animation's "null" words read as left out: it goes through.
+    assert_eq!(output_for(&seen[6], "call_10"), DONE_OUTPUT);
+    // The reply says nothing went undone: the refused undo was the model's own, not the person's request.
+    assert_eq!(
+        out.reply,
+        "Here is your vertical short. Review the cut below."
+    );
+}
+
+#[test]
+fn an_undo_the_person_asked_for_after_another_change_is_said_to_be_undone() {
+    // "Make it square and undo the music": the model changes the format, then calls undo, which is refused back with
+    // how to do it instead. If it never does, the reply says part of it wasn't done.
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let model = Fake::new(vec![
+        answer(
+            "",
+            vec![
+                fc(
+                    "call_1",
+                    "setFormat",
+                    r#"{"format": "square", "keepOthers": true}"#,
+                ),
+                fc("call_2", "undo", "{}"),
+            ],
+            0.001,
+        ),
+        answer("It's square now.", vec![], 0.001),
+    ]);
+    let out = send(&model, &[], "make it square and undo the music", &i, &p).unwrap();
+    assert_eq!(
+        output_for(&model.seen()[1], "call_2"),
+        klipolo_chat::UNDO_AFTER_CHANGES
+    );
+    assert!(out.reply.starts_with("It's square now."), "{}", out.reply);
+    assert!(out.reply.contains("couldn't"), "{}", out.reply);
 }

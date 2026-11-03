@@ -1508,21 +1508,19 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "at most 6 punchy words",
         "only where two clips already meet with spare footage; otherwise none",
         "never the text \"null\"",
-        // Stickers and sound effects on the words said, each for what it is for.
+        // A short's stickers and sound effects: the model picks the moments, Klipolo places and times them
+        // (`compile::cues`).
         "give atWords: 1 to 4 words in a row copied exactly from Transcript",
         "on their word, not at the start of a moment or range",
-        "only on a spoken word that names a thing, an action or a feeling, showing that word",
-        "a Library image whose name fits it, else makeSticker",
-        "Stickers, at most 3 in a short",
-        "Medium at a top corner, 2 s, at most one per 8 s",
-        "animate last with pop or bounce",
-        "may take one per 5 s at most: rise under the hook, the only sound over the opening words",
-        "Sound effects match the mood",
-        "A calm, serious or moving talk takes 2 to 4 in all",
-        "whoosh or swoosh on a cut to a new topic or speaker, never on every cut, or text sliding in",
-        "pop on a sticker or text popping in, as animate's sound, never also addSound there",
-        "ding or chime on a number, a key point or a reveal",
-        "impact or bass drop on a punchline or a big claim",
+        "In a short you pick the moments; Klipolo places and times stickers and sounds",
+        "Stickers: 3 or 4 at most, at least 10 s apart and none in the first 3 s or the last 2 s",
+        "names a thing, an action or a feeling and carries the story, never on a serious or sad line",
+        "a Library picture whose name fits it (else makeSticker) with atWords on that word, no position, size or time",
+        "Klipolo shows it beside the speaker",
+        "Klipolo adds a rise under the hook, a pop with each sticker and a whoosh where the speaker changes",
+        "what comes back says which",
+        "mark the payoff line with addSound Chime and atWords on it",
+        "no other sound unless the person names one, and none if they want none",
         "addMusic",
         "Place every layer inside the parts you keep",
         // A short's story and its cuts: a hook, a turn, a payoff, an ending, each part a whole thought.
@@ -1699,5 +1697,52 @@ fn follow_subject_keeps_who_chat_names_over_parts_of_the_timeline() {
     assert_eq!(
         follow["parameters"]["required"],
         json!(["description", "focus"])
+    );
+}
+
+#[test]
+fn optional_words_written_as_the_text_null_are_left_out() {
+    // As a paid run wrote them: each optional word "null" reads as left out, never as a sound or preset named "null".
+    let animate = ToolCall::parse(&call(
+        "animate",
+        r#"{"emphasis": "null", "enter": "pop", "exit": "null", "layer": "t1", "sound": "null"}"#,
+    ))
+    .unwrap();
+    let ToolCall::Animate {
+        enter,
+        exit,
+        emphasis,
+        sound,
+        ..
+    } = animate
+    else {
+        panic!("{animate:?}");
+    };
+    assert_eq!((exit, emphasis, sound), (None, None, None));
+    assert!(enter.is_some());
+    let text = ToolCall::parse(&call(
+        "addText",
+        r#"{"animation": "kinetic", "atSec": "null", "atWords": "what do these firsts", "durationSec": 3.0, "font": "null", "preset": "title", "text": "This Is Human History"}"#,
+    ))
+    .unwrap();
+    assert!(
+        matches!(
+            text,
+            ToolCall::AddText {
+                font: None,
+                at_us: None,
+                ..
+            }
+        ),
+        "{text:?}"
+    );
+    let sound = ToolCall::parse(&call(
+        "addSound",
+        r#"{"atSec": "null", "atWords": ["what do these firsts"], "name": "Rise"}"#,
+    ))
+    .unwrap();
+    assert!(
+        matches!(&sound, ToolCall::AddSound { at_us, .. } if at_us.is_empty()),
+        "{sound:?}"
     );
 }

@@ -79,6 +79,7 @@ fn reversed() -> Project {
 
 fn inputs(p: &Project) -> Inputs {
     Inputs {
+        turns: Default::default(),
         message: "play the second clip backward".into(),
         view: View::default(),
         refs: Refs::of(p),

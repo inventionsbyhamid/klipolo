@@ -99,6 +99,10 @@ pub fn caption_layer(
     if !p.captions.enabled {
         return None;
     }
+    // A short's hook in its 9:16 band holds the captions there until it ends (`hook_holds_captions`).
+    if format == FormatKind::Portrait && klipolo_model::captions::hook_holds_captions(p, at_us) {
+        return None;
+    }
     let pages = ctx.captions.pages.get(&format)?;
     let look = &*ctx.caption_style;
     let lead = Us::from(look.style.lead_ms) * 1_000;

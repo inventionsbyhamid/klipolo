@@ -157,6 +157,7 @@ fn scenes() -> HashMap<String, SceneLog> {
 
 fn inputs(p: &Project, message: &str) -> Inputs {
     Inputs {
+        turns: Default::default(),
         message: message.into(),
         view: View::default(),
         refs: Refs::of(p),
@@ -346,7 +347,8 @@ fn animate_the_last_picture_pops_it_in_with_a_sound_at_its_start() {
     let motion = picture.layout.motion.clone().expect("a motion");
     assert_eq!(preset(&motion.enter), named("pop"));
     assert_eq!(preset(&motion.looping), named("pulse"));
-    assert_eq!(motion.exit, None);
+    // A sticker given no place fades out as it came: beside the speaker for a moment.
+    assert_eq!(preset(&motion.exit), named("fade"));
     // The sound plays as it comes in, tied to the same footage.
     let sounds = layers(&after, TrackKind::Audio);
     assert_eq!(sounds.len(), 1);
@@ -680,10 +682,11 @@ fn a_short_planned_in_one_answer_applies_its_look_and_proposes_its_cut() {
             "chat.setCaptions",
             "chat.addText",
             "chat.addImage",
-            "chat.animate",
             "chat.addMusic"
         ]
     );
+    // The sticker comes in as Klipolo times a short's stickers, with its pop: the model's animate adds nothing more.
+    assert!(out.unchanged.contains(&6), "{:?}", out.unchanged);
     assert_eq!(out.proposed_calls, vec![1]);
     let proposal = out.proposal.as_ref().expect("the cut is proposed");
     // Applied, the short is the two parts kept (each snapped to the words it stands on), its layers on them.
@@ -767,6 +770,7 @@ fn a_kinetic_hook_over_a_face_in_9x16_rises_on_two_big_lines_under_the_face() {
         );
         assert_eq!(params.get("by"), Some(&ParamValue::Text("letter".into())));
         assert_eq!(params.get("size"), Some(&ParamValue::Number(130.0)));
+        // No cut in this answer: the words keep their length (a short's hook made with its cut holds 2.5 s at most).
         assert_eq!((layer.start_us, layer.duration_us), (secs(0.5), secs(3.0)));
         let b = portrait_box(layer, after.settings.primary_format);
         assert_eq!(b, klipolo_chat::compile::UNDER_FACE);
@@ -901,9 +905,10 @@ fn animate_last_never_reaches_past_a_layer_that_was_not_added() {
         out.refusals[1].reason,
         "animate: addImage was not done, so there is no layer to animate."
     );
-    // The heart keeps the motion it came with.
+    // The heart keeps the motion it came with: a sticker given no place pops in.
     let after = apply_ops(&p, &out.additions.unwrap().ops).unwrap();
-    assert_eq!(layers(&after, TrackKind::Overlay)[0].layout.motion, None);
+    let motion = layers(&after, TrackKind::Overlay)[0].layout.motion.clone();
+    assert_eq!(preset(&motion.expect("its own").enter), named("pop"));
 }
 
 /// `p` in 9:16 only.
@@ -1091,4 +1096,42 @@ fn a_later_keep_only_in_the_same_message_replaces_the_earlier_one() {
     };
     assert_eq!(kept(&out), kept(&alone));
     assert!(kept(&out) > secs(4.0), "{}", kept(&out));
+}
+
+#[test]
+fn a_ref_past_the_layers_listed_names_the_answers_own_new_layer() {
+    // Layers lists none yet: t1 and i1 are the words and the picture this message adds, as the next context will name
+    // them, never refused as layers that don't exist.
+    let p = project();
+    let out = run(
+        &p,
+        "add the title Day one in Lisbon and a heart, popping in",
+        &[
+            (
+                "addText",
+                json!({"text": "Day one in Lisbon", "preset": "title", "atSec": 0.5, "durationSec": 2.0, "animation": null}),
+            ),
+            (
+                "addImage",
+                json!({"file": "Heart", "size": "small", "position": "top-right", "atSec": 10.0, "durationSec": 2.0}),
+            ),
+            ("animate", animate("t1", json!({"enter": "pop"}))),
+            ("animate", animate("i1", json!({"enter": "bounce"}))),
+            ("animate", animate("i2", json!({"enter": "pop"}))),
+        ],
+    );
+    // i2 names nothing: refused as before.
+    assert_eq!(refused_to_model(&out, 4), "animate: there is no layer i2.");
+    let after =
+        klipolo_model::apply_ops(&p, &out.additions.as_ref().expect("additions").ops).unwrap();
+    let overlays = layers(&after, TrackKind::Overlay);
+    let text = (overlays.iter())
+        .find(|i| matches!(i.content, ItemContent::Text { .. }))
+        .expect("the title");
+    let picture = (overlays.iter())
+        .find(|i| matches!(i.content, ItemContent::Image { .. }))
+        .expect("the heart");
+    let enter = |i: &Item| preset(&i.layout.motion.as_ref().expect("motion").enter);
+    assert_eq!(enter(text), named("pop"));
+    assert_eq!(enter(picture), named("bounce"));
 }

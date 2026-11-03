@@ -360,6 +360,10 @@ pub async fn plan(
         }
         for (k, parsed) in read.parsed.iter().enumerate() {
             match (parsed, &outcomes[k]) {
+                // An undo refused after the message's own changes, the person not asking for one, was the model taking
+                // back its own call, which the refusal tells it to do another way: nothing they asked for is left
+                // undone. One they asked for ("make it red and undo the music") stays undone until done another way.
+                (Ok(ToolCall::Undo), Outcome::Back(_)) if !asks_undo(user) => {}
                 (Ok(call), Outcome::Back(_)) => pending.push(call.name().to_owned()),
                 (Err(_), _) => pending.push(answer.calls[k].name.clone()),
                 (Ok(call), _) if fresh.contains(call) => {
@@ -418,6 +422,14 @@ pub async fn plan(
             .to_owned();
     }
     Ok(out)
+}
+
+/// Whether `message` asks to take something back: undo, revert or take back.
+fn asks_undo(message: &str) -> bool {
+    let m = message.to_lowercase();
+    ["undo", "revert", "take back", "take it back", "roll back"]
+        .iter()
+        .any(|w| m.contains(w))
 }
 
 /// `text` up to the end of its last whole sentence: a `.`, `!` or `?` and any closing quotes or brackets, then a space
@@ -574,7 +586,10 @@ impl Read {
                         Some(r) if r.audience == Audience::Model => Outcome::Back(r.reason.clone()),
                         Some(_) => Outcome::Told,
                         None if compiled.proposed_calls.contains(&i) => Outcome::Proposed,
-                        None => Outcome::Done,
+                        // What Klipolo did with a short's sticker or sound, instead of "done".
+                        None => (compiled.told.iter())
+                            .find(|(k, _)| *k == i)
+                            .map_or(Outcome::Done, |(_, said)| Outcome::Said(said.clone())),
                     }
                 }
             })
@@ -590,6 +605,8 @@ enum Outcome {
     Told,
     Proposed,
     Done,
+    /// Done, or left out, as Klipolo says (`Compiled::told`).
+    Said(String),
 }
 
 impl Outcome {
@@ -604,6 +621,7 @@ impl Outcome {
             Outcome::Told => TOLD_PERSON,
             Outcome::Proposed => PROPOSED_OUTPUT,
             Outcome::Done => DONE_OUTPUT,
+            Outcome::Said(said) => said,
         }
     }
 }

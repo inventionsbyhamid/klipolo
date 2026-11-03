@@ -22,7 +22,7 @@
             {"name": "setFormat", "args": {"format": "portrait"}},
             {"name": "setCaptions", "args": {"on": true}},
             {"name": "addText"},
-            {"name": "animate"}
+            {"name": "addSound", "args": {"name": {"anyOf": ["Chime", "Ding"]}, "atWords": {"minItems": 1}}}
           ],
           "outcome": {"applied": true, "proposed": true, "keptSec": {"min": 40.0, "max": 75.0}}
         }

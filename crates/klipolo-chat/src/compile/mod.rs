@@ -37,8 +37,10 @@
 //! something at may instead be the words said there (`quote`: refused back when said nowhere, or in several places
 //! the answer's removals leave); its seconds snap to a word's start or a cut near them, else stay as given
 //! (`Evidence::place`). A clip ref resolves through
-//! the `Refs` the context was built with, never through the project's own order. `undo` doesn't mix with edits: the
-//! edits were compiled against the project before it, so they are refused back to the model.
+//! the `Refs` the context was built with, never through the project's own order. `undo` takes back the person's change
+//! from before the message, so it stands only as the message's first change: after a change of the message's own it
+//! is refused back to the model (it would leave this message's changes out), and changes after it, compiled against
+//! the project before it, are refused for the person to send again (`UNDO_FIRST`).
 //!
 //! Undo labels are message ids with values, worded by the UI: `chat.<tool>` (`chat.cutRange {startUs, endUs}`), and
 //! `chat.andMore {first, more}` for a step of several calls. What an addition did beyond what was asked, or what a
@@ -47,7 +49,8 @@
 //! `clips` (a clip's speed, volume, mute and framing, and the transitions at its cuts), `background` (what shows
 //! behind the video), `recorded` (a recording's camera, in `cameras` and `bubble`, and its sounds, in `sources`),
 //! `animate` (a layer's animation, with its sound), `zooms` (a recording's clicks as auto zooms), `clear` (a picture in
-//! 9:16 kept off the person on screen), `quote` (a moment by the words said there), `map`.
+//! 9:16 kept off the person on screen, a short's sticker beside the speaker's head), `cues` (a short's stickers and
+//! sound effects, placed and timed by what it shows), `quote` (a moment by the words said there), `map`.
 
 mod additions;
 mod animate;
@@ -56,6 +59,7 @@ mod bubble;
 mod cameras;
 mod clear;
 mod clips;
+mod cues;
 mod effects;
 mod layer;
 mod map;
@@ -86,7 +90,7 @@ use klipolo_model::query::main_track_duration;
 use klipolo_model::risk::{Review, removals};
 use klipolo_model::speech::{Speech, run_spans};
 use klipolo_model::time::{RangeUs, Us, kept_parts, merge_ranges};
-use klipolo_model::timeline::{Attach, ClipSource};
+use klipolo_model::timeline::{Attach, ClipSource, ItemContent};
 use klipolo_model::{ModelError, Project, finish_parts};
 
 use crate::context::{Refs, SceneLog, View, secs};
@@ -107,6 +111,15 @@ pub(crate) use sources::{OwnTrack, kind_of};
 pub use sources::{centre_ops, fill_gaps_ops};
 use trim::Trim;
 
+/// What the model is told of an `undo` after a change of the same message: it would take back the person's change
+/// before the message and leave this one's out.
+pub const UNDO_AFTER_CHANGES: &str = "undo: not done. Undo takes back the person's change from before this message, \
+     and this message has changes of its own: they would all be lost. To take back something the person names (an \
+     earlier change, or one of this message's), remove it or change it back with its own tool (setLayer remove for a \
+     layer); else leave it as it is.";
+/// What the person is told of the changes asked for after an undo in the same message: they were made on the project
+/// before it, so they wait for the person's next message.
+pub const UNDO_FIRST: &str = "I undid your last change first. Send the rest again and I'll do it.";
 /// What the person is told when a tool needs a clip's words and Klipolo is still hearing or timing them.
 pub const STILL_LISTENING: &str =
     "Klipolo is still listening to this clip. Ask me again when its analysis is done.";
@@ -160,6 +173,9 @@ pub struct Inputs {
     pub speech: Speech,
     /// Scene logs by asset id.
     pub scenes: HashMap<String, SceneLog>,
+    /// Each file's speaker turns by asset id, as the context reads them: who speaks either side of a short's cut
+    /// (`cues`).
+    pub turns: HashMap<String, Vec<crate::context::SpeakerTurn>>,
     /// Each file's analysis, by asset id.
     pub analysis: HashMap<String, AnalysisState>,
     /// The files whose rough words the preview's header offers to time again (Time words again), by asset id: a
@@ -255,6 +271,12 @@ pub struct Compiled {
     /// is fitted (`media::music::with_music_refit`): what the edits do to the music, not the edits themselves. Another
     /// app's batch is judged and committed without them, its host fitting the music as it does for the person.
     pub music_refit: usize,
+    /// What the model is told of a call instead of that it is done, by call index: what Klipolo did with a short's
+    /// stickers and sound effects (`cues`), placed and timed by what the short shows, or left out.
+    pub told: Vec<(usize, String)>,
+    /// The pictures in `additions` Klipolo placed beside the speaker (a short's stickers, and any sticker with no place
+    /// given), by layer id, for `place_beside_again` once the follow's path is known.
+    pub beside: Vec<(Id, Beside)>,
 }
 
 /// Removals for the person to approve.
@@ -319,6 +341,16 @@ pub struct MakeSticker {
     pub motion: Option<Box<Motion>>,
     /// Plays where its animation starts: as it comes in, or as it goes out when its motion has only an exit.
     pub sound: Option<Box<Asset>>,
+    /// A short's sticker: placed beside the speaker (`clear::beside_speaker`) rather than at `position`.
+    pub beside: Option<Beside>,
+}
+
+/// How a short's drawn sticker is placed beside the speaker once it comes: whether the answer followed the speaker
+/// (the follow keeps them in the middle of a cropped format), and the side it takes when both have the same room.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Beside {
+    pub follows: bool,
+    pub right: bool,
 }
 
 /// A call that compiled to nothing, and why, in one plain sentence on one line.
@@ -599,6 +631,8 @@ struct Compiler<'a> {
     portrait: bool,
     /// A call of the answer follows someone (`followSubject`): its footage shows people.
     follows: bool,
+    /// A short's stickers and sound effects, as Klipolo places them (`cues`); None when the answer plans no short.
+    cues: Option<cues::Cues>,
 }
 
 impl<'a> Compiler<'a> {
@@ -633,8 +667,10 @@ impl<'a> Compiler<'a> {
                     )
                 }),
             follows: (calls.iter()).any(|call| matches!(call, ToolCall::FollowSubject { .. })),
+            cues: None,
         };
         c.cut = c.cut_by(calls);
+        c.cues = cues::Cues::plan(&c, calls);
         c
     }
 
@@ -679,8 +715,12 @@ impl<'a> Compiler<'a> {
 
 impl Compiler<'_> {
     fn run(&self, calls: &[ToolCall]) -> Compiled {
+        // `undo` takes back the change before this message, so it stands only as the message's first change: after one
+        // of this message's own changes it would take back the person's earlier change and leave this message's out.
+        let first_change = calls.iter().position(is_edit);
+        let first_undo = (calls.iter()).position(|c| matches!(c, ToolCall::Undo));
         let mut out = Compiled {
-            undo: calls.iter().any(|c| matches!(c, ToolCall::Undo)),
+            undo: first_undo.is_some_and(|u| first_change.is_none_or(|e| u < e)),
             ..Compiled::default()
         };
         // In call order: the edits that are additions compile now; media layers go on the project they make, then
@@ -699,15 +739,20 @@ impl Compiler<'_> {
         let mut pictures = 0;
         // Klipolo's notes on what the additions did, by call index (`Compiled::notes`).
         let mut notes: Vec<(usize, String)> = Vec::new();
+        // What the model is told of a short's stickers and sounds (`Compiled::told`).
+        let mut told: Vec<(usize, String)> = Vec::new();
+        // The pictures placed beside the speaker (`Compiled::beside`), with their calls.
+        let mut beside: Vec<(Id, Beside)> = Vec::new();
         for (i, call) in calls.iter().enumerate() {
             // A recording tool's notes, said once its edit is kept.
             let mut recorded: Vec<String> = Vec::new();
+            if matches!(call, ToolCall::Undo) && !out.undo {
+                refuse(&mut out, i, to_model(UNDO_AFTER_CHANGES.to_owned()));
+                continue;
+            }
+            // The changes after an undo were made on the project before it: the person sends them again.
             if out.undo && is_edit(call) {
-                let reason = format!(
-                    "{}: not done, because undo is in the same answer. Call undo on its own, then the other changes.",
-                    call.name()
-                );
-                refuse(&mut out, i, to_model(reason));
+                refuse(&mut out, i, to_person(UNDO_FIRST.to_owned()));
                 continue;
             }
             if matches!(
@@ -929,6 +974,22 @@ impl Compiler<'_> {
             .collect();
         let mut animated: HashMap<usize, Animated> = HashMap::new();
         for (i, call) in layers {
+            // A layer tool on a short's sticker Klipolo left out: it went with it.
+            let tool_layer = match call {
+                ToolCall::SetMotion { layer, .. }
+                | ToolCall::AnimateText { layer, .. }
+                | ToolCall::SetLayer { layer, .. }
+                | ToolCall::StyleText { layer, .. }
+                | ToolCall::SetEffects { target: layer, .. } => Some(layer),
+                _ => None,
+            };
+            if let Some(layer) = tool_layer
+                && let Some(cues::Sticker::Left(_)) = self.cued_sticker(calls, layer, i)
+            {
+                adding.unchanged.push(i);
+                told.push((i, cues::LEFT_WITH_STICKER.to_owned()));
+                continue;
+            }
             if let Some(done) = self.layer_tool(calls, i, call, &added, &mut animated, &adding.work)
             {
                 let done = match done {
@@ -976,6 +1037,21 @@ impl Compiler<'_> {
                 sound,
             } = call
             {
+                // A short's sticker comes in and goes out as Klipolo times it, with its sound.
+                if let Some(sticker) = self.cued_sticker(calls, layer, i) {
+                    adding.unchanged.push(i);
+                    let asked_sound = (self.own_layer_call(calls, layer, i))
+                        .and_then(|j| self.cues.as_ref()?.sticker_sounds.get(&j));
+                    let said = match (sticker, asked_sound) {
+                        (cues::Sticker::At { .. }, Some((name, _))) => {
+                            format!("done: Klipolo pops it in with {name} and fades it out.")
+                        }
+                        (cues::Sticker::At { .. }, None) => cues::ANIMATED_ALREADY.to_owned(),
+                        (cues::Sticker::Left(_), _) => cues::LEFT_WITH_STICKER.to_owned(),
+                    };
+                    told.push((i, said));
+                    continue;
+                }
                 let change = animate::Change {
                     enter: *enter,
                     exit: *exit,
@@ -1009,6 +1085,7 @@ impl Compiler<'_> {
                 }
                 continue;
             }
+            let cued = self.cues.as_ref();
             let tried = match call {
                 ToolCall::MakeTitleCard {
                     title,
@@ -1017,7 +1094,72 @@ impl Compiler<'_> {
                     ..
                 } => media::make_title_card(self, &adding.work, title, (*at_us, *duration_us))
                     .map(|(edit, title_id)| (edit, Some(title_id))),
-                _ => self.addition(&adding.work, call).map(|edit| (edit, None)),
+                // A short's sticker, placed and timed by Klipolo, or left out.
+                ToolCall::AddImage { file, .. }
+                    if cued.is_some_and(|q| q.stickers.contains_key(&i)) =>
+                {
+                    let sticker = &cued.expect("cued").stickers[&i];
+                    let own = cued.is_some_and(|q| q.own_pictures.contains(&i));
+                    told.push((i, cues::told_of(sticker, own)));
+                    let edit = media::cued_sticker(self, &adding.work, (i, file), sticker);
+                    if let (Ok(edit), cues::Sticker::At { prefer, .. }) = (&edit, sticker) {
+                        beside.extend(media::picture_id(edit).map(|id| {
+                            let right = *prefer == clear::Side::Right;
+                            (
+                                id,
+                                Beside {
+                                    follows: self.follows,
+                                    right,
+                                },
+                            )
+                        }));
+                    }
+                    edit.map(|edit| (edit, None))
+                }
+                // A short's sound effect, at what is seen there, or left out.
+                ToolCall::AddSound { name, .. }
+                    if cued.is_some_and(|q| q.sounds.contains_key(&i)) =>
+                {
+                    let cue = &cued.expect("cued").sounds[&i];
+                    let edit = media::cued_sound(self, &adding.work, name, &cue.at);
+                    // Every moment of it already has the same sound: nothing more plays.
+                    let said = match &edit {
+                        Ok(e) if e.ops.is_empty() && !cue.at.is_empty() => {
+                            cues::ALREADY_THERE.to_owned()
+                        }
+                        _ => cue.told.clone(),
+                    };
+                    told.push((i, said));
+                    edit.map(|edit| (edit, None))
+                }
+                // A sticker with no place given goes beside the speaker (`media::add_image`): placed again once the
+                // follow's path is known.
+                ToolCall::AddImage { file, position, .. }
+                    if media::is_sticker(self, file, *position) =>
+                {
+                    let edit = self.addition(&adding.work, call);
+                    if let Ok(edit) = &edit {
+                        let at = Beside {
+                            follows: self.follows,
+                            right: true,
+                        };
+                        beside.extend(media::picture_id(edit).map(|id| (id, at)));
+                    }
+                    edit.map(|edit| (edit, None))
+                }
+                _ => self.addition(&adding.work, call).map(|edit| {
+                    // The short's hook: held at most 2.5 s, the 9:16 captions waiting while it shows in its band.
+                    let hook = cued.and_then(|q| q.hook).filter(|(h, _)| *h == i);
+                    match hook {
+                        Some(_) => {
+                            if let Some(said) = cued.and_then(cues::Cues::hook_said) {
+                                told.push((i, said));
+                            }
+                            (media::short_hook(edit), None)
+                        }
+                        None => (edit, None),
+                    }
+                }),
             }
             .and_then(|(edit, title_id)| {
                 let tried = (adding.try_edit(edit))
@@ -1053,6 +1195,29 @@ impl Compiler<'_> {
                 Err(r) => refuse(&mut out, i, r),
             }
         }
+        // A short's own sound effects, each its own change: a rise under the hook (where the hook is in), the
+        // whooshes where the speaker changes. Listed with the hook's call, else the cut's.
+        if let Some(cues) = &self.cues {
+            let refused = |i: usize| out.refusals.iter().any(|r| r.call_index == i);
+            let hook = cues.hook.map(|(h, _)| h).filter(|&h| !refused(h));
+            let cut = calls
+                .iter()
+                .position(|c| matches!(c, ToolCall::KeepOnly { .. }));
+            let at_call = hook.or(cut).unwrap_or(0);
+            for own in &cues.own {
+                if own.kind == cues::Kind::Rise && hook.is_none() {
+                    continue;
+                }
+                let Some(edit) = media::own_sound(self, &adding.work, own) else {
+                    continue;
+                };
+                if let Ok(tried) = adding.try_edit(edit)
+                    && tried.after.is_some()
+                {
+                    adding.keep(tried, at_call);
+                }
+            }
+        }
         waiting.sort_by_key(|(i, _)| *i);
         // A longer video plays the music that reached its end on to the new end.
         adding.refit_music(self.snapshot);
@@ -1077,6 +1242,16 @@ impl Compiler<'_> {
                 continue;
             };
             let times = (At::of(at_us, at_words.as_deref()), *duration_us);
+            // A short's drawn sticker: Klipolo's time and place, or left out.
+            if let Some(sticker) = self.cues.as_ref().and_then(|q| q.stickers.get(&i)) {
+                told.push((i, cues::told_of(sticker, false)));
+                match media::cued_make_sticker(self, &with_additions, prompt, sticker) {
+                    Ok(Some(job)) => jobs.push((i, job)),
+                    Ok(None) => adding.unchanged.push(i),
+                    Err(r) => refuse(&mut out, i, r),
+                }
+                continue;
+            }
             match media::make_sticker(self, &with_additions, prompt, *position, times) {
                 Ok(mut job) => {
                     if let (Job::MakeSticker(sticker), Some(a)) = (&mut job, animated.remove(&i)) {
@@ -1169,12 +1344,47 @@ impl Compiler<'_> {
         }
         out.waits = waits.into_iter().map(|(_, said)| said).collect();
         out.refusals.sort_by_key(|r| r.call_index);
+        told.retain(|(i, _)| !out.refusals.iter().any(|r| r.call_index == *i));
+        told.sort_by_key(|(i, _)| *i);
+        out.told = told;
+        let added: HashSet<&str> = (out.additions.iter().flat_map(|tx| &tx.ops))
+            .filter_map(|op| match op {
+                Op::AddItem { item, .. } => Some(item.id.as_str()),
+                _ => None,
+            })
+            .collect();
+        beside.retain(|(id, _)| added.contains(id.as_str()));
+        out.beside = beside;
         out
     }
 
-    /// The layer call `i` (of `tool`, which would `verb` it) names: by its ref from the context, or the one the last call
-    /// before it that adds a layer (`addText`, `addImage`, `makeTitleCard`, `makeSticker`) added (`added`, by call index):
-    /// none when that call was refused, never an earlier one.
+    /// The sticker call of a short that layer call `i` names (`last` after one, or its ref as this message's own
+    /// picture: `own_layer_call`), which Klipolo places and animates (`cues`), as Klipolo placed it or left it out.
+    fn cued_sticker(
+        &self,
+        calls: &[ToolCall],
+        layer: &LayerRef,
+        i: usize,
+    ) -> Option<&cues::Sticker> {
+        let cues = self.cues.as_ref()?;
+        if let LayerRef::One(r) = layer {
+            let refs = &self.inputs.refs;
+            if refs
+                .text(r)
+                .or_else(|| refs.picture(r))
+                .or_else(|| refs.video(r))
+                .is_some()
+            {
+                return None;
+            }
+        }
+        let j = self.own_layer_call(calls, layer, i)?;
+        cues.stickers.get(&j)
+    }
+
+    /// The layer call `i` (of `tool`, which would `verb` it) names: by its ref from the context, or the layer a call of
+    /// this message added that `last` or a ref past Layers names (`own_layer_call`; `added`, by call index): none when
+    /// that call was refused, never an earlier one.
     fn animated_layer(
         &self,
         (tool, verb): (&str, &str),
@@ -1183,41 +1393,74 @@ impl Compiler<'_> {
         i: usize,
         added: &[(usize, Added)],
     ) -> Result<Added, Refused> {
+        let not_done = |j: usize| {
+            to_model(format!(
+                "{tool}: {} was not done, so there is no layer to {verb}.",
+                calls[j].name()
+            ))
+        };
+        let own = |j: usize| {
+            (added.iter())
+                .find(|(k, _)| *k == j)
+                .map(|(_, a)| a.clone())
+                .ok_or_else(|| not_done(j))
+        };
         match layer {
-            LayerRef::Last => {
-                let adds = |c: &ToolCall| {
-                    matches!(
-                        c,
-                        ToolCall::AddText { .. }
-                            | ToolCall::AddImage { .. }
-                            | ToolCall::MakeTitleCard { .. }
-                            | ToolCall::MakeSticker { .. }
-                    )
-                };
-                let Some(j) = (0..i).rev().find(|&j| calls.get(j).is_some_and(adds)) else {
-                    return Err(to_model(format!(
-                        "{tool}: no layer was added before it in this answer. Name one by its ref from Layers, \
-                         such as t1 or i1."
-                    )));
-                };
-                (added.iter())
-                    .find(|(k, _)| *k == j)
-                    .map(|(_, a)| a.clone())
-                    .ok_or_else(|| {
-                        to_model(format!(
-                            "{tool}: {} was not done, so there is no layer to {verb}.",
-                            calls[j].name()
-                        ))
-                    })
-            }
+            LayerRef::Last => match self.own_layer_call(calls, layer, i) {
+                Some(j) => own(j),
+                None => Err(to_model(format!(
+                    "{tool}: no layer was added before it in this answer. Name one by its ref from Layers, such as \
+                     t1 or i1."
+                ))),
+            },
             LayerRef::One(r) => {
                 let refs = &self.inputs.refs;
-                (refs
-                    .text(r)
+                let listed = (refs.text(r))
                     .or_else(|| refs.picture(r))
-                    .or_else(|| refs.video(r)))
-                .map(|id| Added::Item(id.to_owned()))
-                .ok_or_else(|| to_model(format!("{tool}: there is no layer {r}.")))
+                    .or_else(|| refs.video(r));
+                match (listed, self.own_layer_call(calls, layer, i)) {
+                    (Some(id), _) => Ok(Added::Item(id.to_owned())),
+                    (None, Some(j)) => own(j),
+                    (None, None) => Err(to_model(format!("{tool}: there is no layer {r}."))),
+                }
+            }
+        }
+    }
+
+    /// The call of this message, before call `i`, whose layer `layer` names: for `last`, the last call before it that
+    /// adds a layer (`addText`, `addImage`, `makeTitleCard`, `makeSticker`); for a ref past those Layers lists (`t3`
+    /// where Layers has `t1` and `t2`), this message's own layers of that kind in call order, as the next context will
+    /// list them (`t3` the first words it adds, `i1` its first picture where Layers has none).
+    fn own_layer_call(&self, calls: &[ToolCall], layer: &LayerRef, i: usize) -> Option<usize> {
+        let words =
+            |c: &ToolCall| matches!(c, ToolCall::AddText { .. } | ToolCall::MakeTitleCard { .. });
+        let pictures =
+            |c: &ToolCall| matches!(c, ToolCall::AddImage { .. } | ToolCall::MakeSticker { .. });
+        let before = calls.get(..i)?;
+        match layer {
+            LayerRef::Last => (0..i)
+                .rev()
+                .find(|&j| words(&before[j]) || pictures(&before[j])),
+            LayerRef::One(r) => {
+                let refs = &self.inputs.refs;
+                let (kind, listed): (&dyn Fn(&ToolCall) -> bool, usize) = match r.chars().next()? {
+                    't' => (
+                        &words,
+                        (1..)
+                            .take_while(|k| refs.text(&format!("t{k}")).is_some())
+                            .count(),
+                    ),
+                    'i' => (
+                        &pictures,
+                        (1..)
+                            .take_while(|k| refs.picture(&format!("i{k}")).is_some())
+                            .count(),
+                    ),
+                    _ => return None,
+                };
+                let n: usize = r.get(1..)?.parse().ok()?;
+                let nth = n.checked_sub(listed + 1)?;
+                (0..i).filter(|&j| kind(&before[j])).nth(nth)
             }
         }
     }
@@ -1690,5 +1933,39 @@ impl Phase {
         self.done = done;
         self.refit_ops = refit.len();
         self.ops.extend(refit);
+    }
+}
+
+/// `ops` (a message's additions) with the pictures Klipolo placed beside the speaker (`Compiled::beside`) placed again
+/// on `p`, the project once the message's follow has landed: beside the head where the follow's path now keeps the
+/// speaker, which may be off the middle where the crop meets the picture's edge. Each is found in `p` by its id, at
+/// its time there; one `p` doesn't hold keeps its place.
+pub fn place_beside_again(p: &Project, ops: &mut [Op], beside: &[(Id, Beside)]) {
+    for op in ops {
+        let Op::AddItem { item, .. } = op else {
+            continue;
+        };
+        let Some((_, b)) = beside.iter().find(|(id, _)| *id == item.id) else {
+            continue;
+        };
+        let Some(now) = (p.timeline.tracks.iter())
+            .flat_map(|t| &t.items)
+            .find(|i| i.id == item.id)
+        else {
+            continue;
+        };
+        let ItemContent::Image { asset_id, .. } = &now.content else {
+            continue;
+        };
+        let Some(asset) = p.asset(asset_id) else {
+            continue;
+        };
+        let prefer = if b.right {
+            clear::Side::Right
+        } else {
+            clear::Side::Left
+        };
+        let (boxes, _) = clear::beside_speaker(p, now.start_us, asset, b.follows, prefer);
+        clear::place_beside(p, std::slice::from_mut(op), &boxes);
     }
 }

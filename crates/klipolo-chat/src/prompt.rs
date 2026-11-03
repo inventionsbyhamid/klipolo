@@ -11,8 +11,9 @@
 //! per blur; removals are proposals; media by name from the library, "the song", background music from the start, topic
 //! changes, Muse Image drawing a new picture, a title only in the person's words; a recording by its name and its
 //! clips' camera and sounds, and zooms on their clicks; a short planned whole in one answer from one request, as a
-//! short recipe the model adapts to what was asked, never a fixed macro, its stickers and sound effects placed on the
-//! words said (`atWords`) by what each is for; the layer refs and `last`; when a preset is
+//! short recipe the model adapts to what was asked, never a fixed macro, where it picks the moments of stickers and
+//! sound effects (the word, the payoff line) and Klipolo places and times them (`compile::cues`); the layer refs and
+//! `last`; when a preset is
 //! enough (`animate`) and when to compose keys, words by unit, a card's fields or an effect; the catalogues those tools
 //! name, kept out of their schemas: the motion presets, the effects with their settings and a clip's looks (a test holds
 //! them to `Catalog::builtin`), the bundled fonts; volume keys for a stretch; `cannotDo` when nothing fits); and how to
@@ -115,14 +116,13 @@ answers next (P1 is leftmost: People names them, else Scenes says where each sit
 \"these\").\n\
 - To place something where words are said, give atWords: 1 to 4 words in a row copied exactly from Transcript; it \
 starts as the first is said. Place stickers and sounds this way, on their word, not at the start of a moment or range.\n\
-- Stickers, at most 3 in a short, and none on a serious or sad line: only on a spoken word that names a thing, an \
-action or a feeling, showing that word: a Library image whose name fits it, else makeSticker. Medium at a top corner, \
-2 s, at most one per 8 s, then animate last with pop or bounce and its sound.\n\
-- Sound effects match the mood. A calm, serious or moving talk takes 2 to 4 in all: rise under the hook, one chime or \
-deep boom on the payoff, pop on a sticker. An upbeat or funny one may take one per 5 s at most: rise under the hook, \
-the only sound over the opening words; whoosh or swoosh on a cut to a new topic or speaker, never on every cut, or \
-text sliding in; pop on a sticker or text popping in, as animate's sound, never also addSound there; ding or chime on \
-a number, a key point or a reveal; impact or bass drop on a punchline or a big claim.\n\
+- In a short you pick the moments; Klipolo places and times stickers and sounds. Stickers: 3 or 4 at most, at least \
+10 s apart and none in the first 3 s or the last 2 s, each on a spoken word that names a thing, an action or a \
+feeling and carries the story, never on a serious or sad line: addImage of a Library picture whose name fits it (else \
+makeSticker) with atWords on that word, no position, size or time; Klipolo shows it beside the speaker. Sound \
+effects: Klipolo adds a rise under the hook, a pop with each sticker and a whoosh where the speaker changes, and what \
+comes back says which; mark the payoff line with addSound Chime and atWords on it; no other sound unless the person \
+names one, and none if they want none.\n\
 - Layers lists words (t1), pictures (i1), video layers (v1) and music (m1). last is the layer the call before added.\n\
 - animate is the quick way for a common move. For anything specific, compose it: setMotion keys (x 1 is a frame's \
 width right, y 1 its height down, scale 1 the layer's size), animateText for words by letter, word or line, setLayer \

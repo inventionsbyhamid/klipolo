@@ -18,7 +18,8 @@
             {"name": "setFormat", "args": {"format": "portrait"}},
             {"name": "setCaptions", "args": {"on": true, "style": {"anyOf": ["word-pop", "bold-box"]}}},
             {"name": "addText", "args": {"animation": {"anyOf": ["kinetic", "pop", "zoom", "bounce", "blur", "typewriter", "fromLeft", "fromRight", "fromTop", "fromBottom", "fade"]}}},
-            {"name": "animate", "args": {"layer": "last"}},
+            {"name": "addImage", "args": {"position": null, "atWords": {"contains": ""}}},
+            {"name": "addSound", "args": {"name": {"anyOf": ["Chime", "Ding"]}, "atWords": {"minItems": 1}}},
             {"name": "addMusic"}
           ],
           "outcome": {"applied": true, "proposed": true, "keptSec": {"min": 45.0, "max": 75.0}}
