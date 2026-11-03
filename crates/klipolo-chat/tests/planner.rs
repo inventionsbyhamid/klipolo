@@ -113,6 +113,7 @@ fn talk() -> (Project, Speech) {
 /// empty: the planner reads the person's message from its own argument.
 fn inputs(project: &Project, speech: Speech) -> Inputs {
     Inputs {
+        turns: Default::default(),
         message: String::new(),
         view: View::default(),
         refs: Refs::of(project),
@@ -1696,10 +1697,12 @@ fn a_short_places_its_sticker_and_sounds_on_the_words_said() {
             .map(|item| item.start_us)
             .collect()
     };
-    assert_eq!(starts(TrackKind::Overlay, None), [secs(2.9) - from]);
+    // The sticker from just before its word, as a short's are, with its pop.
+    let sticker = (secs(2.8).max(from)) - from;
+    assert_eq!(starts(TrackKind::Overlay, None), [sticker]);
     assert_eq!(
         starts(TrackKind::Audio, Some("klipolo-pack-pop")),
-        [secs(2.9) - from]
+        [sticker]
     );
     assert_eq!(
         starts(TrackKind::Audio, Some("klipolo-pack-ding")),

@@ -163,6 +163,7 @@ fn project() -> Project {
 
 fn inputs(p: &Project, message: &str) -> Inputs {
     Inputs {
+        turns: Default::default(),
         message: message.into(),
         view: View::default(),
         refs: Refs::of(p),
@@ -603,106 +604,6 @@ fn klipolo_plays_the_rise_and_the_whooshes_where_the_model_marks_only_the_payoff
 }
 
 #[test]
-fn a_short_with_no_sound_effects_gets_none() {
-    let p = project();
-    let mut calls = base();
-    calls.push(sticker("Rocket", 10)[0].clone());
-    let out = compile(&p, &inputs(&p, MESSAGE), &calls);
-    let after = short(&out);
-    let (pictures, sounds) = layers(&after);
-    assert_eq!(pictures.len(), 1);
-    assert!(sounds.is_empty(), "{sounds:?}");
-}
-
-#[test]
-fn the_captions_start_as_the_9x16_hook_fades() {
-    let p = project();
-    let out = compile(&p, &inputs(&p, MESSAGE), &plan());
-    let ops = &out.additions.as_ref().expect("additions").ops;
-    let hidden: Vec<(String, Us, Us)> = (ops.iter())
-        .filter_map(|op| match op {
-            Op::SetWordLook {
-                asset_id,
-                ranges,
-                look,
-            } if look.hidden == Some(true) => {
-                Some((asset_id.clone(), ranges[0].start, ranges[0].end))
-            }
-            _ => None,
-        })
-        .collect();
-    // The hook shows from "w1" (1.0 s) for 3 s and starts to fade before 4.0 s: the words from "w1" to "w6" (3.5 s)
-    // are hidden, and the captions come back with the word after.
-    let [(asset, start, end)] = &hidden[..] else {
-        panic!("{hidden:?}");
-    };
-    assert_eq!(asset, "panel");
-    assert_eq!(*start, secs(1.0));
-    assert!(*end > secs(3.0) && *end <= secs(4.0), "{end}");
-    // The words before the hook keep their captions.
-    assert!(*start > secs(0.8));
-}
-
-#[test]
-fn outside_a_short_stickers_and_sounds_go_where_asked() {
-    // No cut: not a short. The sticker keeps the corner asked for and the sound its word.
-    let p = project();
-    let calls = vec![
-        call(
-            "setFormat",
-            json!({"format": "portrait", "keepOthers": true}),
-        ),
-        sticker("Rocket", 10)[0].clone(),
-        sound("Impact", 70),
-    ];
-    let out = compile(
-        &p,
-        &inputs(&p, "add a rocket at the top right and an impact"),
-        &calls,
-    );
-    assert_eq!(out.refusals, vec![], "{:#?}", out.refusals);
-    let tx = out.additions.as_ref().expect("additions");
-    let after = klipolo_model::apply_ops(&p, &tx.ops).unwrap();
-    let (pictures, sounds) = layers(&after);
-    assert_eq!(pictures.len(), 1);
-    assert!(
-        near(pictures[0].1, 5.5) && near(pictures[0].2, 2.0),
-        "{pictures:?}"
-    );
-    assert_eq!(sounds, vec![("Impact".to_owned(), 35.5)]);
-    assert!(out.told.is_empty());
-}
-
-#[test]
-fn the_captions_come_back_at_the_cut_that_ends_the_hook() {
-    // The first part ends 2.8 s into the talk, before the hook's 3 s are up: the hook ends at that cut, and the
-    // captions of the second part show from its first word.
-    let p = project();
-    let mut calls = base();
-    calls[0] = call(
-        "keepOnly",
-        json!({"ranges": [
-            {"startSec": 0.5, "endSec": 2.8},
-            {"startSec": 32.0, "endSec": 46.8},
-            {"startSec": 62.0, "endSec": 76.8},
-            {"startSec": 92.0, "endSec": 106.8},
-        ]}),
-    );
-    let out = compile(&p, &inputs(&p, MESSAGE), &calls);
-    let ops = &out.additions.as_ref().expect("additions").ops;
-    let hidden: Vec<(Us, Us)> = (ops.iter())
-        .filter_map(|op| match op {
-            Op::SetWordLook { ranges, look, .. } if look.hidden == Some(true) => {
-                Some((ranges[0].start, ranges[0].end))
-            }
-            _ => None,
-        })
-        .collect();
-    // "w1" (1.0 s) to "w4" (2.5 to 2.8 s), the first part's last words.
-    assert_eq!(hidden, vec![(secs(1.0), secs(2.8))]);
-}
-
-#[test]
 fn a_drawn_sticker_in_a_short_is_timed_by_its_word_and_placed_beside_the_speaker_when_it_comes() {
     let p = project();
     let mut calls = base();
@@ -780,4 +681,304 @@ fn a_layer_tool_on_a_sticker_left_out_goes_with_it() {
         told[&7].starts_with("Left out with its sticker"),
         "{told:?}"
     );
+}
+
+#[test]
+fn a_short_hook_holds_at_most_2_5_s_and_no_caption_word_is_hidden() {
+    // The hook ("w1 w2 w3", asked for 3 s) shows 2.5 s at most; the 9:16 captions wait while it shows
+    // (`captions::hook_holds_captions`, drawn from the layer), so no word is hidden in the project, its caption files or
+    // its other versions.
+    let p = project();
+    let out = compile(&p, &inputs(&p, MESSAGE), &plan());
+    let ops = &out.additions.as_ref().expect("additions").ops;
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::SetWordLook { .. })),
+        "{ops:#?}"
+    );
+    let after = short(&out);
+    let hook = (after.timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .find(|i| klipolo_model::captions::in_hook_band(&after, i))
+        .expect("the hook in its band");
+    assert_eq!(hook.duration_us, secs(2.5));
+    // The captions wait in 9:16 while it shows, and come back as it ends.
+    assert!(klipolo_model::captions::hook_holds_captions(
+        &after,
+        hook.start_us + secs(2.4)
+    ));
+    assert!(!klipolo_model::captions::hook_holds_captions(
+        &after,
+        hook.end_us()
+    ));
+}
+
+#[test]
+fn a_short_plays_its_sound_effects_without_a_sound_call() {
+    // The model sends no sound call at all: the rise, each sticker's pop and the whooshes still play, and the hook's
+    // call says so.
+    let p = project();
+    let mut calls = base();
+    calls.extend(sticker("Rocket", 10));
+    let out = compile(&p, &inputs(&p, MESSAGE), &calls);
+    let after = short(&out);
+    let (_, sounds) = layers(&after);
+    let names: Vec<&str> = sounds.iter().map(|(n, _)| n.as_str()).collect();
+    assert_eq!(names, vec!["Rise", "Pop", "Whoosh", "Whoosh"], "{sounds:?}");
+    let told: HashMap<usize, &str> = (out.told.iter()).map(|(i, s)| (*i, s.as_str())).collect();
+    let hook = told[&4];
+    assert!(
+        hook.contains("a rise under it") && hook.contains("whooshes") && hook.contains("pop"),
+        "{hook}"
+    );
+    // Each is its own change on the card.
+    let changes: Vec<String> = (out.changes.iter())
+        .filter(|c| c.code == "chat.addSound")
+        .map(|c| format!("{:?}", c.params.get("name")))
+        .collect();
+    assert_eq!(changes.len(), 2, "{changes:?}");
+}
+
+#[test]
+fn a_short_the_person_wants_without_sound_effects_gets_none() {
+    let p = project();
+    let mut calls = base();
+    calls.extend(sticker("Rocket", 10));
+    calls.push(sound("Chime", 130));
+    let out = compile(
+        &p,
+        &inputs(&p, "Make a 60 second short, no sound effects"),
+        &calls,
+    );
+    let after = short(&out);
+    let (pictures, sounds) = layers(&after);
+    assert_eq!(pictures.len(), 1);
+    assert!(sounds.is_empty(), "{sounds:?}");
+}
+
+#[test]
+fn outside_a_short_a_sticker_with_a_place_goes_there_and_one_without_goes_beside_the_speaker() {
+    // A vertical version and stickers, no cut and no short asked for: not a short. The message names no place and no
+    // sound, so only the gate decides.
+    let p = project();
+    let calls = vec![
+        call(
+            "setFormat",
+            json!({"format": "portrait", "keepOthers": true}),
+        ),
+        sticker("Rocket", 10)[0].clone(),
+        call(
+            "addImage",
+            json!({"file": "Heart", "size": null, "position": null, "atSec": null, "atWords": w(40), "durationSec": null}),
+        ),
+        sound("Impact", 70),
+    ];
+    let out = compile(
+        &p,
+        &inputs(&p, "add the pictures on w10 and w40 and a sound on w70"),
+        &calls,
+    );
+    assert_eq!(out.refusals, vec![], "{:#?}", out.refusals);
+    assert!(out.told.is_empty());
+    let tx = out.additions.as_ref().expect("additions");
+    let after = klipolo_model::apply_ops(&p, &tx.ops).unwrap();
+    let (pictures, sounds) = layers(&after);
+    // The Rocket where the model put it: its word, 2 s, the top right.
+    let rocket = &pictures[0];
+    assert!(near(rocket.1, 5.5) && near(rocket.2, 2.0), "{pictures:?}");
+    assert!(portrait_box(&after, &rocket.3).x > 0.5);
+    // The Heart, given no place: beside the speaker for 1.5 s, popping in, never in the middle on them.
+    let heart = &pictures[1];
+    assert!(near(heart.2, 1.5), "{pictures:?}");
+    let b = portrait_box(&after, &heart.3);
+    assert!(!overlaps(b, klipolo_chat::compile::FACE_ZONE), "{b:?}");
+    assert!((0.17..=0.24).contains(&b.w), "{b:?}");
+    let enter = heart
+        .3
+        .layout
+        .motion
+        .as_ref()
+        .and_then(|m| m.enter.as_ref());
+    assert!(enter.is_some_and(|u| u.preset.as_str().ends_with("motion.pop")));
+    // The sound where the model put it.
+    assert_eq!(sounds, vec![("Impact".to_owned(), 35.5)]);
+}
+
+#[test]
+fn a_vertical_project_given_a_plain_trim_is_no_short() {
+    // Already vertical; a trim and a sound: placed as asked, as on main.
+    let mut p = project();
+    p.settings.formats = vec![FormatKind::Portrait];
+    p.settings.primary_format = FormatKind::Portrait;
+    let calls = vec![
+        call(
+            "keepOnly",
+            json!({"ranges": [{"startSec": 0.5, "endSec": 40.0}]}),
+        ),
+        sound("Impact", 70),
+    ];
+    let out = compile(
+        &p,
+        &inputs(&p, "keep the first 40 seconds and add a sound on w70"),
+        &calls,
+    );
+    assert!(out.told.is_empty(), "{:?}", out.told);
+    let after = short(&out);
+    let (_, sounds) = layers(&after);
+    assert_eq!(sounds.len(), 1, "{sounds:?}");
+}
+
+#[test]
+fn a_sticker_the_person_names_stays_even_where_the_rules_leave_others_out() {
+    // "a heart when he says w4": w4 comes under the hook, where no sticker shows unless the person asked for it.
+    let p = project();
+    let mut calls = base();
+    calls.extend(sticker("Heart", 4));
+    let out = compile(
+        &p,
+        &inputs(&p, "Make a 60 second short and put a heart on w4"),
+        &calls,
+    );
+    let after = short(&out);
+    let (pictures, _) = layers(&after);
+    assert_eq!(pictures.len(), 1, "{pictures:?}");
+    assert!(near(pictures[0].1, in_short(&after, 2.4)), "{pictures:?}");
+    let told: HashMap<usize, &str> = (out.told.iter()).map(|(i, s)| (*i, s.as_str())).collect();
+    assert!(told[&5].starts_with("done"), "{told:?}");
+}
+
+#[test]
+fn a_sound_the_person_names_by_what_it_is_is_kept() {
+    // Named by a tag that isn't its first: "cha ching" is the Cash register's.
+    let p = project();
+    let mut i = inputs(&p, "Make a 60 second short with a cha ching on w70");
+    i.library.items.push(LibraryItem {
+        name: "Cash register".into(),
+        kind: MediaKind::Sound,
+        asset: asset("pack-cash", "audio", "Cash register.wav", 1.4, (0, 0)),
+        pack: true,
+        tags: vec![
+            "cash register".into(),
+            "money".into(),
+            "sale".into(),
+            "cha ching".into(),
+        ],
+    });
+    let mut calls = base();
+    calls.push(sound("Cash register", 70));
+    let out = compile(&p, &i, &calls);
+    let after = short(&out);
+    let (_, sounds) = layers(&after);
+    let kept: Vec<f64> = (sounds.iter())
+        .filter(|(n, _)| n == "Cash register")
+        .map(|(_, t)| *t)
+        .collect();
+    assert_eq!(kept.len(), 1, "{sounds:?}");
+    assert!(near(kept[0], in_short(&after, 35.5)), "{sounds:?}");
+}
+
+#[test]
+fn a_later_call_never_takes_out_a_sticker_an_earlier_one_placed() {
+    // Fire (w70, 35.5 s) is called first; Star (w60, 30.5 s, earlier in the short but within 10 s of Fire) after it,
+    // as a later round would retry it. Fire stays; Star is left out.
+    let p = project();
+    let mut calls = base();
+    calls.extend(sticker("Fire", 70));
+    calls.extend(sticker("Star", 66));
+    let out = compile(&p, &inputs(&p, MESSAGE), &calls);
+    let after = short(&out);
+    let (pictures, _) = layers(&after);
+    let names: Vec<&str> = pictures.iter().map(|(n, ..)| n.as_str()).collect();
+    assert_eq!(names, vec!["Fire"], "{pictures:?}");
+}
+
+#[test]
+fn whooshes_follow_the_transcripts_speakers_over_the_scene_logs_words() {
+    // The scene log names one man two ways; the transcript's turns say one voice speaks to 60 s and another after.
+    let p = project();
+    let mut i = inputs(&p, MESSAGE);
+    let scene = |start: f64, end: f64, who: &str| SceneEntry {
+        start_us: secs(start),
+        end_us: secs(end),
+        kind: "speech".into(),
+        who: who.into(),
+        text: "talks".into(),
+        on_screen_text: None,
+    };
+    i.scenes.insert(
+        "panel".into(),
+        SceneLog {
+            items: vec![
+                scene(0.0, 40.0, "man in a blue shirt"),
+                scene(40.0, 120.0, "the man"),
+            ],
+        },
+    );
+    let turn = |start: f64, end: f64, who: &str| klipolo_chat::SpeakerTurn {
+        start_us: secs(start),
+        end_us: secs(end),
+        speaker: Some(who.into()),
+    };
+    i.turns.insert(
+        "panel".into(),
+        vec![turn(0.0, 60.0, "A"), turn(60.0, 120.0, "B")],
+    );
+    let mut calls = base();
+    calls.push(sound("Chime", 130));
+    let out = compile(&p, &i, &calls);
+    let after = short(&out);
+    let (_, sounds) = layers(&after);
+    let whooshes: Vec<f64> = (sounds.iter())
+        .filter(|(n, _)| n == "Whoosh")
+        .map(|(_, t)| *t)
+        .collect();
+    // The cuts: at 32 s (A again), 62 s (A to B) and 92 s (B again): one whoosh, at the second.
+    let cuts = cuts(&after);
+    assert_eq!(whooshes.len(), 1, "{sounds:?}");
+    assert!(near(whooshes[0], cuts[2]), "{sounds:?} {cuts:?}");
+}
+
+#[test]
+fn a_sticker_placed_before_the_follow_moves_beside_the_head_where_the_path_puts_it() {
+    // At compile time the follow hasn't run: the sticker goes beside the middle. Once the path lands with the speaker
+    // near the picture's left edge (the crop meets it, so in 9:16 they sit left of the middle), it moves beside them.
+    let p = project();
+    let mut calls = base();
+    calls.extend(sticker("Rocket", 10));
+    calls.extend(sticker("Fire", 70));
+    let out = compile(&p, &inputs(&p, MESSAGE), &calls);
+    assert_eq!(out.beside.len(), 2, "{:?}", out.beside);
+    let mut after = short(&out);
+    let path = FocusPath {
+        keys: vec![FocusKey {
+            at_us: 0,
+            x: 0.1,
+            y: 0.5,
+            cut: false,
+        }],
+    };
+    for clip in &mut after.timeline.main {
+        clip.fill_focus.insert(
+            FormatKind::Portrait,
+            FillFocus::Speaker {
+                path: path.clone(),
+                keep: Keep::Speaker,
+                people: Vec::new(),
+            },
+        );
+    }
+    let mut ops = out.additions.as_ref().expect("additions").ops.clone();
+    klipolo_chat::place_beside_again(&after, &mut ops, &out.beside);
+    let head_right = 0.1 / (9.0 / 16.0 / (16.0 / 9.0)) + 0.22;
+    for (id, _) in &out.beside {
+        let item = (ops.iter())
+            .find_map(|op| match op {
+                Op::AddItem { item, .. } if &item.id == id => Some(item.clone()),
+                _ => None,
+            })
+            .expect("the sticker");
+        let b = portrait_box(&after, &item);
+        // Both on the right of the off-centre head, near it: the left (Fire's turn) has no room.
+        assert!(b.x >= head_right - 1e-6, "on the head: {b:?}");
+        assert!(b.x - head_right < 0.05, "far from the head: {b:?}");
+    }
 }

@@ -205,6 +205,7 @@ fn scenes() -> HashMap<String, SceneLog> {
 /// What `compile` reads besides the project: every file analyzed, the playhead at 0, no selection.
 fn inputs(p: &Project, message: &str) -> Inputs {
     Inputs {
+        turns: Default::default(),
         message: message.into(),
         view: View::default(),
         refs: Refs::of(p),
@@ -1083,7 +1084,8 @@ fn add_image_by_name_places_it_by_size_and_position() {
     assert!(near(r.h * 1080.0, r.w * 1920.0 / 2.0), "{r:?}");
     assert!(near((1.0 - r.x - r.w) * 1920.0, margin), "{r:?}");
     assert!(near(r.y * 1080.0, margin), "{r:?}");
-    // Left unsaid: medium (0.35 of the width) in the middle.
+    // A pack sticker with no place given: beside the speaker, never in the middle of the frame on them, at a size by the
+    // frame's height, popping in (no one is followed here, so out at the frame's edge).
     let out = compile(
         &p,
         &i,
@@ -1097,8 +1099,11 @@ fn add_image_by_name_places_it_by_size_and_position() {
         ["pack-heart"]
     );
     let heart = &layers(&applied(&p, &out), TrackKind::Overlay)[0];
-    assert_eq!(heart.layout.anchor, Anchor::Center);
-    assert!(near(heart.layout.rect.w, 0.35) && near(heart.layout.rect.x, 0.325));
+    assert!(
+        heart.layout.rect.x > 0.8 && heart.layout.rect.w < 0.1,
+        "{:?}",
+        heart.layout.rect
+    );
     assert_eq!(heart.duration_us, secs(2.0));
     // A sound is no picture.
     let out = compile(
@@ -1375,7 +1380,10 @@ fn a_drawn_sticker_is_placed_where_its_job_says_as_a_picture_is() {
     // A 5 s sticker at 12 s, top right; the drawing comes back as a picture not in the project yet.
     let p = project();
     let mut job = sticker_job(&p, 12.0);
+    // A corner asked for: placed there, as a picture is.
     job.position = Position::TopRight;
+    job.beside = None;
+    job.motion = None;
     let drawn = asset(
         "drawn",
         "image",
@@ -1746,7 +1754,7 @@ fn a_sticker_keeps_to_its_footage_whatever_the_answer_does_before_it() {
         );
         assert_eq!(
             sticker_placement(&with_additions, job),
-            Some((secs(17.0), secs(5.0)))
+            Some((secs(17.0), secs(1.5)))
         );
     }
 }
@@ -1839,7 +1847,7 @@ fn a_stickers_footage_is_found_again_once_a_removal_is_applied() {
         // Applied, the cut moves "flying" earlier by what it took away; the sticker follows it there.
         assert_eq!(
             sticker_placement(&after, job),
-            Some((secs(12.0) - proposal.removed_us, secs(5.0))),
+            Some((secs(12.0) - proposal.removed_us, secs(1.5))),
             "{calls:?}"
         );
     }
@@ -1954,7 +1962,7 @@ fn media_additions_apply_at_once_as_one_step() {
     assert!(matches!(
         out.jobs.as_slice(),
         [Job::MakeSticker(MakeSticker {
-            position: Position::Center,
+            beside: Some(_),
             ..
         })]
     ));

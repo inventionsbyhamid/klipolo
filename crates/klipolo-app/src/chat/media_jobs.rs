@@ -26,6 +26,8 @@ impl StickerPlacement for Sticker {
 /// A sticker to draw.
 pub(super) fn sticker(job: &MakeSticker) -> PictureAsk {
     let corner = match job.position {
+        // No place given: beside the speaker (`MakeSticker::beside`).
+        _ if job.beside.is_some() => "beside the speaker",
         Position::TopLeft => "in the top left corner",
         Position::TopRight => "in the top right corner",
         Position::BottomLeft => "in the bottom left corner",

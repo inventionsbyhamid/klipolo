@@ -67,11 +67,7 @@ use crate::evidence::{TOLERANCE_US, in_cut};
 use crate::library::{Found, LibraryItem, MediaKind, is_generic};
 use crate::sanitize;
 use crate::tools::{Entrance, Exit, PictureSize, Position, TextPreset, ToolCall};
-use klipolo_model::captions::looks::Look;
 use klipolo_model::media::image::Spot;
-use klipolo_model::query::clip_at;
-use klipolo_model::time::RangeUs;
-use klipolo_model::timeline::ClipSource;
 
 /// The most names a refusal lists, then how many more there are: as many as Library shows of a kind.
 const LISTED: usize = crate::context::LIBRARY_NAMES;
@@ -752,6 +748,16 @@ pub(super) fn font_note(c: &Compiler, call: &ToolCall) -> Option<String> {
     ))
 }
 
+/// Whether `addImage` of `file` with this place is a sticker Klipolo places beside the speaker: a pack picture (not a
+/// background) with no place given. The person's own pictures (a logo) go where asked, as ever.
+pub(super) fn is_sticker(c: &Compiler, file: &str, position: Option<Position>) -> bool {
+    let Ok(item) = pick(c, "addImage", file, &[MediaKind::Image]) else {
+        return false;
+    };
+    let background = item.tags.iter().any(|t| t == "background");
+    position.is_none() && item.pack && !background && item.asset.kind == AssetKind::Image
+}
+
 pub(super) fn add_image(
     c: &Compiler,
     work: &Project,
@@ -767,6 +773,33 @@ pub(super) fn add_image(
         )));
     }
     let start = start(c, work, "addImage", at.field(), at)?;
+    // A sticker with no place given, in a short or not: beside the speaker for a moment, never in the middle of the
+    // frame on them.
+    if is_sticker(c, file, position) {
+        let len = length(work, start, duration.or(Some(cues::HOLD_US)), IMAGE_US);
+        let mut ops = add_image_ops_at(
+            work,
+            &item.asset,
+            start,
+            PictureSize::Medium.share(),
+            Spot::TopRight,
+        )
+        .map_err(|e| to_model(format!("addImage: {e}")))?;
+        let (boxes, _) = clear::beside_speaker(work, start, &item.asset, c.follows, Side::Right);
+        clear::place_beside(work, &mut ops, &boxes);
+        for op in &mut ops {
+            if let Op::AddItem { item, .. } = op {
+                item.layout.motion = popping(len);
+            }
+        }
+        return Ok(Edit {
+            ops: lasting(ops, len),
+            label: label(
+                "addImage",
+                vec![("file", ErrorParam::from(item.name.as_str()))],
+            ),
+        });
+    }
     let size = size.unwrap_or(PictureSize::Medium);
     let spot = position.unwrap_or(Position::Center).spot();
     // As the library's + puts a picture (`add_image_ops`), at a size and in a corner when one was asked for.
@@ -871,16 +904,27 @@ pub(super) fn make_sticker(
     (at, duration): (At, Option<Us>),
 ) -> Result<Job, Refused> {
     let start = start(c, with_additions, "makeSticker", at.field(), at)?;
+    // No place given: beside the speaker for a moment, popping in, never in the middle of the frame on them.
+    let beside = position.is_none().then_some(Beside {
+        follows: c.follows,
+        right: true,
+    });
+    let held = if beside.is_some() {
+        duration.or(Some(cues::HOLD_US))
+    } else {
+        duration
+    };
+    let duration_us = length(with_additions, start, held, IMAGE_US);
     Ok(Job::MakeSticker(MakeSticker {
         prompt: sanitize::reply(prompt),
         at_us: start,
-        duration_us: length(with_additions, start, duration, IMAGE_US),
-        position: position.unwrap_or(Position::Center),
+        duration_us,
+        position: position.unwrap_or(Position::TopRight),
         size: PictureSize::Medium,
         anchor: anchor_at(&with_additions.timeline.main, start),
-        motion: None,
+        motion: beside.and_then(|_| popping(duration_us)).map(Box::new),
         sound: None,
-        beside: None,
+        beside,
     }))
 }
 
@@ -938,7 +982,7 @@ fn popping(len_us: Us) -> Option<Motion> {
 pub(super) fn cued_sticker(
     c: &Compiler,
     work: &Project,
-    file: &str,
+    (call, file): (usize, &str),
     sticker: &cues::Sticker,
 ) -> Result<Edit, Refused> {
     let item = pick(c, "addImage", file, &[MediaKind::Image])?;
@@ -979,13 +1023,18 @@ pub(super) fn cued_sticker(
     }
     let duration = length(work, at, Some(duration), IMAGE_US);
     let mut ops = lasting(ops, duration);
-    if let Some(pop) = c.cues.as_ref().and_then(|q| q.pop.as_ref()) {
-        let with = apply_ops(work, &ops).map_err(|e| to_model(format!("addImage: {e}")))?;
-        if !sound_near(c, &with, &pop.id, at) {
-            ops.extend(
-                add_sound_ops(&with, pop, at).map_err(|e| to_model(format!("addImage: {e}")))?,
-            );
-        }
+    // Its pop, or the sound the person asked for it; a sound that can't play leaves the sticker as it is.
+    let cues = c.cues.as_ref();
+    let sound = (cues
+        .and_then(|q| q.sticker_sounds.get(&call))
+        .map(|(_, a)| a))
+    .or_else(|| cues.and_then(|q| q.pop.as_ref()));
+    if let Some(sound) = sound
+        && let Ok(with) = apply_ops(work, &ops)
+        && !sound_near(c, &with, &sound.id, at)
+        && let Ok(more) = add_sound_ops(&with, sound, at)
+    {
+        ops.extend(more);
     }
     Ok(Edit { ops, label })
 }
@@ -1024,23 +1073,38 @@ pub(super) fn cued_sound(
     })
 }
 
-/// The short's hook `edit` with Klipolo's own sound effects (`cues::Cues::own`: a rise under it, the whooshes where the
-/// speaker changes) played with it. One that no longer fits is left out.
-pub(super) fn with_own_sounds(c: &Compiler, work: &Project, mut edit: Edit) -> Edit {
-    let Some(cues) = c.cues.as_ref() else {
-        return edit;
-    };
-    for (asset, at) in &cues.own {
-        let starts: Vec<Us> = (at.iter())
-            .filter_map(|&t| c.map.time(work, t))
-            .filter(|&now| video_duration(&work.timeline).saturating_sub(now) >= MIN_DURATION_US)
-            .collect();
-        // Each its own file, so each adds its file to the project itself.
-        if let Ok(ops) = sounds_at(work, asset, &starts) {
-            edit.ops.extend(ops);
+/// The picture layer `edit` adds, by id.
+pub(super) fn picture_id(edit: &Edit) -> Option<Id> {
+    (edit.ops.iter()).find_map(|op| match op {
+        Op::AddItem { item, .. } if matches!(item.content, ItemContent::Image { .. }) => {
+            Some(item.id.clone())
         }
+        _ => None,
+    })
+}
+
+/// One of a short's own sound effects (`cues::Own`: a rise under the hook, the whooshes where the speaker changes) as
+/// its own change, labelled as `addSound`'s; None when none of its moments fits.
+pub(super) fn own_sound(c: &Compiler, work: &Project, own: &cues::Own) -> Option<Edit> {
+    let starts: Vec<Us> = (own.at.iter())
+        .filter_map(|&t| c.map.time(work, t))
+        .filter(|&now| video_duration(&work.timeline).saturating_sub(now) >= MIN_DURATION_US)
+        .filter(|&now| !sound_near(c, work, &own.asset.id, now))
+        .collect();
+    if starts.is_empty() {
+        return None;
     }
-    edit
+    let ops = sounds_at(work, &own.asset, &starts).ok()?;
+    Some(Edit {
+        ops,
+        label: label(
+            "addSound",
+            vec![
+                ("name", ErrorParam::from(own.name.as_str())),
+                ("count", ErrorParam::from(starts.len())),
+            ],
+        ),
+    })
 }
 
 /// The ops that play `asset` at each of `starts` of `work`: the file once (when the project hasn't got it), then a
@@ -1069,78 +1133,21 @@ fn sounds_at(work: &Project, asset: &Asset, starts: &[Us]) -> Result<Vec<Op>, Re
     Ok(ops)
 }
 
-/// The short's hook `edit` with the captions' words under it hidden until it starts to fade, where it sits in its
-/// 9:16 band (`clear::UNDER_FACE`, just above the captions): the words said while it shows, up to the short's first
-/// cut, where it ends, in each file's own time (a caption look, so they follow the words). A file whose words there have a look already
-/// keeps its captions, as does a hook placed anywhere else.
-pub(super) fn captions_after_hook(c: &Compiler, work: &Project, mut edit: Edit) -> Edit {
-    let (Some(cues), Some(hook)) = (
-        c.cues.as_ref(),
-        (edit.ops.iter()).find_map(|op| match op {
-            Op::AddItem { item, .. } => Some(item.clone()),
+/// The short's hook `edit`, held at most `cues::HOOK_MAX_US` (a cut ends it sooner, as its ripple shortens a layer
+/// that runs past it): sound-off viewers read the captions, which wait while it shows in its 9:16 band
+/// (`captions::hook_holds_captions`).
+pub(super) fn short_hook(edit: Edit) -> Edit {
+    let len = (edit.ops.iter())
+        .find_map(|op| match op {
+            Op::AddItem { item, .. } => Some(item.duration_us),
             _ => None,
-        }),
-    ) else {
-        return edit;
-    };
-    let Some((_, span)) = cues.hook else {
-        return edit;
-    };
-    if !clear::under_face(work, &hook) {
-        return edit;
+        })
+        .unwrap_or(cues::HOOK_MAX_US)
+        .min(cues::HOOK_MAX_US);
+    Edit {
+        ops: lasting(edit.ops, len),
+        label: edit.label,
     }
-    let fade = (hook.layout.motion.as_ref())
-        .and_then(|m| m.exit.as_ref())
-        .map_or(0, |e| e.duration_us);
-    let shown = hook.duration_us.saturating_sub(fade);
-    let main = &c.snapshot.timeline.main;
-    let mut hidden: BTreeMap<String, (Us, Us)> = BTreeMap::new();
-    for part in cues.kept_within(span.start, shown) {
-        let mut t = part.start;
-        while t < part.end {
-            let Some((i, start)) = clip_at(main, t) else {
-                break;
-            };
-            let clip = &main[i];
-            let end = part.end.min(start + clip.duration_us());
-            if let ClipSource::Asset { id } = &clip.source
-                && let Some(words) = c.inputs.speech.transcripts.get(id)
-            {
-                let source = |at: Us| clip.source_in_us + ((at - start) as f64 * clip.speed) as Us;
-                let (a, b) = (source(t), source(end));
-                for w in (words.words.iter()).filter(|w| w.kind != WordKind::Pause) {
-                    if w.start_us >= a && w.start_us < b {
-                        let range = hidden.entry(id.clone()).or_insert((w.start_us, w.end_us));
-                        range.0 = range.0.min(w.start_us);
-                        range.1 = range.1.max(w.end_us);
-                    }
-                }
-            }
-            if end <= t {
-                break;
-            }
-            t = end;
-        }
-    }
-    for (asset_id, (start_us, end_us)) in hidden {
-        let looked = (work.word_looks.iter())
-            .any(|l| l.asset_id == asset_id && l.start_us < end_us && start_us < l.end_us);
-        if looked {
-            continue;
-        }
-        edit.ops.push(Op::SetWordLook {
-            asset_id,
-            ranges: vec![RangeUs {
-                start: start_us,
-                end: end_us,
-            }],
-            look: Look {
-                hidden: Some(true),
-                ..Look::default()
-            },
-        });
-    }
-    edit
 }
 
 /// `makeTitleCard`'s title, an addition on the additions' working copy, and its layer's id for the background's job.

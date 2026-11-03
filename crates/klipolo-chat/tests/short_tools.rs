@@ -157,6 +157,7 @@ fn scenes() -> HashMap<String, SceneLog> {
 
 fn inputs(p: &Project, message: &str) -> Inputs {
     Inputs {
+        turns: Default::default(),
         message: message.into(),
         view: View::default(),
         refs: Refs::of(p),
@@ -346,7 +347,8 @@ fn animate_the_last_picture_pops_it_in_with_a_sound_at_its_start() {
     let motion = picture.layout.motion.clone().expect("a motion");
     assert_eq!(preset(&motion.enter), named("pop"));
     assert_eq!(preset(&motion.looping), named("pulse"));
-    assert_eq!(motion.exit, None);
+    // A sticker given no place fades out as it came: beside the speaker for a moment.
+    assert_eq!(preset(&motion.exit), named("fade"));
     // The sound plays as it comes in, tied to the same footage.
     let sounds = layers(&after, TrackKind::Audio);
     assert_eq!(sounds.len(), 1);
@@ -768,7 +770,8 @@ fn a_kinetic_hook_over_a_face_in_9x16_rises_on_two_big_lines_under_the_face() {
         );
         assert_eq!(params.get("by"), Some(&ParamValue::Text("letter".into())));
         assert_eq!(params.get("size"), Some(&ParamValue::Number(130.0)));
-        assert_eq!((layer.start_us, layer.duration_us), (secs(0.5), secs(3.0)));
+        // A short's hook shows at most 2.5 s.
+        assert_eq!((layer.start_us, layer.duration_us), (secs(0.5), secs(2.5)));
         let b = portrait_box(layer, after.settings.primary_format);
         assert_eq!(b, klipolo_chat::compile::UNDER_FACE);
         assert!(off_the_face(b), "{b:?}");
@@ -902,9 +905,10 @@ fn animate_last_never_reaches_past_a_layer_that_was_not_added() {
         out.refusals[1].reason,
         "animate: addImage was not done, so there is no layer to animate."
     );
-    // The heart keeps the motion it came with.
+    // The heart keeps the motion it came with: a sticker given no place pops in.
     let after = apply_ops(&p, &out.additions.unwrap().ops).unwrap();
-    assert_eq!(layers(&after, TrackKind::Overlay)[0].layout.motion, None);
+    let motion = layers(&after, TrackKind::Overlay)[0].layout.motion.clone();
+    assert_eq!(preset(&motion.expect("its own").enter), named("pop"));
 }
 
 /// `p` in 9:16 only.

@@ -115,13 +115,14 @@ answers next (P1 is leftmost: People names them, else Scenes says where each sit
 - fixCaptionWords for a stutter or a misheard name the short shows; it fixes them everywhere (\"these these\" reads \
 \"these\").\n\
 - To place something where words are said, give atWords: 1 to 4 words in a row copied exactly from Transcript; it \
-starts as the first is said.\n\
-- In a short you pick the moments; Klipolo places and times stickers and sounds. Stickers: 3 or 4 at most, each on a \
-spoken word that names a thing, an action or a feeling and carries the story, never on a serious or sad line: \
-addImage of a Library picture whose name fits it (else makeSticker) with atWords on that word, no position, size or \
-time; Klipolo shows it beside the speaker with a pop. Sound effects: Klipolo plays a rise under the hook and a \
-whoosh where the speaker changes; mark the payoff line with addSound Chime and atWords on it; no other sound unless \
-the person names one, and none if they want none.\n\
+starts as the first is said. Place stickers and sounds this way, on their word, not at the start of a moment or range.\n\
+- In a short you pick the moments; Klipolo places and times stickers and sounds. Stickers: 3 or 4 at most, at least \
+10 s apart and none in the first 3 s or the last 2 s, each on a spoken word that names a thing, an action or a \
+feeling and carries the story, never on a serious or sad line: addImage of a Library picture whose name fits it (else \
+makeSticker) with atWords on that word, no position, size or time; Klipolo shows it beside the speaker. Sound \
+effects: Klipolo adds a rise under the hook, a pop with each sticker and a whoosh where the speaker changes, and what \
+comes back says which; mark the payoff line with addSound Chime and atWords on it; no other sound unless the person \
+names one, and none if they want none.\n\
 - Layers lists words (t1), pictures (i1), video layers (v1) and music (m1). last is the layer the call before added.\n\
 - animate is the quick way for a common move. For anything specific, compose it: setMotion keys (x 1 is a frame's \
 width right, y 1 its height down, scale 1 the layer's size), animateText for words by letter, word or line, setLayer \

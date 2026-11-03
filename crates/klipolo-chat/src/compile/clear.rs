@@ -52,14 +52,9 @@ pub const FACE_ZONE: BoxN = BoxN {
     w: 0.6,
     h: 0.38,
 };
-/// Where the hook goes in 9:16 instead of over the face: under it, above the captions (word pop's are centred at 0.69),
-/// inside the apps' clear area (`media::text::PORTRAIT_CLEAR`). Two lines of the hook's 130 pixels fit its height.
-pub const UNDER_FACE: BoxN = BoxN {
-    x: 0.06,
-    y: 0.465,
-    w: 0.81,
-    h: 0.155,
-};
+/// Where the hook goes in 9:16 instead of over the face: under it, above the captions, inside the apps' clear area
+/// (`captions::HOOK_BAND`); while it shows there, the 9:16 captions wait (`captions::hook_holds_captions`).
+pub const UNDER_FACE: BoxN = klipolo_model::captions::HOOK_BAND;
 
 /// The width and height of the picture clip `i` of `p` shows: its file, or a recording's primary source's first file.
 fn picture_size(p: &Project, source: &ClipSource) -> Option<(f64, f64)> {
@@ -466,14 +461,5 @@ pub(super) fn place_beside(p: &Project, ops: &mut [Op], boxes: &[(FormatKind, Bo
                 item.layout.overrides.insert(format, rect);
             }
         }
-    }
-}
-
-/// Whether `item` sits in the hook's band under the face in 9:16 (`hook_under_face`).
-pub(super) fn under_face(p: &Project, item: &klipolo_model::timeline::Item) -> bool {
-    if p.settings.primary_format == FormatKind::Portrait {
-        item.layout.rect == UNDER_FACE
-    } else {
-        item.layout.overrides.get(&FormatKind::Portrait) == Some(&UNDER_FACE)
     }
 }

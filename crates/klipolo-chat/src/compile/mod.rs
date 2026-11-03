@@ -90,7 +90,7 @@ use klipolo_model::query::main_track_duration;
 use klipolo_model::risk::{Review, removals};
 use klipolo_model::speech::{Speech, run_spans};
 use klipolo_model::time::{RangeUs, Us, kept_parts, merge_ranges};
-use klipolo_model::timeline::{Attach, ClipSource};
+use klipolo_model::timeline::{Attach, ClipSource, ItemContent};
 use klipolo_model::{ModelError, Project, finish_parts};
 
 use crate::context::{Refs, SceneLog, View, secs};
@@ -273,6 +273,9 @@ pub struct Compiled {
     /// What the model is told of a call instead of that it is done, by call index: what Klipolo did with a short's
     /// stickers and sound effects (`cues`), placed and timed by what the short shows, or left out.
     pub told: Vec<(usize, String)>,
+    /// The pictures in `additions` Klipolo placed beside the speaker (a short's stickers, and any sticker with no place
+    /// given), by layer id, for `place_beside_again` once the follow's path is known.
+    pub beside: Vec<(Id, Beside)>,
 }
 
 /// Removals for the person to approve.
@@ -737,6 +740,8 @@ impl Compiler<'_> {
         let mut notes: Vec<(usize, String)> = Vec::new();
         // What the model is told of a short's stickers and sounds (`Compiled::told`).
         let mut told: Vec<(usize, String)> = Vec::new();
+        // The pictures placed beside the speaker (`Compiled::beside`), with their calls.
+        let mut beside: Vec<(Id, Beside)> = Vec::new();
         for (i, call) in calls.iter().enumerate() {
             // A recording tool's notes, said once its edit is kept.
             let mut recorded: Vec<String> = Vec::new();
@@ -1034,11 +1039,18 @@ impl Compiler<'_> {
                 // A short's sticker comes in and goes out as Klipolo times it, with its sound.
                 if let Some(sticker) = self.cued_sticker(calls, layer, i) {
                     adding.unchanged.push(i);
-                    let said = match sticker {
-                        cues::Sticker::At { .. } => cues::ANIMATED_ALREADY,
-                        cues::Sticker::Left(_) => cues::LEFT_WITH_STICKER,
+                    let asked_sound = (self.own_layer_call(calls, layer, i))
+                        .and_then(|j| self.cues.as_ref()?.sticker_sounds.get(&j));
+                    let said = match (sticker, asked_sound) {
+                        (cues::Sticker::At { .. }, Some((name, _))) => {
+                            format!(
+                                "done: Klipolo pops it in with {name}, as the person asked, and fades it out."
+                            )
+                        }
+                        (cues::Sticker::At { .. }, None) => cues::ANIMATED_ALREADY.to_owned(),
+                        (cues::Sticker::Left(_), _) => cues::LEFT_WITH_STICKER.to_owned(),
                     };
-                    told.push((i, said.to_owned()));
+                    told.push((i, said));
                     continue;
                 }
                 let change = animate::Change {
@@ -1089,23 +1101,61 @@ impl Compiler<'_> {
                 {
                     let sticker = &cued.expect("cued").stickers[&i];
                     told.push((i, cues::told_of(sticker)));
-                    media::cued_sticker(self, &adding.work, file, sticker).map(|edit| (edit, None))
+                    let edit = media::cued_sticker(self, &adding.work, (i, file), sticker);
+                    if let (Ok(edit), cues::Sticker::At { prefer, .. }) = (&edit, sticker) {
+                        beside.extend(media::picture_id(edit).map(|id| {
+                            let right = *prefer == clear::Side::Right;
+                            (
+                                id,
+                                Beside {
+                                    follows: self.follows,
+                                    right,
+                                },
+                            )
+                        }));
+                    }
+                    edit.map(|edit| (edit, None))
                 }
                 // A short's sound effect, at what is seen there, or left out.
                 ToolCall::AddSound { name, .. }
                     if cued.is_some_and(|q| q.sounds.contains_key(&i)) =>
                 {
                     let cue = &cued.expect("cued").sounds[&i];
-                    told.push((i, cue.told.clone()));
-                    media::cued_sound(self, &adding.work, name, &cue.at).map(|edit| (edit, None))
+                    let edit = media::cued_sound(self, &adding.work, name, &cue.at);
+                    // Every moment of it already has the same sound: nothing more plays.
+                    let said = match &edit {
+                        Ok(e) if e.ops.is_empty() && !cue.at.is_empty() => {
+                            cues::ALREADY_THERE.to_owned()
+                        }
+                        _ => cue.told.clone(),
+                    };
+                    told.push((i, said));
+                    edit.map(|edit| (edit, None))
+                }
+                // A sticker with no place given goes beside the speaker (`media::add_image`): placed again once the
+                // follow's path is known.
+                ToolCall::AddImage { file, position, .. }
+                    if media::is_sticker(self, file, *position) =>
+                {
+                    let edit = self.addition(&adding.work, call);
+                    if let Ok(edit) = &edit {
+                        let at = Beside {
+                            follows: self.follows,
+                            right: true,
+                        };
+                        beside.extend(media::picture_id(edit).map(|id| (id, at)));
+                    }
+                    edit.map(|edit| (edit, None))
                 }
                 _ => self.addition(&adding.work, call).map(|edit| {
-                    // The short's hook in its 9:16 band: the captions under it wait until it fades.
+                    // The short's hook: held at most 2.5 s, the 9:16 captions waiting while it shows in its band.
                     let hook = cued.and_then(|q| q.hook).filter(|(h, _)| *h == i);
                     match hook {
                         Some(_) => {
-                            let edit = media::captions_after_hook(self, &adding.work, edit);
-                            (media::with_own_sounds(self, &adding.work, edit), None)
+                            if let Some(said) = cued.and_then(cues::Cues::hook_said) {
+                                told.push((i, said));
+                            }
+                            (media::short_hook(edit), None)
                         }
                         None => (edit, None),
                     }
@@ -1143,6 +1193,29 @@ impl Compiler<'_> {
                     }
                 }
                 Err(r) => refuse(&mut out, i, r),
+            }
+        }
+        // A short's own sound effects, each its own change: a rise under the hook (where the hook is in), the
+        // whooshes where the speaker changes. Listed with the hook's call, else the cut's.
+        if let Some(cues) = &self.cues {
+            let refused = |i: usize| out.refusals.iter().any(|r| r.call_index == i);
+            let hook = cues.hook.map(|(h, _)| h).filter(|&h| !refused(h));
+            let cut = calls
+                .iter()
+                .position(|c| matches!(c, ToolCall::KeepOnly { .. }));
+            let at_call = hook.or(cut).unwrap_or(0);
+            for own in &cues.own {
+                if own.kind == cues::Kind::Rise && hook.is_none() {
+                    continue;
+                }
+                let Some(edit) = media::own_sound(self, &adding.work, own) else {
+                    continue;
+                };
+                if let Ok(tried) = adding.try_edit(edit)
+                    && tried.after.is_some()
+                {
+                    adding.keep(tried, at_call);
+                }
             }
         }
         waiting.sort_by_key(|(i, _)| *i);
@@ -1274,6 +1347,14 @@ impl Compiler<'_> {
         told.retain(|(i, _)| !out.refusals.iter().any(|r| r.call_index == *i));
         told.sort_by_key(|(i, _)| *i);
         out.told = told;
+        let added: HashSet<&str> = (out.additions.iter().flat_map(|tx| &tx.ops))
+            .filter_map(|op| match op {
+                Op::AddItem { item, .. } => Some(item.id.as_str()),
+                _ => None,
+            })
+            .collect();
+        beside.retain(|(id, _)| added.contains(id.as_str()));
+        out.beside = beside;
         out
     }
 
@@ -1852,5 +1933,39 @@ impl Phase {
         self.done = done;
         self.refit_ops = refit.len();
         self.ops.extend(refit);
+    }
+}
+
+/// `ops` (a message's additions) with the pictures Klipolo placed beside the speaker (`Compiled::beside`) placed again
+/// on `p`, the project once the message's follow has landed: beside the head where the follow's path now keeps the
+/// speaker, which may be off the middle where the crop meets the picture's edge. Each is found in `p` by its id, at
+/// its time there; one `p` doesn't hold keeps its place.
+pub fn place_beside_again(p: &Project, ops: &mut [Op], beside: &[(Id, Beside)]) {
+    for op in ops {
+        let Op::AddItem { item, .. } = op else {
+            continue;
+        };
+        let Some((_, b)) = beside.iter().find(|(id, _)| *id == item.id) else {
+            continue;
+        };
+        let Some(now) = (p.timeline.tracks.iter())
+            .flat_map(|t| &t.items)
+            .find(|i| i.id == item.id)
+        else {
+            continue;
+        };
+        let ItemContent::Image { asset_id, .. } = &now.content else {
+            continue;
+        };
+        let Some(asset) = p.asset(asset_id) else {
+            continue;
+        };
+        let prefer = if b.right {
+            clear::Side::Right
+        } else {
+            clear::Side::Left
+        };
+        let (boxes, _) = clear::beside_speaker(p, now.start_us, asset, b.follows, prefer);
+        clear::place_beside(p, std::slice::from_mut(op), &boxes);
     }
 }

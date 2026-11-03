@@ -1623,7 +1623,7 @@ async fn a_sticker_the_model_asks_for_follows_its_footage_while_it_is_drawn() {
     assert_eq!(r["pictures"][0]["prompt"], "paper plane");
     assert_eq!(
         r["pictures"][0]["place"],
-        "Goes in the middle, over the moment it was asked for."
+        "Goes beside the speaker, over the moment it was asked for."
     );
     assert_eq!(
         s.chat.project.revision(),

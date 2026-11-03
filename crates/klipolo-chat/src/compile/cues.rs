@@ -1,22 +1,25 @@
 //! A short's stickers and sound effects, placed and timed by Klipolo on what the short shows: the model picks the
 //! moments (the word a sticker is for, the payoff line, which kinds of sound), never the places or times.
 //!
-//! An answer plans a short when it keeps parts (`keepOnly`) of a video that has or gets a 9:16 version, and it is
-//! chat's own (another app's calls are placed as it gives them). Everything is decided once, on the snapshot's
+//! An answer plans a short when it is chat's own (another app's calls are placed as it gives them) and the person asks
+//! for a short (a reel, a TikTok), or the answer both cuts (`keepOnly`) and makes a 9:16 version itself. Everything is decided once, on the snapshot's
 //! timeline, with the short's own times worked out from what the answer cuts (`Compiler::cut`):
-//! - **The hook** is the first words the answer puts on screen (`addText`) within the short's first 3 s.
-//! - **Stickers** are the pack's pictures (`addImage`, not a background) and drawn stickers (`makeSticker`), unless
-//!   the person said where to put them. Each shows from `LEAD_US` before its word, for `HOLD_US`, ending before its
+//! - **The hook** is the first words the answer puts on screen (`addText`) within the short's first 3 s, held at most
+//!   `HOOK_MAX_US`.
+//! - **Stickers** are the pack's pictures (`addImage`, not a background), the person's own with no place given, and
+//!   drawn stickers (`makeSticker`), unless the model gave a place where the person said one. Each shows from `LEAD_US` before its word, for `HOLD_US`, ending before its
 //!   part does (one that can't show `MIN_HOLD_US` there is left out), popping in and fading out. In the short's time,
-//!   in order: none while the hook shows, none in its last `END_CLEAR_US`, at least `STICKER_GAP_US` between two, and
-//!   at most one per `STICKERS_PER_US` of it. Where each goes is `clear::beside_speaker`'s, alternating sides when
+//!   in call order (a later round never takes out one an earlier was told is in): none while the hook shows, none in
+//!   its last `END_CLEAR_US`, at least `STICKER_GAP_US` between two, and at most one per `STICKERS_PER_US` of it. One
+//!   the person named stays where its word is. Where each goes is `clear::beside_speaker`'s, alternating sides when
 //!   both have the same room. An `animate` of one is Klipolo's already.
 //! - **Sounds** follow what is seen, once the answer has any sound effect (an `addSound`, or an `animate` with a
 //!   sound): a pop with each sticker; a rise under the hook and a whoosh at up to `MAX_WHOOSHES` cuts where the speaker
-//!   changes (by the scene log's speech items, `STICKER_GAP_US` apart and after the hook), in the file the model named
-//!   for that kind or else the library's (`Cues::own`, played with the hook's words); and one chime or ding on the
-//!   payoff line, where the model marks it. Any other sound, and any more of those, is left out, unless the person
-//!   named it: then it goes where the model put it.
+//!   changes (by the transcript's speaker turns, else the scene log's speech items; `STICKER_GAP_US` apart, after the
+//!   hook), in the file the model named for that kind or else the library's (`Cues::own`, each its own change); and
+//!   one chime or ding on the payoff line, where the model marks it. Any other sound, and any more of those, is left
+//!   out, unless the person named it: then it goes where the model put it. A short whose person asks for no sound
+//!   effects gets none.
 //!
 //! What the model is told of each call it affects (`Compiled::told`) says what Klipolo did with it, so its reply
 //! claims nothing that isn't there.
@@ -44,12 +47,16 @@ pub const HOLD_US: Us = 1_500_000;
 pub const MIN_HOLD_US: Us = 1_200_000;
 /// A sticker ends this long before its part does.
 const PART_END_US: Us = 100_000;
+/// The least a sticker the person named shows, even right before a cut.
+const MIN_DURATION: Us = 500_000;
 /// The least time between two stickers' starts, in the short.
 pub const STICKER_GAP_US: Us = 10_000_000;
 /// At most one sticker per this much of the short.
 pub const STICKERS_PER_US: Us = 12_000_000;
 /// No sticker shows in the short's last this long.
 pub const END_CLEAR_US: Us = 1_500_000;
+/// The longest a short's hook shows: sound-off viewers lose the speech under it.
+pub const HOOK_MAX_US: Us = 2_500_000;
 /// The hook is words that start within this long of the short's start.
 pub const HOOK_WITHIN_US: Us = 3_000_000;
 /// The most whooshes in a short.
@@ -97,9 +104,9 @@ fn words(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// Whether `message` names the sound `item`: its name, or its first tag (what it is: "whoosh", "boom"), as words of
-/// their own, a plural too.
-fn named(message: &[String], item: &LibraryItem) -> bool {
+/// Whether `message` names `item`: its name or any of its tags (what it is or suits: "whoosh", "cha ching", "funny"),
+/// as words of their own, a plural too.
+pub(crate) fn named(message: &[String], item: &LibraryItem) -> bool {
     let says = |name: &str| {
         let want = words(name);
         !want.is_empty()
@@ -112,7 +119,64 @@ fn named(message: &[String], item: &LibraryItem) -> bool {
                 })
             })
     };
-    says(&item.name) || item.tags.first().is_some_and(|t| says(t))
+    if says(&item.name) {
+        return true;
+    }
+    // A sticker by its name only: its tags ("like", "look", "new") are everyday words.
+    item.kind != MediaKind::Image
+        && (item.tags.iter())
+            .filter(|t| !GENERIC.contains(&t.as_str()))
+            .any(|t| says(t))
+}
+
+/// Tags too common to say the person asked for that sound ("a short with sound effects and text animations").
+const GENERIC: [&str; 21] = [
+    "short",
+    "text",
+    "video",
+    "sound",
+    "effect",
+    "effects",
+    "animation",
+    "quick",
+    "fast",
+    "transition",
+    "intro",
+    "soft",
+    "high",
+    "deep",
+    "fun",
+    "button",
+    "ui",
+    "tech",
+    "digital",
+    "light",
+    "dark",
+];
+
+/// Whether `message` asks for a short: a short, a reel or a TikTok, never only short pauses or silences.
+fn asks_short(message: &[String]) -> bool {
+    message.iter().enumerate().any(|(k, w)| {
+        let next = message.get(k + 1).map(String::as_str);
+        match w.as_str() {
+            "short" | "shorts" => !matches!(
+                next,
+                Some(
+                    "pause" | "pauses" | "silence" | "silences" | "gap" | "gaps" | "bit" | "while"
+                )
+            ),
+            "reel" | "reels" | "tiktok" | "tiktoks" => true,
+            _ => false,
+        }
+    })
+}
+
+/// Whether `message` asks for no sound effects ("no sound effects", "without sounds", "no sfx").
+fn no_sounds(message: &[String]) -> bool {
+    message.windows(2).any(|w| {
+        matches!(w[0].as_str(), "no" | "without" | "skip")
+            && matches!(w[1].as_str(), "sound" | "sounds" | "sfx" | "effects")
+    })
 }
 
 /// Whether `message` says where to put something on screen.
@@ -155,6 +219,15 @@ pub(crate) struct Cue {
     pub kind: Kind,
 }
 
+/// One of Klipolo's own sound effects in a short: the library's name for it, its file, its kind and its snapshot times.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Own {
+    pub name: String,
+    pub asset: Asset,
+    pub kind: Kind,
+    pub at: Vec<Us>,
+}
+
 /// A short's plan for its stickers and sounds (see the module notes).
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Cues {
@@ -169,17 +242,32 @@ pub(crate) struct Cues {
     /// The sound each sticker pops in with, when the answer has sound effects.
     pub pop: Option<Asset>,
     /// Klipolo's own sound effects where the model asked for none of their kind (a rise under the hook, the whooshes
-    /// where the speaker changes): each file and its snapshot times, played with the hook's words.
-    pub own: Vec<(Asset, Vec<Us>)>,
+    /// where the speaker changes): each file and its snapshot times.
+    pub own: Vec<Own>,
+    /// The short has sound effects: the person didn't ask for none.
+    pub sound_effects: bool,
+    /// By sticker call: the sound it comes in with instead of the pop, where the model's `animate` of it names a sound
+    /// the person asked for.
+    pub sticker_sounds: HashMap<usize, (String, Asset)>,
 }
 
 impl Cues {
     /// The short's plan for `calls`, or None when the answer doesn't plan a short.
     pub(super) fn plan(c: &Compiler, calls: &[ToolCall]) -> Option<Cues> {
-        let short = !c.by_app
-            && c.portrait
-            && (calls.iter()).any(|call| matches!(call, ToolCall::KeepOnly { .. }));
-        if !short {
+        let message = words(&c.inputs.message);
+        // This answer makes a short: it cuts and makes a 9:16 version itself, or the person asks for a short. A project
+        // that is vertical already, given a plain trim, isn't one.
+        let cuts = (calls.iter()).any(|call| matches!(call, ToolCall::KeepOnly { .. }));
+        let goes_vertical = (calls.iter()).any(|call| {
+            matches!(
+                call,
+                ToolCall::SetFormat {
+                    format: klipolo_model::project::FormatKind::Portrait,
+                    ..
+                }
+            )
+        });
+        if c.by_app || !(asks_short(&message) || (cuts && goes_vertical)) {
             return None;
         }
         let duration = main_track_duration(&c.snapshot.timeline.main);
@@ -187,14 +275,31 @@ impl Cues {
             parts: kept_parts(0, duration, &c.cut),
             ..Cues::default()
         };
-        let message = words(&c.inputs.message);
         cues.hook = cues.hook_of(c, calls);
         cues.stickers = cues.place_stickers(c, calls, &message);
-        let wants_sounds = (calls.iter()).any(|call| {
-            matches!(call, ToolCall::AddSound { .. })
-                || matches!(call, ToolCall::Animate { sound: Some(_), .. })
-        });
-        if wants_sounds {
+        // A short's sound effects are Klipolo's unless the person wants none.
+        cues.sound_effects = !no_sounds(&message);
+        if !cues.sound_effects {
+            // None at all, but a sound the person named.
+            for (i, call) in calls.iter().enumerate() {
+                let ToolCall::AddSound { name, .. } = call else {
+                    continue;
+                };
+                let named_it = super::media::pick(c, "addSound", name, &[MediaKind::Sound])
+                    .is_ok_and(|item| named(&message, item));
+                if !named_it {
+                    let told = NO_EFFECTS.to_owned();
+                    cues.sounds.insert(
+                        i,
+                        Cue {
+                            at: Vec::new(),
+                            told,
+                            kind: Kind::Other,
+                        },
+                    );
+                }
+            }
+        } else {
             let library = &c.inputs.library;
             let sounds = library.of_kind(MediaKind::Sound, false);
             cues.pop = (sounds.iter())
@@ -203,6 +308,29 @@ impl Cues {
                 .map(|i| i.asset.clone());
             cues.sounds = cues.time_sounds(c, calls, &message);
             cues.own = cues.own_sounds(c, &sounds);
+            // A sticker's sound the person asked for ("pop the heart in with a boing") replaces its pop.
+            for (a, call) in calls.iter().enumerate() {
+                let ToolCall::Animate {
+                    layer,
+                    sound: Some(name),
+                    ..
+                } = call
+                else {
+                    continue;
+                };
+                let Some(j) = c.own_layer_call(calls, layer, a) else {
+                    continue;
+                };
+                if !matches!(cues.stickers.get(&j), Some(Sticker::At { .. })) {
+                    continue;
+                }
+                if let Ok(item) = super::media::pick(c, "animate", name, &[MediaKind::Sound])
+                    && named(&message, item)
+                {
+                    cues.sticker_sounds
+                        .insert(j, (item.name.clone(), item.asset.clone()));
+                }
+            }
         }
         Some(cues)
     }
@@ -255,7 +383,9 @@ impl Cues {
                     return None;
                 };
                 let start = moment(c, "addText", At::of(at_us, at_words.as_deref()))?;
-                let len = duration_us.unwrap_or(klipolo_model::media::text::TEXT_US);
+                let len = duration_us
+                    .unwrap_or(klipolo_model::media::text::TEXT_US)
+                    .min(HOOK_MAX_US);
                 (self.short_time(start) < HOOK_WITHIN_US).then_some((
                     i,
                     RangeUs {
@@ -276,16 +406,16 @@ impl Cues {
         message: &[String],
     ) -> HashMap<usize, Sticker> {
         let mut out = HashMap::new();
-        if places(message) {
-            return out;
-        }
-        let mut found: Vec<(usize, Us, Us)> = Vec::new();
+        let says_where = places(message);
+        // Each sticker moment: call, start, length, and whether the person named that sticker.
+        let mut found: Vec<(usize, Us, Us, bool)> = Vec::new();
         for (i, call) in calls.iter().enumerate() {
-            let (tool, at) = match call {
+            let (tool, at, position, asked) = match call {
                 ToolCall::AddImage {
                     file,
                     at_us,
                     at_words,
+                    position,
                     ..
                 } => {
                     let Ok(item) = super::media::pick(c, "addImage", file, &[MediaKind::Image])
@@ -293,16 +423,33 @@ impl Cues {
                         continue;
                     };
                     let background = item.tags.iter().any(|t| t == "background");
-                    if !item.pack || background || item.asset.kind != AssetKind::Image {
+                    // The person's own picture is a sticker only in the recipe's form, with no place given.
+                    if background
+                        || item.asset.kind != AssetKind::Image
+                        || (!item.pack && position.is_some())
+                    {
                         continue;
                     }
-                    ("addImage", At::of(at_us, at_words.as_deref()))
+                    let at = At::of(at_us, at_words.as_deref());
+                    ("addImage", at, *position, named(message, item))
                 }
                 ToolCall::MakeSticker {
-                    at_us, at_words, ..
-                } => ("makeSticker", At::of(at_us, at_words.as_deref())),
+                    at_us,
+                    at_words,
+                    position,
+                    ..
+                } => (
+                    "makeSticker",
+                    At::of(at_us, at_words.as_deref()),
+                    *position,
+                    false,
+                ),
                 _ => continue,
             };
+            // A place the model gave, where the person said one: as asked.
+            if position.is_some() && says_where {
+                continue;
+            }
             let Some(word) = moment(c, tool, at) else {
                 continue;
             };
@@ -311,35 +458,42 @@ impl Cues {
             };
             let start = word.saturating_sub(LEAD_US).max(part.start);
             let room = (part.end - PART_END_US).saturating_sub(start);
-            if room < MIN_HOLD_US {
+            if room < MIN_HOLD_US && !asked {
                 out.insert(i, Sticker::Left(NEAR_CUT));
                 continue;
             }
-            found.push((i, start, HOLD_US.min(room)));
+            found.push((i, start, HOLD_US.min(room.max(MIN_DURATION)), asked));
         }
-        found.sort_by_key(|&(i, start, _)| (start, i));
+        // In call order, so a later round of the message never takes out a sticker an earlier one was told is in.
+        found.sort_by_key(|&(i, ..)| i);
         let length = self.length();
         let most = (length / STICKERS_PER_US).max(1) as usize;
         let hook_end = self.hook_span().map_or(0, |h| h.end);
-        let mut last: Option<Us> = None;
+        let mut kept: Vec<Us> = Vec::new();
         let mut side = Side::Right;
-        let mut kept = 0;
-        for (i, start, duration) in found {
+        for (i, start, duration, asked) in found {
             let at = self.short_time(start);
             let left = if at < hook_end {
                 Some(UNDER_HOOK)
             } else if at + duration > length.saturating_sub(END_CLEAR_US) {
                 Some(AT_END)
-            } else if last.is_some_and(|l| at < l + STICKER_GAP_US) {
+            } else if kept
+                .iter()
+                .any(|&k| at.abs_diff(k) < STICKER_GAP_US.unsigned_abs())
+            {
                 Some(TOO_CLOSE)
-            } else if kept >= most {
+            } else if kept.len() >= most {
                 Some(TOO_MANY)
             } else {
                 None
             };
-            if let Some(why) = left {
-                out.insert(i, Sticker::Left(why));
-                continue;
+            // One the person named stays, where its word is, whatever the spacing.
+            match left {
+                Some(why) if !asked => {
+                    out.insert(i, Sticker::Left(why));
+                    continue;
+                }
+                _ => {}
             }
             out.insert(
                 i,
@@ -350,39 +504,37 @@ impl Cues {
                 },
             );
             side = side.other();
-            last = Some(at);
-            kept += 1;
+            kept.push(at);
         }
         out
     }
 
-    /// A rise under the hook and the whooshes where the speaker changes, when no `addSound` call of the model's plays
-    /// that kind (`sounds`), from the library (its sound of that name, else the first of that kind). Only with a hook,
-    /// whose words they come with.
-    fn own_sounds(&self, c: &Compiler, library: &[&LibraryItem]) -> Vec<(Asset, Vec<Us>)> {
-        let Some((_, hook)) = self.hook else {
-            return Vec::new();
-        };
+    /// A rise under the hook (where there is one) and the whooshes where the speaker changes, when no `addSound` call
+    /// of the model's plays that kind (`sounds`), from the library (its sound of that name, else the first of that
+    /// kind). Each is its own change, added after the layers (`Compiler::own_sounds`).
+    fn own_sounds(&self, c: &Compiler, library: &[&LibraryItem]) -> Vec<Own> {
         let asked =
             |kind: Kind| (self.sounds.values()).any(|cue| cue.kind == kind && !cue.at.is_empty());
-        let file = |name: &str, kind: Kind| {
+        let file = |name: &str, kind: Kind, at: Vec<Us>| {
             (library.iter())
                 .find(|i| i.name.eq_ignore_ascii_case(name))
                 .or_else(|| library.iter().find(|i| sound_kind(i) == kind))
-                .map(|i| i.asset.clone())
+                .map(|i| Own {
+                    name: i.name.clone(),
+                    asset: i.asset.clone(),
+                    kind,
+                    at,
+                })
         };
         let mut out = Vec::new();
-        if !asked(Kind::Rise)
-            && let Some(rise) = file("Rise", Kind::Rise)
+        if let Some((_, hook)) = self.hook
+            && !asked(Kind::Rise)
         {
-            out.push((rise, vec![hook.start]));
+            out.extend(file("Rise", Kind::Rise, vec![hook.start]));
         }
         let cuts = self.whoosh_cuts(c);
-        if !asked(Kind::Whoosh)
-            && !cuts.is_empty()
-            && let Some(whoosh) = file("Whoosh", Kind::Whoosh)
-        {
-            out.push((whoosh, cuts));
+        if !asked(Kind::Whoosh) && !cuts.is_empty() {
+            out.extend(file("Whoosh", Kind::Whoosh, cuts));
         }
         out
     }
@@ -533,23 +685,38 @@ impl Cues {
     }
 }
 
-/// Who speaks over `window` of the snapshot's timeline (inside one clip): the scene log's speech item that covers the
-/// most of it, by who it names (no one named: a voice off screen). None without one.
+/// Who speaks over `window` of the snapshot's timeline (inside one clip, cut to it): the transcript's speaker turn that
+/// covers the most of it, by its label (`Inputs::turns`), else the scene log's speech item, by who it names (no one
+/// named: a voice off screen). A recording's clip reads its file's. None when neither says.
 fn speaker(c: &Compiler, window: RangeUs) -> Option<String> {
     let main = &c.snapshot.timeline.main;
     let (i, start) = clip_at(main, window.start)?;
     let clip = &main[i];
-    let ClipSource::Asset { id } = &clip.source else {
-        return None;
+    let id = match &clip.source {
+        ClipSource::Asset { id } => id.clone(),
+        ClipSource::Recording { id } => {
+            let r = c.snapshot.recording(id)?;
+            r.primary_source()?.runs.first()?.asset_id.clone()
+        }
     };
-    let log = c.inputs.scenes.get(id)?;
+    let end = window.end.min(start + clip.duration_us());
     let source = |t: Us| clip.source_in_us + ((t - start) as f64 * clip.speed) as Us;
-    let (a, b) = (source(window.start), source(window.end));
+    let (a, b) = (source(window.start), source(end));
+    let covered = |from: Us, to: Us| to.min(b) - from.max(a);
+    let turn = (c.inputs.turns.get(&id).into_iter().flatten())
+        .filter_map(|t| Some((covered(t.start_us, t.end_us), t.speaker.as_deref()?)))
+        .filter(|(n, _)| *n > 0)
+        .max_by_key(|(n, _)| *n)
+        .map(|(_, who)| format!("voice {who}"));
+    if turn.is_some() {
+        return turn;
+    }
+    let log = c.inputs.scenes.get(&id)?;
     (log.items.iter())
         .filter(|item| item.kind.trim().eq_ignore_ascii_case("speech"))
-        .map(|item| (item.end_us.min(b) - item.start_us.max(a), item))
-        .filter(|(covered, _)| *covered > 0)
-        .max_by_key(|(covered, item)| (*covered, item.start_us))
+        .map(|item| (covered(item.start_us, item.end_us), item))
+        .filter(|(n, _)| *n > 0)
+        .max_by_key(|(n, item)| (*n, item.start_us))
         .map(|(_, item)| item.who.trim().to_lowercase())
 }
 
@@ -568,13 +735,17 @@ fn moment(c: &Compiler, tool: &str, at: At) -> Option<Us> {
 }
 
 /// What the model is told of a sticker Klipolo shows.
-pub(crate) const STICKER_DONE: &str = "done: Klipolo shows it beside the speaker from just before the word, for 1.5 s, \
-     popping in and fading out.";
+pub(crate) const STICKER_DONE: &str = "done: Klipolo shows it beside the speaker from just before the word, for about \
+     1.5 s, popping in and fading out.";
+/// What the model is told of a sound in a short the person wants without sound effects.
+const NO_EFFECTS: &str = "Left out: the person asked for no sound effects.";
+/// What the model is told of a sound whose every moment has the same sound already.
+pub(crate) const ALREADY_THERE: &str =
+    "Left out: the same sound plays there already. Don't mention it twice.";
 /// What the model is told of an `animate` of a sticker Klipolo left out.
 pub(crate) const LEFT_WITH_STICKER: &str = "Left out with its sticker. Don't mention it.";
 /// What the model is told of an `animate` of a sticker Klipolo places.
-pub(crate) const ANIMATED_ALREADY: &str =
-    "done: Klipolo pops a short's stickers in and fades them out, with their sound.";
+pub(crate) const ANIMATED_ALREADY: &str = "done: Klipolo pops a short's stickers in and fades them out, with a pop sound when the short has sound effects.";
 const NEAR_CUT: &str = "Left out: its word comes too close to the end of its part for the sticker to show. Don't \
                         mention it.";
 const UNDER_HOOK: &str =
@@ -606,17 +777,50 @@ pub(crate) fn told_of(sticker: &Sticker) -> String {
 }
 
 impl Cues {
-    /// The snapshot's stretches from `start` for `len` that the short keeps: where a layer placed there still shows
-    /// once the cut is applied (it ends at the first cut it meets).
-    pub(crate) fn kept_within(&self, start: Us, len: Us) -> Vec<RangeUs> {
-        let end = start + len;
-        let first = self.part_of(start);
-        (first.into_iter())
-            .map(|p| RangeUs {
-                start,
-                end: p.end.min(end),
-            })
-            .filter(|r| !r.is_empty())
-            .collect()
+    /// What the model is told of the hook's call: the sound effects Klipolo plays around it, so its reply says what is
+    /// there. None in a short without sound effects.
+    pub(crate) fn hook_said(&self) -> Option<String> {
+        if !self.sound_effects {
+            return None;
+        }
+        let times = |kind: Kind| -> Vec<Us> {
+            let own = (self.own.iter())
+                .filter(|o| o.kind == kind)
+                .flat_map(|o| o.at.clone());
+            let asked = (self.sounds.values())
+                .filter(|c| c.kind == kind)
+                .flat_map(|c| c.at.clone());
+            own.chain(asked).collect()
+        };
+        let mut said = Vec::new();
+        if !times(Kind::Rise).is_empty() {
+            said.push("a rise under it".to_owned());
+        }
+        let whooshes: Vec<String> = (times(Kind::Whoosh).iter())
+            .map(|&t| secs(self.short_time(t)))
+            .collect();
+        said.push(match whooshes.as_slice() {
+            [] => "no whoosh, since the speaker doesn't change at a cut after it".to_owned(),
+            [one] => format!("a whoosh at the cut to a new speaker at {one} s"),
+            several => format!(
+                "whooshes at the cuts to a new speaker at {} s",
+                several.join(" and ")
+            ),
+        });
+        if self
+            .stickers
+            .values()
+            .any(|s| matches!(s, Sticker::At { .. }))
+            && self.pop.is_some()
+        {
+            said.push("a pop with each sticker".to_owned());
+        }
+        let last = said.pop().unwrap_or_default();
+        let list = if said.is_empty() {
+            last
+        } else {
+            format!("{}, and {last}", said.join(", "))
+        };
+        Some(format!("done. Klipolo plays {list}."))
     }
 }

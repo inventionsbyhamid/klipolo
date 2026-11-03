@@ -1511,12 +1511,14 @@ fn system_prompt_explains_the_context_and_the_rules() {
         // A short's stickers and sound effects: the model picks the moments, Klipolo places and times them
         // (`compile::cues`).
         "give atWords: 1 to 4 words in a row copied exactly from Transcript",
+        "on their word, not at the start of a moment or range",
         "In a short you pick the moments; Klipolo places and times stickers and sounds",
-        "Stickers: 3 or 4 at most",
+        "Stickers: 3 or 4 at most, at least 10 s apart and none in the first 3 s or the last 2 s",
         "names a thing, an action or a feeling and carries the story, never on a serious or sad line",
         "a Library picture whose name fits it (else makeSticker) with atWords on that word, no position, size or time",
-        "Klipolo shows it beside the speaker with a pop",
-        "Klipolo plays a rise under the hook and a whoosh where the speaker changes",
+        "Klipolo shows it beside the speaker",
+        "Klipolo adds a rise under the hook, a pop with each sticker and a whoosh where the speaker changes",
+        "what comes back says which",
         "mark the payoff line with addSound Chime and atWords on it",
         "no other sound unless the person names one, and none if they want none",
         "addMusic",
