@@ -1,7 +1,7 @@
 //! Folders read through handles: a folder is opened from the handle of the one above it
 //! (`openat`), never by its whole path again, and never through a link at any level (`O_NOFOLLOW`, with `O_DIRECTORY`
 //! for folders), so a folder swapped for a link after it was listed is refused rather than followed. Files open the same
-//! way (`O_NONBLOCK` too, so a FIFO doesn't hang the open). Windows (until W) checks each step's metadata first and
+//! way (`O_NONBLOCK` too, so a FIFO doesn't hang the open). Windows (once supported) checks each step's metadata first and
 //! opens the reparse point itself, as the library's reader does.
 
 use std::io;

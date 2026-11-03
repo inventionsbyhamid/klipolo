@@ -31,7 +31,7 @@ pub fn instance_descriptor() -> wgpu::InstanceDescriptor {
 /// anyone: wgpu's blocking poll holds the device's fence lock while it waits, which would stall the next submit.
 /// - macOS: an empty command buffer committed on wgpu's Metal queue, whose completed handler calls it (Metal runs a
 ///   queue's command buffers in order);
-/// - elsewhere: false, nothing is called (W/L: a fence or timeline semaphore), and the caller treats the work as done.
+/// - elsewhere: false, nothing is called (later a fence or timeline semaphore), and the caller treats the work as done.
 pub fn on_submitted_done(queue: &wgpu::Queue, done: impl Fn() + 'static) -> bool {
     #[cfg(target_os = "macos")]
     {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the LGPL FFmpeg 9.0.2 for Linux (the CI container, later the AppImage/Flatpak at L): the macOS flag list
+# Builds the LGPL FFmpeg 9.0.2 for Linux (the CI container, later the AppImage/Flatpak): the macOS flag list
 # (scripts/ffmpeg-common.sh) without VideoToolbox, AudioToolbox and the macOS loader flags. Same layout as
 # scripts/build-ffmpeg.sh:
 #   scripts/build-ffmpeg-linux.sh [build-dir]  default .build/ffmpeg-9.0-linux

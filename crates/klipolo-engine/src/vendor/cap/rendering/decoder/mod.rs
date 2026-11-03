@@ -1014,7 +1014,7 @@ pub async fn spawn_decoder_at(
         }
     }
 
-    // Klipolo: elsewhere FFmpeg decodes, with the hardware device crate::platform::decode picks (software until W/L).
+    // Klipolo: elsewhere FFmpeg decodes, with the hardware device crate::platform::decode picks (software for now).
     #[cfg(not(target_os = "macos"))]
     {
         let _ = timeout_duration;

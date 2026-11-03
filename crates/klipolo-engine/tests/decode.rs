@@ -38,7 +38,7 @@ async fn decodes_a_frame_from_the_fixture() {
             "{:?}",
             handle.decoder_type()
         );
-        // Elsewhere FFmpeg decodes in software until W and L add D3D12VA and VA-API.
+        // Elsewhere FFmpeg decodes in software until Windows and Linux add D3D12VA and VA-API.
         #[cfg(not(target_os = "macos"))]
         assert_eq!(handle.decoder_type(), DecoderType::FFmpegSoftware);
     }

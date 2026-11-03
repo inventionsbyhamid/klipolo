@@ -221,7 +221,7 @@ pub(super) async fn prepare<W: std::io::Write>(
             })
             .collect()
     });
-    // No H.264 encoder here (Windows and Linux until W and L): say so rather than retrying.
+    // No H.264 encoder here (Windows and Linux for now): say so rather than retrying.
     let needs_h264 = handle.read(|j| {
         j.outputs
             .iter()

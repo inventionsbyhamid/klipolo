@@ -16,7 +16,7 @@
 //! error `StoppedBySystem` (a restart). After a loss the thread looks for the device by name once a second (`listed`:
 //! the host's device list, names only, opening nothing, and only inside a take the person started) and sends
 //! `DeviceBack` when it is there again, so the session restarts on the person's own mic. Raw mode on
-//! Windows (`AUDCLNT_STREAMOPTIONS_RAW`) isn't exposed by cpal: W.
+//! Windows (`AUDCLNT_STREAMOPTIONS_RAW`) isn't exposed by cpal yet.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -209,7 +209,7 @@ fn listed(name: &str) -> bool {
 /// samples left the HAL, so a sound is stamped this much after it was heard (Core Audio's device latency, safety offset
 /// and stream latency: 33 ms for this Intel Mac's built-in mic, a frame at 30 fps). The design is Cap's
 /// (`recording/src/feeds/microphone.rs` @ d327051, design only), capped at 0.5 s as Cap's (`mic::latency_ns`). Windows
-/// reports none yet (W).
+/// reports none yet.
 fn input_latency(name: &str) -> Duration {
     #[cfg(target_os = "macos")]
     let late = crate::platform::macos::input_latency(name).unwrap_or_default();
