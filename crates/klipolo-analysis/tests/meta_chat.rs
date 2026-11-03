@@ -10,7 +10,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use klipolo_analysis::providers::meta::Meta;
-use klipolo_analysis::providers::meta_chat::{CHAT_MODEL, MetaChat, SERVER_BUSY, wire_body};
+use klipolo_analysis::providers::meta_chat::{
+    CHAT_MAX_OUTPUT_TOKENS, CHAT_MODEL, ChatSetup, MetaChat, SERVER_BUSY, wire_body, wire_body_with,
+};
 use klipolo_chat::{
     AnalysisState, ChatContext, ChatErrorKind, Inputs, Item, LanguageModel, Library, ModelError,
     ModelRequest, Refs, View, build_context, plan, system_prompt, tools,
@@ -442,6 +444,41 @@ async fn the_cached_prefix_is_the_same_bytes_on_the_wire_for_two_messages() {
     assert_eq!(user_text(&input[1]), "cut the boring bit");
     assert_eq!(input[2]["role"], "assistant");
     assert_eq!(user_text(&input[3]), "make it square");
+}
+
+#[test]
+fn the_app_asks_spark_at_metas_default_effort_and_the_eval_may_ask_another_setup() {
+    let request = ModelRequest {
+        system: "Be brief.".into(),
+        tools: json!([]),
+        input: vec![Item::User { text: "hi".into() }],
+    };
+    // The app's body: Spark, its output cap, no reasoning field.
+    let app = wire_body(&request);
+    assert_eq!(app["model"], CHAT_MODEL);
+    assert_eq!(app["max_output_tokens"], CHAT_MAX_OUTPUT_TOKENS);
+    assert!(app.get("reasoning").is_none(), "{app}");
+    assert_eq!(app, wire_body_with(&request, &ChatSetup::default()));
+    // Another model and effort, for the development eval only.
+    let setup = ChatSetup {
+        model: "muse-wonder-1.0".into(),
+        reasoning_effort: Some("high".into()),
+        max_output_tokens: 32_768,
+    };
+    let body = wire_body_with(&request, &setup);
+    assert_eq!(body["model"], "muse-wonder-1.0");
+    assert_eq!(body["reasoning"], json!({"effort": "high"}));
+    assert_eq!(body["max_output_tokens"], 32_768);
+    // Wonder has no list price here: it is counted at five times Spark's, so a cap never undercounts it.
+    let usage = klipolo_meta::Usage {
+        input_tokens: 10_000,
+        output_tokens: 2_000,
+        ..klipolo_meta::Usage::default()
+    };
+    let spark = klipolo_meta::pricing::chat_usd(CHAT_MODEL, usage);
+    assert!((spark - klipolo_meta::pricing::spark_usd(usage)).abs() < 1e-12);
+    let wonder = klipolo_meta::pricing::chat_usd("muse-wonder-1.0", usage);
+    assert!((wonder - 5.0 * spark).abs() < 1e-12);
 }
 
 #[test]

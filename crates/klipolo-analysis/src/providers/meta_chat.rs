@@ -7,7 +7,8 @@
 //! (Meta keeps no copy of the answer) and `input`. No call refers to stored state (no `previous_response_id` or
 //! `conversation`) and no reasoning item is sent back: a refusal round sends the whole input again. Reasoning effort is
 //! Meta's default (the field is left out). The context is the first input item, as the person's message, so the
-//! instructions, the tools and the context stay one prefix Meta's cache reuses.
+//! instructions, the tools and the context stay one prefix Meta's cache reuses. The app always asks with
+//! `ChatSetup::default()`; the development eval may name another model or effort (`MetaChat::with_setup`).
 //!
 //! The relay takes 4 Meta calls at once from a device; the analysis holds 3 (`meta::RELAY_META_CALLS`) and chat the
 //! fourth: `MetaChat` keeps its own single slot, shared by its clones, and never takes one of `Meta::call`'s. A busy
@@ -15,7 +16,7 @@
 //! `CHAT_BUSY_RETRIES` times; then it is `ModelError::Busy`. A message's answer gets `CHAT_ANSWER_TIMEOUT` in all
 //! (waits for the slot and busy retries included); past it the message fails saying who took too long, and chat is
 //! free for the next one. Each answer is priced from its `usage`, cached input at the cached price
-//! (`pricing::spark_usd`); the client writes the spend ledger's row.
+//! (`pricing::chat_usd`: Spark's prices); the client writes the spend ledger's row.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -48,6 +49,26 @@ pub const CHAT_BUSY_WAIT_MAX: Duration = Duration::from_secs(5);
 /// it), billed all the same.
 pub const CHAT_ANSWER_TIMEOUT: Duration = Duration::from_secs(180);
 
+/// What a chat call asks Meta for besides the request: the model, the reasoning effort (None: Meta's default, the
+/// field left out) and the output cap, reasoning included.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChatSetup {
+    pub model: String,
+    pub reasoning_effort: Option<String>,
+    pub max_output_tokens: u32,
+}
+
+impl Default for ChatSetup {
+    /// What the app asks for: `CHAT_MODEL` at Meta's default effort, within `CHAT_MAX_OUTPUT_TOKENS`.
+    fn default() -> Self {
+        Self {
+            model: CHAT_MODEL.to_owned(),
+            reasoning_effort: None,
+            max_output_tokens: CHAT_MAX_OUTPUT_TOKENS,
+        }
+    }
+}
+
 /// Muse Spark as chat's language model, within chat's own slot. Its clones share the client and the slot.
 #[derive(Clone, Debug)]
 pub struct MetaChat {
@@ -55,6 +76,7 @@ pub struct MetaChat {
     slot: Arc<Semaphore>,
     busy_wait_max: Duration,
     answer_timeout: Duration,
+    setup: ChatSetup,
 }
 
 impl MetaChat {
@@ -65,7 +87,14 @@ impl MetaChat {
             slot: Arc::new(Semaphore::new(CHAT_CALLS)),
             busy_wait_max: CHAT_BUSY_WAIT_MAX,
             answer_timeout: CHAT_ANSWER_TIMEOUT,
+            setup: ChatSetup::default(),
         }
+    }
+
+    /// Another model, effort or output cap (`ChatSetup::default()` is the app's; the development eval sets this).
+    pub fn with_setup(mut self, setup: ChatSetup) -> Self {
+        self.setup = setup;
+        self
     }
 
     /// The longest wait before a busy answer is asked again (`CHAT_BUSY_WAIT_MAX`; tests shorten it).
@@ -101,14 +130,14 @@ impl LanguageModel for MetaChat {
         request: &'a ModelRequest,
     ) -> BoxFuture<'a, Result<ModelResponse, ModelError>> {
         Box::pin(async move {
-            let body = wire_body(request);
+            let body = wire_body_with(request, &self.setup);
             let asked = async {
                 let _slot = (self.slot.acquire().await)
                     .map_err(|_| ModelError::other("chat's slot is closed"))?;
                 let mut retries = 0;
                 loop {
                     match self.client.respond(body.clone()).await {
-                        Ok(out) => return answer(out),
+                        Ok(out) => return answer(out, &self.setup.model),
                         Err(e) => match self.busy_wait(&e) {
                             Some(wait) if retries < CHAT_BUSY_RETRIES => {
                                 tokio::time::sleep(wait).await;
@@ -130,8 +159,13 @@ impl LanguageModel for MetaChat {
     }
 }
 
-/// `request` as a Responses API body.
+/// `request` as a Responses API body, as the app sends it (`ChatSetup::default()`).
 pub fn wire_body(request: &ModelRequest) -> Value {
+    wire_body_with(request, &ChatSetup::default())
+}
+
+/// `request` as a Responses API body for `setup`: its model and output cap, and `reasoning.effort` when it names one.
+pub fn wire_body_with(request: &ModelRequest, setup: &ChatSetup) -> Value {
     let tools: Vec<Value> = (request.tools.as_array().into_iter().flatten())
         .map(|tool| {
             let mut tool = tool.clone();
@@ -143,16 +177,20 @@ pub fn wire_body(request: &ModelRequest) -> Value {
         })
         .collect();
     let input: Vec<Value> = request.input.iter().map(item).collect();
-    json!({
-        "model": CHAT_MODEL,
+    let mut body = json!({
+        "model": setup.model,
         "instructions": request.system,
         "tools": tools,
         "tool_choice": "auto",
         "parallel_tool_calls": true,
-        "max_output_tokens": CHAT_MAX_OUTPUT_TOKENS,
+        "max_output_tokens": setup.max_output_tokens,
         "store": false,
         "input": input,
-    })
+    });
+    if let Some(effort) = &setup.reasoning_effort {
+        body["reasoning"] = json!({ "effort": effort });
+    }
+    body
 }
 
 /// One input item in the Responses API's shape. A replayed call carries no `id`: it names no item stored at Meta.
@@ -179,8 +217,8 @@ fn item(item: &Item) -> Value {
 /// with its words and the calls it finished (not marked `incomplete`, and arguments that read as a JSON object), for the
 /// planner to keep and ask again. One that came back `failed`, or `incomplete` for another reason, is an error, none of
 /// its calls used. Either is still billed, so the error carries its cost.
-fn answer(out: ResponseOut) -> Result<ModelResponse, ModelError> {
-    let usage_usd = pricing::spark_usd(out.usage);
+fn answer(out: ResponseOut, model: &str) -> Result<ModelResponse, ModelError> {
+    let usage_usd = pricing::chat_usd(model, out.usage);
     // A code from the answer, for logs: only lowercase letters, digits and underscores, never free text.
     let code = |pointer: &str| {
         (out.raw.pointer(pointer).and_then(Value::as_str))
