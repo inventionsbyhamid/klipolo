@@ -348,7 +348,7 @@ pub enum ToolCall {
         target: LayerRef,
         effects: Vec<EffectChange>,
     },
-    /// Undo the last change.
+    /// Undo the person's last change, from before the message: only as the message's first change (`compile`).
     Undo,
     /// Ask the person `question` before doing anything more.
     AskUser { question: String },
@@ -918,7 +918,8 @@ const TOOLS: &[Tool] = &[
     recorded::AUTO_ZOOM,
     Tool {
         name: "undo",
-        description: "Undo the last change.",
+        description: "Undo the person's last change, from before this message: only before any other change of \
+                      this message, never to take back your own call (change or remove that with its own tool).",
         parameters: Vec::new,
         read: |_| Ok(ToolCall::Undo),
     },

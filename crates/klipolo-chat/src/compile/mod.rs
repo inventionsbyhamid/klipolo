@@ -37,8 +37,10 @@
 //! something at may instead be the words said there (`quote`: refused back when said nowhere, or in several places
 //! the answer's removals leave); its seconds snap to a word's start or a cut near them, else stay as given
 //! (`Evidence::place`). A clip ref resolves through
-//! the `Refs` the context was built with, never through the project's own order. `undo` doesn't mix with edits: the
-//! edits were compiled against the project before it, so they are refused back to the model.
+//! the `Refs` the context was built with, never through the project's own order. `undo` takes back the person's change
+//! from before the message, so it stands only as the message's first change: after a change of the message's own it
+//! is refused back to the model (it would leave this message's changes out), and changes after it, compiled against
+//! the project before it, are refused for the person to send again (`UNDO_FIRST`).
 //!
 //! Undo labels are message ids with values, worded by the UI: `chat.<tool>` (`chat.cutRange {startUs, endUs}`), and
 //! `chat.andMore {first, more}` for a step of several calls. What an addition did beyond what was asked, or what a
@@ -109,6 +111,14 @@ pub(crate) use sources::{OwnTrack, kind_of};
 pub use sources::{centre_ops, fill_gaps_ops};
 use trim::Trim;
 
+/// What the model is told of an `undo` after a change of the same message: it would take back the person's change
+/// before the message and leave this one's out.
+pub const UNDO_AFTER_CHANGES: &str = "undo: not done. Undo takes back the person's change from before this message, \
+     and this message has changes of its own: they would all be lost. To take back one of them, change it or remove \
+     it with its own tool (setLayer remove for a layer), or leave it as it is.";
+/// What the person is told of the changes asked for after an undo in the same message: they were made on the project
+/// before it, so they wait for the person's next message.
+pub const UNDO_FIRST: &str = "I undid your last change first. Send the rest again and I'll do it.";
 /// What the person is told when a tool needs a clip's words and Klipolo is still hearing or timing them.
 pub const STILL_LISTENING: &str =
     "Klipolo is still listening to this clip. Ask me again when its analysis is done.";
@@ -698,8 +708,12 @@ impl<'a> Compiler<'a> {
 
 impl Compiler<'_> {
     fn run(&self, calls: &[ToolCall]) -> Compiled {
+        // `undo` takes back the change before this message, so it stands only as the message's first change: after one
+        // of this message's own changes it would take back the person's earlier change and leave this message's out.
+        let first_change = calls.iter().position(is_edit);
+        let first_undo = (calls.iter()).position(|c| matches!(c, ToolCall::Undo));
         let mut out = Compiled {
-            undo: calls.iter().any(|c| matches!(c, ToolCall::Undo)),
+            undo: first_undo.is_some_and(|u| first_change.is_none_or(|e| u < e)),
             ..Compiled::default()
         };
         // In call order: the edits that are additions compile now; media layers go on the project they make, then
@@ -723,12 +737,13 @@ impl Compiler<'_> {
         for (i, call) in calls.iter().enumerate() {
             // A recording tool's notes, said once its edit is kept.
             let mut recorded: Vec<String> = Vec::new();
+            if matches!(call, ToolCall::Undo) && !out.undo {
+                refuse(&mut out, i, to_model(UNDO_AFTER_CHANGES.to_owned()));
+                continue;
+            }
+            // The changes after an undo were made on the project before it: the person sends them again.
             if out.undo && is_edit(call) {
-                let reason = format!(
-                    "{}: not done, because undo is in the same answer. Call undo on its own, then the other changes.",
-                    call.name()
-                );
-                refuse(&mut out, i, to_model(reason));
+                refuse(&mut out, i, to_person(UNDO_FIRST.to_owned()));
                 continue;
             }
             if matches!(
