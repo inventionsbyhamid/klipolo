@@ -31,7 +31,9 @@
 //! music is in."). When nothing came of the message and a call was refused (still refused back, or refused for the
 //! person, `cannotDo` aside), that text, which may claim the edit, is left out. With none of these, the reply is
 //! `askUser`'s questions, else a short sentence on what was done (or, for only work handed to a runner, that it is
-//! under way); otherwise the questions are only in `Compiled::questions`.
+//! under way); otherwise the questions are only in `Compiled::questions`. A `followSubject` runs once the plan is made,
+//! so its output says done before it has: should the follow come to nothing, the app says `PlanOut::without_follow`
+//! instead of a reply that may claim it.
 //!
 //! An error before anything was done leaves the project untouched: nothing is compiled, and each is one plain
 //! sentence (`ChatError`). A project whose context is over budget (`ChatContext::fits`) is refused before any model
@@ -120,6 +122,9 @@ pub struct PlanOut {
     pub calls: Vec<ToolCall>,
     /// Each model answer's calls as it made them, one entry per answer.
     pub answers: Vec<Vec<FunctionCall>>,
+    /// The reply to give instead when its `followSubject` comes to nothing once it runs (`instead_of_follow`): None
+    /// without a follow that went through, empty when nothing else is said.
+    pub without_follow: Option<String>,
 }
 
 impl PlanOut {
@@ -616,6 +621,7 @@ fn finish(
     answers: Vec<Vec<FunctionCall>>,
     stopped: Option<&str>,
 ) -> PlanOut {
+    let without_follow = instead_of_follow(&calls, &compiled, unfinished, stopped);
     let came_of_it = compiled.additions.is_some()
         || compiled.proposal.is_some()
         || !compiled.moments.is_empty()
@@ -645,6 +651,7 @@ fn finish(
             usage_usd,
             calls,
             answers,
+            without_follow,
         };
     }
     // An edit refused for the person (nothing to remove, a clip not analyzed yet): the text was written before it, and
@@ -719,7 +726,50 @@ fn finish(
         usage_usd,
         calls,
         answers,
+        without_follow,
     }
+}
+
+/// The reply should the message's `followSubject` come to nothing once it runs (nobody found, the tracking failed, no
+/// clip can follow). It runs after the plan, so the model was told it was done and its words may claim it: they are
+/// left out, as for a call refused for the person. Said instead: what else went through, plainly (`done_sentences`
+/// without the follow), Klipolo's notes on it, the sentences of refusals meant for the person, what couldn't be done,
+/// and why it stopped; empty when none of these, so that what the follow came to is the reply. None without a follow
+/// that went through.
+fn instead_of_follow(
+    calls: &[ToolCall],
+    compiled: &Compiled,
+    unfinished: &[String],
+    stopped: Option<&str>,
+) -> Option<String> {
+    let refused = |i: usize| compiled.refusals.iter().any(|r| r.call_index == i);
+    let followed = (calls.iter().enumerate())
+        .any(|(i, c)| matches!(c, ToolCall::FollowSubject { .. }) && !refused(i));
+    if !followed {
+        return None;
+    }
+    let mut parts = said_done(calls, compiled, |c| {
+        !matches!(c, ToolCall::FollowSubject { .. })
+    });
+    let else_done = !parts.is_empty();
+    for said in (compiled.notes.iter().chain(&compiled.waits)).map(|n| full_stop(n.trim())) {
+        if !said.is_empty() && !parts.contains(&said) {
+            parts.push(said);
+        }
+    }
+    for r in (compiled.refusals.iter()).filter(|r| r.audience == Audience::Person) {
+        let said = full_stop(r.reason.trim());
+        if !said.is_empty() && !parts.contains(&said) {
+            parts.push(said);
+        }
+    }
+    if !unfinished.is_empty() {
+        parts.push(could_not(unfinished, else_done));
+    }
+    if let Some(why) = stopped {
+        parts.push(format!("{} {STOPPED}", full_stop(why.trim())));
+    }
+    Some(sanitize::reply(&parts.join(" ")))
 }
 
 /// What a call that went through did, said plainly for a reply that leaves the model's text out.
@@ -864,8 +914,17 @@ fn summary(calls: &[ToolCall], compiled: &Compiled) -> String {
 
 /// The calls of `compiled` that went through, each said once (`done`), then the proposal if there is one.
 fn done_sentences(calls: &[ToolCall], compiled: &Compiled) -> Vec<String> {
+    said_done(calls, compiled, |_| true)
+}
+
+/// [`done_sentences`] of the calls `said` keeps.
+fn said_done(
+    calls: &[ToolCall],
+    compiled: &Compiled,
+    said: impl Fn(&ToolCall) -> bool,
+) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
-    for (i, call) in calls.iter().enumerate() {
+    for (i, call) in calls.iter().enumerate().filter(|(_, c)| said(c)) {
         let refused = compiled.refusals.iter().any(|r| r.call_index == i);
         // Proposed, or through but changing nothing (a format the video already has): not said as done.
         if refused || compiled.proposed_calls.contains(&i) || compiled.unchanged.contains(&i) {

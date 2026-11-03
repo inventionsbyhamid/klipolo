@@ -985,6 +985,7 @@ fn keep_only(project: &Project, inputs: &Inputs, ranges: Vec<RangeUs>) -> PlanOu
         note,
         calls,
         answers: Vec::new(),
+        without_follow: None,
     }
 }
 

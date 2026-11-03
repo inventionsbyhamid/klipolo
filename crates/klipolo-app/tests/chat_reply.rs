@@ -127,6 +127,7 @@ fn a_plan_reads_as_its_reply_its_new_questions_and_its_moments() {
         note: String::new(),
         calls: vec![],
         answers: vec![],
+        without_follow: None,
     };
     let reply = ChatReply::from_plan("r1", &plan);
     assert_eq!(reply.text(), "She talks about the kiln twice. Which one?");

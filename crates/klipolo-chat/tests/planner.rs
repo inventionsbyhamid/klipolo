@@ -1027,6 +1027,44 @@ fn following_or_blurring_alone_is_said_to_be_on_its_way() {
 }
 
 #[test]
+fn a_follow_that_comes_to_nothing_has_a_reply_without_it() {
+    // A follow runs once the plan is made, so the model is told it is done and its closing words may claim it: what
+    // to say should it come to nothing is what else went through, plainly; nothing when there is nothing else.
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let follow = || {
+        fc(
+            "call_2",
+            "followSubject",
+            r#"{"description": "person", "focus": null}"#,
+        )
+    };
+    let model = Fake::new(vec![
+        answer("", vec![square_call("call_1"), follow()], 0.002),
+        answer("Done. It is square and keeps her in frame.", vec![], 0.001),
+    ]);
+    let out = send(&model, &[], "square, and keep her in frame", &i, &p).unwrap();
+    assert_eq!(out.reply, "Done. It is square and keeps her in frame.");
+    assert_eq!(
+        out.without_follow.as_deref(),
+        Some("The format is changed.")
+    );
+    let model = Fake::new(vec![
+        answer("", vec![follow()], 0.002),
+        answer("Done. She stays in frame.", vec![], 0.001),
+    ]);
+    let out = send(&model, &[], "keep her in frame", &i, &p).unwrap();
+    assert_eq!(out.without_follow.as_deref(), Some(""));
+    // No follow: nothing to say instead.
+    let model = Fake::new(vec![
+        answer("", vec![square_call("call_1")], 0.002),
+        answer("Done.", vec![], 0.001),
+    ]);
+    let out = send(&model, &[], "square", &i, &p).unwrap();
+    assert_eq!(out.without_follow, None);
+}
+
+#[test]
 fn a_part_refused_for_the_person_is_not_claimed_by_the_models_text() {
     // There is no pause to remove (no loudness), the music goes in: the model's sentence claims both, so it is left
     // out and what went through is said plainly, then why the rest wasn't done.
