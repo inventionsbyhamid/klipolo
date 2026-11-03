@@ -712,19 +712,53 @@ impl Cues {
             {
                 continue;
             }
-            match (speaker(c, before), speaker(c, after)) {
-                (Some(x), Some(y)) if x != y => out.push(after.start),
-                _ => {}
+            if speaker_changes(c, before, after) {
+                out.push(after.start);
             }
         }
         out
     }
 }
 
-/// Who speaks over `window` of the snapshot's timeline (inside one clip, cut to it): the transcript's speaker turn that
-/// covers the most of it, by its label (`Inputs::turns`), else the scene log's speech item, by who it names (no one
-/// named: a voice off screen). A recording's clip reads its file's. None when neither says.
-fn speaker(c: &Compiler, window: RangeUs) -> Option<String> {
+/// Who speaks over a stretch, as one source tells it.
+#[derive(Clone, Debug, PartialEq)]
+enum Who {
+    /// A transcript voice of file `asset`: its label ("P1" for a person on screen) and, for a bare voice label, the
+    /// transcription part it holds in (`Inputs::turns` writes it as "A@3").
+    Voice {
+        asset: String,
+        part: Option<String>,
+        label: String,
+    },
+    /// The scene log's speech item, by who it names (no one named: a voice off screen).
+    Scene(String),
+}
+
+/// Whether the speaker differs between `a` and `b`, where the two can be compared: two voices of one file in one
+/// transcription part (or two people on screen), or two scene log items. None when they can't be.
+fn changes(a: &Who, b: &Who) -> Option<bool> {
+    match (a, b) {
+        (
+            Who::Voice {
+                asset: f,
+                part: p,
+                label: x,
+            },
+            Who::Voice {
+                asset: g,
+                part: q,
+                label: y,
+            },
+        ) => (f == g && p == q).then_some(x != y),
+        (Who::Scene(x), Who::Scene(y)) => Some(x != y),
+        _ => None,
+    }
+}
+
+/// Who speaks over `window` of the snapshot's timeline (inside one clip, cut to it), by the transcript's speaker turns
+/// (`Inputs::turns`, when `turns`) or by the scene log's speech items: what covers the most of it. A recording's clip
+/// reads its file's. None when that source doesn't say.
+fn speaker(c: &Compiler, window: RangeUs, turns: bool) -> Option<Who> {
     let main = &c.snapshot.timeline.main;
     let (i, start) = clip_at(main, window.start)?;
     let clip = &main[i];
@@ -739,13 +773,22 @@ fn speaker(c: &Compiler, window: RangeUs) -> Option<String> {
     let source = |t: Us| clip.source_in_us + ((t - start) as f64 * clip.speed) as Us;
     let (a, b) = (source(window.start), source(end));
     let covered = |from: Us, to: Us| to.min(b) - from.max(a);
-    let turn = (c.inputs.turns.get(&id).into_iter().flatten())
-        .filter_map(|t| Some((covered(t.start_us, t.end_us), t.speaker.as_deref()?)))
-        .filter(|(n, _)| *n > 0)
-        .max_by_key(|(n, _)| *n)
-        .map(|(_, who)| format!("voice {who}"));
-    if turn.is_some() {
-        return turn;
+    if turns {
+        return (c.inputs.turns.get(&id).into_iter().flatten())
+            .filter_map(|t| Some((covered(t.start_us, t.end_us), t.speaker.as_deref()?)))
+            .filter(|(n, _)| *n > 0)
+            .max_by_key(|(n, _)| *n)
+            .map(|(_, said)| {
+                let (label, part) = match said.split_once('@') {
+                    Some((label, part)) => (label.to_owned(), Some(part.to_owned())),
+                    None => (said.to_owned(), None),
+                };
+                Who::Voice {
+                    asset: id.clone(),
+                    part,
+                    label,
+                }
+            });
     }
     let log = c.inputs.scenes.get(&id)?;
     (log.items.iter())
@@ -753,7 +796,17 @@ fn speaker(c: &Compiler, window: RangeUs) -> Option<String> {
         .map(|item| (covered(item.start_us, item.end_us), item))
         .filter(|(n, _)| *n > 0)
         .max_by_key(|(n, item)| (*n, item.start_us))
-        .map(|(_, item)| item.who.trim().to_lowercase())
+        .map(|(_, item)| Who::Scene(item.who.trim().to_lowercase()))
+}
+
+/// Whether the speaker changes from `before` to `after`: by the transcript's turns where both sides can be compared,
+/// else by the scene log's; false where neither can tell, as a missed whoosh is better than a false one.
+fn speaker_changes(c: &Compiler, before: RangeUs, after: RangeUs) -> bool {
+    let by = |turns: bool| match (speaker(c, before, turns), speaker(c, after, turns)) {
+        (Some(x), Some(y)) => changes(&x, &y),
+        _ => None,
+    };
+    by(true).or_else(|| by(false)).unwrap_or(false)
 }
 
 /// Where a call places something on the snapshot's timeline, in a part the answer keeps; None when it stands nowhere.
