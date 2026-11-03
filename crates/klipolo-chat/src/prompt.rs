@@ -107,12 +107,12 @@ their question, keep the question first. Fewer, whole thoughts beat many scraps:
 3 sentences and leave out repeats and false starts, with a range for each piece.\n\
 - Cut where speech breaks: start a part where a line starts and end it where a line ends, at a sentence end, a \
 [pause] or a change of speaker. Never start a part on and, but, so, because or that; never end one on and, but, so, \
-that or the; never keep the next speaker's first word, or a pause, at a part's end. Klipolo moves a part's edge \
-that falls inside a phrase to the nearest break.\n\
+that or the; never keep the next speaker's first word, or a pause, at a part's end (Klipolo trims a long pause and \
+a stray word after it from a part's end).\n\
 - followSubject in a short: where the speaker is off camera (a question), give focus to who the words name or who \
-answers next (P1 is leftmost, as Scenes places them).\n\
-- fixCaptionWords for a stutter or a misheard name in the parts you keep (\"these these first\" reads \"these \
-firsts\").\n\
+answers next (P1 is leftmost: People names them, else Scenes says where each sits).\n\
+- fixCaptionWords for a stutter or a misheard name the short shows; it fixes them everywhere (\"these these\" reads \
+\"these\").\n\
 - To place something where words are said, give atWords: 1 to 4 words in a row copied exactly from Transcript; it \
 starts as the first is said. Place stickers and sounds this way, on their word, not at the start of a moment or range.\n\
 - Stickers, at most 3 in a short, and none on a serious or sad line: only on a spoken word that names a thing, an \
