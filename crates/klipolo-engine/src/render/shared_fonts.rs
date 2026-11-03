@@ -2,7 +2,7 @@
 //! with the managed faces only (built in milliseconds, every built-in style's face included) and takes the scanned
 //! template once the background scan (`TextDrawer::scan_fonts_in_background`, on its own thread) is done, then follows
 //! the font generation: the render thread never waits on the system fonts. An export (`wait`) scans before frame 0,
-//! on the worker's own thread, as it did before this task.
+//! on the worker's own thread, as it always has.
 //!
 //! Memory: one `FontSystem` per compositor (its database is a clone of the template's face records; faces are
 //! memory-mapped once used), where the text drawer and a caption drawer would each have held one.

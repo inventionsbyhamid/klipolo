@@ -319,7 +319,7 @@ fn pixel(bytes: &[u8], stride: u32, x: u32, y: u32) -> [u8; 3] {
     [bytes[i], bytes[i + 1], bytes[i + 2]]
 }
 
-// The one GPU test of this task (in this file rather than `gpu.rs`, which another task was editing at the time).
+// A GPU test, kept in this file rather than `gpu.rs`.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU"]
 async fn generators_effects_and_adjustments_draw() {

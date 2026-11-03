@@ -211,7 +211,7 @@ impl SceneLogger for Meta {
         self.videos_at_once
     }
 
-    /// The plan's formula: 131 tokens a sampled frame at 640 × 360, 10 a second of sound, the prompt, and the output
+    /// The cost formula: 131 tokens a sampled frame at 640 × 360, 10 a second of sound, the prompt, and the output
     /// expected (`SCENE_OUTPUT_TOKENS_*`), at Spark's list prices.
     fn estimate_usd(&self, seconds: f64, fps: f64) -> f64 {
         let input = pricing::spark_video_tokens(seconds, fps) + SCENE_PROMPT_TOKENS;

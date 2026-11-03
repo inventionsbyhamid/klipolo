@@ -48,7 +48,7 @@ export function styleOf(settings: CaptionSettings, formats: readonly FormatKind[
   return styleById(settings.style ?? defaultStyle(formats)) ?? BY_ID.get(FALLBACK)!;
 }
 
-/** Each shown style's name on its card (the design's). */
+/** Each shown style's name on its card. */
 export const STYLE_NAMES: Partial<Record<BuiltinCaptionStyle, MessageDescriptor>> = {
   clean: msg({ id: 'captions.style.clean', message: 'Clean' }),
   bold: msg({ id: 'captions.style.bold', message: 'Bold pop' }),

@@ -1,7 +1,7 @@
 //! The presenter seam: the native view the app made for the preview reaches the engine as an opaque
 //! `NativeSurface`, so the session, the backend trait and the actor never name an OS type.
 //! - macOS: a CAMetalLayer under the transparent WKWebView (`present::macos::install`);
-//! - Windows (W: a DirectComposition visual or a child-HWND swap chain) and Linux (L: a Wayland subsurface): none
+//! - Windows (a DirectComposition visual or a child-HWND swap chain) and Linux (a Wayland subsurface): none
 //!   yet, so the socket presents.
 
 /// The view a native presenter draws into.

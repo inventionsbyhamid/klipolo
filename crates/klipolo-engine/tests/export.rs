@@ -1018,7 +1018,7 @@ async fn a_file_moved_into_place_before_a_crash_is_delivered_not_redone() {
 // The real worker. Needs a GPU, VideoToolbox, `scripts/gen-engine-fixtures.sh --bench` and
 // `cargo build -p klipolo-engine --example perf_harness` (that binary runs the worker for `--export-worker`).
 
-/// False (the test is skipped) where this computer has no H.264 encoder: Windows and Linux until W and L.
+/// False (the test is skipped) where this computer has no H.264 encoder: Windows and Linux for now.
 fn h264_encoder() -> bool {
     let found = klipolo_engine::export::quality::probe_caps_for(&[]).h264;
     if !found {

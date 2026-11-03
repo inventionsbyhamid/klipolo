@@ -25,7 +25,7 @@ use windows::core::{HRESULT, HSTRING, PCWSTR, Ref, implement};
 
 use crate::trash_rule::recycles;
 
-/// Where it went isn't said: the Recycle Bin names its items itself (Start over's Undo is W's, through it).
+/// Where it went isn't said: the Recycle Bin names its items itself (on Windows, Start over's Undo goes through it).
 pub(crate) fn move_to_trash(path: &Path) -> io::Result<Option<std::path::PathBuf>> {
     let path = std::path::absolute(path)?;
     let refused = Arc::new(AtomicBool::new(false));

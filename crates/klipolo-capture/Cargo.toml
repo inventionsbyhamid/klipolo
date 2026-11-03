@@ -13,7 +13,7 @@ synthetic = []
 # this feature turns it on elsewhere, for a preview build only. Tests never do.
 separate-cursor = []
 # The macOS, Windows and Linux backends. Only the app turns this on; tests never do. Every OS dependency the
-# backend tasks add (cpal for the mic on macOS and Windows, cidre, objc2*, tray-icon, global-hotkey, windows, ashpd,
+# backends add (cpal for the mic on macOS and Windows, cidre, objc2*, tray-icon, global-hotkey, windows, ashpd,
 # pipewire, x11rb, v4l, and ffmpeg on Windows and Linux) is `optional = true` and enabled here, so a
 # `synthetic` build compiles none of them and a dev-dependency on this crate pulls in only the core.
 real-capture = ["dep:cpal", "dep:cidre", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-core-graphics", "dep:objc2-foundation", "dep:objc2-core-foundation", "dep:block2", "dep:libc", "dep:tray-icon", "dep:global-hotkey"]

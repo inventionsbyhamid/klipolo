@@ -131,7 +131,7 @@ export function useEditorShortcuts() {
       d: 'duplicate',
       t: 'add-transition',
       l: 'loop',
-      // The design's key for the library, beside the Control Command S the panels take.
+      // The library's key, beside the Control Command S the panels take.
       b: 'toggle-side-panel',
     };
     if (mod) {

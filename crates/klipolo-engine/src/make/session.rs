@@ -156,7 +156,7 @@ struct WorkerRecord {
 }
 
 /// Records the worker `pid` in `session` (`WORKER_FILE`: its id, start time and boot), so a later start can stop it if
-/// the app never did. `Unsupported` where the OS won't say when a process started (Windows until W).
+/// the app never did. `Unsupported` where the OS won't say when a process started (Windows, for now).
 pub fn record_worker(session: &Path, pid: u32) -> io::Result<()> {
     let unsupported = || io::Error::from(io::ErrorKind::Unsupported);
     let record = WorkerRecord {

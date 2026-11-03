@@ -87,8 +87,8 @@ pub fn classify(bundle: &Path, facts: PlaceFacts) -> InstallPlace {
     }
 }
 
-/// The running app's bundle: macOS the `.app` above `current_exe`; W the install folder; L `$APPIMAGE` (inside a
-/// Flatpak, the running executable, whose place is `Managed`). None in tests and dev runs.
+/// The running app's bundle: macOS the `.app` above `current_exe`; Windows the install folder; Linux `$APPIMAGE`
+/// (inside a Flatpak, the running executable, whose place is `Managed`). None in tests and dev runs.
 pub fn bundle() -> Option<PathBuf> {
     crate::imp::bundle()
 }

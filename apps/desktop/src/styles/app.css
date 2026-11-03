@@ -176,8 +176,8 @@
   outline: none;
 }
 
-/* Folded (Control Command S), the library is its rail: Open library and Add files, then the clips' thumbnails (design
-   8). Wins over the Captions view's wider panel. `--library-w` stays the open library's width: the card's, while it
+/* Folded (Control Command S), the library is its rail: Open library and Add files, then the clips' thumbnails.
+   Wins over the Captions view's wider panel. `--library-w` stays the open library's width: the card's, while it
    lies over the preview's left edge. */
 .workspace:has(.library.panel[data-collapsed="true"]) {
   grid-template-columns: var(--library-rail) minmax(0, 1fr) var(--chat-w);

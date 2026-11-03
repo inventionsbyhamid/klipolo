@@ -33,8 +33,8 @@ pub fn read_profile(session: &Path) -> Result<SandboxProfile, String> {
     Ok(profile)
 }
 
-/// Sandboxes this process as `session`'s profile says (macOS), or answers `Unsupported` (Linux until L, Windows until
-/// W). An error means the worker must exit before it reads a request.
+/// Sandboxes this process as `session`'s profile says (macOS), or answers `Unsupported` (Linux and Windows, for
+/// now). An error means the worker must exit before it reads a request.
 pub fn apply(session: &Path) -> Result<Applied, String> {
     sandbox_self(&read_profile(session)?)
 }

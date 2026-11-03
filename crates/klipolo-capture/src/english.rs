@@ -1,5 +1,5 @@
 //! klipolo-capture's codes and their English: every `capture.*` code the recorder sends. They are all declared
-//! here up front, so the later tasks use them and invent none. `msg!` and `code!` refuse to compile a code
+//! here up front, so no code is invented elsewhere. `msg!` and `code!` refuse to compile a code
 //! that isn't here. The UI words every code in the person's language (its descriptors come from
 //! `apps/desktop/src/bindings/captureCodes.json`); logs and MCP replies read `english()`. The UI's own messages live under
 //! `recorder.*`, `source.*` and `marker.*`, never under `capture`, which is Rust's; the permission steps' copy is coded
@@ -186,8 +186,6 @@ pub const ENGLISH: Messages = &[
     // Windows' Recycle Bin can't take it (too big, or the drive has none): never deleted outright.
     ("capture.recovered.trashTooBig", "This recording is too big for the Recycle Bin, so it's still in its folder."),
     ("capture.busy", "A recording is already running. Stop it from {place}."),
-    // Arming while v1 dictation listens to the mic: the mic is the dictation's until it ends.
-    ("capture.busyDictating", "Finish dictating first, then record."),
     ("capture.orphan", "Klipolo closed. The recording goes on until you stop it here."),
     ("capture.quit.ask", "A recording is running. Stop and save it, then quit?"),
     ("capture.import.noVideo", "This take has no picture to edit. Its sound files are in the recording's folder."),

@@ -3,7 +3,7 @@
 
 use ffmpeg::sys::AVHWDeviceType;
 
-/// macOS: VideoToolbox. Windows (W: `D3D12VA`, on wgpu's own D3D12 device) and Linux (L: `VAAPI`, exported as
+/// macOS: VideoToolbox. Windows (`D3D12VA`, on wgpu's own D3D12 device) and Linux (`VAAPI`, exported as
 /// DMA-BUF) decode in software for now.
 pub fn hw_device_type() -> Option<AVHWDeviceType> {
     if cfg!(target_os = "macos") {

@@ -41,7 +41,7 @@ impl Backend for OsBackend {
     fn preview(&self, _camera: &str) -> Result<Box<dyn PreviewPipe>, PipeError> {
         Err(PipeError::Unsupported)
     }
-    /// Not yet: Windows Graphics Capture's live view comes with its capture tasks (26-29). No view, no error.
+    /// Not yet: Windows Graphics Capture's live view comes with its capture. No view, no error.
     fn live_view(&self, _target: &Target) -> Result<Box<dyn PreviewPipe>, PipeError> {
         Err(PipeError::Unsupported)
     }

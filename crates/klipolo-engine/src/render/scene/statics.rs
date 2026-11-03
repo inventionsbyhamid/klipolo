@@ -20,8 +20,8 @@ use super::shapes::GpuGradient;
 /// What a node draws.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum Look {
-    /// Nothing of its own: a group, repeat or emitter passes its place down; texts, paths and particles are drawn by
-    /// later tasks.
+    /// Nothing of its own: a group, repeat or emitter passes its place down; texts, paths and particles are drawn
+    /// elsewhere.
     None,
     Rect,
     Ellipse,

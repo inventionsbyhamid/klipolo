@@ -194,6 +194,6 @@ pub(crate) fn ask_to_stop(_child: &std::process::Child) -> io::Result<()> {
 pub(crate) fn running_from(_bundle: &std::path::Path) -> io::Result<Vec<crate::process::Running>> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
-        "the processes running from the bundle can't be listed here yet (W)",
+        "the processes running from the bundle can't be listed here yet",
     ))
 }

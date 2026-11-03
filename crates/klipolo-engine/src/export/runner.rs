@@ -72,7 +72,7 @@ pub enum Outcome {
 pub const DISK_FULL: &str = "Your disk is full. Free up space, then resume.";
 /// The hardware encoder failed twice and switching to the software one would throw away finished segments.
 pub const ENCODER_BUSY: &str = "The video encoder is busy. Another app may be using it, like a screen recorder or a video call. Close it, then resume.";
-/// Windows and Linux until W and L: Klipolo's LGPL FFmpeg has no software H.264 encoder, and no OS encoder is wired up.
+/// Windows and Linux for now: Klipolo's LGPL FFmpeg has no software H.264 encoder, and no OS encoder is wired up.
 pub const NO_H264: &str =
     "This computer has no H.264 encoder, so this video can't be exported here yet.";
 /// A clip failed to decode twice in hardware, where switching would throw away finished segments.

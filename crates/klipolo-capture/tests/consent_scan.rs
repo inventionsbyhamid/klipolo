@@ -1,7 +1,7 @@
 //! Capture begins only when the person presses Record or Check camera: never in tests, builds or device inspection.
 //! The exceptions, the recorder's live view and the Record dialog's stills, are capture files of their own
 //! (`captures`). These checks read source text only, every OS's on every OS, so a Linux run checks the macOS and
-//! Windows code too, and each later task's files are checked as they land.
+//! Windows code too, and every new file is checked as it lands.
 
 // Only the source helpers, not `common`: a source scan links nothing else (no FFmpeg).
 #[path = "common/scan.rs"]

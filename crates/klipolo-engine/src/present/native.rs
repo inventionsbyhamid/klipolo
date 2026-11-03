@@ -6,7 +6,7 @@
 //!   drawable never holds up the engine.
 //!
 //! The slot ring, the pacing and the log are the portable half; only macOS has a presenter thread to drain them until
-//! W and L add theirs (a DXGI swap chain, a Wayland subsurface), so elsewhere they are unused.
+//! Windows and Linux add theirs (a DXGI swap chain, a Wayland subsurface), so elsewhere they are unused.
 #![cfg_attr(not(target_os = "macos"), allow(dead_code))]
 
 mod slots;

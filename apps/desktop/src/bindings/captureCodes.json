@@ -535,11 +535,6 @@
     ]
   },
   {
-    "code": "capture.busyDictating",
-    "message": "Finish dictating first, then record.",
-    "params": []
-  },
-  {
     "code": "capture.orphan",
     "message": "Klipolo closed. The recording goes on until you stop it here.",
     "params": []
