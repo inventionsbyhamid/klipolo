@@ -61,8 +61,8 @@ mod tests {
     }
 
     /// `pnpm bindings` runs this (its name matches `export_bindings`): `apps/desktop/src/bindings/fontsCodes.json`,
-    /// this crate's `fonts.*` codes, their English and their values, for the UI's catalogue (as klipolo-ai writes
-    /// `aiCodes.json`).
+    /// this crate's `fonts.*` codes, their English and their values, for the UI's catalogue (as the app crate writes
+    /// `appCodes.json`).
     #[test]
     fn export_bindings_fonts_codes() {
         let list: Vec<serde_json::Value> = crate::english::ENGLISH
