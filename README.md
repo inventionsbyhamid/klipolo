@@ -345,10 +345,11 @@ flowchart LR
 - Before a call goes to Meta, the relay reserves the most it could cost. If the spend leaves no room under a cap, the
   call is refused (402) and never reaches Meta. After Meta answers, the call is charged from Meta's own usage figures,
   and only then is the reservation freed. Failed calls aren't charged.
-- The caps: each device (by default $2, all time); each access code, when one is set (what all its devices spend
-  together, and how many devices may register with it); the whole relay (by default $40); and SAM 3.1 video tracking,
-  a daily cap across every device (by default $5). If Meta ever bills SAM more frames than the relay reserved, SAM is
-  turned off for that code.
+- The caps: each device, all time; each access code, when one is set (what all its devices spend together, and how
+  many devices may register with it); the whole relay; and SAM 3.1 video tracking, a daily cap across every device.
+  They are environment settings. The defaults in the code are $2 a device, $40 for the whole relay and $5 a day for
+  SAM. Today's live values for the free credit are $5 a device and $150 in all for the built-in free credit code. If
+  Meta ever bills SAM more frames than the relay reserved, SAM is turned off for that code.
 - Every charged call is a ledger row: the device, the time, the endpoint, the model, Meta's usage figures, the cost
   and the code it came under.
 
