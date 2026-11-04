@@ -6,7 +6,7 @@
 //! Only a few words are an app's own (`apps_words`). Chat's model puts the person's words on screen, an app its own
 //! (`klipolo_chat::compile_for_app`), so `addText`'s text and `makeTitleCard` say so. A sticker, chat's or an app's,
 //! waits once drawn in Klipolo's chat panel for the person's Use; an app's person may not be looking there, so an
-//! app's `makeSticker` says where it waits.
+//! app's `makeSticker` and `makePicture` say where they wait.
 
 use std::sync::LazyLock;
 
@@ -84,6 +84,7 @@ fn apps_words(name: &str, description: &Value, schema: &Value) -> (Value, Value)
             description = json!(words::TITLE_CARD_TOOL);
         }
         "makeSticker" => description = json!(words::STICKER_TOOL),
+        "makePicture" => description = json!(words::PICTURE_TOOL),
         _ => {}
     }
     (description, schema)

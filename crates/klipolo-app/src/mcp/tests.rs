@@ -246,6 +246,7 @@ fn sticker(prompt: &str) -> Job {
         motion: None,
         sound: None,
         beside: None,
+        picture: None,
     })
 }
 

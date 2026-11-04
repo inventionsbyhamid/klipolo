@@ -255,6 +255,11 @@ use addText.";
 pub const STICKER_TOOL: &str = "Have Muse Image draw a new sticker when no picture in Library fits. Once drawn, it \
 waits in Klipolo's chat panel for the person to place it with Use.";
 
+/// `makePicture`, for an app: as with a sticker, the picture waits in Klipolo's chat for the person's Use.
+pub const PICTURE_TOOL: &str = "Have Muse Image draw a picture that explains what is said at a moment (a diagram, a \
+scene, an example): full covers the frame for its time, inset sits in a corner box. Once drawn, it waits in Klipolo's \
+chat panel for the person to place it with Use.";
+
 /// `getSummary`.
 pub const SUMMARY_TOOL: &str = "The project in short: its revision, name, formats, length, captions and clips (c1, c2 \
 and so on, in timeline seconds), then the person's playhead and selection.";

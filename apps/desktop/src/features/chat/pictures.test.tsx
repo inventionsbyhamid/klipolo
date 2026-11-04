@@ -265,6 +265,29 @@ describe('pictures chat asks for', () => {
     expect(c).toHaveTextContent('Goes behind the title, for as long as it shows.');
   });
 
+  it('a picture that explains a moment keeps its name, its place and its price', async () => {
+    const explained: ChatPicture = {
+      id: 'pic3',
+      kind: 'picture',
+      prompt: 'a fish population over 50 years',
+      place: 'Shows over the whole frame, at the moment it was asked for.',
+    };
+    let release: () => void = () => undefined;
+    chat({
+      reply: (r) => reply(r.id, 'Drawing the picture.', { pictures: [explained] }),
+      drawPicture: async () => {
+        await new Promise<void>((done) => (release = done));
+        return picture(1);
+      },
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'show a picture of the fish population{Enter}');
+    const c = await screen.findByRole('group', { name: 'A fish population over 50 years picture' });
+    expect(await within(c).findByText('Costs about $0.01.')).toBeInTheDocument();
+    await act(async () => release());
+    expect(c).toHaveTextContent('Shows over the whole frame, at the moment it was asked for.');
+  });
+
   it("drives the app's chat commands with what each names", async () => {
     const undo = code('chat.makeSticker');
     backend({

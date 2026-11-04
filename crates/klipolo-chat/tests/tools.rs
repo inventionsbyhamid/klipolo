@@ -12,8 +12,9 @@ use std::collections::BTreeSet;
 
 use klipolo_chat::tools::{
     BackgroundChoice, BubbleChange, CHAT_CAPTION_STYLES, ClipRef, EffectChange, Entrance,
-    FunctionCall, KeyIn, LayerChange, LayerRef, Moment, Paint, PictureSize, Position, Problem,
-    Property, SizeStep, Sound, StyleChange, TextPreset, ToolCall, TransitionKind, tools,
+    FunctionCall, KeyIn, LayerChange, LayerRef, Moment, Paint, PictureLayout, PictureSize,
+    Position, Problem, Property, SizeStep, Sound, StyleChange, TextPreset, ToolCall,
+    TransitionKind, tools,
 };
 use klipolo_model::captions::styles::{BuiltinCaptionStyle, CaptionStyles};
 use klipolo_model::layout::Anchor;
@@ -211,6 +212,7 @@ fn every_tool_schema_is_strict() {
             "addText",
             "addImage",
             "makeSticker",
+            "makePicture",
             "makeTitleCard",
             "animate",
             "setMotion",
@@ -285,6 +287,9 @@ fn every_tool_schema_is_strict() {
             "makeSticker.atWords",
             "makeSticker.durationSec",
             "makeSticker.position",
+            "makePicture.atSec",
+            "makePicture.atWords",
+            "makePicture.durationSec",
             "makeTitleCard.atSec",
             "makeTitleCard.durationSec",
             "animate.emphasis",
@@ -567,6 +572,16 @@ fn parses_each_tool_from_spike_shaped_calls() {
                 position: Some(Position::TopRight),
                 at_us: Some(secs_to_us(56.0)),
                 at_words: None,
+                duration_us: None,
+            }],
+        ),
+        (
+            "show a picture of a fish population when he explains how it changes",
+            vec![MakePicture {
+                prompt: "a fish population over 50 years".into(),
+                layout: PictureLayout::Full,
+                at_us: None,
+                at_words: Some("how it changes".into()),
                 duration_us: None,
             }],
         ),
@@ -1627,8 +1642,10 @@ fn the_prompt_is_one_fixed_text_and_small() {
     // makeSticker and atSec saying what it does beside it (6,530 in all). The tools cap rose from 6,500 to 6,600 for
     // that last part. The short's story, its cuts where speech breaks, its follow on a question and its caption fixes,
     // with sound effects that match the mood, take about 370 prompt tokens more: the prompt cap rose from 1,800 to 2,200.
+    // makePicture, Muse Image's picture that explains a moment, takes about 200 tools tokens: the tools cap rose from
+    // 6,600 to 6,800.
     assert!(prompt_tokens <= 2_200, "prompt {prompt_tokens} tokens");
-    assert!(tools_tokens <= 6_600, "tools {tools_tokens} tokens");
+    assert!(tools_tokens <= 6_800, "tools {tools_tokens} tokens");
 }
 
 #[test]
@@ -1744,5 +1761,20 @@ fn optional_words_written_as_the_text_null_are_left_out() {
     assert!(
         matches!(&sound, ToolCall::AddSound { at_us, .. } if at_us.is_empty()),
         "{sound:?}"
+    );
+}
+
+#[test]
+fn the_recipe_says_when_to_draw_a_picture_and_when_a_sticker() {
+    let prompt = klipolo_chat::prompt::system_prompt();
+    assert!(
+        prompt.contains("a sticker for a small reaction")
+            && prompt.contains("only when the person asks for a picture"),
+        "{prompt}"
+    );
+    assert!(
+        serde_json::to_string(&tools())
+            .unwrap()
+            .contains("\"makePicture\"")
     );
 }

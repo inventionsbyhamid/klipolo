@@ -1110,6 +1110,19 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
             "atWords": at_words,
             "durationSec": duration_us.map(s),
         }),
+        ToolCall::MakePicture {
+            prompt,
+            layout,
+            at_us,
+            at_words,
+            duration_us,
+        } => json!({
+            "prompt": prompt,
+            "layout": layout.key(),
+            "atSec": at_us.map(s),
+            "atWords": at_words,
+            "durationSec": duration_us.map(s),
+        }),
         ToolCall::MakeTitleCard {
             title,
             prompt,

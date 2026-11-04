@@ -19,6 +19,9 @@
 //!   each format's own area (in 9:16 the area the apps keep clear) when one was asked for. In a short, the person's own
 //!   picture with no place given (a logo) goes in a top corner off the face instead (`clear::own_corner`), for 3 s,
 //!   placed again once the follow's path is known (`place_beside_again`).
+//! - `makePicture`: a picture that explains a moment, as `makeSticker`'s job (`MakeSticker::picture`): drawn whole, shown
+//!   over the frame (whole in a format of another shape, over a blurred copy) or in a corner box
+//!   (`clear::place_picture`), fading in and out.
 //! - `makeSticker`: a `Job::MakeSticker` only, on the project as the message's additions leave it, anchored to the
 //!   footage it shows over as a layer attaches (`Attach`); once the picture is drawn the app places it with
 //!   `sticker_ops` (where and how long `sticker_placement` says, on the project as it is then). A job's prompt names the
@@ -53,12 +56,14 @@ use klipolo_model::motion::{self, Ease, Motion};
 use klipolo_model::ops::Op;
 use klipolo_model::params::{ParamKind, ParamValue};
 use klipolo_model::project::{Asset, AssetKind, FormatKind};
-use klipolo_model::query::{anchor_at, main_track_duration, resolve_attach, video_duration};
+use klipolo_model::query::{
+    anchor_at, clip_at, main_track_duration, resolve_attach, video_duration,
+};
 use klipolo_model::scene::check_scene;
 use klipolo_model::speech::{WordKind, is_mark, joins_unspaced, word_ranges};
 use klipolo_model::text_safety::clean_shown;
 use klipolo_model::time::{MIN_DURATION_US, Us};
-use klipolo_model::timeline::{ItemContent, Outline};
+use klipolo_model::timeline::{ClipSource, ItemContent, Outline};
 use klipolo_model::validate::MAX_TEXT;
 use klipolo_model::{Project, apply_ops};
 
@@ -71,7 +76,7 @@ use crate::context::{secs, within_video};
 use crate::evidence::{TOLERANCE_US, in_cut};
 use crate::library::{Found, LibraryItem, MediaKind, is_generic};
 use crate::sanitize;
-use crate::tools::{Entrance, Exit, PictureSize, Position, TextPreset, ToolCall};
+use crate::tools::{Entrance, Exit, PictureLayout, PictureSize, Position, TextPreset, ToolCall};
 use klipolo_model::media::image::Spot;
 
 /// The most names a refusal lists, then how many more there are: as many as Library shows of a kind.
@@ -944,6 +949,17 @@ pub fn sticker_ops(p: &Project, job: &MakeSticker, asset: &Asset) -> Option<Vec<
     let (start, duration) = sticker_placement(p, job)?;
     let mut ops = add_image_ops_at(p, asset, start, job.size.share(), job.position.spot()).ok()?;
     match job.beside {
+        // A picture to explain the moment: over the frame, or in a corner box.
+        _ if job.picture.is_some() => {
+            let layout = job.picture.unwrap_or(PictureLayout::Full);
+            // The side the compiler chose from the scene log, where no follow's path says.
+            let side = if job.position == Position::TopLeft {
+                Side::Left
+            } else {
+                Side::Right
+            };
+            clear::place_picture(p, &mut ops, asset, (layout, start, side));
+        }
         // A short's: beside the speaker, on the project as it is now (its follow's path, once it has one).
         Some(beside) => {
             let prefer = if beside.right {
@@ -1033,6 +1049,113 @@ pub(super) fn make_sticker(
         motion: beside.and_then(|_| popping(duration_us)).map(Box::new),
         sound: None,
         beside,
+        picture: None,
+    }))
+}
+
+/// What the model is told of a `makePicture` in a short whose person asked for no picture.
+const NO_PICTURE_ASKED: &str =
+    "makePicture: the person didn't ask for a picture, so this short has none. Leave it out.";
+
+/// Whether `message` asks for a picture, a diagram or another visual to explain something.
+fn asks_picture(message: &str) -> bool {
+    const ASKED: [&str; 14] = [
+        "picture",
+        "image",
+        "diagram",
+        "illustration",
+        "visual",
+        "drawing",
+        "photo",
+        "chart",
+        "graphic",
+        "cutaway",
+        "broll",
+        "map",
+        "infographic",
+        "illustrate",
+    ];
+    cues::words(message).iter().any(|w| {
+        let one = w.strip_suffix('s').unwrap_or(w);
+        ASKED.contains(&one) || ASKED.contains(&w.as_str())
+    })
+}
+
+/// The top corner a 16:9 inset picture takes at timeline `at` of `work` where no follow's path says where the speaker
+/// is: away from the side the scene log says they are on ("the man on the left"), else the right.
+fn away_from_who(c: &Compiler, work: &Project, at: Us) -> Position {
+    let Some((i, start)) = clip_at(&work.timeline.main, at) else {
+        return Position::TopRight;
+    };
+    let clip = &work.timeline.main[i];
+    let ClipSource::Asset { id } = &clip.source else {
+        return Position::TopRight;
+    };
+    let source = clip.source_in_us + ((at - start) as f64 * clip.speed) as Us;
+    let said = (c.inputs.scenes.get(id).into_iter())
+        .flat_map(|log| &log.items)
+        .filter(|item| item.start_us <= source && source < item.end_us)
+        .map(|item| item.who.to_lowercase())
+        .find(|who| who.contains("left") || who.contains("right"));
+    match said {
+        Some(who) if who.contains("right") && !who.contains("left") => Position::TopLeft,
+        _ => Position::TopRight,
+    }
+}
+
+/// How long a picture drawn to explain a moment shows when no length is given (`tools::DRAWN_PICTURE_SECS`).
+pub const PICTURE_US: Us = 3_000_000;
+
+/// A picture of `prompt` to draw to explain the moment `at`, shown in `layout` for `duration` (else `PICTURE_US`) once
+/// it is drawn (`picture_ops`), fading in and out unless an `animate` of it says otherwise. A job, as a sticker's is.
+pub(super) fn make_picture(
+    c: &Compiler,
+    with_additions: &Project,
+    prompt: &str,
+    layout: PictureLayout,
+    (at, duration): (At, Option<Us>),
+) -> Result<Job, Refused> {
+    // A short's pictures are the person's to ask for: one nobody asked for would cover the speaker and wait on a card.
+    if c.cues.as_ref().is_some_and(|q| q.makes_short) && !asks_picture(&c.inputs.message) {
+        return Err(to_model(NO_PICTURE_ASKED.to_owned()));
+    }
+    let start = start(c, with_additions, "makePicture", at.field(), at)?;
+    let duration_us = length(
+        with_additions,
+        start,
+        duration.or(Some(PICTURE_US)),
+        PICTURE_US,
+    );
+    // Never over the hook: words in its place then (a short's hook) keep the frame to themselves.
+    let hook = (with_additions.timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .find(|i| {
+            i.start_us < start + duration_us
+                && start < i.end_us()
+                && klipolo_model::captions::in_hook_band(with_additions, i)
+        });
+    if let Some(hook) = hook {
+        return Err(to_model(format!(
+            "makePicture: the hook shows until {} s, and a picture never covers it. Place it after.",
+            secs(hook.end_us())
+        )));
+    }
+    let change = animate::Change {
+        enter: Some(Entrance::Fade),
+        exit: Some(Exit::Fade),
+        emphasis: None,
+    };
+    Ok(Job::MakeSticker(MakeSticker {
+        prompt: sanitize::reply(prompt),
+        at_us: start,
+        duration_us,
+        position: away_from_who(c, with_additions, start),
+        size: PictureSize::Medium,
+        anchor: anchor_at(&with_additions.timeline.main, start),
+        motion: animate::animated(None, &change, duration_us, None).map(Box::new),
+        sound: None,
+        beside: None,
+        picture: Some(layout),
     }))
 }
 
@@ -1072,6 +1195,7 @@ pub(super) fn cued_make_sticker(
             right: prefer == Side::Right,
             corner: false,
         }),
+        picture: None,
     })))
 }
 

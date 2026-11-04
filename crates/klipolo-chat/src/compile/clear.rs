@@ -34,6 +34,7 @@ use klipolo_model::time::Us;
 use klipolo_model::timeline::{ClipSource, FramingMode, ItemContent};
 
 use crate::context::SceneLog;
+use crate::tools::PictureLayout;
 
 /// A picture's share of the width where no corner is clear of the person.
 pub const CLEAR_SHARE: f64 = 0.28;
@@ -601,6 +602,139 @@ fn place_at(p: &Project, ops: &mut [Op], boxes: &[(FormatKind, BoxN)], anchor: A
             } else {
                 item.layout.overrides.insert(format, rect);
             }
+        }
+    }
+}
+
+/// A picture drawn to explain a moment, in a corner box, in shares of the 16:9 frame's width: about a third.
+const INSET_W: f64 = 0.36;
+/// Its share of the 1:1 frame's width: a little smaller, clear of a face in the middle.
+const SQUARE_INSET_W: f64 = 0.28;
+/// Its corners' rounding, as a share of its shorter side.
+const INSET_RADIUS: f64 = 0.06;
+
+/// `asset`'s box shown whole in `format`'s frame (Fit, centred).
+fn whole(asset: &Asset, format: FormatKind) -> BoxN {
+    let ratio = aspect_of(asset) / {
+        let (fw, fh) = frame(format);
+        fw / fh
+    };
+    let (w, h) = if ratio >= 1.0 {
+        (1.0, 1.0 / ratio)
+    } else {
+        (ratio, 1.0)
+    };
+    BoxN {
+        x: (1.0 - w) / 2.0,
+        y: (1.0 - h) / 2.0,
+        w,
+        h,
+    }
+}
+
+/// `asset`'s width over its height; an unknown size is 16:9.
+fn aspect_of(asset: &Asset) -> f64 {
+    if asset.width > 0 && asset.height > 0 {
+        f64::from(asset.width) / f64::from(asset.height)
+    } else {
+        16.0 / 9.0
+    }
+}
+
+/// `asset` centred across 9:16 in the band from `top` to `bottom` (shares of the height): as wide as the band's height
+/// lets it be, at most `most` of the width.
+fn in_band(asset: &Asset, (top, bottom): (f64, f64), most: f64) -> BoxN {
+    let (fw, fh) = frame(FormatKind::Portrait);
+    let aspect = aspect_of(asset);
+    let mut h = (bottom - top).max(0.0);
+    let mut w = h * fh * aspect / fw;
+    if w > most {
+        w = most;
+        h = w * fw / (fh * aspect);
+    }
+    BoxN {
+        x: (1.0 - w) / 2.0,
+        y: top + ((bottom - top) - h) / 2.0,
+        w,
+        h,
+    }
+}
+
+/// A picture inset in 9:16 at timeline `at_us` of `p`, readable and clear of the face and the captions: where the clip
+/// there shows its picture whole (Fit, a 16:9 picture from 0.342 to 0.658 of the height), centred in the blurred band
+/// above it, from the top of the apps' clear area (about 60 % of the width); else in the band under the face where a
+/// short's hook goes, above the captions (about half the width).
+fn inset_in_portrait(p: &Project, at_us: Us, asset: &Asset) -> BoxN {
+    let fit = clip_at(&p.timeline.main, at_us).is_some_and(|(i, _)| {
+        effective_framing(p, &p.timeline.main[i], FormatKind::Portrait).mode == FramingMode::Fit
+    });
+    let gap = GAP * frame(FormatKind::Portrait).0 / frame(FormatKind::Portrait).1;
+    if fit {
+        let picture_top = (1.0 - (9.0 / 16.0) / (16.0 / 9.0)) / 2.0;
+        in_band(asset, (PORTRAIT_CLEAR.y, picture_top - gap), 0.7)
+    } else {
+        in_band(asset, (UNDER_FACE.y, UNDER_FACE.y + UNDER_FACE.h), 0.7)
+    }
+}
+
+/// `ops`' picture layer of `asset`, a picture drawn to explain the moment at timeline `at_us` of `p`, placed for
+/// `layout` in each of `p`'s formats:
+/// - **full**: over the whole frame in the format it was drawn for, and shown whole (Fit, centred) in the others,
+///   never cut. One layer, so it deletes and moves as one. The captions stay on top, as they draw over every layer.
+/// - **inset**: a box with rounded corners: in 16:9 `INSET_W` of the width in a top corner, on the side away from the
+///   speaker where a follow's path says where they are, else on `side` (the compiler's pick from the scene log, the
+///   right where it says nothing); in 1:1 `SQUARE_INSET_W` on the same side; in 9:16 readable across the frame, clear
+///   of the face and the captions (`inset_in_portrait`).
+pub(super) fn place_picture(
+    p: &Project,
+    ops: &mut [Op],
+    asset: &Asset,
+    (layout, at_us, side): (PictureLayout, Us, Side),
+) {
+    let primary = p.settings.primary_format;
+    let Some(k) = ops.iter().position(|op| {
+        matches!(op, Op::AddItem { item, .. } if matches!(item.content, ItemContent::Image { .. }))
+    }) else {
+        return;
+    };
+    let boxes: Vec<(FormatKind, BoxN)> = match layout {
+        PictureLayout::Full => (p.settings.formats.iter())
+            .map(|&f| (f, whole(asset, f)))
+            .collect(),
+        PictureLayout::Inset => {
+            let left = match speaker_at(p, at_us, FormatKind::Landscape, false) {
+                Some(seen) => seen.x > 0.5,
+                None => side == Side::Left,
+            };
+            let spot = if left { Spot::TopLeft } else { Spot::TopRight };
+            (p.settings.formats.iter())
+                .map(|&f| {
+                    let rect = match f {
+                        FormatKind::Landscape => {
+                            corner_rect(asset.width, asset.height, INSET_W, spot, f)
+                        }
+                        FormatKind::Square => {
+                            corner_rect(asset.width, asset.height, SQUARE_INSET_W, spot, f)
+                        }
+                        FormatKind::Portrait => inset_in_portrait(p, at_us, asset),
+                    };
+                    (f, rect)
+                })
+                .collect()
+        }
+    };
+    if let Op::AddItem { item, .. } = &mut ops[k] {
+        item.layout.overrides.clear();
+        for &(format, rect) in &boxes {
+            if format == primary {
+                item.layout.rect = rect;
+                item.layout.anchor = Anchor::Center;
+            } else {
+                item.layout.overrides.insert(format, rect);
+            }
+        }
+        if layout == PictureLayout::Inset {
+            item.layout.radius = INSET_RADIUS;
         }
     }
 }

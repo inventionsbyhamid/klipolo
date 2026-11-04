@@ -1518,3 +1518,56 @@ fn the_persons_logo_never_takes_a_shorts_sticker_slot() {
     let rockets = pictures.iter().filter(|(n, ..)| n == "Rocket").count();
     assert_eq!(rockets, 1, "{pictures:?}");
 }
+
+#[test]
+fn a_short_draws_a_picture_only_when_asked_and_never_over_its_hook() {
+    let p = project();
+    let picture = |word: usize| {
+        call(
+            "makePicture",
+            json!({"prompt": "a plane over the sea", "layout": "full", "atSec": null, "atWords": w(word),
+                   "durationSec": null}),
+        )
+    };
+    let refused = |out: &Compiled| -> Vec<(usize, String)> {
+        (out.refusals.iter())
+            .map(|r| (r.call_index, r.reason.clone()))
+            .collect()
+    };
+    // Nobody asked for a picture: refused back, with why.
+    let mut calls = base();
+    calls.push(picture(70));
+    let out = compile(&p, &inputs(&p, MESSAGE), &calls);
+    let why = refused(&out);
+    assert_eq!(why.len(), 1, "{why:?}");
+    assert!(
+        why[0].0 == 5 && why[0].1.contains("didn't ask for a picture"),
+        "{why:?}"
+    );
+    assert!(
+        !out.jobs.iter().any(|j| matches!(j, Job::MakeSticker(_))),
+        "{:?}",
+        out.jobs
+    );
+    // Asked for: never while the hook shows, and drawn for its word after it.
+    let asked =
+        "Make this a 60 second short with stickers, sound effects and a picture of the flight";
+    let mut calls = base();
+    calls.push(picture(2));
+    let why = refused(&compile(&p, &inputs(&p, asked), &calls));
+    assert!(
+        why.len() == 1 && why[0].1.contains("never covers it"),
+        "{why:?}"
+    );
+    let mut calls = base();
+    calls.push(picture(70));
+    let out = compile(&p, &inputs(&p, asked), &calls);
+    assert_eq!(refused(&out), vec![]);
+    assert!(
+        out.jobs
+            .iter()
+            .any(|j| matches!(j, Job::MakeSticker(m) if m.picture.is_some())),
+        "{:?}",
+        out.jobs
+    );
+}

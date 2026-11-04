@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use klipolo_chat::tools::Position;
+use klipolo_chat::tools::{PictureLayout, Position};
 use klipolo_chat::{MakeSticker, sticker_ops};
 use klipolo_model::Project;
 use klipolo_model::ids::Id;
@@ -23,8 +23,20 @@ impl StickerPlacement for Sticker {
     }
 }
 
-/// A sticker to draw.
+/// A sticker to draw, or a picture to explain a moment (`MakeSticker::picture`).
 pub(super) fn sticker(job: &MakeSticker) -> PictureAsk {
+    if let Some(layout) = job.picture {
+        let place = match layout {
+            PictureLayout::Full => "Shows over the whole frame, at the moment it was asked for.",
+            PictureLayout::Inset => "Shows in a corner box, at the moment it was asked for.",
+        };
+        return PictureAsk::Picture {
+            prompt: job.prompt.clone(),
+            place: place.to_owned(),
+            placement: Arc::new(Sticker(job.clone())),
+            inset: layout == PictureLayout::Inset,
+        };
+    }
     let corner = match job.position {
         // No place given: beside the speaker (`MakeSticker::beside`).
         _ if job.beside.is_some() => "beside the speaker",

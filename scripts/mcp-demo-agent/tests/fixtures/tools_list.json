@@ -936,6 +936,59 @@
       "annotations": {
         "readOnlyHint": false
       },
+      "description": "Have Muse Image draw a picture that explains what is said at a moment (a diagram, a scene, an example): full covers the frame for its time, inset sits in a corner box. Once drawn, it waits in Klipolo's chat panel for the person to place it with Use.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "atSec": {
+            "description": "Start. With atWords, picks where they are said. Both null: the playhead.",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "atWords": {
+            "description": "Or 1 to 4 words said there, exactly as in Transcript; it starts on the first.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "durationSec": {
+            "description": "Length. Null for 3 s.",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "layout": {
+            "description": "full over the frame, or inset in a corner.",
+            "enum": [
+              "full",
+              "inset"
+            ],
+            "type": "string"
+          },
+          "prompt": {
+            "description": "What it shows, a short phrase such as a fish population over 50 years.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt",
+          "layout",
+          "atSec",
+          "atWords",
+          "durationSec"
+        ],
+        "type": "object"
+      },
+      "name": "makePicture"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
       "description": "A full-screen title card: your title over a background Muse Image draws, with no lettering in the picture. Use it when a title card or a picture behind the title is wanted; for words over the video, use addText.",
       "inputSchema": {
         "additionalProperties": false,

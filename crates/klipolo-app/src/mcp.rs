@@ -374,6 +374,17 @@ fn capped(ask: PictureAsk) -> Option<PictureAsk> {
             prompt: clean(&prompt)?,
             title_id,
         },
+        PictureAsk::Picture {
+            prompt,
+            place,
+            placement,
+            inset,
+        } => PictureAsk::Picture {
+            prompt: clean(&prompt)?,
+            place,
+            placement,
+            inset,
+        },
     })
 }
 

@@ -56,6 +56,7 @@ describe('undo labels as message ids', () => {
       'addImage',
       'makeTitleCard',
       'makeSticker',
+      'makePicture',
       'titleBackground',
     ]) {
       expect(historyAction('undo', `chat.${tool}`), tool).not.toBe('Undo');
@@ -64,6 +65,9 @@ describe('undo labels as message ids', () => {
       'Undo add the words Day 1 in Lisbon',
     );
     expect(historyAction('undo', 'chat.setBackground', { kind: 'blur' })).toBe('Undo blur the video behind it');
+    expect(historyAction('undo', 'chat.makePicture', { prompt: 'fish population' })).toBe(
+      'Undo add the fish population picture',
+    );
     // Only the inset changed: no kind.
     expect(historyAction('undo', 'chat.setBackground', { kind: 'same', padding: 0.1 })).toBe(
       'Undo change the background',
