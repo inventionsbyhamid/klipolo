@@ -23,7 +23,7 @@ mod style_check;
 pub mod styles;
 
 pub use casing::shown;
-pub use hook::{hook_holds_captions, in_hook_band, HOOK_BAND};
+pub use hook::{hook_holds_captions, hook_place, in_hook_band, HOOK_ABOVE, HOOK_BAND};
 pub use keywords::Keyword;
 pub use pages::{captions, captions_in, page_at, previewed, Captions, Page, PageWord, Pages};
 pub use said::{word_source, BREAK_GAP_US};

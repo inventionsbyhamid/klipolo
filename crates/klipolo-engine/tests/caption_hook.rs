@@ -70,3 +70,26 @@ fn words_elsewhere_hold_no_captions() {
     let moved = PlanContext::new(Arc::new(p)).with_captions(ctx.captions.clone());
     assert!(caption_layer(&moved, s(1.5), FormatKind::Portrait, &mut Vec::new()).is_some());
 }
+
+#[test]
+fn a_hook_over_a_picture_shown_whole_holds_the_captions_in_its_band_or_above_it() {
+    // The clip Fit in 9:16 (a presenter's inset shown whole): words in the hook's band, or moved up above the picture,
+    // hold the 9:16 captions all the same.
+    for band in [HOOK_BAND, klipolo_model::captions::HOOK_ABOVE] {
+        let ctx = context(2.5, FormatKind::Portrait);
+        let mut p = (*ctx.project).clone();
+        let mut fit = klipolo_model::framing::effective_framing(
+            &p,
+            &p.timeline.main[0],
+            FormatKind::Portrait,
+        );
+        fit.mode = klipolo_model::timeline::FramingMode::Fit;
+        p.timeline.main[0].framing.insert(FormatKind::Portrait, fit);
+        p.timeline.tracks.last_mut().unwrap().items[0].layout.rect = band;
+        let whole = PlanContext::new(Arc::new(p)).with_captions(ctx.captions.clone());
+        let at =
+            |t: f64| caption_layer(&whole, s(t), FormatKind::Portrait, &mut Vec::new()).is_some();
+        assert!(!at(1.5), "{band:?}");
+        assert!(at(2.75), "{band:?}");
+    }
+}
