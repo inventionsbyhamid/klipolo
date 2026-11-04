@@ -213,7 +213,7 @@ The code: the loop is `crates/klipolo-chat/src/planner.rs` (`MAX_STEPS = 10`), t
 Klipolo is a Tauri 2 app. Rust crates do the work, a React page draws the editor, and each crate has one job.
 
 <p align="center">
-  <img src="docs/images/architecture.png" alt="Architecture diagram. On the Mac, the editor page (React) talks to the app shell (klipolo-app, Tauri 2) through typed commands and events. The shell uses the chat planner and compiler (klipolo-chat), the engine (klipolo-engine, wgpu on Metal and FFmpeg), the recorder (klipolo-capture), the analysis (klipolo-analysis) and the MCP server (klipolo-mcp). Chat and the engine use the project model (klipolo-model). The MCP server uses chat's tools and compiler, and any MCP client reaches it over a stdio bridge or HTTP on 127.0.0.1. The analysis uses the Meta client (klipolo-meta), which calls Meta's Model API directly with your own key or through the Klipolo relay with an access code; word timing goes through the relay for everyone.">
+  <img src="docs/images/architecture.png" alt="Architecture diagram. On the Mac, the editor page (React) talks to the app shell (klipolo-app, Tauri 2) through typed commands and events. The shell uses the chat planner and compiler (klipolo-chat), the engine (klipolo-engine, wgpu on Metal and FFmpeg), the recorder (klipolo-capture), the analysis (klipolo-analysis) and the MCP server (klipolo-mcp). Chat and the engine use the project model (klipolo-model). The MCP server uses chat's tools and compiler, and any MCP client reaches it over a stdio bridge or HTTP on 127.0.0.1. The analysis uses the Meta client (klipolo-meta), which calls Meta's Model API directly with your own key or through the Klipolo relay with the free credit or an access code; word timing goes through the relay for everyone.">
 </p>
 
 <details>
@@ -248,7 +248,7 @@ flowchart TB
     engine --> model
     analysis --> metac
     metac -->|your own key| meta
-    metac -->|access code, and<br/>word timing for all| relay
+    metac -->|free credit or access code,<br/>and word timing for all| relay
     relay --> meta
 ```
 
