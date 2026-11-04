@@ -32,7 +32,9 @@ export function pictureTitle(picture: ChatPicture): string {
   const name =
     picture.kind === 'sticker'
       ? t({ id: 'chatPanel.picture.sticker', message: `${picture.prompt} sticker` })
-      : t({ id: 'chatPanel.picture.background', message: `${picture.prompt} title card background` });
+      : picture.kind === 'picture'
+        ? t({ id: 'chatPanel.picture.picture', message: `${picture.prompt} picture` })
+        : t({ id: 'chatPanel.picture.background', message: `${picture.prompt} title card background` });
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 

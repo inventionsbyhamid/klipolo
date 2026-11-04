@@ -3339,3 +3339,93 @@ mod follow {
         );
     }
 }
+
+/// The model asks Muse Image for a picture that explains a moment, in `layout`, at 12 s for 3 s.
+fn picture_at_12(layout: &str) -> Result<ModelResponse, ModelError> {
+    answer(
+        "Drawing it.",
+        vec![fc(
+            "p",
+            "makePicture",
+            &format!(
+                r#"{{"prompt": "a fish population over 50 years", "layout": "{layout}", "atSec": 12.0, "durationSec": 3.0}}"#
+            ),
+        )],
+    )
+}
+
+#[tokio::test]
+async fn a_picture_the_model_asks_for_is_drawn_whole_and_placed_over_the_frame_as_one_undo_step() {
+    let s = studio_with(
+        talk(),
+        Painter::new(vec![drawn()]),
+        vec![picture_at_12("full")],
+    );
+    let out = s
+        .chat
+        .session
+        .send(at_playhead(
+            "show a picture of the fish population here",
+            12.0,
+        ))
+        .await
+        .unwrap();
+    let r = reply(&out);
+    // Its card, as a sticker's: what it shows and where it goes (the page adds its price and Use and Try again).
+    assert_eq!(r["pictures"][0]["kind"], "picture");
+    assert_eq!(
+        r["pictures"][0]["prompt"],
+        "a fish population over 50 years"
+    );
+    assert_eq!(
+        r["pictures"][0]["place"],
+        "Shows over the whole frame, at the moment it was asked for."
+    );
+    assert_eq!(s.chat.project.revision(), 0, "no op until it exists");
+    let id = r["pictures"][0]["id"].as_str().unwrap().to_owned();
+    let drawn = s.chat.session.draw_picture(&id).await.unwrap();
+    // Drawn whole in the video's shape, its background kept.
+    assert_eq!(*s.painter.asked.lock().unwrap(), [ImageSize::Landscape]);
+    assert!(drawn.width > drawn.height, "{drawn:?}");
+    let placed = s.chat.session.place_picture(&id, &drawn.path).unwrap();
+    assert_eq!(placed.undo.code, "chat.makePicture");
+    let now = s.chat.project.project();
+    assert_eq!(pictures_on(&now), [(0, secs(12.0), secs(3.0))]);
+    let item = (now.timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .find(|i| {
+            matches!(
+                i.content,
+                klipolo_model::timeline::ItemContent::Image { .. }
+            )
+        })
+        .unwrap();
+    assert_eq!(item.layout.rect, klipolo_model::layout::BoxN::FULL);
+    assert_eq!(s.chat.project.undo_steps(), 1);
+}
+
+#[tokio::test]
+async fn an_inset_picture_is_drawn_in_16_9() {
+    let s = studio_with(
+        talk(),
+        Painter::new(vec![drawn()]),
+        vec![picture_at_12("inset")],
+    );
+    let out = s
+        .chat
+        .session
+        .send(at_playhead(
+            "show a small picture of the fish population here",
+            12.0,
+        ))
+        .await
+        .unwrap();
+    let r = reply(&out);
+    assert_eq!(
+        r["pictures"][0]["place"],
+        "Shows in a corner box, at the moment it was asked for."
+    );
+    let id = r["pictures"][0]["id"].as_str().unwrap().to_owned();
+    s.chat.session.draw_picture(&id).await.unwrap();
+    assert_eq!(*s.painter.asked.lock().unwrap(), [ImageSize::Landscape]);
+}

@@ -49,6 +49,15 @@ pub fn title_card_prompt(prompt: &str) -> String {
     )
 }
 
+/// The words Muse Image gets for a picture that explains a moment about `prompt`: a clear illustration, with no
+/// lettering (Muse Image's own can't be held to words or spelling).
+pub fn picture_prompt(prompt: &str) -> String {
+    format!(
+        "A clear, simple illustration of {prompt} that explains it at a glance, with no text, letters or numbers \
+         anywhere"
+    )
+}
+
 /// A picture made for the project: its new asset (a PNG in the project's media folder, not yet in the project), the
 /// model that made it, for the library's label, and a note for the person when the picture isn't quite what was asked
 /// (the white was kept).
@@ -194,6 +203,47 @@ pub async fn make_title_card(
     let folder = made_folder(project_file, &made_with);
     let file_slug = format!("title-{}", slug(prompt, "card"));
     let name = format!("{} title card background", name(prompt));
+    let asset = save(folder, file_slug, png, name, &made_with).await?;
+    Ok(MadeAsset {
+        asset,
+        made_with,
+        note: None,
+        revised_prompt: drawn.revised_prompt,
+    })
+}
+
+/// A picture that explains a moment about `prompt`, in the shape of `format`, for the project saved in
+/// `project_file`: drawn by `maker` whole, with no lettering (`picture_prompt`) and no background cut out, cut to the
+/// shape (`framed`) and saved in the project's media folder.
+pub async fn make_picture(
+    maker: &dyn ImageMaker,
+    project_file: &Path,
+    prompt: &str,
+    format: FormatKind,
+) -> Result<MadeAsset, MakeError> {
+    let prompt = prompt.trim();
+    if prompt.is_empty() {
+        return Err(MakeError::NoPrompt);
+    }
+    let size = match format {
+        FormatKind::Landscape => ImageSize::Landscape,
+        FormatKind::Portrait => ImageSize::Portrait,
+        FormatKind::Square => ImageSize::Square,
+    };
+    let drawn = draw(maker, &picture_prompt(prompt), size).await?;
+    let made_with = maker.made_with().to_owned();
+    let unreadable = |detail: String| MakeError::Unreadable {
+        made_with: made_with.clone(),
+        detail,
+    };
+    let png = drawn.png;
+    let png = tokio::task::spawn_blocking(move || framed(png, format))
+        .await
+        .map_err(|e| unreadable(e.to_string()))?
+        .map_err(unreadable)?;
+    let folder = made_folder(project_file, &made_with);
+    let file_slug = format!("picture-{}", slug(prompt, "picture"));
+    let name = format!("{} picture", name(prompt));
     let asset = save(folder, file_slug, png, name, &made_with).await?;
     Ok(MadeAsset {
         asset,

@@ -101,6 +101,11 @@ export const CHAT_LABELS: Record<string, MessageDescriptor> = {
     message: 'Add the {prompt} sticker',
     comment: 'Undo history entry: a drawn sticker placed, e.g. "Add the paper plane sticker"',
   }),
+  'chat.makePicture': msg({
+    id: 'chat.makePicture',
+    message: 'Add the {prompt} picture',
+    comment: 'Undo history entry: a picture drawn to explain a moment placed, e.g. "Add the fish population picture"',
+  }),
   'chat.titleBackground': msg({
     id: 'chat.titleBackground',
     message: 'Add a title card background',

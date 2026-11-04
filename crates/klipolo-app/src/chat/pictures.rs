@@ -1,5 +1,5 @@
-//! Pictures chat asks for (Muse Image behind `ImageMaker`): a sticker, or the background of a title card under its
-//! title. A picture is never an op until it exists, and everything comes back from commands:
+//! Pictures chat asks for (Muse Image behind `ImageMaker`): a sticker, a picture that explains a moment, or the
+//! background of a title card under its title. A picture is never an op until it exists, and everything comes back from commands:
 //! - a reply names each picture it asked for (`ChatPicture`);
 //! - `draw` draws it (about 35 s) into the project's media folder, not into the project, for its card; Try again draws
 //!   it again, and every drawing stays usable: Use names the one its card shows. Every picture drawn stays in that
@@ -21,7 +21,7 @@ use klipolo_model::ids::{Id, new_id};
 use klipolo_model::layout::Layout;
 use klipolo_model::motion::{Ease, Motion, MotionUse};
 use klipolo_model::ops::{Op, Origin, TrackTarget};
-use klipolo_model::project::Asset;
+use klipolo_model::project::{Asset, FormatKind};
 use klipolo_model::query::find_item;
 use klipolo_model::time::Us;
 use klipolo_model::timeline::{Item, ItemContent, TrackKind};
@@ -33,7 +33,7 @@ use super::project::{At, CommitError, Projects};
 use super::reply::ChatApplied;
 use super::sources::Models;
 use super::spend::SpendCounter;
-use crate::media::generated::{MadeAsset, MakeError, make_sticker, make_title_card};
+use crate::media::generated::{MadeAsset, MakeError, make_picture, make_sticker, make_title_card};
 
 /// Said when a picture is no longer there to draw or use: used already, or another project opened.
 pub const PICTURE_GONE: &str = "That picture is gone. Ask me for it again.";
@@ -44,6 +44,9 @@ pub const NOT_DRAWN: &str = "That picture isn't ready yet.";
 /// Said when the part of the video a sticker was for was cut while it was drawn: nothing is placed.
 pub const MOMENT_CUT: &str = "The part of the video that sticker was for was cut while it was drawn, so I didn't place \
                               it. Ask me for it again.";
+/// Said when the part of the video a picture was for was cut while it was drawn: nothing is placed.
+pub const PICTURE_MOMENT_CUT: &str = "The part of the video that picture was for was cut while it was drawn, so I \
+                                      didn't place it. Ask me for it again.";
 /// Said when a title card's title is gone: its background isn't drawn or placed.
 pub const TITLE_GONE: &str =
     "The title for that background is gone, so I left it out. Ask me for it again.";
@@ -70,12 +73,22 @@ pub enum PictureAsk {
     },
     /// The background of the title card whose title layer is `title_id`.
     TitleBackground { prompt: String, title_id: Id },
+    /// A picture to explain a moment (`makePicture`), drawn whole: in the video's main shape for the whole frame, else
+    /// (`inset`, a corner box) in 16:9. Placed as a sticker's job says once drawn.
+    Picture {
+        prompt: String,
+        place: String,
+        placement: Arc<dyn StickerPlacement>,
+        inset: bool,
+    },
 }
 
 impl PictureAsk {
     fn prompt(&self) -> &str {
         match self {
-            Self::Sticker { prompt, .. } | Self::TitleBackground { prompt, .. } => prompt,
+            Self::Sticker { prompt, .. }
+            | Self::TitleBackground { prompt, .. }
+            | Self::Picture { prompt, .. } => prompt,
         }
     }
 }
@@ -99,6 +112,7 @@ pub struct ChatPicture {
 pub enum ChatPictureKind {
     Sticker,
     TitleBackground,
+    Picture,
 }
 
 /// A picture drawn, for its card: the file (in the project's media folder, not in the project until Use), its size,
@@ -147,10 +161,13 @@ impl Pictures {
             kind: match ask {
                 PictureAsk::Sticker { .. } => ChatPictureKind::Sticker,
                 PictureAsk::TitleBackground { .. } => ChatPictureKind::TitleBackground,
+                PictureAsk::Picture { .. } => ChatPictureKind::Picture,
             },
             prompt: sanitize::reply(ask.prompt().trim()),
             place: match &ask {
-                PictureAsk::Sticker { place, .. } => sanitize::reply(place),
+                PictureAsk::Sticker { place, .. } | PictureAsk::Picture { place, .. } => {
+                    sanitize::reply(place)
+                }
                 PictureAsk::TitleBackground { .. } => BEHIND_THE_TITLE.to_owned(),
             },
         };
@@ -204,6 +221,15 @@ impl Pictures {
             PictureAsk::TitleBackground { prompt, .. } => {
                 let format = now.project.settings.primary_format;
                 make_title_card(&*maker, &now.file, prompt, format).await
+            }
+            // The whole frame's shape as the video has it now; a corner box in 16:9.
+            PictureAsk::Picture { prompt, inset, .. } => {
+                let format = if *inset {
+                    FormatKind::Landscape
+                } else {
+                    now.project.settings.primary_format
+                };
+                make_picture(&*maker, &now.file, prompt, format).await
             }
         };
         // A picture that came back is paid for, kept or not.
@@ -267,6 +293,13 @@ impl Pictures {
                 None => {
                     self.forget(id);
                     return Err(said(MOMENT_CUT));
+                }
+            },
+            PictureAsk::Picture { placement, .. } => match placement.ops(p, &made.asset) {
+                Some(ops) => (ops, "makePicture"),
+                None => {
+                    self.forget(id);
+                    return Err(said(PICTURE_MOMENT_CUT));
                 }
             },
             PictureAsk::TitleBackground { title_id, .. } => {
