@@ -281,8 +281,8 @@ machine for video work.
 
 | What | Klipolo | How it was measured |
 | --- | --- | --- |
-| Disk image (Intel, 0.1.1) | **46.8 MB** (46,786,969 bytes) | the file's size |
-| Installed app | **85.2 MB** (85,193,509 bytes): the app binary 39.0 MB, FFmpeg's libraries 25.7 MB, fonts 5.8 MB, the music, sound and sticker pack 14.3 MB | the sum of the files in `/Applications/Klipolo.app` |
+| Disk image, 0.1.1 | **43.4 MB** for Apple Silicon (43,424,717 bytes), **46.8 MB** for Intel (46,787,526 bytes) | the released files' sizes |
+| Installed app, 0.1.1 | **77.7 MB** for Apple Silicon, **85.5 MB** for Intel. In the Intel test build of the same version: the app binary 39.0 MB, FFmpeg's libraries 25.7 MB, fonts 5.8 MB, the music, sound and sticker pack 14.3 MB | `du -sk` of each release build's `Klipolo.app` (75,924 and 83,488 KiB); the parts summed file by file |
 | Each edit on a two hour, 3,000 clip project | **under 10 ms** to apply (split 9.2 ms, ripple delete 5.1 ms, roll 3.5 ms, slip 3.3 ms), then 2 to 8 ms for the engine to update | median of 5 runs, a release build of 2 November, on a generated project (`crates/klipolo-engine/examples/perf_harness/long.rs`) |
 | Save and open that project | **3.1 ms** to write its JSON (0.95 MB), **6.2 ms** to parse and check it | median of 5 runs, in memory (no disk) |
 | A caption frame at 1080p | **about 1 ms** of CPU (0.48 ms for Word pop to 1.06 ms for Highlight, at the median over four styles) and 4.4 to 5.7 ms of GPU | 1,800 frames each, paced at 60 fps |
@@ -303,11 +303,12 @@ show what the runtime alone, and two open source Electron media apps, weigh.
 
 MB here is 1,000,000 bytes, as the Mac's Finder counts, from the exact sizes in GitHub's release API. GitHub's
 release pages count 1,048,576 bytes to the MB, so they show the same files as 119 MB and 115 MB (Electron), 170 MB
-and 158 MB (LosslessCut), and 117 MB and 119 MB (Kap). In those units Klipolo's Intel disk image is 44.6 MB.
+and 158 MB (LosslessCut), and 117 MB and 119 MB (Kap). In those units Klipolo's disk images are 41.4 MB (Apple Silicon)
+and 44.6 MB (Intel).
 
-What this says, plainly: the download is where a Rust core wins most clearly. Klipolo's Intel disk image, FFmpeg
-and its sound pack included, is 46.8 MB: under 40% of the Electron runtime's own 125.0 MB download for the same Mac,
-and about a quarter of LosslessCut's. Memory is closer: in Tauri's benchmark a hello world peaks at 358 MB against
+What this says, plainly: the download is where a Rust core wins most clearly. Klipolo's disk images, FFmpeg and its
+sound pack included, are 43.4 MB (Apple Silicon) and 46.8 MB (Intel): under 40% of the Electron runtime's own
+download for the same Mac (121.0 MB and 125.0 MB), and about a quarter of LosslessCut's. Memory is closer: in Tauri's benchmark a hello world peaks at 358 MB against
 Electron's 476 MB, because a web view costs memory either way. That is why Klipolo keeps the video work out of it.
 
 ## MCP: let other apps edit
@@ -391,10 +392,11 @@ You need a Mac with Apple Silicon or Intel and macOS 15 or later.
 
 1. **Download** the disk image for your Mac:
    [Klipolo for Apple Silicon](https://github.com/inventionsbyhamid/klipolo/releases/download/v0.1.1/Klipolo-0.1.1-aarch64.dmg)
-   or [Klipolo for Intel](https://github.com/inventionsbyhamid/klipolo/releases/download/v0.1.1/Klipolo-0.1.1-x86_64.dmg).
+   (43.4 MB) or [Klipolo for Intel](https://github.com/inventionsbyhamid/klipolo/releases/download/v0.1.1/Klipolo-0.1.1-x86_64.dmg)
+   (46.8 MB).
    Not sure which? About This Mac lists a **Chip** on Apple Silicon and an Intel **Processor** on Intel.
-2. **Open it and drag Klipolo to Applications.** Both disk images are signed with a Developer ID and notarized by
-   Apple.
+2. **Open it and drag Klipolo to Applications.** Both disk images are signed with a Developer ID, notarized by
+   Apple and stapled.
 3. **Allow Screen Recording** when macOS asks, to record your screen or an app. Klipolo asks for the camera and
    microphone when you first use them.
 4. **Turn on the AI features.** Open Settings (the Settings button at the top right, or Command comma) and pick one:
