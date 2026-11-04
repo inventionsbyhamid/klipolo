@@ -148,8 +148,8 @@ Where each one is called:
 - The MCP demo agent (Muse Spark driving Klipolo over MCP): `scripts/mcp-demo-agent/agent.py`.
 
 All of them go through one client, `crates/klipolo-meta`. With your own key it calls Meta directly; with the free
-credit or an access code it goes through Klipolo's relay. Word timing (MMS) runs on the relay either way, which keeps no audio. Callers
-never branch on which.
+credit or an access code it goes through Klipolo's relay. Word timing (MMS) runs on the relay either way, which keeps
+no audio. Callers never branch on which.
 
 ### One message, end to end
 
