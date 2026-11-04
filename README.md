@@ -279,12 +279,12 @@ machine for video work.
 | --- | --- | --- |
 | Disk image (Intel, 0.1.1) | **46.8 MB** (46,786,969 bytes) | the file's size |
 | Installed app | **85.2 MB** (85,193,509 bytes): the app binary 39.0 MB, FFmpeg's libraries 25.7 MB, fonts 5.8 MB, the music, sound and sticker pack 14.3 MB | the sum of the files in `/Applications/Klipolo.app` |
-| Each edit on a two hour, 3,000 clip project | **under 10 ms** (split 9.2 ms, ripple delete 5.1 ms, roll 3.5 ms, slip 3.3 ms to apply) | median of 5 runs, release build |
-| Save and open that project | **3.1 ms** to save (0.95 MB of JSON), **6.2 ms** to open (read and check) | median of 5 runs |
-| A caption frame at 1080p | **about 1 ms** of CPU (0.48 to 1.06 ms at the median over Highlight, Arcade, Karaoke and Word pop) | 1,800 frames each, paced at 60 fps |
-| The recorder, killed with `kill -9` | every source recovers, losing at most 0.7 s of video and 0.2 s of audio | `crates/klipolo-capture/tests/kill.rs`, run by the Linux gate |
-| Launch to the editor window | **about 3 s** (2.4 to 3.4 s) | one launch, the first after installing 0.1.1: the process start time from `ps` (to the second) against the app's own log line when its window showed |
-| Memory, idle with a project open | **446 MB** resident in all: the app's process 160.5 MB, its three WebKit processes 285.8 MB | `ps -o rss`, 33 minutes after launch with the Mac idle; resident sizes count shared system libraries once in each process |
+| Each edit on a two hour, 3,000 clip project | **under 10 ms** to apply (split 9.2 ms, ripple delete 5.1 ms, roll 3.5 ms, slip 3.3 ms), then 2 to 8 ms for the engine to update | median of 5 runs, a release build of 2 November, on a generated project (`crates/klipolo-engine/examples/perf_harness/long.rs`) |
+| Save and open that project | **3.1 ms** to write its JSON (0.95 MB), **6.2 ms** to parse and check it | median of 5 runs, in memory (no disk) |
+| A caption frame at 1080p | **about 1 ms** of CPU (0.48 ms for Word pop to 1.06 ms for Highlight, at the median over four styles) and 4.4 to 5.7 ms of GPU | 1,800 frames each, paced at 60 fps |
+| The recorder, killed with `kill -9` | 20 kills at random moments: every source recovered, losing at most 0.7 s of video and 0.2 s of audio | a test with synthetic sources (`crates/klipolo-capture/tests/kill.rs`), run on Linux by the gate, not on this Mac |
+| Launch until the window shows | **about 3 s** (2.4 to 3.4 s) | one launch, not repeated, the first after installing 0.1.1: the process start time from `ps` (to the second) against the app's own log line when its window showed |
+| Memory, idle with a project open | **446 MB** resident in all: the app's process 160.5 MB, the three WebKit processes that started with it 285.8 MB | one reading with `ps -o rss`, 33 minutes after launch, the Mac idle; resident sizes count shared system libraries once in each process, so the real total is lower |
 
 ### Electron, from published sources
 
@@ -296,7 +296,7 @@ show what the runtime alone, and two open source Electron media apps, weigh.
 | The Electron runtime alone for macOS, v45.2.2, before any app code | 125.0 MB zipped (Intel), 121.0 MB (Apple Silicon) | [Electron v45.2.2 release](https://github.com/electron/electron/releases/tag/v45.2.2) |
 | LosslessCut 3.70.2, an open source Electron video cutter built on FFmpeg | 177.9 MB disk image (Intel), 165.8 MB (Apple Silicon) | [LosslessCut v3.70.2 release](https://github.com/mifi/lossless-cut/releases/tag/v3.70.2) |
 | Kap 3.6.0, an open source Electron screen recorder for macOS | 122.7 MB disk image (Intel), 124.7 MB (Apple Silicon) | [Kap v3.6.0 release](https://github.com/wulkano/Kap/releases/tag/v3.6.0) |
-| Tauri's own benchmark, a hello world app on Linux CI | Electron: 166.5 MB binary, 476 MB peak memory (September 2023, the last Electron run). Tauri: 3.0 MB binary, 358 MB peak memory (Nov 2026) | [Tauri's benchmark results](https://github.com/tauri-apps/benchmark_results) and their [data files](https://github.com/tauri-apps/benchmark_results/tree/gh-pages) |
+| Tauri's own benchmark, a hello world app on Linux CI | Electron: 166.5 MB binary, 476 MB peak memory (September 2023, the last Electron run). Tauri: 3.0 MB binary, 358 MB peak memory (Nov 2026) | [electron-recent.json](https://github.com/tauri-apps/benchmark_results/blob/gh-pages/electron-recent.json) and [tauri-recent-linux.json](https://github.com/tauri-apps/benchmark_results/blob/gh-pages/tauri-recent-linux.json), the last entry of each (`*_hello_world`) |
 
 MB here is 1,000,000 bytes, as the Mac's Finder counts, from the exact sizes in GitHub's release API. GitHub's
 release pages count 1,048,576 bytes to the MB, so they show the same files as 119 MB and 115 MB (Electron), 170 MB
@@ -304,8 +304,8 @@ and 158 MB (LosslessCut), and 117 MB and 119 MB (Kap). In those units Klipolo's 
 
 What this says, plainly: the download is where a Rust core wins most clearly. Klipolo's Intel disk image, FFmpeg
 and its sound pack included, is 46.8 MB: under 40% of the Electron runtime's own 125.0 MB download for the same Mac,
-and about a quarter of LosslessCut's. Memory is closer: a web view costs memory either way, which is why Klipolo
-keeps the video work out of it.
+and about a quarter of LosslessCut's. Memory is closer: in Tauri's benchmark a hello world peaks at 358 MB against
+Electron's 476 MB, because a web view costs memory either way. That is why Klipolo keeps the video work out of it.
 
 ## MCP: let other apps edit
 
