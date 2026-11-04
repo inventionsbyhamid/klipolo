@@ -245,3 +245,7 @@ open http://localhost:8000. Its two download links are in the
   timing with uroman (https://github.com/isi-nlp/uroman), under its MIT-style
   licence: "This project uses the universal romanizer software 'uroman'
   written by Ulf Hermjakob, USC Information Sciences Institute (2015-2020)".
+- The relay's word timing uses Meta's MMS forced alignment model (`MMS_FA`,
+  loaded through torchaudio), whose weights are under CC BY-NC 4.0. They are
+  downloaded into the relay's image when it is built and are not in this
+  repository.
