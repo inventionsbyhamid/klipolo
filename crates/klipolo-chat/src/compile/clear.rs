@@ -17,7 +17,7 @@
 //!
 //! A short's sticker goes beside the speaker's head instead (`beside_speaker`), as `cues` times it: at the head's
 //! height, on the side with more room, never on the head or, where nothing says where the speaker is, the face zone.
-//! The person's own picture with no place given (a logo) goes in a top corner beside the face zone (`own_corner`).
+//! The person's own picture with no place given (a logo) goes in a top corner beside the head (`own_corner`).
 
 use std::collections::HashMap;
 
@@ -488,16 +488,18 @@ pub(super) fn beside_speaker(
     (out, chosen)
 }
 
-/// The person's own picture with no place given, in a short (a logo): its share of the 9:16 width where it fits beside
-/// `FACE_ZONE`.
+/// The person's own picture with no place given, in a short (a logo): its most share of the 9:16 width.
 const CORNER_W: f64 = 0.2;
+/// The least it shrinks to, to stay off the head.
+const MIN_CORNER_W: f64 = 0.1;
 
 /// Where the person's own picture with no place given goes in a short ("put my logo at the start"), in each of `p`'s
-/// formats at timeline `at_us`: in 9:16 a top corner out at the frame's edge, as wide as fits beside `FACE_ZONE` (about
-/// 18 % of the width, `CORNER_W` at most), from the top of the area the apps keep clear down to well above the hook and
-/// the captions, so it is off the face wherever the face is. It takes the left, or the right where a follow's path puts
-/// the speaker's head in the left one. The other formats take the same corner, as many pixels wide, at their own
-/// margins. The boxes by format, and the corner.
+/// formats at timeline `at_us`: in 9:16 a top corner inside the apps' clear area across (`PORTRAIT_CLEAR`'s margin, on
+/// either side), from its top down to well above the hook and the captions, as wide as the room beside the speaker's
+/// head allows (`CORNER_W` at most): their head where the follow keeps them (`speaker_at`), else anywhere in
+/// `FACE_ZONE`. It takes the side with more room (the left when alike), and the side away from a picture's edge where
+/// the path holds the crop, as the speaker may stand there. The other formats take the same corner, as many pixels
+/// wide, at their own margins. The boxes by format, and the corner.
 pub(super) fn own_corner(
     p: &Project,
     at_us: Us,
@@ -510,33 +512,40 @@ pub(super) fn own_corner(
         1.0
     };
     let (fw, fh) = frame(FormatKind::Portrait);
-    let edge = GAP * fw.min(fh) / fw;
-    let mut w = CORNER_W.min(FACE_ZONE.x - ZONE_GAP - edge);
+    let short = fw.min(fh);
+    let margin = PORTRAIT_CLEAR.x;
+    let seen = speaker_at(p, at_us, FormatKind::Portrait, follows);
+    let ((head_l, head_r), gap) = match seen {
+        Some(Seen { x, .. }) => {
+            let half = HEAD_HALF_H * fh / fw;
+            ((x - half, x + half), GAP * short / fw)
+        }
+        None => (
+            (FACE_ZONE.x, FACE_ZONE.x + FACE_ZONE.w),
+            ZONE_GAP * short / fw,
+        ),
+    };
+    let (room_l, room_r) = (head_l - gap - margin, 1.0 - margin - gap - head_r);
+    let left = match seen {
+        Some(Seen {
+            toward: Some(side), ..
+        }) => side == Side::Right,
+        _ => room_l >= room_r - 1e-9,
+    };
+    let room = if left { room_l } else { room_r };
+    let mut w = CORNER_W.min(room).max(MIN_CORNER_W);
     let top = PORTRAIT_CLEAR.y;
     // A tall picture no lower than a gap above the hook.
-    let tallest = UNDER_FACE.y - GAP * fw.min(fh) / fh - top;
+    let tallest = UNDER_FACE.y - GAP * short / fh - top;
     let mut h = w * fw / (fh * aspect);
     if h > tallest {
         h = tallest;
         w = h * fh * aspect / fw;
     }
-    let left_clear = match speaker_at(p, at_us, FormatKind::Portrait, follows) {
-        // Held at the picture's left edge, the speaker may be in the left corner.
-        Some(Seen {
-            toward: Some(Side::Left),
-            ..
-        }) => false,
-        Some(Seen { x, .. }) => {
-            let half = HEAD_HALF_H * fh / fw;
-            let (room_l, room_r) = (x - half - edge, 1.0 - edge - (x + half));
-            room_l >= w + GAP || room_l >= room_r
-        }
-        None => true,
-    };
-    let (spot, x) = if left_clear {
-        (Spot::TopLeft, edge)
+    let (spot, x) = if left {
+        (Spot::TopLeft, margin)
     } else {
-        (Spot::TopRight, 1.0 - edge - w)
+        (Spot::TopRight, 1.0 - margin - w)
     };
     let portrait = BoxN { x, y: top, w, h };
     let boxes = (p.settings.formats.iter())
