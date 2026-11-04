@@ -1057,28 +1057,45 @@ pub(super) fn make_sticker(
 const NO_PICTURE_ASKED: &str =
     "makePicture: the person didn't ask for a picture, so this short has none. Leave it out.";
 
-/// Whether `message` asks for a picture, a diagram or another visual to explain something.
+/// Whether `message` asks for a picture, a diagram or another visual to explain something: one of those words, a
+/// plural too, or b-roll (written "b-roll", "b roll" or "broll").
 pub(crate) fn asks_picture(message: &str) -> bool {
-    const ASKED: [&str; 14] = [
+    const ASKED: [&str; 24] = [
         "picture",
+        "pic",
         "image",
         "diagram",
         "illustration",
+        "illustrate",
+        "illustrated",
         "visual",
+        "visualize",
+        "visualise",
+        "visualization",
+        "visualisation",
+        "draw",
         "drawing",
+        "sketch",
         "photo",
+        "photograph",
         "chart",
+        "graph",
         "graphic",
+        "infographic",
+        "map",
         "cutaway",
         "broll",
-        "map",
-        "infographic",
-        "illustrate",
     ];
-    cues::words(message).iter().any(|w| {
-        let one = w.strip_suffix('s').unwrap_or(w);
-        ASKED.contains(&one) || ASKED.contains(&w.as_str())
-    })
+    let words = cues::words(message);
+    let one = |w: &str| {
+        [Some(w), w.strip_suffix('s'), w.strip_suffix("es")]
+            .into_iter()
+            .flatten()
+            .any(|w| ASKED.contains(&w))
+    };
+    // "b-roll" and "b roll" both come apart into "b" and "roll".
+    let b_roll = |p: &[String]| p[0] == "b" && matches!(p[1].as_str(), "roll" | "rolls");
+    words.iter().any(|w| one(w)) || words.windows(2).any(b_roll)
 }
 
 /// The top corner a 16:9 inset picture takes at timeline `at` of `work` where no follow's path says where the speaker
@@ -1494,6 +1511,42 @@ pub(super) fn screen_words(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_picture_is_asked_in_the_words_people_use() {
+        let asked = [
+            "show a picture of the plane",
+            "add some pics of the beach",
+            "draw what he describes",
+            "sketch the idea for me",
+            "put a graph of the sales here",
+            "two graphs side by side",
+            "visualize the numbers",
+            "visualise the route",
+            "a visualization of the market",
+            "make it illustrated",
+            "a photograph of the old harbour",
+            "add b-roll over the boring part",
+            "some b roll when he talks about Lisbon",
+            "cut to broll here",
+            "a couple of sketches",
+            "a diagram of the engine",
+            "an image of a fish",
+        ];
+        for m in asked {
+            assert!(asks_picture(m), "{m}");
+        }
+        let not_asked = [
+            "make a 30 second short with nice animations",
+            "cut the boring parts and add captions",
+            "rock and roll at the end",
+            "keep the second paragraph",
+            "roll the credits",
+        ];
+        for m in not_asked {
+            assert!(!asks_picture(m), "{m}");
+        }
+    }
 
     #[test]
     fn the_persons_words_are_taken_as_written() {
