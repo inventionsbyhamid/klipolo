@@ -49,8 +49,8 @@
 3. **Type one message.** For example: "Turn this into a 60 second vertical short with nice animations, sound effects
    and text animations." Click **Apply** on the cut, then **Export**.
 
-Recording, editing and export work offline, with no code or key. The AI features need an access code or your own Meta
-API key ([Install](#install)).
+Recording, editing and export work offline. Klipolo comes with free AI credit to try the AI features, with no key or
+code to type. Add your own Meta API key for more ([Install](#install)).
 
 ## What it does
 
@@ -147,8 +147,8 @@ Where each one is called:
   with the sticker cut-out in `crates/klipolo-app/src/media/sticker.rs`.
 - The MCP demo agent (Muse Spark driving Klipolo over MCP): `scripts/mcp-demo-agent/agent.py`.
 
-All of them go through one client, `crates/klipolo-meta`. With your own key it calls Meta directly; with an access
-code it goes through Klipolo's relay. Word timing (MMS) runs on the relay either way, which keeps no audio. Callers
+All of them go through one client, `crates/klipolo-meta`. With your own key it calls Meta directly; with the free
+credit or an access code it goes through Klipolo's relay. Word timing (MMS) runs on the relay either way, which keeps no audio. Callers
 never branch on which.
 
 ### One message, end to end
@@ -405,14 +405,16 @@ You need a Mac with Apple Silicon or Intel and macOS 15 or later.
    Apple and stapled.
 3. **Allow Screen Recording** when macOS asks, to record your screen or an app. Klipolo asks for the camera and
    microphone when you first use them.
-4. **Turn on the AI features.** Open Settings (the Settings button at the top right, or Command comma) and pick one:
-   - **Access code.** If you were given one: choose Access code, type the code and click Use code. No Meta account
-     needed. Each Mac gets $2 of credit, and Klipolo shows what is left.
+4. **Try the AI features.** Klipolo comes with free AI credit to try them. There is no key or code to type, and
+   Settings (the Settings button at the top right, or Command comma) shows what is left. For more, add your own in
+   Settings:
    - **My Meta API key.** Choose My Meta API key, paste your key and click Save key. Klipolo checks it with Meta
      first, then keeps it in your Mac's Keychain. Meta bills your key. Get a key at dev.meta.ai.
+   - **Access code.** If you were given one: choose Access code, type the code and click Use code. No Meta account
+     needed.
 
 Klipolo shows the price before each analysis, and the clip card shows it before following a speaker. Recording,
-editing and export work without a code or a key. The AI features need the internet.
+editing and export work offline and use no credit. The AI features need the internet.
 
 ## Build from source
 
