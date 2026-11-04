@@ -45,12 +45,13 @@ use klipolo_model::Project;
 use klipolo_model::time::US_PER_SEC;
 use serde::{Deserialize, Serialize};
 
-use crate::compile::{Audience, Compiled, Inputs, compile};
+use crate::compile::{Audience, Compiled, Inputs, compile, names_media};
 use crate::context::ChatContext;
+use crate::library::MediaKind;
 use crate::model::{Item, LanguageModel, ModelError, ModelRequest, ModelResponse};
 use crate::prompt::system_prompt;
 use crate::sanitize;
-use crate::tools::{FunctionCall, ToolCall, tools};
+use crate::tools::{FunctionCall, LayerRef, ToolCall, tools};
 
 /// The exchanges the conversation keeps.
 pub const KEPT_TURNS: usize = 6;
@@ -250,8 +251,9 @@ pub async fn plan(
     let mut answers: Vec<Vec<FunctionCall>> = Vec::new();
     // Every call kept so far, in the order made: compiled once at the end, as one additions step and one proposal.
     let mut calls: Vec<ToolCall> = Vec::new();
-    // The tools of calls refused back to the model, one entry per call, until a new call of the tool goes through.
-    let mut pending: Vec<String> = Vec::new();
+    // The calls refused back to the model (by tool, and the call where it could be read), one entry per call, until a
+    // new call of the tool goes through.
+    let mut pending: Vec<(String, Option<ToolCall>)> = Vec::new();
     // The last words the model wrote, and its closing words: an answer with no call after what came of its calls.
     let mut said = String::new();
     let mut closing: Option<String> = None;
@@ -364,10 +366,18 @@ pub async fn plan(
                 // back its own call, which the refusal tells it to do another way: nothing they asked for is left
                 // undone. One they asked for ("make it red and undo the music") stays undone until done another way.
                 (Ok(ToolCall::Undo), Outcome::Back(_)) if !asks_undo(user) => {}
-                (Ok(call), Outcome::Back(_)) => pending.push(call.name().to_owned()),
-                (Err(_), _) => pending.push(answer.calls[k].name.clone()),
+                (Ok(call), Outcome::Back(_)) => {
+                    pending.push((call.name().to_owned(), Some(call.clone())));
+                }
+                (Err(_), _) => pending.push((answer.calls[k].name.clone(), None)),
                 (Ok(call), _) if fresh.contains(call) => {
-                    if let Some(at) = pending.iter().position(|p| p == call.name()) {
+                    // An undo the person asked for, done instead by taking the thing away with its own tool, as the
+                    // refusal says: nothing is left undone.
+                    let undone =
+                        takes_back(call).then(|| pending.iter().position(|p| p.0 == "undo"));
+                    if let Some(at) = (undone.flatten())
+                        .or_else(|| pending.iter().position(|p| p.0 == call.name()))
+                    {
                         pending.remove(at);
                     }
                 }
@@ -407,11 +417,18 @@ pub async fn plan(
         Some(closing) => (closing, stopped.is_none()),
         None => (said, false),
     };
+    // In a short, a refused call that only styles or decorates is Klipolo's to decide: never said as left undone.
+    let unfinished: Vec<String> = (pending.iter())
+        .filter(|(_, call)| {
+            !(compiled.short && call.as_ref().is_some_and(|c| decorates(c, inputs)))
+        })
+        .map(|(tool, _)| tool.clone())
+        .collect();
     let mut out = finish(
         &text,
         calls,
         compiled,
-        &pending,
+        &unfinished,
         (spent, summed),
         answers,
         stopped.as_ref().map(|e| e.message.as_str()),
@@ -422,6 +439,41 @@ pub async fn plan(
             .to_owned();
     }
     Ok(out)
+}
+
+/// Whether refused `call` only styles or decorates a short, which Klipolo's own rules decide (where its stickers and
+/// sound effects go and how they come in): an animation or motion, a change of a picture or sound this answer added,
+/// or a sound, picture or drawn sticker the person didn't name. Its refusal is never said as part of the message left
+/// undone; a named one, and every real edit, is.
+fn decorates(call: &ToolCall, inputs: &Inputs) -> bool {
+    let added = |layer: &LayerRef| match layer {
+        LayerRef::Last => true,
+        LayerRef::One(r) => match r.chars().next() {
+            Some('i') => inputs.refs.picture(r).is_none(),
+            Some('s') => inputs.refs.sound(r).is_none(),
+            _ => false,
+        },
+    };
+    match call {
+        ToolCall::Animate { .. } | ToolCall::SetMotion { .. } | ToolCall::AnimateText { .. } => {
+            true
+        }
+        ToolCall::SetLayer { layer, .. } => added(layer),
+        ToolCall::AddSound { name, .. } => !names_media(inputs, name, &[MediaKind::Sound]),
+        ToolCall::AddImage { file, .. } => !names_media(inputs, file, &[MediaKind::Image]),
+        ToolCall::MakeSticker { prompt, .. } => !names_media(inputs, prompt, &[MediaKind::Image]),
+        _ => false,
+    }
+}
+
+/// Whether `call` takes something away with its own tool, as a refused undo is told to: a layer or song removed, or the
+/// captions turned off.
+fn takes_back(call: &ToolCall) -> bool {
+    match call {
+        ToolCall::SetLayer { change, .. } => change.remove,
+        ToolCall::SetCaptions { on, .. } => !on,
+        _ => false,
+    }
 }
 
 /// Whether `message` asks to take something back: undo, revert or take back.
@@ -659,8 +711,8 @@ fn finish(
                 reply = format!("{reply} {said}").trim().to_owned();
             }
         }
-        if !unfinished.is_empty() {
-            reply = format!("{reply} {}", could_not(unfinished, came_of_it));
+        if let Some(said) = could_not(unfinished, came_of_it) {
+            reply = format!("{reply} {said}");
         }
         return PlanOut {
             note: note(&calls, &compiled, unfinished),
@@ -695,9 +747,7 @@ fn finish(
             }
         }
     }
-    if !unfinished.is_empty() {
-        parts.push(could_not(unfinished, came_of_it));
-    }
+    parts.extend(could_not(unfinished, came_of_it));
     if parts.is_empty() {
         parts.extend(compiled.questions.iter().map(|q| full_stop(q.trim())));
     }
@@ -781,9 +831,7 @@ fn instead_of_follow(
             parts.push(said);
         }
     }
-    if !unfinished.is_empty() {
-        parts.push(could_not(unfinished, else_done));
-    }
+    parts.extend(could_not(unfinished, else_done));
     if let Some(why) = stopped {
         parts.push(format!("{} {STOPPED}", full_stop(why.trim())));
     }
@@ -967,9 +1015,10 @@ fn full_stop(text: &str) -> String {
     }
 }
 
-/// What a tool does, as the reply says it couldn't.
-fn task(tool: &str) -> &'static str {
-    match tool {
+/// What a tool does, as the reply says it couldn't; None for one the reply never names (a question, `cannotDo`, a
+/// name no tool has).
+fn task(tool: &str) -> Option<&'static str> {
+    Some(match tool {
         "cutRange" => "make the cut",
         "keepOnly" => "keep only that part",
         "removeSilences" => "remove the pauses",
@@ -1000,8 +1049,15 @@ fn task(tool: &str) -> &'static str {
         "setSourceVolume" => "change the volume",
         "separateSound" => "separate the sound",
         "undo" => "undo the last change",
-        _ => "do part of this",
-    }
+        "animate" => "animate the layer",
+        "setMotion" => "add the motion",
+        "animateText" => "animate the words",
+        "setLayer" => "change the layer",
+        "styleText" => "restyle the words",
+        "setEffects" => "change the effects",
+        "autoZoom" => "add the zooms",
+        _ => return None,
+    })
 }
 
 /// Whether a tool works on a part of the video the model names by its times: refused back, that part stood on nothing
@@ -1013,36 +1069,37 @@ fn names_a_part(tool: &str) -> bool {
 /// What the reply says the tools named couldn't do, with what to do next, `else_done` when something else of the
 /// answer went through (so the video wasn't left as it was). Parts of the video it couldn't find: "I couldn't find that
 /// part, so I left the video as it was. Select it on the timeline and ask again." Anything else by what it does: "I
-/// couldn't add the sound, so I left the video as it was. Try asking in other words."
-fn could_not(tools: &[String], else_done: bool) -> String {
+/// couldn't add the sound, so I left the video as it was. Try asking in other words." None when it names nothing.
+fn could_not(tools: &[String], else_done: bool) -> Option<String> {
     let left = if else_done {
         "so I left it out"
     } else {
         "so I left the video as it was"
     };
-    if tools.iter().all(|t| names_a_part(t)) {
-        return format!(
+    if !tools.is_empty() && tools.iter().all(|t| names_a_part(t)) {
+        return Some(format!(
             "I couldn't find that part, {left}. Select it on the timeline and ask again."
-        );
+        ));
     }
     let mut tasks: Vec<&str> = Vec::new();
-    for t in tools {
-        let task = task(t);
+    for task in tools.iter().filter_map(|t| task(t)) {
         if !tasks.contains(&task) {
             tasks.push(task);
         }
     }
     let list = match tasks.as_slice() {
+        [] => return None,
         [one] => (*one).to_owned(),
         [rest @ .., last] => format!("{} or {last}", rest.join(", ")),
-        [] => "do part of this".to_owned(),
     };
     let left = if else_done && tasks.len() > 1 {
         "so I left those out"
     } else {
         left
     };
-    format!("I couldn't {list}, {left}. Try asking in other words.")
+    Some(format!(
+        "I couldn't {list}, {left}. Try asking in other words."
+    ))
 }
 
 /// One line on what `calls` came to, with the tools refused back and never made good (`dropped`): "Applied setFormat.

@@ -322,3 +322,30 @@ fn a_very_long_busy_talk_keeps_its_path_within_the_cap() {
         path.keys.len()
     );
 }
+
+#[test]
+fn chats_range_from_just_after_a_shots_start_opens_it_on_the_speaker() {
+    // Chat keeps whoever speaks from 0.1 s into the shot (its timeline's tenths): the first 0.1 s isn't a stretch of
+    // its own that opens on the bigger, more central person and holds them 2 s while the speaker talks.
+    let f = frames(12.0, &[person(1, 0.25, 0.2), person(2, 0.75, 0.3)]);
+    let said = [talk(0.0, 12.0, 1)];
+    let from = |who: Who| Keep::Ranges {
+        ranges: vec![KeepRange {
+            start_us: s(0.1),
+            end_us: s(11.9),
+            who,
+        }],
+    };
+    let path = path_of(&f, PORTRAIT, &said, &from(Who::Speaker));
+    assert!(on(&path, 0.0, 0.25) && on(&path, 11.5, 0.25), "{path:?}");
+    assert!(cuts(&path).is_empty(), "{path:?}");
+    // Chat's one person from there: theirs from the start, never a flash of someone else first.
+    let path = path_of(
+        &f,
+        PORTRAIT,
+        &[talk(0.0, 12.0, 2)],
+        &from(Who::Person { person: 1 }),
+    );
+    assert!(on(&path, 0.0, 0.25) && on(&path, 11.95, 0.25), "{path:?}");
+    assert!(cuts(&path).is_empty(), "{path:?}");
+}

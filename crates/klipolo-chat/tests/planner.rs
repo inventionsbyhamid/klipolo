@@ -2007,3 +2007,180 @@ fn an_undo_the_person_asked_for_after_another_change_is_said_to_be_undone() {
     assert!(out.reply.starts_with("It's square now."), "{}", out.reply);
     assert!(out.reply.contains("couldn't"), "{}", out.reply);
 }
+
+#[test]
+fn an_undo_the_person_asked_for_done_by_taking_the_thing_away_is_not_said_to_be_left_undone() {
+    // "Make it square and undo the picture": the undo is refused back after the format change, and the model takes the
+    // picture away with setLayer, as the refusal says. Nothing is left undone: the reply never says part of it wasn't.
+    let (mut p, speech) = talk();
+    let picture = Asset {
+        id: "logo".into(),
+        kind: AssetKind::Image,
+        path: "/media/logo.png".into(),
+        name: "logo.png".into(),
+        duration_us: 0,
+        width: 512,
+        height: 512,
+        fps: 0.0,
+        rotation: None,
+        has_audio: false,
+        audio_lead_us: None,
+        made_with: None,
+    };
+    let ops = klipolo_model::media::image::add_image_ops(&p, &picture, 0).unwrap();
+    p = klipolo_model::apply_ops(&p, &ops).unwrap();
+    let i = inputs(&p, speech);
+    let model = Fake::new(vec![
+        answer(
+            "",
+            vec![
+                fc(
+                    "call_1",
+                    "setFormat",
+                    r#"{"format": "square", "keepOthers": true}"#,
+                ),
+                fc("call_2", "undo", "{}"),
+            ],
+            0.001,
+        ),
+        answer(
+            "",
+            vec![fc(
+                "call_3",
+                "setLayer",
+                r#"{"layer": "i1", "set": [{"key": "remove", "value": true}]}"#,
+            )],
+            0.001,
+        ),
+        answer(
+            "It's square, and the picture goes once you apply the change.",
+            vec![],
+            0.001,
+        ),
+    ]);
+    let out = send(&model, &[], "make it square and undo the picture", &i, &p).unwrap();
+    assert_eq!(
+        output_for(&model.seen()[1], "call_2"),
+        klipolo_chat::UNDO_AFTER_CHANGES
+    );
+    assert!(
+        out.compiled.proposal.is_some(),
+        "the picture's removal is proposed"
+    );
+    assert_eq!(
+        out.reply,
+        "It's square, and the picture goes once you apply the change."
+    );
+}
+
+/// A short's cut, 9:16 version and captions, as the recipe makes them on the talk.
+fn short_calls() -> Vec<FunctionCall> {
+    vec![
+        fc(
+            "call_1",
+            "keepOnly",
+            r#"{"ranges": [{"startSec": 0.5, "endSec": 7.8}]}"#,
+        ),
+        fc(
+            "call_2",
+            "setFormat",
+            r#"{"format": "portrait", "keepOthers": true}"#,
+        ),
+        fc(
+            "call_3",
+            "setCaptions",
+            r#"{"on": true, "style": "word-pop"}"#,
+        ),
+    ]
+}
+
+#[test]
+fn a_shorts_styling_refused_back_is_never_said_as_left_undone() {
+    // The short is made; an animation of a layer that isn't there is refused back and never made good. Klipolo's own
+    // rules decide a short's styling, so the reply says nothing went undone.
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let mut calls = short_calls();
+    calls.push(fc(
+        "call_4",
+        "animate",
+        r#"{"layer": "i7", "enter": "pop", "exit": null, "emphasis": null, "sound": null}"#,
+    ));
+    let model = Fake::new(vec![
+        answer("", calls, 0.002),
+        answer(
+            "Here is your vertical short. Review the cut below.",
+            vec![],
+            0.001,
+        ),
+    ]);
+    let out = send(
+        &model,
+        &[],
+        "make a 30 second short with nice animations",
+        &i,
+        &p,
+    )
+    .unwrap();
+    assert_ne!(output_for(&model.seen()[1], "call_4"), DONE_OUTPUT);
+    assert!(out.compiled.short);
+    assert_eq!(
+        out.reply,
+        "Here is your vertical short. Review the cut below."
+    );
+}
+
+#[test]
+fn a_sound_the_person_named_that_fails_in_a_short_is_still_said() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let mut calls = short_calls();
+    calls.push(fc(
+        "call_4",
+        "addSound",
+        r#"{"name": "Cha ching", "atSec": [1.0], "atWords": null}"#,
+    ));
+    let model = Fake::new(vec![
+        answer("", calls, 0.002),
+        answer("Here is your vertical short.", vec![], 0.001),
+    ]);
+    let out = send(
+        &model,
+        &[],
+        "make a 30 second short with a cha ching sound at the start",
+        &i,
+        &p,
+    )
+    .unwrap();
+    assert!(
+        out.reply.contains("I couldn't add the sound"),
+        "{}",
+        out.reply
+    );
+}
+
+#[test]
+fn a_refused_call_is_named_never_said_as_part_of_this() {
+    // Outside a short, an animation refused back and never made good is said by what it does.
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let model = Fake::new(vec![
+        answer(
+            "",
+            vec![fc(
+                "call_1",
+                "animate",
+                r#"{"layer": "i7", "enter": "pop", "exit": null, "emphasis": null, "sound": null}"#,
+            )],
+            0.001,
+        ),
+        answer("Done.", vec![], 0.001),
+    ]);
+    let out = send(&model, &[], "animate the picture", &i, &p).unwrap();
+    assert!(!out.reply.contains("part of this"), "{}", out.reply);
+    assert!(
+        out.reply.contains("I couldn't animate the layer"),
+        "{}",
+        out.reply
+    );
+}

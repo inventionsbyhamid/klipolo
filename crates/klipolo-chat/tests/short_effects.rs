@@ -1201,9 +1201,9 @@ fn a_sticker_in_a_wide_or_square_project_reads_at_a_share_of_its_width() {
 
 #[test]
 fn a_whoosh_trusts_voice_labels_only_within_one_transcription_part() {
-    // Labels from different transcription parts can't be compared: at the first cut ("A@0" then "B@1") the scene log
-    // decides (the man, then the woman: a change), and at the second ("B@1" then "A@2", the woman both times by the
-    // scene log) there is none. The last cut is within one part: "A@2" then "C@2" is a change.
+    // Labels from different transcription parts can't be compared, and the scene log's words don't decide for them: no
+    // whoosh at the first cut ("A@0" then "B@1", though the scene log goes from the man to the woman) or the second
+    // ("B@1" then "A@2"). The last cut is within one part: "A@2" then "C@2" is a change.
     let p = project();
     let mut i = inputs(&p, MESSAGE);
     let turn = |start: f64, end: f64, who: &str| klipolo_chat::SpeakerTurn {
@@ -1230,10 +1230,197 @@ fn a_whoosh_trusts_voice_labels_only_within_one_transcription_part() {
         .map(|(_, t)| *t)
         .collect();
     let cuts = cuts(&after);
-    // To the woman, and back to the man; none where she goes on.
-    assert_eq!(whooshes.len(), 2, "{sounds:?} {cuts:?}");
+    // Only the last cut, where one part's labels say the voice changes; never the scene log's guess where they can't.
+    assert_eq!(whooshes.len(), 1, "{sounds:?} {cuts:?}");
+    assert!(near(whooshes[0], cuts[3]), "{sounds:?} {cuts:?}");
+}
+
+/// Where the person's own picture with no place given may sit in a short's 9:16 version: in a top corner, about a fifth
+/// of the width, off the face zone, the hook and the captions.
+fn in_a_safe_corner(b: BoxN) -> bool {
+    let face = BoxN {
+        x: 0.2,
+        y: 0.08,
+        w: 0.6,
+        h: 0.38,
+    };
+    (0.17..=0.22).contains(&b.w)
+        && (b.x <= 0.05 || b.x + b.w >= 0.95)
+        && b.y <= 0.2
+        && !overlaps(b, face)
+        && !overlaps(b, WORDS)
+}
+
+#[test]
+fn the_persons_own_picture_with_no_place_goes_in_a_top_corner_of_a_short_off_the_face_and_the_words()
+ {
+    let logo = |at: f64, duration: Value| {
+        call(
+            "addImage",
+            json!({"file": "logo.png", "size": null, "position": null, "atSec": at, "atWords": null,
+                   "durationSec": duration}),
+        )
+    };
+    // In the answer that makes the short: from its start, for about 3 s.
+    let p = project();
+    let mut calls = base();
+    calls.push(logo(0.5, Value::Null));
+    let out = compile(
+        &p,
+        &with_own_pictures(&p, "Make a 60 second short and put my logo at the start"),
+        &calls,
+    );
+    let after = short(&out);
+    let (pictures, _) = layers(&after);
+    assert_eq!(pictures.len(), 1, "{pictures:?}");
+    let (_, at, len, item) = &pictures[0];
     assert!(
-        near(whooshes[0], cuts[1]) && near(whooshes[1], cuts[3]),
-        "{sounds:?} {cuts:?}"
+        near(*at, in_short(&after, 0.5)) && near(*len, 3.0),
+        "{pictures:?}"
+    );
+    let b = portrait_box(&after, item);
+    assert!(in_a_safe_corner(b) && b.x < 0.5, "{b:?}");
+    // Its 16:9 version: the same corner, as many pixels wide.
+    let wide = item.layout.overrides[&FormatKind::Landscape];
+    assert!(
+        wide.x < 0.05 && wide.y < 0.1 && (0.09..=0.12).contains(&wide.w),
+        "{wide:?}"
+    );
+
+    // A message about the short made before: the same corner, for the time asked.
+    let p = applied_short();
+    let out = compile(
+        &p,
+        &with_own_pictures(&p, "put my logo at the start for 4 seconds"),
+        &[logo(0.0, json!(4.0))],
+    );
+    assert_eq!(out.refusals, vec![], "{:#?}", out.refusals);
+    let after = added(&p, &out);
+    let (pictures, _) = layers(&after);
+    let (_, at, len, item) = &pictures[0];
+    assert!(near(*at, 0.0) && near(*len, 4.0), "{pictures:?}");
+    let b = portrait_box(&after, item);
+    assert!(in_a_safe_corner(b) && b.x < 0.5, "{b:?}");
+
+    // Where the follow holds the crop at the picture's left edge, the speaker may stand in the left corner: the right
+    // one.
+    let mut p = applied_short();
+    held_at_left_edge(&mut p);
+    let out = compile(
+        &p,
+        &with_own_pictures(&p, "put my logo at the start"),
+        &[logo(0.0, Value::Null)],
+    );
+    let after = added(&p, &out);
+    let (pictures, _) = layers(&after);
+    let b = portrait_box(&after, &pictures[0].3);
+    let head_right = 0.1 / CROP + 0.22;
+    assert!(in_a_safe_corner(b) && b.x >= head_right, "{b:?}");
+}
+
+/// The share of a 16:9 picture's width a 9:16 crop shows.
+const CROP: f64 = 9.0 / 16.0 / (16.0 / 9.0);
+
+/// `p`'s clips followed in 9:16 with the crop held at the picture's left edge, as a follow holds it for someone near
+/// that edge: its path at the crop's middle there.
+fn held_at_left_edge(p: &mut Project) {
+    for clip in &mut p.timeline.main {
+        clip.fill_focus.insert(
+            FormatKind::Portrait,
+            FillFocus::Speaker {
+                path: FocusPath {
+                    keys: vec![FocusKey {
+                        at_us: 0,
+                        x: CROP / 2.0,
+                        y: 0.5,
+                        cut: false,
+                    }],
+                },
+                keep: Keep::Speaker,
+                people: Vec::new(),
+            },
+        );
+    }
+}
+
+#[test]
+fn a_sticker_keeps_off_a_speaker_the_crop_holds_at_the_pictures_edge() {
+    // The path says the crop's middle, but the speaker may stand anywhere from there to the picture's left edge (at 0.1
+    // of it, 0.316 of the frame): the sticker goes on the right, clear of their head.
+    let p = project();
+    let mut calls = base();
+    calls.extend(sticker("Rocket", 10));
+    let out = compile(&p, &inputs(&p, MESSAGE), &calls);
+    let mut after = short(&out);
+    held_at_left_edge(&mut after);
+    let mut ops = out.additions.as_ref().expect("additions").ops.clone();
+    klipolo_chat::place_beside_again(&after, &mut ops, &out.beside);
+    let (id, _) = &out.beside[0];
+    let item = (ops.iter())
+        .find_map(|op| match op {
+            Op::AddItem { item, .. } if &item.id == id => Some(item.clone()),
+            _ => None,
+        })
+        .expect("the sticker");
+    let b = portrait_box(&after, &item);
+    assert!(b.x >= 0.1 / CROP + 0.22, "on the head: {b:?}");
+}
+
+#[test]
+fn a_whoosh_at_a_cut_that_has_one_already_plays_once_when_the_short_is_cut_again() {
+    // The short made before has a whoosh where it cuts to its second part (14.3 s). Cut once more, the model marks that
+    // cut and the new one with whooshes: only the new one gets one.
+    let p = applied_short();
+    let whoosh = |at: &[f64]| {
+        call(
+            "addSound",
+            json!({"name": "Whoosh", "atSec": at, "atWords": null}),
+        )
+    };
+    let out = compile(
+        &p,
+        &inputs(&p, "add a whoosh at 14.3 s"),
+        &[whoosh(&[14.3])],
+    );
+    let p = added(&p, &out);
+    let (_, sounds) = layers(&p);
+    assert_eq!(sounds.len(), 1, "{sounds:?}");
+    // Drops the second part's last 7.8 s: the third part then starts at 21.3 s.
+    let out = compile(
+        &p,
+        &inputs(&p, "cut the end of the second part"),
+        &[
+            call(
+                "keepOnly",
+                json!({"ranges": [{"startSec": 0.0, "endSec": 21.3}, {"startSec": 29.1, "endSec": 43.9}]}),
+            ),
+            whoosh(&[14.3, 29.1]),
+        ],
+    );
+    let after = short(&out);
+    let (_, sounds) = layers(&after);
+    let at: Vec<f64> = sounds.iter().map(|(_, t)| *t).collect();
+    assert_eq!(at.len(), 2, "{sounds:?}");
+    assert!(near(at[0], 14.3) && near(at[1], 21.3), "{sounds:?}");
+    // Only there already: nothing added, and the model is told so.
+    let out = compile(
+        &p,
+        &inputs(&p, "cut the end of the second part"),
+        &[
+            call(
+                "keepOnly",
+                json!({"ranges": [{"startSec": 0.0, "endSec": 21.3}, {"startSec": 29.1, "endSec": 43.9}]}),
+            ),
+            whoosh(&[14.3]),
+        ],
+    );
+    let (_, sounds) = layers(&short(&out));
+    assert_eq!(sounds.len(), 1, "{sounds:?}");
+    assert!(
+        out.told
+            .iter()
+            .any(|(i, said)| *i == 1 && said.starts_with("Left out")),
+        "{:?}",
+        out.told
     );
 }

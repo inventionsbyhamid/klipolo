@@ -95,7 +95,7 @@ use klipolo_model::{ModelError, Project, finish_parts};
 
 use crate::context::{Refs, SceneLog, View, secs};
 use crate::evidence::{Evidence, Unfounded};
-use crate::library::Library;
+use crate::library::{Library, MediaKind};
 use crate::sanitize;
 use crate::tools::{
     EffectChange, FollowFocus, KeyIn, LayerRef, Moment, PictureSize, Position, PresetIn, ToolCall,
@@ -277,6 +277,8 @@ pub struct Compiled {
     /// The pictures in `additions` Klipolo placed beside the speaker (a short's stickers, and any sticker with no place
     /// given), by layer id, for `place_beside_again` once the follow's path is known.
     pub beside: Vec<(Id, Beside)>,
+    /// The answer makes a short (`cues`): Klipolo's own rules place and time its stickers and sound effects.
+    pub short: bool,
 }
 
 /// Removals for the person to approve.
@@ -1148,6 +1150,15 @@ impl Compiler<'_> {
                     edit.map(|edit| (edit, None))
                 }
                 _ => self.addition(&adding.work, call).map(|edit| {
+                    // A sound that plays nowhere new: the same one (or a whoosh) is at each of its moments already.
+                    if let ToolCall::AddSound {
+                        at_us, at_words, ..
+                    } = call
+                        && edit.ops.is_empty()
+                        && !(at_us.is_empty() && at_words.is_empty())
+                    {
+                        told.push((i, cues::ALREADY_THERE.to_owned()));
+                    }
                     // The short's hook: held at most 2.5 s, the 9:16 captions waiting while it shows in its band.
                     let hook = cued.and_then(|q| q.hook).filter(|(h, _)| *h == i);
                     match hook {
@@ -1344,6 +1355,7 @@ impl Compiler<'_> {
         }
         out.waits = waits.into_iter().map(|(_, said)| said).collect();
         out.refusals.sort_by_key(|r| r.call_index);
+        out.short = self.cues.as_ref().is_some_and(|q| q.makes_short);
         told.retain(|(i, _)| !out.refusals.iter().any(|r| r.call_index == *i));
         told.sort_by_key(|(i, _)| *i);
         out.told = told;
@@ -1933,6 +1945,22 @@ impl Phase {
         self.done = done;
         self.refit_ops = refit.len();
         self.ops.extend(refit);
+    }
+}
+
+/// Whether the person's message names the media `asked` finds in `inputs`' library: the item's name or one of its
+/// tags (`cues::named`), or, where the library has none by that name, the words asked for themselves.
+pub(crate) fn names_media(inputs: &Inputs, asked: &str, kinds: &[MediaKind]) -> bool {
+    let message = cues::words(&inputs.message);
+    match inputs.library.find(asked, kinds) {
+        crate::library::Found::One(item) => cues::named(&message, item),
+        crate::library::Found::Several(items) => {
+            items.iter().any(|item| cues::named(&message, item))
+        }
+        crate::library::Found::None => {
+            let want = cues::words(asked);
+            !want.is_empty() && message.windows(want.len()).any(|w| w == want.as_slice())
+        }
     }
 }
 
