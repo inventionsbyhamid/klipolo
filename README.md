@@ -126,12 +126,12 @@ it is good at, behind an interface Klipolo owns.
 | Model | Its job in Klipolo | What goes in | What comes out | Why this model |
 | --- | --- | --- | --- | --- |
 | **Muse Spark 1.3**<br>`muse-spark-1.3` | **Chat editing.** Plans the whole edit from one message. | The system prompt, 40 strict function tools, and the project as text: clips, transcript lines with their pauses, the scene log, the media library, the playhead and the selection. Then the message. | Tool calls, up to 10 model calls a message, each with the results of the last. Then a short reply. | Strict function tools and high reasoning effort: in paid test runs it planned a whole short in 3 calls (about $0.08) where Meta's default effort took 10 (about $0.28). The prompt is the same bytes for every message on one project revision, so Meta's prompt cache pays on every step. |
-| **Muse Spark 1.3** | **Scene log.** Watches each imported clip. | A 360p, 4 frames a second copy of the clip with its sound, in chunks of at most 10 minutes that overlap by 20 s. | A strict JSON log with times: shots, actions, reactions, text on screen and topic changes. Klipolo snaps it to the hard cuts it finds in every frame. | It takes video and sound together (`input_video`), so it hears a topic change and sees the slide change at once. |
+| **Muse Spark 1.3** | **Scene log.** Watches each imported clip and each Record yourself take. | A 360p, 4 frames a second copy of the clip with its sound, in chunks of at most 10 minutes that overlap by 20 s. | A strict JSON log with times: shots, actions, reactions, text on screen and topic changes. Klipolo snaps it to the hard cuts it finds in every frame. | It takes video and sound together (`input_video`), so it hears a topic change and sees the slide change at once. |
 | **Muse Spark 1.3** | **Who is speaking.** | A few seconds of the clip (picture and sound), and where each person SAM 3.1 found is, numbered from the left. | The number of the person whose mouth moves with the voice, or none. | Matching a voice to a face needs sight and sound in one call. |
 | **Muse Voice Transcribe**<br>`muse-voice-transcribe-1.0` | **Speech to text.** | A 16 kHz mono WAV of the clip's sound, split at its quietest moment before each 10 minute limit. | Speaker turns, each with a voice label and its text, in the language spoken. | Diarization in one call: whose words are whose, which the crop and the cuts need. |
 | **MMS forced aligner**<br>`MMS_FA` | **Word timing.** Runs on CPU on Klipolo's relay. | Each speaker turn's text and its own slice of the WAV (the turn plus 0.25 s on each side). Other scripts are romanized with uroman first. | A start, an end and a score from 0 to 1 for every word. Words it scores near zero (words the transcript invented) are dropped. | Voice Transcribe times turns, not words. MMS is Meta's open aligner for many languages, so captions light up word by word and a cut lands between words. |
 | **SAM 3.1**<br>`sam-3.1` | **Finds and follows people.** | A small copy of the footage that plays (854 x 480 at 2 frames a second) and a noun phrase, `person`. | Every match on every frame, as boxes. They become the path of the vertical or square crop. | It finds and tracks every match of a short noun phrase across a whole video in one call, with no training for each video. |
-| **Muse Image**<br>`muse-image-1.0` | **Pictures, stickers, title cards.** | A prompt for the subject, with lookups and code tools turned off so a picture costs one image. | A PNG. Klipolo cuts a sticker out of its white background, and a title card's background has no lettering, so your title stays your exact words. | It draws the subject a teacher is talking about, in one call, at about a cent a picture. |
+| **Muse Image**<br>`muse-image-1.0` | **Pictures, stickers, title cards.** | A prompt for the subject, with lookups and code tools turned off so a picture costs one image. | A PNG. Klipolo cuts a sticker out of its white background, and a title card's background has no lettering, so your title stays your exact words. | It draws what the speaker is talking about from a short prompt, in one call, for $0.01 a picture. |
 
 Where each one is called:
 
@@ -250,9 +250,9 @@ flowchart LR
 
 ### Why it is modular
 
-- **The chat plans, a compiler checks.** Muse Spark only ever produces tool calls. The compiler in `klipolo-chat` checks
-  each one against the project model before anything changes, so a model can't make an edit the model of the
-  project would refuse.
+- **The chat plans, a compiler checks.** Muse Spark edits only through tool calls. The compiler in `klipolo-chat`
+  checks each one against a snapshot of the project before anything changes, so Spark can't make an edit the project
+  would refuse.
 - **One engine, two outputs.** `klipolo-engine` draws the same frames for the preview and the export, so the file is
   what you saw.
 - **The MCP server exposes the same tools.** `klipolo-mcp` offers chat's own tools, byte for byte, minus the two that
@@ -296,7 +296,7 @@ show what the runtime alone, and two open source Electron media apps, weigh.
 | The Electron runtime alone for macOS, v45.2.2, before any app code | 125.0 MB zipped (Intel), 121.0 MB (Apple Silicon) | [electron/electron release v45.2.2](https://github.com/electron/electron/releases/tag/v45.2.2) |
 | LosslessCut 3.70.2, an open source Electron video cutter built on FFmpeg | 177.9 MB disk image (Intel), 165.8 MB (Apple Silicon) | [mifi/lossless-cut release v3.70.2](https://github.com/mifi/lossless-cut/releases/tag/v3.70.2) |
 | Kap 3.6.0, an open source Electron screen recorder for macOS | 122.7 MB disk image (Intel), 124.7 MB (Apple Silicon) | [wulkano/Kap release v3.6.0](https://github.com/wulkano/Kap/releases/tag/v3.6.0) |
-| Tauri's own benchmark, a hello world app on Linux CI | Electron: 166.5 MB binary, 476 MB peak memory (Sept 2023, the last Electron run). Tauri: 3.0 MB binary, 358 MB peak memory (Nov 2026) | [tauri-apps/benchmark_results](https://github.com/tauri-apps/benchmark_results) (the `gh-pages` data files) |
+| Tauri's own benchmark, a hello world app on Linux CI | Electron: 166.5 MB binary, 476 MB peak memory (September 2023, the last Electron run). Tauri: 3.0 MB binary, 358 MB peak memory (Nov 2026) | [tauri-apps/benchmark_results](https://github.com/tauri-apps/benchmark_results), its [data files](https://github.com/tauri-apps/benchmark_results/tree/gh-pages) |
 
 What this says, plainly: the download is where a Rust core wins most clearly. Klipolo's Intel disk image, FFmpeg
 and its sound pack included, is 46.8 MB: under 40% of the Electron runtime's own 125.0 MB download for the same Mac,
@@ -484,15 +484,16 @@ site/              klipolo.com (static, hand written, no build step)
   their own under their own names.
 - **A plugin marketplace.** A place in Klipolo to find, install and update plugins for added features: new tools for
   chat and MCP, new caption styles, new title templates and new effects.
-- **Custom effects.** The built-in shader effects are a `contrib.json` beside a WGSL shader. Your own effects will
-  take the same shape, so you can write one, or ask chat for one, and keep it in your library.
+- **Custom effects.** Each built-in shader effect is a `contrib.json` beside a WGSL shader. Your own effects will
+  take the same shape, so you can write one, or install one from the marketplace, and keep it in your library.
 - **Windows and Linux.** The platform crate already has Windows and Linux backends (stubs that compile and degrade
   honestly), and the Linux gate builds and tests every crate there today. The recorder and the app shell come next.
-- **Blur with SAM 3.1.** `blurObjects` is in the tool list. It will blur faces, license plates or any thing a phrase
-  names, wherever it shows.
+- **Blur with SAM 3.1.** `blurObjects` is in the tool list and answers that it is coming. It will blur faces, number
+  plates or anything else a short phrase names, wherever it shows.
 - **Scene logs for screen recordings.** Today a screen recording is analysed for its words only. Imported clips and
   Record yourself takes also get a scene log.
-- **Word timing in more languages.** Word timing outside English was tested most on Hindi and Arabic.
+- **Word timing tested in more languages.** Outside English, word timing was tested most on Hindi and Arabic. More
+  languages get the same test against reference timings.
 - **Updates inside the app.** Klipolo doesn't update itself yet. New versions are on the releases page.
 
 ## Licence
