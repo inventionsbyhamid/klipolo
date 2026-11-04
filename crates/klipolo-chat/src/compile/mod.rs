@@ -1286,7 +1286,12 @@ impl Compiler<'_> {
             } = call
             {
                 let times = (At::of(at_us, at_words.as_deref()), *duration_us);
-                match media::make_picture(self, &with_additions, prompt, *layout, times) {
+                // This answer's hook, whatever its look (kinetic, pop, the title template), where it went in.
+                let own_hook = (self.cues.as_ref().and_then(|q| q.hook))
+                    .filter(|(h, _)| !out.refusals.iter().any(|r| r.call_index == *h))
+                    .map(|(_, r)| r);
+                match media::make_picture(self, &with_additions, prompt, *layout, (times, own_hook))
+                {
                     Ok(mut job) => {
                         if let (Job::MakeSticker(picture), Some(a)) =
                             (&mut job, animated.remove(&i))

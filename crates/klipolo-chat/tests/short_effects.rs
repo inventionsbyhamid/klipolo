@@ -1571,3 +1571,45 @@ fn a_short_draws_a_picture_only_when_asked_and_never_over_its_hook() {
         out.jobs
     );
 }
+
+#[test]
+fn a_picture_never_covers_a_pop_hook_or_a_title_template_hook() {
+    let p = project();
+    let asked =
+        "Make this a 60 second short with stickers, sound effects and a picture of the flight";
+    let picture = call(
+        "makePicture",
+        json!({"prompt": "a plane over the sea", "layout": "full", "atSec": null, "atWords": w(2),
+               "durationSec": null}),
+    );
+    let refused = |out: &Compiled| -> Vec<String> {
+        (out.refusals.iter())
+            .filter(|r| r.call_index == 5 || r.call_index == 4)
+            .map(|r| r.reason.clone())
+            .collect()
+    };
+    // A pop hook: words at the top of 9:16, not in the band under a face.
+    let mut calls = base();
+    let ToolCall::AddText { animation, .. } = &mut calls[4] else {
+        panic!("the hook");
+    };
+    *animation = Some(klipolo_chat::tools::Entrance::Pop);
+    calls.push(picture.clone());
+    let why = refused(&compile(&p, &inputs(&p, asked), &calls));
+    assert!(why.iter().any(|r| r.contains("never covers it")), "{why:?}");
+    // A kinetic hook with no face known (no one named in the scene log, no follow): the title template.
+    let mut i = inputs(&p, asked);
+    for log in i.scenes.values_mut() {
+        for item in &mut log.items {
+            item.who = String::new();
+        }
+    }
+    let mut calls: Vec<ToolCall> = base()
+        .into_iter()
+        .filter(|c| !matches!(c, ToolCall::FollowSubject { .. }))
+        .collect();
+    calls.push(picture);
+    let out = compile(&p, &i, &calls);
+    let why: Vec<&str> = (out.refusals.iter()).map(|r| r.reason.as_str()).collect();
+    assert!(why.iter().any(|r| r.contains("never covers it")), "{why:?}");
+}

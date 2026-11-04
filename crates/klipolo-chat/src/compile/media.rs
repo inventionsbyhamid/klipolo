@@ -62,7 +62,7 @@ use klipolo_model::query::{
 use klipolo_model::scene::check_scene;
 use klipolo_model::speech::{WordKind, is_mark, joins_unspaced, word_ranges};
 use klipolo_model::text_safety::clean_shown;
-use klipolo_model::time::{MIN_DURATION_US, Us};
+use klipolo_model::time::{MIN_DURATION_US, RangeUs, Us};
 use klipolo_model::timeline::{ClipSource, ItemContent, Outline};
 use klipolo_model::validate::MAX_TEXT;
 use klipolo_model::{Project, apply_ops};
@@ -1113,7 +1113,7 @@ pub(super) fn make_picture(
     with_additions: &Project,
     prompt: &str,
     layout: PictureLayout,
-    (at, duration): (At, Option<Us>),
+    ((at, duration), own_hook): ((At, Option<Us>), Option<RangeUs>),
 ) -> Result<Job, Refused> {
     // A short's pictures are the person's to ask for: one nobody asked for would cover the speaker and wait on a card.
     if c.cues.as_ref().is_some_and(|q| q.makes_short) && !asks_picture(&c.inputs.message) {
@@ -1126,18 +1126,29 @@ pub(super) fn make_picture(
         duration.or(Some(PICTURE_US)),
         PICTURE_US,
     );
-    // Never over the hook: words in its place then (a short's hook) keep the frame to themselves.
-    let hook = (with_additions.timeline.tracks.iter())
+    // Never over the hook: this answer's (on the snapshot's timeline, where it goes in), else words in its place from
+    // an earlier answer keep the frame to themselves.
+    let own = own_hook.and_then(|r| {
+        Some(RangeUs {
+            start: c.map.time(with_additions, r.start)?,
+            end: c.map.time(with_additions, r.end).unwrap_or(r.end),
+        })
+    });
+    let earlier = (with_additions.timeline.tracks.iter())
         .flat_map(|t| &t.items)
-        .find(|i| {
-            i.start_us < start + duration_us
-                && start < i.end_us()
-                && klipolo_model::captions::in_hook_band(with_additions, i)
+        .filter(|i| klipolo_model::captions::in_hook_band(with_additions, i))
+        .map(|i| RangeUs {
+            start: i.start_us,
+            end: i.end_us(),
         });
+    let hook = own
+        .into_iter()
+        .chain(earlier)
+        .find(|h| h.start < start + duration_us && start < h.end);
     if let Some(hook) = hook {
         return Err(to_model(format!(
             "makePicture: the hook shows until {} s, and a picture never covers it. Place it after.",
-            secs(hook.end_us())
+            secs(hook.end)
         )));
     }
     let change = animate::Change {
