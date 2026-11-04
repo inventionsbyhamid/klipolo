@@ -1763,3 +1763,18 @@ fn optional_words_written_as_the_text_null_are_left_out() {
         "{sound:?}"
     );
 }
+
+#[test]
+fn the_recipe_says_when_to_draw_a_picture_and_when_a_sticker() {
+    let prompt = klipolo_chat::prompt::system_prompt();
+    assert!(
+        prompt.contains("a sticker for a small reaction")
+            && prompt.contains("makePicture to explain what is said"),
+        "{prompt}"
+    );
+    assert!(
+        serde_json::to_string(&tools())
+            .unwrap()
+            .contains("\"makePicture\"")
+    );
+}
