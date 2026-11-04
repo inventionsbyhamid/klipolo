@@ -568,6 +568,70 @@ ul[role="list"], ol[role="list"] { list-style: none; padding: 0; }
   .window__ask { display: none; }
 }
 
+/* ---------- what it does: real stills, grouped Record, Edit by message, Share ---------- */
+
+.features {
+  padding-block: clamp(40px, 7vh, 88px) clamp(24px, 4vh, 48px);
+  display: grid;
+  gap: clamp(40px, 7vh, 72px);
+}
+.group { display: grid; gap: clamp(16px, 2.6vh, 24px); }
+.group__title {
+  font-size: var(--t-line);
+  font-weight: 500;
+  letter-spacing: -.02em;
+  line-height: 1.25;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.tiles {
+  display: grid;
+  gap: clamp(28px, 4vh, 40px) 24px;
+  align-items: start;
+}
+@media (min-width: 720px) {
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tile--wide { grid-column: 1 / -1; }
+}
+.tile__fig { margin: 0; display: grid; gap: 12px; }
+.tile__text {
+  font-size: var(--t-body);
+  line-height: 1.45;
+  max-width: 46ch;
+  text-wrap: pretty;
+}
+
+/* A still from a capture, framed like the editor's window: a small shadow on light, a hairline on dark. */
+.still {
+  border-radius: 10px;
+  background: #141518;
+  box-shadow: 0 0 0 .5px rgb(0 0 0 / .45), 0 1px 2px rgb(23 24 26 / .1), 0 10px 28px -14px rgb(23 24 26 / .4);
+}
+.still__img { width: 100%; height: auto; border-radius: inherit; }
+@media (prefers-color-scheme: dark) {
+  .still { box-shadow: 0 0 0 1px rgb(255 255 255 / .14); }
+}
+
+/* Three caption styles side by side, each named under its strip. */
+.strips { display: grid; gap: 16px; }
+@media (min-width: 720px) {
+  .strips { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.still--strip { border-radius: 8px; }
+.strip__name {
+  margin-top: 8px;
+  font-size: var(--t-small);
+  font-weight: 500;
+  color: var(--quiet);
+}
+
+.features__credit {
+  font-size: var(--t-small);
+  line-height: 1.5;
+  color: var(--quiet);
+  max-width: 72ch;
+}
+
 /* ---------- story sections ---------- */
 
 main > section:not(.hero) {
