@@ -349,3 +349,28 @@ fn chats_range_from_just_after_a_shots_start_opens_it_on_the_speaker() {
     assert!(on(&path, 0.0, 0.25) && on(&path, 11.95, 0.25), "{path:?}");
     assert!(cuts(&path).is_empty(), "{path:?}");
 }
+
+#[test]
+fn chats_range_that_covers_only_a_moment_of_a_shots_edge_never_flashes_its_person() {
+    // Chat keeps P2 for the shot's first 0.1 s (its range ends just inside it), and again from 0.1 s before its end:
+    // the speaker, P1, holds the whole shot, never 0.1 s of P2 and a cut away from them.
+    let f = frames(12.0, &[person(1, 0.25, 0.2), person(2, 0.75, 0.3)]);
+    let said = [talk(0.0, 12.0, 1)];
+    let keep = Keep::Ranges {
+        ranges: vec![
+            KeepRange {
+                start_us: s(0.0),
+                end_us: s(0.1),
+                who: Who::Person { person: 2 },
+            },
+            KeepRange {
+                start_us: s(11.9),
+                end_us: s(20.0),
+                who: Who::Person { person: 2 },
+            },
+        ],
+    };
+    let path = path_of(&f, PORTRAIT, &said, &keep);
+    assert!(on(&path, 0.0, 0.25) && on(&path, 11.95, 0.25), "{path:?}");
+    assert!(cuts(&path).is_empty(), "{path:?}");
+}

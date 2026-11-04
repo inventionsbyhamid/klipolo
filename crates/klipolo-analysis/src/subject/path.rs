@@ -23,8 +23,8 @@
 //!   each other, frame everyone in it when they fit, else whoever said more there. Silence, or a voice nobody on
 //!   screen has, holds who is framed. A shot opens on its first speaker (else the last one, else its main subject). A
 //!   switch further than `CUT_AWAY` crop widths is a cut at the start of the speech; a nearer one eases. `Keep` can
-//!   name one person, everyone, or who when instead (a moment of a shot those ranges leave out, too short for anyone's
-//!   talk to count, goes with its neighbour). Without anyone heard, or with everyone fitting, a shot is framed
+//!   name one person, everyone, or who when instead (a moment at a shot's edge those ranges leave out or cover, too
+//!   short for anyone's talk to count, goes with its neighbour). Without anyone heard, or with everyone fitting, a shot is framed
 //!   as above.
 
 use klipolo_cursor::smooth::step;
@@ -523,8 +523,10 @@ fn switch(targets: &mut Vec<(Us, Target)>, cur: &mut Option<Target>, at: Us, t: 
 /// `keep` over a shot: (from, to, who) in order, covering it. A stretch no range covers that is shorter than
 /// `MIN_TALK_US` goes with the range after it (at the shot's end, the one before): chat's ranges are its timeline's
 /// tenths of a second, so a part's first or last moments can fall outside them, and a stretch too short for anyone's
-/// talk to count would open the shot on its main subject, held `MIN_HOLD_US` before the speaker takes the frame.
-/// Neighbours that keep alike are one stretch.
+/// talk to count would open the shot on its main subject, held `MIN_HOLD_US` before the speaker takes the frame. So
+/// does a range that covers only that much of the shot's start or end (one that ends or starts just inside it): it
+/// would show its person for a moment before the next stretch takes the frame. Neighbours that keep alike are one
+/// stretch.
 fn spans(keep: &Keep, (start, end): (Us, Us)) -> Vec<(Us, Us, Who)> {
     let Keep::Ranges { ranges } = keep else {
         return vec![(start, end, keep.who_at(start))];
@@ -551,6 +553,15 @@ fn spans(keep: &Keep, (start, end): (Us, Us)) -> Vec<(Us, Us, Who)> {
             Some(last) if end - at < MIN_TALK_US => last.1 = end,
             _ => out.push((at, end, Who::Speaker)),
         }
+    }
+    // A sliver at either edge goes with its neighbour.
+    while out.len() > 1 && out[0].1 - out[0].0 < MIN_TALK_US {
+        out[1].0 = out[0].0;
+        out.remove(0);
+    }
+    while out.len() > 1 && out[out.len() - 1].1 - out[out.len() - 1].0 < MIN_TALK_US {
+        let last = out.pop().expect("two or more");
+        out.last_mut().expect("one or more").1 = last.1;
     }
     out.dedup_by(|later, earlier| {
         let alike = earlier.2 == later.2 && earlier.1 == later.0;
