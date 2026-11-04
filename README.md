@@ -125,7 +125,7 @@ it is good at, behind an interface Klipolo owns.
 
 | Model | Its job in Klipolo | What goes in | What comes out | Why this model |
 | --- | --- | --- | --- | --- |
-| **Muse Spark 1.3**<br>`muse-spark-1.3` | **Chat editing.** Plans the whole edit from one message. | The system prompt, 40 strict function tools, and the project as text: clips, transcript lines with their pauses, the scene log, the media library, the playhead and the selection. Then the message. | Tool calls, up to 10 model calls a message, each with the results of the last. Then a short reply. | Strict function tools and high reasoning effort: in paid test runs it planned a whole short in 3 calls (about $0.08) where Meta's default effort took 10 (about $0.28). The prompt is the same bytes for every message on one project revision, so Meta's prompt cache pays on every step. |
+| **Muse Spark 1.3**<br>`muse-spark-1.3` | **Chat editing.** Plans the whole edit from one message. | The system prompt, 40 strict function tools, and the project as text: clips, transcript lines with their pauses, the scene log, the media library, the playhead and the selection. Then the message. | Tool calls, up to 10 model calls a message, each with the results of the last. Then a short reply. | Strict function tools and high reasoning effort: in paid test runs it planned a whole short in 3 calls (about $0.08) where Meta's default effort took 10 (about $0.28). |
 | **Muse Spark 1.3** | **Scene log.** Watches each imported clip and each Record yourself take. | A 360p, 4 frames a second copy of the clip with its sound, in chunks of at most 10 minutes that overlap by 20 s. | A strict JSON log with times: shots, actions, reactions, text on screen and topic changes. Klipolo snaps it to the hard cuts it finds in every frame. | It takes video and sound together (`input_video`), so it hears a topic change and sees the slide change at once. |
 | **Muse Spark 1.3** | **Who is speaking.** | A few seconds of the clip (picture and sound), and where each person SAM 3.1 found is, numbered from the left. | The number of the person whose mouth moves with the voice, or none. | Matching a voice to a face needs sight and sound in one call. |
 | **Muse Voice Transcribe**<br>`muse-voice-transcribe-1.0` | **Speech to text.** | A 16 kHz mono WAV of the clip's sound, split at its quietest moment before each 10 minute limit. | Speaker turns, each with a voice label and its text, in the language spoken. | Diarization in one call: whose words are whose, which the crop and the cuts need. |
@@ -174,7 +174,7 @@ sequenceDiagram
 ```
 
 1. **The request.** The system prompt, the tools and the project context go first, the same bytes for every message
-   on one project revision, then the conversation, then your message.
+   on one project revision so Meta's prompt cache reuses them, then the conversation, then your message.
 2. **Spark's calls.** Spark answers with tool calls: `removeSilences` for the pauses and `setCaptions` for the style.
    The plan came back in 11.9 s.
 3. **The checks.** Each call is read into a typed edit and checked against a snapshot of the project before anything
