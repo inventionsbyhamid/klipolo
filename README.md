@@ -155,7 +155,14 @@ never branch on which.
 
 This is the message from the screenshot above, on a 12 minute lesson that Klipolo had already analyzed.
 
-```mermaid
+<p align="center">
+  <img src="docs/images/message-trace.png" alt="Sequence diagram of one message. You type: Remove the pauses longer than half a second, and add captions in the Clean style. The chat planner sends Muse Spark 1.3 the system prompt, 40 tools, the project context and the message. Spark answers with removeSilences and setCaptions. The compiler checks each call against a snapshot of the project and tells Spark captions done, pause cuts proposed. Spark closes with no more calls. Then the captions apply at once as one undo step, 101 pause cuts wait as one proposal in red, Klipolo replies, and you click Apply: 12:38.0 becomes 11:34.6.">
+</p>
+
+<details>
+<summary>Diagram source (Mermaid)</summary>
+
+```text
 sequenceDiagram
     actor You
     participant Chat as Chat planner<br/>(klipolo-chat)
@@ -174,6 +181,8 @@ sequenceDiagram
     Chat-->>You: "Clean captions are on. I proposed removing pauses<br/>longer than half a second, waiting for your approval."
     You->>Timeline: Apply: 12:38.0 becomes 11:34.6
 ```
+
+</details>
 
 1. **The request.** The system prompt, the tools and the project context go first, the same bytes for every message
    on one project revision so Meta's prompt cache reuses them, then the conversation, then your message.
@@ -197,38 +206,47 @@ The code: the loop is `crates/klipolo-chat/src/planner.rs` (`MAX_STEPS = 10`), t
 
 Klipolo is a Tauri 2 app. Rust crates do the work, a React page draws the editor, and each crate has one job.
 
-```mermaid
-flowchart LR
+<p align="center">
+  <img src="docs/images/architecture.png" alt="Architecture diagram. On the Mac, the editor page (React) talks to the app shell (klipolo-app, Tauri 2) through typed commands and events. The shell uses the chat planner and compiler (klipolo-chat), the engine (klipolo-engine, wgpu on Metal and FFmpeg), the recorder (klipolo-capture), the analysis (klipolo-analysis) and the MCP server (klipolo-mcp). Chat and the engine use the project model (klipolo-model). The MCP server uses chat's tools and compiler, and any MCP client reaches it over a stdio bridge or HTTP on 127.0.0.1. The analysis uses the Meta client (klipolo-meta), which calls Meta's Model API directly with your own key or through the Klipolo relay with an access code; word timing goes through the relay for everyone.">
+</p>
+
+<details>
+<summary>Diagram source (Mermaid)</summary>
+
+```text
+flowchart TB
+    agent["Any MCP client<br/>(an AI agent)"]
     subgraph mac["Klipolo on your Mac"]
         page["Editor page<br/>apps/desktop<br/>React 19 + TypeScript"]
         shell["App shell<br/>klipolo-app<br/>Tauri 2, thin commands"]
-        chat["Chat planner + compiler<br/>klipolo-chat"]
-        model["Project model<br/>klipolo-model<br/>ops, validation, undo"]
-        engine["Engine<br/>klipolo-engine<br/>wgpu on Metal + FFmpeg"]
-        rec["Recorder<br/>klipolo-capture<br/>worker process"]
-        analysis["Analysis<br/>klipolo-analysis<br/>traits + Meta adapters"]
-        metac["Meta client<br/>klipolo-meta"]
         mcp["MCP server<br/>klipolo-mcp"]
+        chat["Chat planner + compiler<br/>klipolo-chat"]
+        rec["Recorder<br/>klipolo-capture<br/>separate process"]
+        engine["Engine<br/>klipolo-engine<br/>wgpu on Metal + FFmpeg"]
+        analysis["Analysis<br/>klipolo-analysis<br/>traits + Meta adapters"]
+        model["Project model<br/>klipolo-model<br/>ops, validation, undo"]
+        metac["Meta client<br/>klipolo-meta"]
     end
-    agent["Any MCP client<br/>(an AI agent)"]
     relay["Klipolo relay<br/>services/relay<br/>budgets + MMS aligner"]
-    meta["Meta's Model API<br/>Muse Spark, Voice Transcribe,<br/>SAM 3.1, Muse Image"]
+    meta["Meta's Model API<br/>Muse Spark, Muse Image<br/>Voice Transcribe, SAM 3.1"]
 
     page <-->|typed commands and events| shell
-    shell --> chat
-    shell --> engine
-    shell --> rec
-    shell --> analysis
     shell --> mcp
+    shell --> chat
+    shell --> rec
+    shell --> engine
+    shell --> analysis
+    agent <-->|stdio bridge or<br/>HTTP on 127.0.0.1| mcp
+    mcp -->|same tools,<br/>same compiler| chat
     chat --> model
     engine --> model
-    mcp -->|same tools, same compiler| chat
     analysis --> metac
     metac -->|your own key| meta
-    metac -->|access code, and word timing for all| relay
+    metac -->|access code, and<br/>word timing for all| relay
     relay --> meta
-    agent <-->|stdio bridge or HTTP on 127.0.0.1| mcp
 ```
+
+</details>
 
 ### The crates and apps
 
