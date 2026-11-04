@@ -5,7 +5,8 @@ vi.mock('../bridge/ai', () => ({
   aiBridge: { status: vi.fn(), setKey: vi.fn(), setCode: vi.fn(), clear: vi.fn(), onStatus: vi.fn() },
 }));
 const { aiBridge } = await import('../bridge/ai');
-const { creditMoved, followAiStatus, refreshAiStatus, setAiStatus, useAi } = await import('./aiStatus');
+const { creditMoved, followAiStatus, freeCreditText, freeCreditUsedUp, refreshAiStatus, setAiStatus, useAi } =
+  await import('./aiStatus');
 
 const relay: AiStatus = { mode: 'relay', code: 'KLIP-TEST-0001', budgetUsd: 2, spentUsd: 0.06, active: true };
 const key: AiStatus = { mode: 'key', keyHint: '6789' };
@@ -104,5 +105,40 @@ describe('when a paid job ends', () => {
     creditMoved();
     await settle();
     expect(aiBridge.status).not.toHaveBeenCalled();
+  });
+});
+
+describe('the free credit', () => {
+  const trial: AiStatus = { mode: 'relay', trial: true, budgetUsd: 5, spentUsd: 0.2, active: true };
+
+  it('says what is left and that no key is needed', () => {
+    expect(freeCreditText(trial)).toBe('Free credit: $4.80 left. No key needed.');
+    expect(freeCreditText({ ...trial, budgetUsd: undefined })).toBe('Free credit. No key needed.');
+    expect(freeCreditUsedUp(trial)).toBe(false);
+  });
+
+  it('says it is used up when nothing is left or the relay turned it off', () => {
+    for (const status of [
+      { ...trial, spentUsd: 5 },
+      { ...trial, spentUsd: 5.03 },
+      { ...trial, budgetUsd: 1.2, spentUsd: 1.2 },
+      { ...trial, active: false, budgetUsd: 0 },
+    ]) {
+      expect(freeCreditUsedUp(status)).toBe(true);
+      expect(freeCreditText(status)).toBe('Your free credit is used up. Add your own Meta key in Settings to keep using AI.');
+    }
+  });
+
+  it("gives Rust's sentence when the credit couldn't be checked", () => {
+    const notice = "Couldn't reach Klipolo to check your credit. Check your internet connection.";
+    expect(freeCreditText({ mode: 'relay', trial: true, notice })).toBe(notice);
+  });
+
+  it('says nothing with a key, the person\'s own code or nothing', () => {
+    expect(freeCreditText(null)).toBeNull();
+    expect(freeCreditText({ mode: 'none' })).toBeNull();
+    expect(freeCreditText({ mode: 'key', keyHint: '6789' })).toBeNull();
+    expect(freeCreditText(relay)).toBeNull();
+    expect(freeCreditUsedUp({ ...relay, active: false })).toBe(false);
   });
 });

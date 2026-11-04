@@ -1,5 +1,5 @@
 import type { AiStatus } from '../bindings/AiStatus';
-import { setAiStatus } from '../ai/aiStatus';
+import { freeCreditLeft, freeCreditUsedUp, setAiStatus } from '../ai/aiStatus';
 import { aiBridge } from '../bridge/ai';
 
 /** Which way to pay the dialog shows: an access code or the person's own Meta API key. */
@@ -42,9 +42,9 @@ function spend(amount: number): string {
 export interface ChipView {
   icon: 'key' | 'ticket';
   label: string;
-  /** The credit left, for an access code whose credit is known. */
+  /** The credit left, for an access code (or the free credit) whose credit is known. */
   left?: string;
-  /** No key and no code: the outlined "Add Meta key" chip. */
+  /** No key and no code, or the free credit used up: the outlined chip. */
   missing: boolean;
 }
 
@@ -72,6 +72,13 @@ export function chipView(status: AiStatus | null): ChipView | null {
     case 'key':
       return { icon: 'key', label: 'Meta key', missing: false };
     case 'relay': {
+      if (status.trial) {
+        if (freeCreditUsedUp(status)) return { icon: 'ticket', label: 'Free credit used up', missing: true };
+        const left = freeCreditLeft(status);
+        return left === null
+          ? { icon: 'ticket', label: 'Free credit', missing: false }
+          : { icon: 'ticket', label: 'Free credit:', left: usd(left), missing: false };
+      }
       const budget = budgetView(status);
       return budget
         ? { icon: 'ticket', label: 'Access code', left: usd(budget.left), missing: false }
