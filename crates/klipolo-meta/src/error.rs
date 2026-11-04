@@ -78,6 +78,8 @@ const RELAY_BUSY_CODE: &str = "busy";
 const CONTENT_POLICY_CODE: &str = "content_policy_violation";
 /// The relay's 503 code while it has no Meta key.
 const NOT_CONFIGURED_CODE: &str = "not_configured";
+/// The relay's 403 code when relay AI is off for the device (its access code was turned off, or it has none).
+const NO_RELAY_AI_CODE: &str = "no_relay_ai";
 
 /// ": message" for `Display`, or nothing when there is no message.
 fn detail(message: Option<&String>) -> String {
@@ -301,6 +303,31 @@ fn body_code(body: &[u8], secrets: &[&str]) -> Option<String> {
             .bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
     is_code.then_some(code)
+}
+
+/// `error`, from a refused call's `body`, as a [`MetaError::Budget`] saying `sentence` when it refused for credit: a
+/// 402 about credit (one naming credit, or with no message; the relay's daily cap on video tracking is not) or the
+/// relay's 403 `no_relay_ai`. Any other error is kept.
+pub(crate) fn used_up(
+    error: MetaError,
+    body: &[u8],
+    secrets: &[&str],
+    sentence: &str,
+) -> MetaError {
+    let for_credit = match &error {
+        MetaError::Budget { message } => message.is_empty() || message.contains("credit"),
+        MetaError::NotAllowed { .. } => {
+            body_code(body, secrets).as_deref() == Some(NO_RELAY_AI_CODE)
+        }
+        _ => false,
+    };
+    if for_credit {
+        MetaError::Budget {
+            message: sentence.to_owned(),
+        }
+    } else {
+        error
+    }
 }
 
 /// `text` with every secret replaced. Run before any truncation, so no part

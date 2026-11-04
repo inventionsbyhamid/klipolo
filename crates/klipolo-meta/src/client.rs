@@ -10,7 +10,7 @@ use reqwest::{RequestBuilder, Response};
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::DeserializeOwned;
 
-use crate::error::{redact, MetaError};
+use crate::error::{redact, used_up, MetaError};
 use crate::ledger::{self, Row, SPEND_LEDGER_ENV};
 
 /// Meta's Model API, used with the person's own key.
@@ -45,6 +45,9 @@ pub struct MetaClient {
     pub(crate) align_token: Option<SecretString>,
     ledger: Option<PathBuf>,
     pub(crate) short_timeout: Duration,
+    /// Through the relay, what a refusal for credit says instead of the relay's sentence
+    /// ([`Self::with_used_up_message`]).
+    used_up: Option<String>,
 }
 
 /// The limit for small JSON calls (devices, deletes) and for reading the body
@@ -73,6 +76,7 @@ impl MetaClient {
                 .filter(|v| !v.is_empty())
                 .map(PathBuf::from),
             short_timeout: SHORT_TIMEOUT,
+            used_up: None,
         }
     }
 
@@ -120,6 +124,21 @@ impl MetaClient {
         self
     }
 
+    /// Through the relay, the sentence a refusal for credit gives instead of the relay's own, as a
+    /// [`MetaError::Budget`]: a 402 about credit (the device's, its access code's or the relay's shared credit, or one
+    /// with no message; not the relay's daily cap on video tracking) and a 403 `no_relay_ai` (relay AI is off for the
+    /// device: its access code was turned off). With a key, Meta's own refusals are kept.
+    pub fn with_used_up_message(mut self, sentence: impl Into<String>) -> Self {
+        self.used_up = Some(sentence.into());
+        self
+    }
+
+    /// The sentence a refusal for credit gives through the relay, when one was set
+    /// ([`Self::with_used_up_message`]).
+    pub fn used_up_message(&self) -> Option<&str> {
+        self.used_up.as_deref().filter(|_| self.is_relay())
+    }
+
     /// True when Meta calls go through the relay.
     pub fn is_relay(&self) -> bool {
         matches!(self.auth, Auth::Relay { .. })
@@ -137,7 +156,20 @@ impl MetaClient {
     /// Sends a call to Meta (or its relay mirror) with this client's secret.
     pub(crate) async fn send_meta(&self, request: RequestBuilder) -> Result<Response, MetaError> {
         let response = self.send_meta_unchecked(request).await?;
-        check(response, &self.secrets(), self.short_timeout).await
+        self.check(response).await
+    }
+
+    /// [`check`] with this client's secrets, and a refusal for credit said as this client was told
+    /// ([`Self::with_used_up_message`]).
+    pub(crate) async fn check(&self, response: Response) -> Result<Response, MetaError> {
+        let secrets = self.secrets();
+        check_with(
+            response,
+            &secrets,
+            self.short_timeout,
+            self.used_up_message(),
+        )
+        .await
     }
 
     /// The URL of the relay's own endpoint `path` (e.g. `/v1/align`).
@@ -151,8 +183,12 @@ impl MetaClient {
         request: RequestBuilder,
         token: &SecretString,
     ) -> Result<Response, MetaError> {
-        let request = request.bearer_auth(token.expose_secret());
-        send(request, &self.secrets(), self.short_timeout).await
+        let response = request
+            .bearer_auth(token.expose_secret())
+            .send()
+            .await
+            .map_err(|e| network_error(&e, &self.secrets()))?;
+        self.check(response).await
     }
 
     /// [`Self::send_meta`] that leaves the status to the caller.
@@ -227,9 +263,19 @@ pub(crate) async fn send(
 /// A status outside 2xx becomes the matching [`MetaError`]. The error's body
 /// is read for its message for at most `body_deadline`.
 pub(crate) async fn check(
+    response: Response,
+    secrets: &[&str],
+    body_deadline: Duration,
+) -> Result<Response, MetaError> {
+    check_with(response, secrets, body_deadline, None).await
+}
+
+/// [`check`], and with `used_up` a refusal for credit through the relay says it ([`MetaClient::with_used_up_message`]).
+async fn check_with(
     mut response: Response,
     secrets: &[&str],
     body_deadline: Duration,
+    used_up_message: Option<&str>,
 ) -> Result<Response, MetaError> {
     let status = response.status();
     if status.is_success() {
@@ -252,12 +298,11 @@ pub(crate) async fn check(
     // A body cut off by the deadline usually gives no message; the status
     // still decides the error.
     let _ = tokio::time::timeout(body_deadline, read).await;
-    Err(MetaError::from_status(
-        status.as_u16(),
-        retry_after.as_deref(),
-        &body,
-        secrets,
-    ))
+    let error = MetaError::from_status(status.as_u16(), retry_after.as_deref(), &body, secrets);
+    Err(match used_up_message {
+        Some(sentence) => used_up(error, &body, secrets, sentence),
+        None => error,
+    })
 }
 
 pub(crate) async fn read_json<T: DeserializeOwned>(

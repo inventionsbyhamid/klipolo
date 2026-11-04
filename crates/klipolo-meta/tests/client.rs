@@ -360,6 +360,66 @@ async fn status_402_maps_to_budget_with_relay_message() {
     assert_eq!(error.user_message(), BUDGET_MESSAGE);
 }
 
+/// A relay client told what a used-up credit says gives that sentence for the relay's refusals for credit (the
+/// device's, the shared credit's, a bare 402, relay AI turned off), and keeps every other refusal as the relay said it.
+#[tokio::test]
+async fn a_used_up_message_replaces_the_relays_refusals_for_credit() {
+    const USED_UP: &str = "Test credit is used up. Add a key.";
+    let refused = |status: u16, body: Value| async move {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(status).set_body_json(body))
+            .mount(&server)
+            .await;
+        let worded = relay(&server).with_used_up_message(USED_UP);
+        assert_eq!(worded.used_up_message(), Some(USED_UP));
+        worded.transcribe(wav(), &[]).await.unwrap_err()
+    };
+    let used_up = MetaError::Budget {
+        message: USED_UP.into(),
+    };
+    for body in [
+        json!({"error": "budget", "message": BUDGET_MESSAGE}),
+        json!({"error": "budget", "message": "Klipolo's shared AI credit is used up for now. Add your own Meta key in Settings."}),
+        json!({"error": "budget", "message": "This device does not have enough Klipolo credit left for this request. Add your own Meta key in Settings."}),
+        json!({}),
+    ] {
+        assert_eq!(refused(402, body.clone()).await, used_up, "{body}");
+    }
+    let off = json!({"error": "no_relay_ai", "message": "Klipolo AI is off for this device. Add an access code or your own Meta key in Settings."});
+    assert_eq!(refused(403, off).await, used_up);
+
+    let sam_today = "Klipolo's video tracking is used up for today. Try again tomorrow, or add your own Meta key in Settings.";
+    assert_eq!(
+        refused(402, json!({"error": "budget", "message": sam_today})).await,
+        MetaError::Budget {
+            message: sam_today.into()
+        }
+    );
+    let sam_off =
+        "Video tracking is off for this access code. Add your own Meta key in Settings to use it.";
+    assert_eq!(
+        refused(403, json!({"error": "sam_off", "message": sam_off})).await,
+        MetaError::NotAllowed {
+            message: Some(sam_off.into())
+        }
+    );
+    // With a key, Meta's own refusal is kept: the sentence is only about the relay.
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(402))
+        .mount(&server)
+        .await;
+    let keyed = direct(&server).with_used_up_message(USED_UP);
+    assert_eq!(keyed.used_up_message(), None);
+    assert_eq!(
+        keyed.transcribe(wav(), &[]).await.unwrap_err(),
+        MetaError::Budget {
+            message: String::new()
+        }
+    );
+}
+
 /// Meta's non-streaming time limit (504), the relay's wait for Meta (504) and a body that took too long to arrive
 /// (408) are timeouts, not a busy service.
 #[tokio::test]
