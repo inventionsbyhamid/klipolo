@@ -28,7 +28,7 @@
 </p>
 
 <p align="center">
-  <a href="https://youtu.be/JAT5tXGfvbs"><img src="https://img.shields.io/badge/Watch%20the%20demo-2%3A41-111111?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch the demo (2:41)"></a>
+  <a href="https://youtu.be/1BVP8_d9i7A"><img src="https://img.shields.io/badge/Watch%20the%20demo-2%3A42-111111?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch the demo (2:42)"></a>
 </p>
 
 <p align="center">
