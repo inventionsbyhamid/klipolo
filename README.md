@@ -166,10 +166,11 @@ sequenceDiagram
     Chat->>Spark: system prompt, 40 tools, project context<br/>(transcript, scene log, pauses), message
     Spark-->>Chat: removeSilences (pauses over 0.5 s)<br/>setCaptions (Clean)
     Chat->>Compiler: each call, checked against a snapshot of the project
+    Compiler-->>Chat: captions "done", pause cuts "proposed"
+    Chat->>Spark: what came of each call
+    Spark-->>Chat: closing words, no more calls
     Compiler->>Timeline: captions on: applied at once, one undo step
     Compiler->>Timeline: 101 pause cuts: one proposal, in red
-    Chat->>Spark: what came of each call ("done", "proposed")
-    Spark-->>Chat: closing words, no more calls
     Chat-->>You: "Clean captions are on. I proposed removing pauses<br/>longer than half a second, waiting for your approval."
     You->>Timeline: Apply: 12:38.0 becomes 11:34.6
 ```
@@ -183,7 +184,8 @@ sequenceDiagram
    or end, a pause, a scene item, a clip edge, the selection, the playhead or a time you typed), and it snaps there,
    so a cut never clips a word. A value out of range is refused with the allowed range, never clamped, and the reason
    goes back to Spark to fix on its next step.
-4. **The red cut.** Additions (the captions) apply at once as one undo step. Removals become one proposal: "Cut 101
+4. **The red cut.** Once Spark answers with no more calls, its calls are compiled together. Additions (the captions)
+   apply at once as one undo step. Removals become one proposal: "Cut 101
    pauses", 63.4 s in all, 12:38.0 now and 11:34.6 after.
 5. **Apply.** Nothing is cut until you click Apply, and Discard drops the proposal. The captions are one step to undo.
 
