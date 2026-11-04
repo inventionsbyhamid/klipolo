@@ -298,7 +298,7 @@ ul[role="list"], ol[role="list"] { list-style: none; padding: 0; }
 .hero {
   width: var(--w);
   margin-inline: auto;
-  padding-top: clamp(84px, 12vh, 128px);
+  padding-top: clamp(88px, 13vh, 128px);
   padding-bottom: clamp(40px, 7vh, 88px);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
