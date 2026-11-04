@@ -234,7 +234,7 @@ function typer(node) {
   const chars = Array.from(text, (c) => shown.appendChild(make('span', 'ch', c)));
   node.replaceChildren(make('span', 'sr-only', text), shown);
   return {
-    async run(from) {
+    async run(soft, from) {
       if (still) {
         for (const s of chars) s.classList.add('on');
         shown.append(caret);
@@ -245,6 +245,7 @@ function typer(node) {
       for (const s of chars) {
         s.classList.add('on');
         s.after(caret);
+        if (s.textContent !== ' ') Sound.key(soft, from);
         await hold(from, pause(s.textContent));
       }
       node.classList.remove('is-typing');
@@ -253,11 +254,12 @@ function typer(node) {
 }
 
 // A command line that types itself, key by key; `from` is the demo it belongs to.
-async function typeInto(el, text, from, wait = (ms) => hold(from, ms)) {
+async function typeInto(el, text, soft, from, wait = (ms) => hold(from, ms)) {
   const line = el.parentElement;
   line.classList.add('is-typing');
   for (let i = 1; i <= text.length; i++) {
     el.textContent = text.slice(0, i);
+    if (text[i - 1] !== ' ') Sound.key(soft, from);
     await wait(pause(text[i - 1]));
   }
   line.classList.remove('is-typing');
@@ -277,9 +279,13 @@ async function erase(el, wait = sleep) {
 const typers = new Map();
 for (const el of d.querySelectorAll('[data-type], [data-ask]')) typers.set(el, typer(el));
 const typerIn = (el, sel) => typers.get(el.querySelector(sel));
+const at = (ms, fn) => { if (!still) setTimeout(fn, ms); };
 
 const moments = {
   async problem(el) {
+    // A soft key as each chore lands, and a tick for the last line.
+    [250, 500, 750, 1000, 1250, 1500].forEach((ms) => at(ms + 60, () => Sound.key(0.5, el)));
+    at(2200, () => Sound.tick(0.6, el));
     const line = el.querySelector('.cmd--answer [data-cmd]');
     const pile = el.querySelector('[data-pile]');
     if (still || !line || !pile) return;
@@ -287,9 +293,11 @@ const moments = {
     await hold(el, 3000);
     el.classList.add('is-asking');
     await hold(el, 300);
-    await typeInto(line, 'make it polished', el);
+    await typeInto(line, 'make it polished', 0.45, el);
     await hold(el, 420);
+    Sound.thock(0.45, el);
     el.classList.add('is-struck');
+    [0, 120, 240, 360, 480, 600].forEach((ms) => setTimeout(() => Sound.tick(0.5, el), ms + 80));
     await hold(el, 1100);
     const gap = parseFloat(getComputedStyle(el).rowGap) || 0;
     el.style.setProperty('--fold', `${pile.offsetHeight + gap}px`);
@@ -299,18 +307,32 @@ const moments = {
     const t = typerIn(el, '[data-type]');
     if (still) { t.run(); return; }
     await hold(el, 250);
-    await t.run(el);
+    await t.run(0.6, el);
+    await hold(el, 420);
+    Sound.thock(0.5, el); // the question lands like Enter
+  },
+  record(el) {
+    [300, 600, 900, 1200].forEach((ms) => at(ms + 40, () => { Sound.tick(0.6, el); Sound.key(0.22, el); }));
   },
   async say(el) {
-    await typerIn(el, '[data-ask]').run(el);
+    await typerIn(el, '[data-ask]').run(0.45, el);
     if (still) return;
     await hold(el, 450);
     el.classList.add('is-preview');
+    Sound.tick(0.45, el);
     await hold(el, 1400);
     el.classList.add('is-done');
+    Sound.key(0.8, el);
     await hold(el, 260);
     const preview = el.querySelector('[data-preview]');
     if (preview) preview.textContent = 'Kept the 5 best moments. 0:58, vertical.';
+    Sound.tick(0.6, el);
+  },
+  promise(el) {
+    at(2300, () => Sound.key(0.85, el)); // the instant line
+  },
+  outcome(el) {
+    at(1700, () => Sound.tick(1, el)); // the playhead reaches the end
   },
 };
 
@@ -431,6 +453,8 @@ function takeDemo(take) {
     });
   }
 
+  // Demo cuts tap only for a visitor who has touched the page and turned sound on.
+  const tap = () => { if (Sound.on) Haptic.tap(4); };
   const drop = (it) => { it.gone = true; it.m.classList.add('is-gone'); };
   const said = (m) => 90 + m.textContent.length * 12 + (/\.$/.test(m.textContent) ? 220 : /,$/.test(m.textContent) ? 70 : 0);
 
@@ -438,6 +462,8 @@ function takeDemo(take) {
     ['cut the ums', async () => {
       for (const it of items.filter((i) => i.f && !i.gone)) {
         it.v.classList.add('is-struck');
+        Sound.tick(0.7, take);
+        tap();
         await wait(220);
         it.v.classList.add('is-out');
         await wait(170);
@@ -452,6 +478,8 @@ function takeDemo(take) {
         it.sx = 0.001;
         it.v.style.transform = pos(it);
         it.v.classList.add('is-out');
+        Sound.key(0.35, take);
+        tap();
         await wait(200);
         drop(it);
         place();
@@ -462,6 +490,7 @@ function takeDemo(take) {
     ['make it 30 seconds', async () => {
       const weak = items.filter((i) => i.k && !i.gone);
       weak.forEach((it) => it.v.classList.add('is-out'));
+      Sound.tick(0.5, take);
       await wait(560);
       weak.forEach(drop);
       place();
@@ -510,8 +539,9 @@ function takeDemo(take) {
     await wait(900);
     for (;;) {
       for (const [say, act] of steps) {
-        await typeInto(cmd, say, take, wait);
+        await typeInto(cmd, say, 0.4, take, wait);
         await wait(rand(380, 520));
+        Sound.thock(0.45, take);
         await act();
         await wait(1500);
         await erase(cmd, wait);
