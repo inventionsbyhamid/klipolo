@@ -452,9 +452,12 @@ engine's GPU tests on a software renderer (Mesa lavapipe), the page's typecheck 
 generated bindings and the third party notices are current. Run it in the image from `ci/linux.Dockerfile`:
 
 ```sh
-docker build -f ci/linux.Dockerfile -t klipolo-ci ci
-docker run --rm -v "$PWD":/src -w /src klipolo-ci scripts/ci-linux.sh
+docker build --platform linux/amd64 -f ci/linux.Dockerfile -t klipolo-ci ci
+docker run --rm --platform linux/amd64 -v "$PWD":/src -w /src klipolo-ci scripts/ci-linux.sh
 ```
+
+The image is x86_64; on an Apple Silicon Mac it runs under emulation and is slow. The gate is heavy: its own header
+runs it with --cpus 16 --memory 24g.
 
 The image runs as uid 1000, so the checkout must belong to that user. The repository holds over 6,500 test functions
 (about 4,370 in Rust, 1,840 in the page and 400 in Python). Nothing in the gate calls Meta: the Meta client's tests
