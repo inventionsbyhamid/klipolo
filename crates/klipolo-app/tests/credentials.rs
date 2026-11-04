@@ -987,11 +987,29 @@ async fn the_free_credit_used_up_or_turned_off_says_so() {
             AiStatus {
                 mode: AiMode::Relay,
                 trial: true,
+                active: Some(false),
                 notice: Some(USED_UP.into()),
                 ..AiStatus::default()
             }
         );
     }
+
+    // Out of reach is not used up: the free credit may still pay once the relay answers.
+    let offline = Credentials::load(
+        Arc::new(MemoryStore::default()),
+        endpoints(CLOSED, CLOSED),
+        DEVICE.into(),
+    )
+    .with_trial_code(Some(secret(TRIAL)));
+    let status = offline.status().await;
+    assert_eq!(
+        (status.trial, status.active, status.notice.as_deref()),
+        (
+            true,
+            None,
+            Some("Couldn't reach Klipolo to check your credit. Check your internet connection.")
+        )
+    );
 
     // Registered, then nothing left (the relay cuts the budget to the trial's), or turned off.
     for (relay_ai, budget, spent) in [(true, 5.0, 5.0), (true, 1.2, 1.2), (false, 0.0, 0.4)] {

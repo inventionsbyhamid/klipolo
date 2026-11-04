@@ -520,10 +520,15 @@ impl Credentials {
         }
         match info {
             Ok(info) => relay_status(code, trial, &info),
-            Err(error) => AiStatus {
-                notice: Some(relay_error_for(&error, CREDIT_OFFLINE, trial).message),
-                ..relay_base_status(code, trial)
-            },
+            Err(error) => {
+                let notice = relay_error_for(&error, CREDIT_OFFLINE, trial).message;
+                AiStatus {
+                    // The relay refused the free credit (used up, or its code turned off): nothing can pay with it.
+                    active: (trial && notice == TRIAL_USED_UP).then_some(false),
+                    notice: Some(notice),
+                    ..relay_base_status(code, trial)
+                }
+            }
         }
     }
 
