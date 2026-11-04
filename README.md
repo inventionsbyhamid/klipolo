@@ -290,6 +290,85 @@ flowchart TB
   (`crates/klipolo-model/captions/styles/*.json`, `crates/klipolo-model/presets/*/contrib.json` beside a WGSL
   shader or a scene JSON), so a new one is a data file plus one line that lists it.
 
+## The relay
+
+`services/relay` is Klipolo's own small web service, at api.klipolo.com. It does three jobs:
+
+- **Free credit and access codes.** It holds Klipolo's own Meta key, so people can try the AI features without one.
+  The free credit is an access code built into the app, which Klipolo never shows. A device registers once and gets
+  a token, and the relay forwards its calls to Meta for an allowlist of models only: Muse Spark, Voice Transcribe,
+  Muse Image and SAM 3.1.
+- **Word timing for every device.** `POST /v1/align` runs Meta's MMS aligner on CPU for every registered device,
+  with your own key or without, up to 120 minutes of audio a device a day.
+- **Video for SAM 3.1.** `POST /meta/v1/sam/videos` decodes an upload with ffmpeg and writes the relay's own copy
+  (2 frames a second, its long side at most 640, no sound, at most 10 minutes), so it knows how many frames Meta will
+  bill before the call goes out.
+
+<p align="center">
+  <img src="docs/images/relay.png" alt="Relay diagram. The Klipolo app, on the free credit, an access code or your own Meta key, talks to the Klipolo relay, one FastAPI container. Every device registers at POST /v1/devices for a token and its credit left, and sends speech turns and audio to POST /v1/align, the MMS aligner on CPU. On the free credit or a code, AI calls go to the Meta proxy at /meta/v1, with its allowlist of Meta models and its caps for the device, the code, the total and SAM a day, and video to track goes to POST /meta/v1/sam/videos, which makes its own 2 fps copy. The proxy reserves, then charges, in a SQLite database of access codes, devices (token hashes) and a ledger row per charged call, and calls Meta's Model API with the relay's own key. With your own key the app calls Meta directly.">
+</p>
+
+<details>
+<summary>Diagram source (Mermaid)</summary>
+
+```text
+flowchart LR
+    app["Klipolo app<br/>free credit, access code<br/>or your own Meta key"]
+    subgraph relay["Klipolo relay: FastAPI in one container"]
+        devices["Devices<br/>POST /v1/devices<br/>a token, the credit left"]
+        align["Word timing<br/>POST /v1/align<br/>MMS aligner on CPU"]
+        proxy["Meta proxy<br/>/meta/v1/...<br/>allowlist of Meta models<br/>caps: device, code, total,<br/>SAM a day"]
+        sam["Video for SAM<br/>POST /meta/v1/sam/videos<br/>its own 2 fps copy"]
+        db[("SQLite<br/>access codes<br/>devices (token hashes)<br/>a ledger row<br/>per charged call")]
+    end
+    meta["Meta's Model API<br/>Muse Spark, Muse Image<br/>Voice Transcribe, SAM 3.1"]
+
+    app -->|every device registers| devices
+    app -->|every device:<br/>speech turns and audio| align
+    app -->|free credit or code:<br/>AI calls| proxy
+    app -->|free credit or code:<br/>video to track| sam
+    app -.->|own key: straight to Meta| meta
+    devices --> db
+    align -->|minutes used today| db
+    proxy -->|reserve, then charge| db
+    proxy -->|the relay's own key| meta
+    sam -->|upload| meta
+```
+
+</details>
+
+**How the money is bounded**
+
+- Before a call goes to Meta, the relay reserves the most it could cost. If the spend leaves no room under a cap, the
+  call is refused (402) and never reaches Meta. After Meta answers, the call is charged from Meta's own usage figures,
+  and only then is the reservation freed. Failed calls aren't charged.
+- The caps: each device (by default $2, all time); each access code, when one is set (what all its devices spend
+  together, and how many devices may register with it); the whole relay (by default $40); and SAM 3.1 video tracking,
+  a daily cap across every device (by default $5). If Meta ever bills SAM more frames than the relay reserved, SAM is
+  turned off for that code.
+- Every charged call is a ledger row: the device, the time, the endpoint, the model, Meta's usage figures, the cost
+  and the code it came under.
+
+**What it keeps, and what it doesn't**
+
+- One SQLite file: the access codes, the devices (each token only as its SHA-256 hash), which devices registered with
+  which code, and the ledger.
+- No audio and no video. Word timing's audio waits in a temporary file in memory while the request runs and is
+  deleted when it ends. A video for SAM and the relay's copy of it live in a temporary folder that is removed when the
+  call ends. Nothing else from a request is stored, and the logs never hold request or response headers, bodies or
+  the key.
+
+**The stack.** Python 3.12, FastAPI on uvicorn, httpx to Meta, SQLite in WAL mode, CPU PyTorch 2.8 with torchaudio for
+the MMS aligner, uroman for words in other scripts, and ffmpeg for SAM's copies. It runs one worker, because the
+limits on calls in flight live in the process. The Docker image pins its base by digest and every package by a lock
+file, bakes in the MMS weights so the server downloads nothing at run time, and runs as a user without root. Its fast
+tests need no torch and never call Meta.
+
+**How it runs.** One Docker container behind a reverse proxy that ends TLS and limits how fast each client can call.
+The container is capped at 8 CPUs and 6 GB, opens no ports of its own, keeps its database on a volume and its
+temporary files in memory. An admin command line adds codes, sets a code's cap and device limit, and shows the spend.
+`services/relay/README.md` has the routes, the settings and the client contract.
+
 ## Why Rust
 
 A video editor spends its life in hot loops: decoding, compositing, timing words, applying edits on long projects.
