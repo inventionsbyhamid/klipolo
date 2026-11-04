@@ -1437,3 +1437,84 @@ fn a_whoosh_at_a_cut_that_has_one_already_plays_once_when_the_short_is_cut_again
         out.told
     );
 }
+
+/// The words in the hook's place in 9:16 on `p`.
+fn hooks(p: &Project) -> Vec<&Item> {
+    (p.timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .filter(|i| klipolo_model::captions::in_hook_band(p, i))
+        .collect()
+}
+
+#[test]
+fn a_second_hook_is_never_drawn_over_the_first() {
+    // In one answer: a second kinetic title at the opening is refused back, with what to do instead.
+    let p = project();
+    let mut calls = base();
+    calls.push(call(
+        "addText",
+        json!({"text": "w2 w3 w4", "preset": "title", "atSec": null, "atWords": "w2 w3 w4",
+               "durationSec": 3.0, "animation": "kinetic", "font": null}),
+    ));
+    let out = compile(&p, &inputs(&p, MESSAGE), &calls);
+    let refused: Vec<usize> = out.refusals.iter().map(|r| r.call_index).collect();
+    assert_eq!(refused, vec![5], "{:#?}", out.refusals);
+    assert!(
+        out.refusals[0].reason.contains("styleText"),
+        "{:#?}",
+        out.refusals
+    );
+    let after = &out.proposal.as_ref().expect("the cut").review.after;
+    assert_eq!(hooks(after).len(), 1);
+    // The same message again on the project the first answer's changes went into (its cut never applied): that
+    // answer's hook is there, so this one's is refused back, naming it.
+    let first = added(&p, &compile(&p, &inputs(&p, MESSAGE), &base()));
+    assert_eq!(hooks(&first).len(), 1);
+    let out = compile(&first, &inputs(&first, MESSAGE), &base());
+    let refused: Vec<usize> = out.refusals.iter().map(|r| r.call_index).collect();
+    assert_eq!(refused, vec![4], "{:#?}", out.refusals);
+    assert!(
+        out.refusals[0].reason.contains("(t1)"),
+        "{:#?}",
+        out.refusals
+    );
+    let after = &out.proposal.as_ref().expect("the cut").review.after;
+    assert_eq!(hooks(after).len(), 1);
+}
+
+#[test]
+fn a_rerun_short_never_doubles_a_sticker_its_pop_or_the_payoff_chime() {
+    // The same message again on the project the first answer's changes went into (its cut never applied): its
+    // Rocket, Rocket's pop and the payoff chime are there, so this answer adds none of them again.
+    let p = project();
+    let mut calls = base();
+    calls.extend(sticker("Rocket", 70));
+    calls.push(sound("Chime", 130));
+    let first = added(&p, &compile(&p, &inputs(&p, MESSAGE), &calls));
+    let count = |p: &Project| {
+        let (pictures, sounds) = layers(p);
+        let n = |name: &str| sounds.iter().filter(|(s, _)| s == name).count();
+        let rockets = pictures.iter().filter(|(s, ..)| s == "Rocket").count();
+        (rockets, n("Pop"), n("Chime"))
+    };
+    assert_eq!(count(&first), (1, 1, 1));
+    let out = compile(&first, &inputs(&first, MESSAGE), &calls);
+    let after = &out.proposal.as_ref().expect("the cut").review.after;
+    assert_eq!(count(after), (1, 1, 1));
+}
+
+#[test]
+fn the_persons_logo_never_takes_a_shorts_sticker_slot() {
+    // The person's logo (a wide wordmark, small on the frame, with no pop) a few seconds before a sticker's word: the
+    // sticker still shows.
+    let mut p = project();
+    let logo = asset("logo", "image", "logo.png", 5.0, (1024, 256));
+    let ops = klipolo_model::media::image::add_image_ops(&p, &logo, secs(32.5)).unwrap();
+    p = klipolo_model::apply_ops(&p, &ops).unwrap();
+    let mut calls = base();
+    calls.extend(sticker("Rocket", 70));
+    let out = compile(&p, &inputs(&p, MESSAGE), &calls);
+    let (pictures, _) = layers(&short(&out));
+    let rockets = pictures.iter().filter(|(n, ..)| n == "Rocket").count();
+    assert_eq!(rockets, 1, "{pictures:?}");
+}

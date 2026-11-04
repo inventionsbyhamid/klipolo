@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use klipolo_analysis::providers::{Heard, TrackedBox, TrackedFrame};
 use klipolo_analysis::subject::clips::{
     Speech, camera_voice, clip_path, clip_people, cropped_formats, follow_op, follow_op_keeping,
-    followable_formats, footage, speaker_path, voice_windows,
+    followable_formats, footage, in_inset, inset_op, speaker_path, voice_windows,
 };
 use klipolo_analysis::subject::voices::{SoundBeside, VoiceTurn, turns_beside};
 use klipolo_analysis::subject::{FPS, PERSON, SubjectTrack};
@@ -632,4 +632,52 @@ fn the_follow_op_keeps_who_it_frames_and_the_people() {
         patch.fill_focus.unwrap()[&Portrait],
         FillFocus::Speaker { path, keep, people }
     );
+}
+
+#[test]
+fn a_presenters_corner_inset_alone_is_shown_whole_and_people_in_full_are_not() {
+    let p = project();
+    let clip = &p.timeline.main[0];
+    let range = RangeUs {
+        start: s(30.0),
+        end: s(40.0),
+    };
+    let with = |boxes: Vec<TrackedBox>| SubjectTrack {
+        frames: (0..20)
+            .map(|frame| TrackedFrame {
+                frame,
+                boxes: boxes.clone(),
+            })
+            .collect(),
+        ..track(range, 0.5)
+    };
+    let tracked = |left: f64, top: f64, right: f64, bottom: f64| TrackedBox {
+        id: 1,
+        left,
+        top,
+        right,
+        bottom,
+        confidence: Some(0.9),
+    };
+    let inset = tracked(0.02, 0.77, 0.13, 0.99);
+    let full = tracked(0.4, 0.1, 0.6, 1.0);
+    let own = footage(&p, clip).unwrap();
+    assert!(in_inset(clip, &own, &[with(vec![inset])]));
+    // In full, beside the inset, or a small person in the middle of the picture: followed as ever.
+    assert!(!in_inset(clip, &own, &[with(vec![full])]));
+    assert!(!in_inset(clip, &own, &[with(vec![inset, full])]));
+    assert!(!in_inset(
+        clip,
+        &own,
+        &[with(vec![tracked(0.45, 0.4, 0.55, 0.6)])]
+    ));
+    assert!(!in_inset(clip, &own, &[with(vec![])]));
+    // Shown whole: Fit in the formats Fill crops it, 16:9 as it was.
+    let Some(Op::UpdateClip { patch, .. }) = inset_op(&p, clip, &[Portrait, Square]) else {
+        panic!("no op")
+    };
+    let framing = patch.framing.expect("framing");
+    assert_eq!(framing[&Portrait].mode, FramingMode::Fit);
+    assert_eq!(framing[&Square].mode, FramingMode::Fit);
+    assert!(!framing.contains_key(&Landscape));
 }

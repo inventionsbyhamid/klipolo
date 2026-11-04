@@ -1,7 +1,8 @@
 //! Main clips and the speaker: which file and stretch a clip plays (`footage`), the formats whose Fill crops it
 //! (`cropped_formats`), its path from a tracked stretch (`clip_path`; `speaker_path` keeps whoever speaks in frame, or
 //! who `Keep` names), the windows its voices are matched in (`voice_windows`), its people (`clip_people`) and the op
-//! that makes it follow (`follow_op`, `follow_op_keeping`).
+//! that makes it follow (`follow_op`, `follow_op_keeping`); or, where its only people are a presenter's corner inset
+//! (`in_inset`), the op that shows its footage whole instead (`inset_op`).
 //!
 //! An imported video plays its file in its own time. A camera take (its camera the main footage) plays its camera
 //! run's file: a clip's source time is the take's, its file time the run's own (`SourceRun::local_us`), so its path is
@@ -24,7 +25,7 @@ use klipolo_model::time::{RangeUs, Us};
 use klipolo_model::timeline::{Clip, ClipSource, FramingMode};
 
 use super::SubjectTrack;
-use super::path::{PathInput, focus_path, people_in, shots};
+use super::path::{MIN_CONFIDENCE, PathInput, focus_path, people_in, shots};
 use super::voices::{self, SoundBeside, VoiceTurn, Window};
 use crate::providers::{Heard, TrackedBox, TrackedFrame};
 
@@ -132,6 +133,52 @@ pub fn cropped_formats(p: &Project, clip: &Clip, formats: &[FormatKind]) -> Vec<
         .copied()
         .filter(|f| fill_crop(p, clip, *f).is_some_and(|c| c.w < WHOLE || c.h < WHOLE))
         .collect()
+}
+
+/// A presenter inset (a face camera's box in a corner of a screen lesson) is shorter than this share of the picture.
+pub const INSET_H: f64 = 0.3;
+/// Its middle is within this share of the picture of a side, and of the top or the bottom.
+pub const INSET_EDGE: f64 = 0.25;
+
+/// Whether every person tracked in `clip`'s footage is a presenter inset: each box, on every frame, under `INSET_H` of
+/// the picture's height with its middle within `INSET_EDGE` of a side and of the top or bottom (in what the clip's own
+/// crop keeps). A crop following them would hold the frame at the picture's edge on a small box; the whole picture
+/// shows them and what they present. False with nobody tracked.
+pub fn in_inset(clip: &Clip, footage: &Footage, tracks: &[SubjectTrack]) -> bool {
+    let kept = kept_in_file(clip);
+    let (frames, _) = file_frames(footage, tracks, kept);
+    let mut boxes = (frames.iter())
+        .flat_map(|(_, f)| &f.boxes)
+        .filter(|b| b.confidence.is_none_or(|c| c >= MIN_CONFIDENCE))
+        .peekable();
+    boxes.peek().is_some()
+        && boxes.all(|b| {
+            let h = (b.bottom - b.top) / kept.h;
+            let x = (b.centre_x() - kept.x) / kept.w;
+            let y = ((b.top + b.bottom) / 2.0 - kept.y) / kept.h;
+            let near = |v: f64| !(INSET_EDGE..=1.0 - INSET_EDGE).contains(&v);
+            h < INSET_H && near(x) && near(y)
+        })
+}
+
+/// The op that frames `clip` Fit in each of `formats` whose Fill crops it now, where it is on Fill: a presenter inset's
+/// footage shown whole (`in_inset`). None when there is no such format.
+pub fn inset_op(p: &Project, clip: &Clip, formats: &[FormatKind]) -> Option<Op> {
+    let mut framing = clip.framing.clone();
+    let mut any = false;
+    for format in followable_formats(p, clip, formats) {
+        let mut own = effective_framing(p, clip, format);
+        own.mode = FramingMode::Fit;
+        framing.insert(format, own);
+        any = true;
+    }
+    any.then(|| Op::UpdateClip {
+        id: clip.id.clone(),
+        patch: ClipPatch {
+            framing: Some(framing),
+            ..ClipPatch::default()
+        },
+    })
 }
 
 /// Which of `formats` `clip` may follow its speaker in: where its Fill crops the footage and it is on Fill (its own

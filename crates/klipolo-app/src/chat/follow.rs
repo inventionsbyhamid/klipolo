@@ -6,6 +6,9 @@
 //!   follow then follow in every format whose Fill crops them, as part of the message's additions (one undo step), or
 //!   of its proposal when it has one (they land when the person applies it). The reply says what it cost. The stickers
 //!   chat placed beside the speaker (`Compiled::beside`) are placed again beside the head where the path keeps them.
+//!   Where the only people SAM found in a clip are a presenter's small corner inset (a face camera over a screen
+//!   lesson), that clip shows its footage whole instead, Fit on a blurred background (`Followed::short_ops`), and the
+//!   reply says so.
 //! - **A vertical or square version** of camera footage made without asking to follow: footage tracked before follows
 //!   at no charge; otherwise the reply offers it with its price.
 //!
@@ -28,7 +31,7 @@ use klipolo_model::coded::ErrorParam;
 use klipolo_model::fill_focus::{Keep, KeepRange, MAX_KEEP_RANGES, Who};
 use klipolo_model::ids::Id;
 use klipolo_model::ops::{Op, Origin};
-use klipolo_model::project::FormatKind;
+use klipolo_model::project::{BackgroundKind, FormatKind};
 use klipolo_model::query::{clip_starts, piece_of};
 use klipolo_model::time::{Us, unscaled};
 use klipolo_model::{Project, Transaction};
@@ -218,6 +221,9 @@ pub(super) struct Follows {
     /// A follow was asked for and nothing of it landed (nobody found, the tracking failed, no clip can follow): the
     /// model's words may claim it (`PlanOut::without_follow`).
     pub failed: bool,
+    /// Every clip shows its footage whole for a presenter's corner inset: a sentence of the model's words that still
+    /// says someone is kept in frame goes (`without_framing_claims`).
+    pub differs: bool,
 }
 
 /// Runs `out`'s follow jobs (and the offer for a new vertical or square version) on the project the message leaves
@@ -279,9 +285,11 @@ pub(super) async fn follow_jobs(
                 follows.failed = true;
             }
             Ok(followed) => {
-                let ops = followed.ops(&target);
-                // Where the stickers Klipolo placed beside the speaker go once the path lands with these changes.
-                let followed_target = (!ops.is_empty() && !out.compiled.beside.is_empty())
+                // A clip whose only people are a presenter's corner inset shows its footage whole instead.
+                let ops = followed.short_ops(&target);
+                // Where the stickers Klipolo placed beside the speaker, and the hook, go once the path lands with these
+                // changes.
+                let followed_target = (!ops.is_empty())
                     .then(|| apply_ops(&target, &ops).ok())
                     .flatten();
                 let cost = cost_said(followed.paid_usd);
@@ -306,14 +314,33 @@ pub(super) async fn follow_jobs(
                             &mut tx.ops,
                             &out.compiled.beside,
                         );
+                        // A clip shown whole for its inset: the hook goes up above the picture.
+                        klipolo_chat::place_hook_again(followed_target, &mut tx.ops);
                     }
                     let when = if out.compiled.proposal.is_some() {
                         "once you apply this"
                     } else {
                         "now"
                     };
-                    let kept = kept_in_frame(&target, &formats, &who_kept(&phrase, &followed));
-                    follows.said.push(format!("{kept} {when}. {cost}"));
+                    let insets = (followed.paths.iter())
+                        .filter(|(id, _)| followed.inset(id))
+                        .count();
+                    let whole = shown_whole(&target, &formats);
+                    follows.differs = insets == followed.paths.len();
+                    let said = if follows.differs {
+                        format!(
+                            "{TRACKER} found only a small corner inset, so {whole} {when}. {cost}"
+                        )
+                    } else {
+                        let kept = kept_in_frame(&target, &formats, &who_kept(&phrase, &followed));
+                        let also = if insets > 0 {
+                            format!(" Where {TRACKER} found only a small corner inset, {whole}.")
+                        } else {
+                            String::new()
+                        };
+                        format!("{kept} {when}.{also} {cost}")
+                    };
+                    follows.said.push(said);
                     follows.note = format!(
                         "Followed {phrase} ({when}), for {}.",
                         dollars(followed.paid_usd)
@@ -617,6 +644,61 @@ fn attach(out: &mut PlanOut, work: &Project, ops: Vec<Op>, phrase: &str) -> bool
 pub fn kept_in_frame(p: &Project, formats: &[FormatKind], who: &str) -> String {
     let (which, keep) = versions(p, formats);
     format!("The {which} {keep} the {who} in frame")
+}
+
+/// Words that say how a crop frames someone ("keeps her in frame", "the camera follows him"): a sentence of the model's
+/// with one is left out where every clip shows its footage whole instead.
+const FRAMING_WORDS: [&str; 7] = [
+    "in frame",
+    "in the frame",
+    "in view",
+    "framed",
+    "centred",
+    "centered",
+    "follow",
+];
+
+/// `reply` without its sentences that say how someone is framed (`FRAMING_WORDS`); the others as they were.
+pub(super) fn without_framing_claims(reply: &str) -> String {
+    let mut kept: Vec<&str> = Vec::new();
+    let mut start = 0;
+    let bytes = reply.as_bytes();
+    for (i, c) in reply.char_indices() {
+        let ends = matches!(c, '.' | '!' | '?')
+            && bytes.get(i + 1).is_none_or(|b| b.is_ascii_whitespace());
+        if ends {
+            kept.push(&reply[start..=i]);
+            start = i + 1;
+        }
+    }
+    if start < reply.len() {
+        kept.push(&reply[start..]);
+    }
+    kept.into_iter()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .filter(|s| {
+            let lower = s.to_lowercase();
+            !FRAMING_WORDS.iter().any(|w| lower.contains(w))
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The tracker chat's follows use, as the reply names it.
+const TRACKER: &str = "SAM 3.1";
+
+/// What a follow did where the only person it found is a presenter's corner inset (`Followed::short_ops`): "the
+/// vertical version shows the whole picture on a blurred background". The background is named only where it is
+/// blurred.
+fn shown_whole(p: &Project, formats: &[FormatKind]) -> String {
+    let (which, keep) = versions(p, formats);
+    let show = if keep == "keeps" { "shows" } else { "show" };
+    let behind = match p.background.kind {
+        BackgroundKind::None | BackgroundKind::Blur => " on a blurred background",
+        _ => "",
+    };
+    format!("the {which} {show} the whole picture{behind}")
 }
 
 /// "Tracking cost $0.02.", or that it cost nothing.
