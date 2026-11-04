@@ -200,6 +200,8 @@ ul[role="list"], ol[role="list"] { list-style: none; padding: 0; }
 .sound__off { transition: opacity .2s; }
 .sound__state { min-width: 1.6em; }
 .sound:focus-visible { outline-offset: 3px; border-radius: 999px; }
+/* Until the script shows it, the switch keeps its place unseen, so the header never shifts. */
+.sound[hidden] { display: inline-flex !important; visibility: hidden; }
 
 /* A quiet button. */
 .pill {
