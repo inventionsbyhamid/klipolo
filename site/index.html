@@ -16,7 +16,7 @@
 <link rel="manifest" href="/site.webmanifest">
 <link rel="preload" href="/assets/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/styles.css">
-<script type="module" src="/assets/site.js?v=6"></script>
+<script type="module" src="/assets/site.js?v=7"></script>
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Klipolo">
 <meta property="og:title" content="Klipolo, the Mac video editor you talk to">
@@ -66,48 +66,42 @@
     <p class="hero__note">Free while in beta. macOS 15 or later. Windows and Linux coming soon.</p>
   </div>
 
-  <div class="hero__demo">
-    <div class="take" data-take aria-hidden="true">
-      <div class="take__clip">
-        <div class="take__meta"><span class="take__rule" data-rule></span><span class="take__time" data-time>1:12</span></div>
-        <p class="take__words" data-words><span class="w">Okay,</span> <span class="w">so,</span> <span class="w f">um,</span> <span class="w">this</span> <span class="w">is</span> <span class="w">how</span> <span class="w">I</span> <span class="w">plan</span> <span class="w">a</span> <span class="w">whole</span> <span class="w">week</span> <span class="w">of</span> <span class="w">videos.</span> <span class="w g">8s</span> <span class="w">I</span> <span class="w">write</span> <span class="w">the</span> <span class="w">hooks</span> <span class="w">first,</span> <span class="w f">like,</span> <span class="w">before</span> <span class="w">I</span> <span class="w">film</span> <span class="w">anything.</span> <span class="w">And</span> <span class="w f">uh,</span> <span class="w">the</span> <span class="w">rest</span> <span class="w">gets</span> <span class="w">easy,</span> <span class="w f">you know,</span> <span class="w">because</span> <span class="w">I</span> <span class="w">know</span> <span class="w">where</span> <span class="w">it’s</span> <span class="w">going.</span> <span class="w g">9s</span> <span class="w k">I</span> <span class="w k">wish</span> <span class="w k">I</span> <span class="w k">knew</span> <span class="w k">this</span> <span class="w k">sooner.</span> <span class="w g">7s</span> <span class="w k">So,</span> <span class="w f k">um,</span> <span class="w k">anyway.</span> <span class="w g">8s</span> <span class="w">And</span> <span class="w">honestly,</span> <span class="w f">like,</span> <span class="w">try</span> <span class="w">it</span> <span class="w">once</span> <span class="w">and</span> <span class="w">you’ll</span> <span class="w">see.</span></p>
-        <span class="take__under" data-under></span>
-      </div>
-      <p class="cmd"><span class="cmd__text" data-cmd></span><span class="caret"></span></p>
-      <div class="take__after">
-        <div class="take__meta"><span class="take__rule take__rule--short"></span><span class="take__time">0:28</span></div>
-        <p class="take__words">Okay, so, this is how I plan a whole week of videos. I write the hooks first, before I film anything. And the rest gets easy, because I know where it’s going. And honestly, try it once and you’ll see.</p>
-      </div>
+  <!--
+    THE DEMO FILM
+    The files live under /media/, outside git: klipolo-teaser.mp4 (the muted loop), klipolo-teaser-720.mp4 (the loop
+    for phones) and klipolo-demo.mp4 (the film).
+    A new cut of any of them is a file replacement under the same name; nothing here changes.
+    The loop's first frame is a plain image under it, so the first paint never waits for a video.
+    With scripting on, site.js puts the two videos in once the page has loaded and the stage is near.
+  -->
+  <section class="film hero__film" id="demo" aria-labelledby="film-title">
+    <h2 class="sr-only" id="film-title">The demo</h2>
+    <div class="film__stage" data-film>
+      <picture class="film__poster">
+        <source type="image/avif" sizes="(min-width: 1316px) 716px, (min-width: 1100px) 54.5vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/demo-teaser-640.avif 640w, /assets/img/demo-teaser-960.avif 960w, /assets/img/demo-teaser-1280.avif 1280w, /assets/img/demo-teaser-1920.avif 1920w">
+        <source type="image/webp" sizes="(min-width: 1316px) 716px, (min-width: 1100px) 54.5vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/demo-teaser-640.webp 640w, /assets/img/demo-teaser-960.webp 960w, /assets/img/demo-teaser-1280.webp 1280w, /assets/img/demo-teaser-1920.webp 1920w">
+        <img src="/assets/img/demo-teaser-960.jpg" sizes="(min-width: 1316px) 716px, (min-width: 1100px) 54.5vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/demo-teaser-640.jpg 640w, /assets/img/demo-teaser-960.jpg 960w, /assets/img/demo-teaser-1280.jpg 1280w, /assets/img/demo-teaser-1920.jpg 1920w" width="1920" height="1080" fetchpriority="high" decoding="async" alt="">
+      </picture>
+      <noscript data-later>
+        <video class="film__teaser" data-teaser muted loop playsinline disablepictureinpicture disableremoteplayback preload="metadata" width="1920" height="1080" aria-hidden="true" tabindex="-1">
+          <source src="/media/klipolo-teaser-720.mp4" type="video/mp4" media="(max-width: 959px)">
+          <source src="/media/klipolo-teaser.mp4" type="video/mp4">
+        </video>
+        <video class="film__full" data-full controls playsinline preload="none" width="1920" height="1080" poster="/assets/img/demo-poster.webp" aria-label="The Klipolo demo">
+          <source src="/media/klipolo-demo.mp4" type="video/mp4">
+          <a href="/media/klipolo-demo.mp4">Watch the demo</a>
+        </video>
+      </noscript>
+      <button class="film__play" type="button" data-play hidden><svg class="film__icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M6.5 4.2v11.6a.8.8 0 0 0 1.2.7l9.2-5.8a.8.8 0 0 0 0-1.4L7.7 3.5a.8.8 0 0 0-1.2.7z"/></svg>Watch the demo</button>
     </div>
-    <p class="sr-only">A short demo plays here. It shows the transcript of a one minute, twelve second video. Typed requests edit it. “Cut the ums” removes the filler words. “Remove the long pauses” closes the silences. “Make it 30 seconds” drops the two weakest sentences. “Add captions” lights the words up as they are spoken. The video ends at 28 seconds: Okay, so, this is how I plan a whole week of videos. I write the hooks first, before I film anything. And the rest gets easy, because I know where it’s going. And honestly, try it once and you’ll see.</p>
-    <button class="demo-toggle" type="button" data-demo-toggle hidden>Pause the demo</button>
-  </div>
-</section>
-
-<!--
-  THE DEMO FILM
-  The files live under /media/, outside git: klipolo-teaser.mp4 (muted loop) and klipolo-demo.mp4 (the film).
-  A new cut of either is a file replacement under the same name; nothing here changes.
-  With scripting on, site.js puts the two videos in once the page has loaded and the stage is near.
--->
-<section class="film" id="demo" aria-labelledby="film-title">
-  <h2 class="sr-only" id="film-title">The demo</h2>
-  <div class="film__stage" data-film>
-    <noscript data-later>
-      <video class="film__teaser" data-teaser muted loop playsinline disablepictureinpicture disableremoteplayback preload="metadata" width="1920" height="1080" poster="/assets/img/demo-teaser-poster.webp" aria-hidden="true" tabindex="-1">
-        <source src="/media/klipolo-teaser.mp4" type="video/mp4">
-      </video>
-      <video class="film__full" data-full controls playsinline preload="none" width="1920" height="1080" poster="/assets/img/demo-poster.webp" aria-label="The Klipolo demo">
-        <source src="/media/klipolo-demo.mp4" type="video/mp4">
-        <a href="/media/klipolo-demo.mp4">Watch the demo</a>
-      </video>
-    </noscript>
-    <button class="film__play" type="button" data-play hidden><svg class="film__icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M6.5 4.2v11.6a.8.8 0 0 0 1.2.7l9.2-5.8a.8.8 0 0 0 0-1.4L7.7 3.5a.8.8 0 0 0-1.2.7z"/></svg>Watch the demo</button>
-  </div>
-  <div class="film__foot">
-    <p class="film__credit">The lesson in the demo: <a class="text-link" href="https://www.youtube.com/watch?v=HIrLEGU7Fg8">Principles of Natural Selection</a> by Nathan Barten, <a class="text-link" href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>. He does not endorse Klipolo.</p>
-    <button class="film__loop" type="button" data-loop hidden>Pause the preview</button>
-  </div>
+    <div class="film__foot">
+      <p class="film__credit">The lesson in the demo: <a class="text-link" href="https://www.youtube.com/watch?v=HIrLEGU7Fg8">Principles of Natural Selection</a> by Nathan Barten, <a class="text-link" href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>. He does not endorse Klipolo.</p>
+      <p class="film__actions">
+        <a class="film__yt" href="https://youtu.be/JAT5tXGfvbs" target="_blank" rel="noopener">Watch on YouTube<span class="sr-only">, opens in a new tab</span></a>
+        <button class="film__loop" type="button" data-loop hidden>Pause the preview</button>
+      </p>
+    </div>
+  </section>
 </section>
 
 <section class="editor" aria-labelledby="editor-title">
