@@ -298,6 +298,10 @@ show what the runtime alone, and two open source Electron media apps, weigh.
 | Kap 3.6.0, an open source Electron screen recorder for macOS | 122.7 MB disk image (Intel), 124.7 MB (Apple Silicon) | [Kap v3.6.0 release](https://github.com/wulkano/Kap/releases/tag/v3.6.0) |
 | Tauri's own benchmark, a hello world app on Linux CI | Electron: 166.5 MB binary, 476 MB peak memory (September 2023, the last Electron run). Tauri: 3.0 MB binary, 358 MB peak memory (Nov 2026) | [Tauri's benchmark results](https://github.com/tauri-apps/benchmark_results) and their [data files](https://github.com/tauri-apps/benchmark_results/tree/gh-pages) |
 
+MB here is 1,000,000 bytes, as the Mac's Finder counts, from the exact sizes in GitHub's release API. GitHub's
+release pages count 1,048,576 bytes to the MB, so they show the same files as 119 MB and 115 MB (Electron), 170 MB
+and 158 MB (LosslessCut), and 117 MB and 119 MB (Kap). In those units Klipolo's Intel disk image is 44.6 MB.
+
 What this says, plainly: the download is where a Rust core wins most clearly. Klipolo's Intel disk image, FFmpeg
 and its sound pack included, is 46.8 MB: under 40% of the Electron runtime's own 125.0 MB download for the same Mac,
 and about a quarter of LosslessCut's. Memory is closer: a web view costs memory either way, which is why Klipolo
