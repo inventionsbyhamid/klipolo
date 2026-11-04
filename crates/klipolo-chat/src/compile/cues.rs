@@ -10,7 +10,8 @@
 //!   drawn stickers (`makeSticker`), unless the model gave a place where the person said one. Each shows from `LEAD_US` before its word, for `HOLD_US`, ending before its
 //!   part does (one that can't show `MIN_HOLD_US` there is left out), popping in and fading out. In the short's time,
 //!   in call order (a later round never takes out one an earlier was told is in): none while the hook shows, none in
-//!   its last `END_CLEAR_US`, at least `STICKER_GAP_US` between two, and at most one per `STICKERS_PER_US` of it. One
+//!   its last `END_CLEAR_US`, at least `STICKER_GAP_US` between two, and at most one per `STICKERS_PER_US` of it,
+//!   counting the sticker-sized pictures the short shows already (a rerun's earlier stickers never get a twin). One
 //!   the person named stays where its word is. Where each goes is `clear::beside_speaker`'s, alternating sides when
 //!   both have the same room. An `animate` of one is Klipolo's already.
 //! - **Sounds** follow what is seen, once the answer has any sound effect (an `addSound`, or an `animate` with a
@@ -29,7 +30,7 @@ use std::collections::HashMap;
 use klipolo_model::project::{Asset, AssetKind};
 use klipolo_model::query::{clip_at, clip_starts, main_track_duration};
 use klipolo_model::time::{RangeUs, Us, kept_parts};
-use klipolo_model::timeline::ClipSource;
+use klipolo_model::timeline::{ClipSource, ItemContent};
 
 use super::Compiler;
 use super::clear::Side;
@@ -468,6 +469,18 @@ impl Cues {
         self.parts.iter().map(RangeUs::len).sum()
     }
 
+    /// Where the short shows the sticker-sized pictures the project has already (less than half the frame each way),
+    /// in the short's time.
+    fn stickers_there(&self, c: &Compiler) -> Vec<Us> {
+        (c.snapshot.timeline.tracks.iter())
+            .flat_map(|t| &t.items)
+            .filter(|i| matches!(i.content, ItemContent::Image { .. }))
+            .filter(|i| i.layout.rect.w < 0.5 && i.layout.rect.h < 0.5)
+            .filter(|i| self.part_of(i.start_us).is_some())
+            .map(|i| self.short_time(i.start_us))
+            .collect()
+    }
+
     /// The kept part `t` is in.
     fn part_of(&self, t: Us) -> Option<RangeUs> {
         self.parts
@@ -590,7 +603,9 @@ impl Cues {
         let length = self.length();
         let most = (length / STICKERS_PER_US).max(1) as usize;
         let hook_end = self.hook_span().map_or(0, |h| h.end);
-        let mut kept: Vec<Us> = Vec::new();
+        // The stickers the short shows already (an earlier answer's, its cut never applied, included) count: a rerun
+        // never stacks one on another.
+        let mut kept: Vec<Us> = self.stickers_there(c);
         let mut side = Side::Right;
         for (i, start, duration, asked) in found {
             let at = self.short_time(start);

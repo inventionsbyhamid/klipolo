@@ -7,7 +7,9 @@
 //!   volume with no fades, attached to the clip under it, cut where the video ends); where each quote is said (the
 //!   times given beside quotes only pick among places), else at each time; two moments within
 //!   `evidence::TOLERANCE_US` of each other are one sound, at the first, and none goes on top of the same sound there
-//!   already from this answer (`sound_near`: a sticker's `animate` sound on the same word).
+//!   already from this answer (`sound_near`: a sticker's `animate` sound on the same word). A short's own sounds (its
+//!   stickers' pops, its payoff chime) never go where the project plays one of their file or kind already
+//!   (`kind_there`), so a rerun of the short never doubles them.
 //! - `addText`: the person's own words (`persons_words`; words of the model's own are refused back, for it to ask), or
 //!   another app's as it gave them (`apps_words`), in one of the four text presets, placed by the model's
 //!   `media::text::add_text_ops` exactly as the canvas's Add title and the library's presets place it: each format's
@@ -1138,12 +1140,34 @@ pub(super) fn cued_sticker(
     .or_else(|| cues.and_then(|q| q.pop.as_ref()));
     if let Some(sound) = sound
         && let Ok(with) = apply_ops(work, &ops)
-        && !sound_near(c, &with, &sound.id, at)
+        && !kind_there(c, &with, &sound.id, at)
         && let Ok(more) = add_sound_ops(&with, sound, at)
     {
         ops.extend(more);
     }
     Ok(Edit { ops, label })
+}
+
+/// Whether `work` plays the sound file `asset_id`, or one of its kind (`cues::sound_kind`, by the library: a pop, a
+/// chime), within `TOLERANCE_US` of `at`, from this answer or before it: a short's own sound there again (a rerun of
+/// the short) would play two at once.
+fn kind_there(c: &Compiler, work: &Project, asset_id: &str, at: Us) -> bool {
+    let kind_of = |id: &str| {
+        (c.inputs.library.items.iter())
+            .find(|l| l.asset.id == id)
+            .map(cues::sound_kind)
+            .filter(|k| *k != cues::Kind::Other)
+    };
+    let kind = kind_of(asset_id);
+    (work.timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .any(|i| match &i.content {
+            ItemContent::Audio { asset_id: a, .. } => {
+                i.start_us.abs_diff(at) <= TOLERANCE_US.unsigned_abs()
+                    && (a == asset_id || (kind.is_some() && kind_of(a) == kind))
+            }
+            _ => false,
+        })
 }
 
 /// A short's sound effect `name` at Klipolo's moments (`cues::Cue`, on the snapshot's timeline), as `addSound` places
@@ -1162,7 +1186,7 @@ pub(super) fn cued_sound(
         };
         if video_duration(&work.timeline).saturating_sub(now) >= MIN_DURATION_US
             && !starts.contains(&now)
-            && !sound_near(c, work, &item.asset.id, now)
+            && !kind_there(c, work, &item.asset.id, now)
         {
             starts.push(now);
         }

@@ -1481,3 +1481,24 @@ fn a_second_hook_is_never_drawn_over_the_first() {
     let after = &out.proposal.as_ref().expect("the cut").review.after;
     assert_eq!(hooks(after).len(), 1);
 }
+
+#[test]
+fn a_rerun_short_never_doubles_a_sticker_its_pop_or_the_payoff_chime() {
+    // The same message again on the project the first answer's changes went into (its cut never applied): its
+    // Rocket, Rocket's pop and the payoff chime are there, so this answer adds none of them again.
+    let p = project();
+    let mut calls = base();
+    calls.extend(sticker("Rocket", 70));
+    calls.push(sound("Chime", 130));
+    let first = added(&p, &compile(&p, &inputs(&p, MESSAGE), &calls));
+    let count = |p: &Project| {
+        let (pictures, sounds) = layers(p);
+        let n = |name: &str| sounds.iter().filter(|(s, _)| s == name).count();
+        let rockets = pictures.iter().filter(|(s, ..)| s == "Rocket").count();
+        (rockets, n("Pop"), n("Chime"))
+    };
+    assert_eq!(count(&first), (1, 1, 1));
+    let out = compile(&first, &inputs(&first, MESSAGE), &calls);
+    let after = &out.proposal.as_ref().expect("the cut").review.after;
+    assert_eq!(count(after), (1, 1, 1));
+}
