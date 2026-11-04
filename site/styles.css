@@ -498,6 +498,110 @@ ul[role="list"], ol[role="list"] { list-style: none; padding: 0; }
   .demo-toggle { position: static; display: block; margin: 2px 0 0 auto; }
 }
 
+/* ---------- the demo film: a muted loop in view, the whole film with sound on a click ---------- */
+
+/* The section is the size container: 100cqw is the stage's width, so its shadow scales like the editor window's. */
+.film {
+  container-type: inline-size;
+  padding-block: 0 clamp(24px, 4vh, 48px);
+  display: grid;
+  gap: 14px;
+}
+/* The stage keeps 16:9 before its videos go in, so nothing below it moves. */
+.film__stage {
+  position: relative;
+  display: grid;
+  aspect-ratio: 16 / 9;
+  border-radius: clamp(8px, 1.1vw, 14px);
+  overflow: hidden;
+  background: #141518;
+  box-shadow:
+    0 0 0 .5px rgb(0 0 0 / .5),
+    0 1px 2px rgb(23 24 26 / .12),
+    0 1.2cqw 3cqw -1cqw rgb(23 24 26 / .32),
+    0 3.6cqw 8cqw -2cqw rgb(23 24 26 / .34);
+}
+@media (prefers-color-scheme: dark) {
+  .film__stage { box-shadow: 0 0 0 1px rgb(255 255 255 / .16); }
+}
+.film__stage video {
+  grid-area: 1 / 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  background: #000;
+}
+.film__teaser { object-fit: cover; cursor: pointer; }
+.film__full { object-fit: contain; }
+/* Without scripting the film shows with its own controls; with it, the loop shows until the film is asked for. */
+.film__stage .film__teaser,
+.js .film__stage .film__full { display: none; }
+.js .film__stage .film__teaser { display: block; }
+.js .film__stage.is-film .film__teaser { display: none; }
+.js .film__stage.is-film .film__full { display: block; }
+
+/* Over the picture, in the corner the loop's own words keep clear of, and light in both themes. */
+.film__play {
+  --play: #e0301a;
+  position: absolute;
+  right: clamp(10px, 2.4%, 28px);
+  bottom: clamp(10px, 4%, 28px);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 22px 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: #f2f3f1;
+  color: #17181a;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / .08), 0 1px 2px rgb(0 0 0 / .24), 0 10px 28px -10px rgb(0 0 0 / .55);
+  transition: background-color .2s, transform .15s var(--ease-out);
+}
+.film__play:hover { background: #fff; }
+.film__play:active { transform: scale(.97); }
+.film__play:focus-visible { outline: 2px solid var(--play); outline-offset: 3px; border-radius: 999px; }
+.film__icon { width: 18px; height: 18px; flex: none; fill: var(--play); }
+@media (max-width: 479px) {
+  .film__play { min-height: 44px; padding: 0 18px 0 13px; font-size: .9375rem; }
+}
+
+.film__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 24px;
+}
+.film__credit {
+  font-size: var(--t-small);
+  line-height: 1.5;
+  color: var(--quiet);
+  max-width: 90ch;
+}
+.film__loop {
+  min-height: 40px;
+  margin-left: auto;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--quiet);
+  font-size: var(--t-small);
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: .25em;
+}
+.film__loop:hover { color: var(--ink); text-decoration-color: currentColor; }
+
 /* ---------- the editor: the real window, framed the way macOS frames it ---------- */
 
 .editor {

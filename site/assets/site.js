@@ -571,3 +571,88 @@ function takeDemo(take) {
 
 const take = d.querySelector('[data-take]');
 if (take) takeDemo(take);
+
+/* -- the demo film --
+   Its two videos go in once the page has loaded and the stage is near, so they never compete with the first
+   paint. The muted loop plays only while half of it shows and the tab is visible, and only for a visitor who
+   hasn't asked for reduced motion or less data; it can be paused. "Watch the demo" plays the whole film, with
+   sound and controls, in the same place. */
+
+const unwrap = (el) => {
+  for (const n of el.querySelectorAll('noscript[data-later]')) {
+    n.insertAdjacentHTML('beforebegin', n.textContent);
+    n.remove();
+  }
+};
+
+function film(stage) {
+  const play = stage.querySelector('[data-play]');
+  const loop = d.querySelector('[data-loop]');
+  const thrifty = Boolean(navigator.connection && navigator.connection.saveData);
+  let teaser = null;
+  let full = null;
+  let choice = null; // the visitor's own Pause or Play for the loop; until then reduced motion and data saving decide
+  let shown = false; // half of the stage is on screen
+  let started = false; // the film was asked for
+
+  const wanted = () => (choice === null ? !still && !thrifty : choice);
+  const label = () => { if (loop) loop.textContent = wanted() ? 'Pause the preview' : 'Play the preview'; };
+  const sync = () => {
+    if (!teaser || started) return;
+    if (wanted() && shown && !d.hidden) {
+      if (teaser.paused) teaser.play()?.catch(() => {}); // refused (a phone's low power mode): the poster stays
+    } else if (!teaser.paused) teaser.pause();
+  };
+  const mount = () => {
+    if (teaser) return;
+    unwrap(stage);
+    teaser = stage.querySelector('[data-teaser]');
+    full = stage.querySelector('[data-full]');
+    teaser.muted = true;
+    teaser.addEventListener('click', start);
+    sync();
+  };
+  function start() {
+    mount();
+    started = true;
+    teaser.pause();
+    stage.classList.add('is-film');
+    play.hidden = true;
+    if (loop) loop.hidden = true;
+    full.tabIndex = 0;
+    full.focus({ preventScroll: true });
+    full.play()?.catch(() => {}); // if refused, the film's own controls are there to press
+  }
+
+  play.hidden = false;
+  play.addEventListener('click', start);
+  if (loop) {
+    label();
+    loop.hidden = false;
+    loop.addEventListener('click', () => { choice = !wanted(); label(); sync(); });
+  }
+  reduce.addEventListener?.('change', () => { label(); sync(); });
+  d.addEventListener('visibilitychange', sync);
+
+  if (!('IntersectionObserver' in window)) {
+    shown = true;
+    mount();
+    return;
+  }
+  new IntersectionObserver((es) => {
+    for (const e of es) shown = e.isIntersecting && e.intersectionRatio >= 0.5;
+    sync();
+  }, { threshold: [0, 0.5, 1] }).observe(stage);
+  const near = new IntersectionObserver((es) => {
+    if (!es.some((e) => e.isIntersecting)) return;
+    near.disconnect();
+    mount();
+  }, { rootMargin: '100% 0px' });
+  const idle = (fn) => (window.requestIdleCallback ? requestIdleCallback(fn, { timeout: 2000 }) : setTimeout(fn, 200));
+  const ready = () => idle(() => near.observe(stage));
+  if (d.readyState === 'complete') ready();
+  else addEventListener('load', ready, { once: true });
+}
+
+const stage = d.querySelector('[data-film]');
+if (stage) film(stage);

@@ -85,15 +85,30 @@
 </section>
 
 <!--
-  SLOT: THE 60 SECOND TEASER
-  The music-led teaser goes here when it is made. Keep it a click to play, with sound only after that click,
-  and a poster frame with width and height set. For example:
-  <section class="teaser" aria-label="Klipolo in 60 seconds">
-    <video controls preload="none" playsinline width="1920" height="1080" poster="/assets/img/teaser-poster.jpg">
-      <source src="/assets/video/teaser.mp4" type="video/mp4">
-    </video>
-  </section>
+  THE DEMO FILM
+  The files live under /media/, outside git: klipolo-teaser.mp4 (muted loop) and klipolo-demo.mp4 (the film).
+  A new cut of either is a file replacement under the same name; nothing here changes.
+  With scripting on, site.js puts the two videos in once the page has loaded and the stage is near.
 -->
+<section class="film" id="demo" aria-labelledby="film-title">
+  <h2 class="sr-only" id="film-title">The demo</h2>
+  <div class="film__stage" data-film>
+    <noscript data-later>
+      <video class="film__teaser" data-teaser muted loop playsinline disablepictureinpicture disableremoteplayback preload="metadata" width="1920" height="1080" poster="/assets/img/demo-teaser-poster.webp" aria-hidden="true" tabindex="-1">
+        <source src="/media/klipolo-teaser.mp4" type="video/mp4">
+      </video>
+      <video class="film__full" data-full controls playsinline preload="none" width="1920" height="1080" poster="/assets/img/demo-poster.webp" aria-label="The Klipolo demo">
+        <source src="/media/klipolo-demo.mp4" type="video/mp4">
+        <a href="/media/klipolo-demo.mp4">Watch the demo</a>
+      </video>
+    </noscript>
+    <button class="film__play" type="button" data-play hidden><svg class="film__icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M6.5 4.2v11.6a.8.8 0 0 0 1.2.7l9.2-5.8a.8.8 0 0 0 0-1.4L7.7 3.5a.8.8 0 0 0-1.2.7z"/></svg>Watch the demo</button>
+  </div>
+  <div class="film__foot">
+    <p class="film__credit">The lesson in the demo: <a class="text-link" href="https://www.youtube.com/watch?v=HIrLEGU7Fg8">Principles of Natural Selection</a> by Nathan Barten, <a class="text-link" href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>. He does not endorse Klipolo.</p>
+    <button class="film__loop" type="button" data-loop hidden>Pause the preview</button>
+  </div>
+</section>
 
 <section class="editor" aria-labelledby="editor-title">
   <h2 class="say" id="editor-title">Here’s the editor.</h2>
