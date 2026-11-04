@@ -6,6 +6,9 @@
 # built (the AGPL's source offer for this version), and check-bundle.sh fails a bundle whose NOTICE.txt still has the
 # {{SOURCE_URL}} or {{SOURCE_COMMIT}} placeholder. That commit must be pushed there, tagged v<version>, before the disk
 # image is shared.
+# KLIPOLO_TRIAL_CODE, when set, is the relay access code built into the app as its free credit (read at compile time:
+# klipolo-app's credentials::built_in_trial_code), so AI works with no key or code to type; unset or empty builds none.
+# The script says which ("trial credit: built in" or "none") and never prints the code.
 # 1. Checks: the source code address, a clean checkout (a release builds a commit), 8 GB free, rustup's cargo with the
 #    target installed, and the LGPL FFmpeg prefix for the arch in .build/ffmpeg-9.0 (scripts/link-ffmpeg.sh), checked
 #    by scripts/verify-ffmpeg-prefix.sh: exactly the prefix that ships.
@@ -105,6 +108,14 @@ config="{\"version\":\"$version\",\"bundle\":{\"macOS\":{\"signingIdentity\":\"-
 config+="\"frameworks\":[$frameworks]},\"resources\":{\"../../.build/release/$arch/licenses/\":\"licenses/\"}}}"
 export FFMPEG_DIR=$prefix KLIPOLO_FFMPEG_PREFIX=$prefix PKG_CONFIG_LIBDIR=$prefix/lib/pkgconfig PKG_CONFIG_PATH=
 export PKG_CONFIG_ALLOW_CROSS=1 MACOSX_DEPLOYMENT_TARGET=15.0 CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-4}
+# Passed through to cargo (rustc reads it for option_env!, and rebuilds the app when it changes); never printed.
+if [ -n "$(printf '%s' "${KLIPOLO_TRIAL_CODE:-}" | tr -d '[:space:]')" ]; then
+  export KLIPOLO_TRIAL_CODE
+  echo "trial credit: built in"
+else
+  export KLIPOLO_TRIAL_CODE=
+  echo "trial credit: none"
+fi
 home=$(cd ~ && pwd -P)
 cargo_home=$(cd "${CARGO_HOME:-$home/.cargo}" && pwd -P)
 # rustc applies the last matching prefix: the repository (under the home folder) maps to ".", the rest of it to "~".
