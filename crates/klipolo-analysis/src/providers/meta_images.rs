@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use futures::future::{self, Either};
-use klipolo_meta::{GeneratedImage, ImageEffort, MetaError};
+use klipolo_meta::{GeneratedImage, ImageEffort, MetaClient, MetaError};
 
 use super::BoxFuture;
 use super::images::{ImageError, ImageErrorKind, ImageMaker, ImageSize, MadeImage};
@@ -142,7 +142,7 @@ impl MetaImages {
                     )))
                 }
                 Ok(Err(e)) if e.is_busy() => Err(e),
-                Ok(Err(e)) => Ok(Err(image_error(&e, client.is_relay()))),
+                Ok(Err(e)) => Ok(Err(image_error(&e, client))),
                 Ok(Ok(images)) => Ok(Ok(images)),
             }
         }));
@@ -167,9 +167,14 @@ fn made(image: GeneratedImage) -> MadeImage {
     }
 }
 
-/// A final Meta client error as one plain sentence about Muse Image; its `Display` (already redacted) for logs.
-fn image_error(e: &MetaError, relay: bool) -> ImageError {
+/// A final Meta client error from `client` as one plain sentence about Muse Image; its `Display` (already redacted) for
+/// logs. A used-up credit the client was told how to say (`MetaClient::with_used_up_message`) says that.
+fn image_error(e: &MetaError, client: &MetaClient) -> ImageError {
+    let relay = client.is_relay();
     let (kind, message) = match e {
+        MetaError::Budget { message } if client.used_up_message() == Some(message.as_str()) => {
+            (ImageErrorKind::OutOfCredit, message.as_str())
+        }
         MetaError::Budget { .. } if relay => (ImageErrorKind::OutOfCredit, RELAY_OUT_OF_CREDIT),
         MetaError::Budget { .. } => (ImageErrorKind::OutOfCredit, KEY_OUT_OF_CREDIT),
         // Meta's own rate limit or a moment it's overloaded: the person can try again soon.
