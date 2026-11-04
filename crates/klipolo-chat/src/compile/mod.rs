@@ -117,6 +117,11 @@ pub const UNDO_AFTER_CHANGES: &str = "undo: not done. Undo takes back the person
      and this message has changes of its own: they would all be lost. To take back something the person names (an \
      earlier change, or one of this message's), remove it or change it back with its own tool (setLayer remove for a \
      layer); else leave it as it is.";
+/// What the model is told of `followSubject`: the follow runs once the answer is made, and Klipolo then decides how the
+/// cropped versions frame the footage, and says so; the model's words never describe it.
+pub const FOLLOW_STARTED: &str = "started: SAM 3.1 tracks it once your answer is made, then Klipolo decides how the \
+     vertical and square versions frame it (following the person, or showing the whole picture where they are only a \
+     small corner inset) and says which. Don't describe how anyone is framed.";
 /// What the person is told of the changes asked for after an undo in the same message: they were made on the project
 /// before it, so they wait for the person's next message.
 pub const UNDO_FIRST: &str = "I undid your last change first. Send the rest again and I'll do it.";
@@ -811,6 +816,7 @@ impl Compiler<'_> {
                 ToolCall::FollowSubject { description, focus } => {
                     let (description, focus) = (description.clone(), focus.clone());
                     jobs.push((i, Job::Follow { description, focus }));
+                    told.push((i, FOLLOW_STARTED.to_owned()));
                     continue;
                 }
                 ToolCall::BlurObjects { description } => {
