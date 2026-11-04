@@ -490,6 +490,10 @@ docs/images/       The screenshots in this README
 site/              klipolo.com (static, hand written, no build step)
 ```
 
+## Known limits
+
+- The Apple Silicon version is built and notarized on an Intel Mac, and most testing ran on Intel Macs.
+
 ## What's next
 
 - **A plugin system.** Looks, motion presets, audio effects, visual effects, generators and transitions already have
