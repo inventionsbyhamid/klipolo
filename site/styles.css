@@ -490,6 +490,8 @@ ul[role="list"], ol[role="list"] { list-style: none; padding: 0; }
 }
 .film__yt:hover,
 .film__loop:hover { color: var(--ink); text-decoration-color: currentColor; }
+/* Hidden, the switch keeps its place unseen, so the credit beside it never reflows. */
+.film__loop[hidden] { display: inline-flex !important; visibility: hidden; }
 
 /* ---------- the editor: the real window, framed the way macOS frames it ---------- */
 
