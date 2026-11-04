@@ -2184,3 +2184,35 @@ fn a_refused_call_is_named_never_said_as_part_of_this() {
         out.reply
     );
 }
+
+#[test]
+fn a_shorts_picture_nobody_asked_for_is_never_said_as_left_undone() {
+    // The short is made, with a picture the message never asked for: refused back, and Spark leaves it out. The reply
+    // says nothing went undone.
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let mut calls = short_calls();
+    calls.push(fc(
+        "call_4",
+        "makePicture",
+        r#"{"prompt": "a new module", "layout": "full", "atSec": 3.0, "atWords": null, "durationSec": null}"#,
+    ));
+    let model = Fake::new(vec![
+        answer("", calls, 0.002),
+        answer("Here is your vertical short.", vec![], 0.001),
+    ]);
+    let out = send(
+        &model,
+        &[],
+        "make a 30 second short with nice animations",
+        &i,
+        &p,
+    )
+    .unwrap();
+    assert!(
+        output_for(&model.seen()[1], "call_4").contains("didn't ask for a picture"),
+        "{}",
+        output_for(&model.seen()[1], "call_4")
+    );
+    assert_eq!(out.reply, "Here is your vertical short.");
+}

@@ -62,7 +62,7 @@ use klipolo_model::query::{
 use klipolo_model::scene::check_scene;
 use klipolo_model::speech::{WordKind, is_mark, joins_unspaced, word_ranges};
 use klipolo_model::text_safety::clean_shown;
-use klipolo_model::time::{MIN_DURATION_US, Us};
+use klipolo_model::time::{MIN_DURATION_US, RangeUs, Us};
 use klipolo_model::timeline::{ClipSource, ItemContent, Outline};
 use klipolo_model::validate::MAX_TEXT;
 use klipolo_model::{Project, apply_ops};
@@ -1057,28 +1057,45 @@ pub(super) fn make_sticker(
 const NO_PICTURE_ASKED: &str =
     "makePicture: the person didn't ask for a picture, so this short has none. Leave it out.";
 
-/// Whether `message` asks for a picture, a diagram or another visual to explain something.
-fn asks_picture(message: &str) -> bool {
-    const ASKED: [&str; 14] = [
+/// Whether `message` asks for a picture, a diagram or another visual to explain something: one of those words, a
+/// plural too, or b-roll (written "b-roll", "b roll" or "broll").
+pub(crate) fn asks_picture(message: &str) -> bool {
+    const ASKED: [&str; 24] = [
         "picture",
+        "pic",
         "image",
         "diagram",
         "illustration",
+        "illustrate",
+        "illustrated",
         "visual",
+        "visualize",
+        "visualise",
+        "visualization",
+        "visualisation",
+        "draw",
         "drawing",
+        "sketch",
         "photo",
+        "photograph",
         "chart",
+        "graph",
         "graphic",
+        "infographic",
+        "map",
         "cutaway",
         "broll",
-        "map",
-        "infographic",
-        "illustrate",
     ];
-    cues::words(message).iter().any(|w| {
-        let one = w.strip_suffix('s').unwrap_or(w);
-        ASKED.contains(&one) || ASKED.contains(&w.as_str())
-    })
+    let words = cues::words(message);
+    let one = |w: &str| {
+        [Some(w), w.strip_suffix('s'), w.strip_suffix("es")]
+            .into_iter()
+            .flatten()
+            .any(|w| ASKED.contains(&w))
+    };
+    // "b-roll" and "b roll" both come apart into "b" and "roll".
+    let b_roll = |p: &[String]| p[0] == "b" && matches!(p[1].as_str(), "roll" | "rolls");
+    words.iter().any(|w| one(w)) || words.windows(2).any(b_roll)
 }
 
 /// The top corner a 16:9 inset picture takes at timeline `at` of `work` where no follow's path says where the speaker
@@ -1113,7 +1130,7 @@ pub(super) fn make_picture(
     with_additions: &Project,
     prompt: &str,
     layout: PictureLayout,
-    (at, duration): (At, Option<Us>),
+    ((at, duration), own_hook): ((At, Option<Us>), Option<RangeUs>),
 ) -> Result<Job, Refused> {
     // A short's pictures are the person's to ask for: one nobody asked for would cover the speaker and wait on a card.
     if c.cues.as_ref().is_some_and(|q| q.makes_short) && !asks_picture(&c.inputs.message) {
@@ -1126,18 +1143,29 @@ pub(super) fn make_picture(
         duration.or(Some(PICTURE_US)),
         PICTURE_US,
     );
-    // Never over the hook: words in its place then (a short's hook) keep the frame to themselves.
-    let hook = (with_additions.timeline.tracks.iter())
+    // Never over the hook: this answer's (on the snapshot's timeline, where it goes in), else words in its place from
+    // an earlier answer keep the frame to themselves.
+    let own = own_hook.and_then(|r| {
+        Some(RangeUs {
+            start: c.map.time(with_additions, r.start)?,
+            end: c.map.time(with_additions, r.end).unwrap_or(r.end),
+        })
+    });
+    let earlier = (with_additions.timeline.tracks.iter())
         .flat_map(|t| &t.items)
-        .find(|i| {
-            i.start_us < start + duration_us
-                && start < i.end_us()
-                && klipolo_model::captions::in_hook_band(with_additions, i)
+        .filter(|i| klipolo_model::captions::in_hook_band(with_additions, i))
+        .map(|i| RangeUs {
+            start: i.start_us,
+            end: i.end_us(),
         });
+    let hook = own
+        .into_iter()
+        .chain(earlier)
+        .find(|h| h.start < start + duration_us && start < h.end);
     if let Some(hook) = hook {
         return Err(to_model(format!(
             "makePicture: the hook shows until {} s, and a picture never covers it. Place it after.",
-            secs(hook.end_us())
+            secs(hook.end)
         )));
     }
     let change = animate::Change {
@@ -1483,6 +1511,42 @@ pub(super) fn screen_words(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_picture_is_asked_in_the_words_people_use() {
+        let asked = [
+            "show a picture of the plane",
+            "add some pics of the beach",
+            "draw what he describes",
+            "sketch the idea for me",
+            "put a graph of the sales here",
+            "two graphs side by side",
+            "visualize the numbers",
+            "visualise the route",
+            "a visualization of the market",
+            "make it illustrated",
+            "a photograph of the old harbour",
+            "add b-roll over the boring part",
+            "some b roll when he talks about Lisbon",
+            "cut to broll here",
+            "a couple of sketches",
+            "a diagram of the engine",
+            "an image of a fish",
+        ];
+        for m in asked {
+            assert!(asks_picture(m), "{m}");
+        }
+        let not_asked = [
+            "make a 30 second short with nice animations",
+            "cut the boring parts and add captions",
+            "rock and roll at the end",
+            "keep the second paragraph",
+            "roll the credits",
+        ];
+        for m in not_asked {
+            assert!(!asks_picture(m), "{m}");
+        }
+    }
 
     #[test]
     fn the_persons_words_are_taken_as_written() {

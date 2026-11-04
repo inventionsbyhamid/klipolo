@@ -660,20 +660,31 @@ fn in_band(asset: &Asset, (top, bottom): (f64, f64), most: f64) -> BoxN {
     }
 }
 
+/// The least height of the 9:16 frame the blurred band above a clip shown whole leaves for an inset picture; a
+/// shorter band (a 4:3 clip's is about 0.14, a vertical clip has none) takes it under the face instead.
+const MIN_BAND_ABOVE: f64 = 0.12;
+
 /// A picture inset in 9:16 at timeline `at_us` of `p`, readable and clear of the face and the captions: where the clip
-/// there shows its picture whole (Fit, a 16:9 picture from 0.342 to 0.658 of the height), centred in the blurred band
-/// above it, from the top of the apps' clear area (about 60 % of the width); else in the band under the face where a
-/// short's hook goes, above the captions (about half the width).
+/// there shows its picture whole (Fit: a 16:9 clip from 0.342 to 0.658 of the height, a squarer one taller), centred
+/// in the blurred band above it, from the top of the apps' clear area (about 60 % of the width for a 16:9 clip); else,
+/// or where that band is under `MIN_BAND_ABOVE`, in the band under the face where a short's hook goes, above the
+/// captions (about half the width).
 fn inset_in_portrait(p: &Project, at_us: Us, asset: &Asset) -> BoxN {
-    let fit = clip_at(&p.timeline.main, at_us).is_some_and(|(i, _)| {
-        effective_framing(p, &p.timeline.main[i], FormatKind::Portrait).mode == FramingMode::Fit
+    let (fw, fh) = frame(FormatKind::Portrait);
+    let gap = GAP * fw / fh;
+    let shown_whole = clip_at(&p.timeline.main, at_us)
+        .map(|(i, _)| &p.timeline.main[i])
+        .filter(|clip| effective_framing(p, clip, FormatKind::Portrait).mode == FramingMode::Fit);
+    // The top of the clip's picture, shown whole across the width (or the height, where it is taller than 9:16).
+    let picture_top = shown_whole.map(|clip| {
+        let (w, h) = picture_size(p, &clip.source).unwrap_or((16.0, 9.0));
+        (1.0 - ((fw / fh) / (w / h)).min(1.0)) / 2.0
     });
-    let gap = GAP * frame(FormatKind::Portrait).0 / frame(FormatKind::Portrait).1;
-    if fit {
-        let picture_top = (1.0 - (9.0 / 16.0) / (16.0 / 9.0)) / 2.0;
-        in_band(asset, (PORTRAIT_CLEAR.y, picture_top - gap), 0.7)
-    } else {
-        in_band(asset, (UNDER_FACE.y, UNDER_FACE.y + UNDER_FACE.h), 0.7)
+    match picture_top {
+        Some(top) if top - gap - PORTRAIT_CLEAR.y >= MIN_BAND_ABOVE => {
+            in_band(asset, (PORTRAIT_CLEAR.y, top - gap), 0.7)
+        }
+        _ => in_band(asset, (UNDER_FACE.y, UNDER_FACE.y + UNDER_FACE.h), 0.7),
     }
 }
 
