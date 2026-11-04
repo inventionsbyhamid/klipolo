@@ -256,8 +256,9 @@ flowchart LR
   would refuse.
 - **One engine, two outputs.** `klipolo-engine` draws the same frames for the preview and the export, so the file is
   what you saw.
-- **The MCP server exposes the same tools.** `klipolo-mcp` offers chat's own tools, byte for byte, minus the two that
-  talk to the person in chat, plus four reads. An agent's calls go through the same compiler.
+- **The MCP server exposes the same tools.** `klipolo-mcp` offers chat's own tools and schemas, minus the two that
+  talk to the person in chat, plus four reads; four descriptions are reworded for an app. An agent's calls go through
+  the same compiler.
 - **Providers behind interfaces.** The analysis owns small traits (`Transcriber`, `Aligner`, `SceneLogger`,
   `SubjectTracker`, `VoiceMatcher`, `ImageMaker`) and chat owns `LanguageModel`. Meta's models sit behind them as
   adapters, so no vendor type reaches the pipeline, the compiler or the page, and tests use fakes of each trait.
@@ -345,13 +346,14 @@ they decided."
 
 ### The tools
 
-42 tools: chat's 38 edit tools and 4 reads. Each schema is strict: closed, every property required, a value that may
-be left unsaid is nullable. The list is in `scripts/mcp-demo-agent/tests/fixtures/tools_list.json` and comes from
+42 tools: 38 of chat's own tools (all but `askUser` and `cannotDo`) and 4 reads. Each schema is strict: closed,
+every property required, a value that may be left unsaid is nullable. The list is in `scripts/mcp-demo-agent/tests/fixtures/tools_list.json` and comes from
 `crates/klipolo-mcp/src/tools.rs`.
 
 | Group | Tools |
 | --- | --- |
-| Read | `getSummary`, `getContext`, `getTranscript`, `getProposal`, and `findMoments` (shows moments to the person, changes nothing) |
+| Read | `getSummary`, `getContext`, `getTranscript`, `getProposal` |
+| Point at moments | `findMoments` (shows moments to the person, changes nothing) |
 | Cut (proposed, waits for Apply) | `cutRange`, `keepOnly`, `removeSilences`, `removeFillers`, `trimClip` |
 | Clips | `splitAt`, `freezeFrame`, `setClip`, `setTransition`, `reverseClip`, `setBackground`, `setFormat` |
 | Captions | `setCaptions`, `fixCaptionWords` |
