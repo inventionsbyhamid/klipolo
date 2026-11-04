@@ -98,7 +98,8 @@ use crate::evidence::{Evidence, Unfounded};
 use crate::library::{Library, MediaKind};
 use crate::sanitize;
 use crate::tools::{
-    EffectChange, FollowFocus, KeyIn, LayerRef, Moment, PictureSize, Position, PresetIn, ToolCall,
+    EffectChange, FollowFocus, KeyIn, LayerRef, Moment, PictureLayout, PictureSize, Position,
+    PresetIn, ToolCall,
 };
 pub(crate) use cameras::every_camera;
 pub use clear::{FACE_ZONE, UNDER_FACE};
@@ -351,6 +352,9 @@ pub struct MakeSticker {
     pub sound: Option<Box<Asset>>,
     /// A short's sticker: placed beside the speaker (`clear::beside_speaker`) rather than at `position`.
     pub beside: Option<Beside>,
+    /// A picture drawn to explain a moment (`makePicture`), not a sticker: drawn whole, with no background cut out, and
+    /// shown over the frame or in a corner box (`media::picture_ops`) rather than at `position`.
+    pub picture: Option<PictureLayout>,
 }
 
 /// How a short's drawn sticker is placed beside the speaker once it comes: whether the answer followed the speaker
@@ -767,7 +771,9 @@ impl Compiler<'_> {
             }
             if matches!(
                 call,
-                ToolCall::MakeSticker { .. } | ToolCall::MakeTitleCard { .. }
+                ToolCall::MakeSticker { .. }
+                    | ToolCall::MakePicture { .. }
+                    | ToolCall::MakeTitleCard { .. }
             ) {
                 pictures += 1;
                 if pictures > MAX_PICTURES {
@@ -848,7 +854,7 @@ impl Compiler<'_> {
                         }
                     }
                 }
-                ToolCall::MakeSticker { .. } => {
+                ToolCall::MakeSticker { .. } | ToolCall::MakePicture { .. } => {
                     stickers.push((i, call));
                     continue;
                 }
@@ -1270,6 +1276,31 @@ impl Compiler<'_> {
             }
         }
         for (i, call) in stickers {
+            // A picture to explain the moment: drawn whole, over the frame or in a corner box.
+            if let ToolCall::MakePicture {
+                prompt,
+                layout,
+                at_us,
+                at_words,
+                duration_us,
+            } = call
+            {
+                let times = (At::of(at_us, at_words.as_deref()), *duration_us);
+                match media::make_picture(self, &with_additions, prompt, *layout, times) {
+                    Ok(mut job) => {
+                        if let (Job::MakeSticker(picture), Some(a)) =
+                            (&mut job, animated.remove(&i))
+                        {
+                            picture.motion = a.motion.map(Box::new);
+                            picture.sound = a.sound.map(Box::new);
+                            media::sticker_sound(self, &with_additions, picture);
+                        }
+                        jobs.push((i, job));
+                    }
+                    Err(r) => refuse(&mut out, i, r),
+                }
+                continue;
+            }
             let ToolCall::MakeSticker {
                 prompt,
                 position,
@@ -1474,8 +1505,14 @@ impl Compiler<'_> {
     fn own_layer_call(&self, calls: &[ToolCall], layer: &LayerRef, i: usize) -> Option<usize> {
         let words =
             |c: &ToolCall| matches!(c, ToolCall::AddText { .. } | ToolCall::MakeTitleCard { .. });
-        let pictures =
-            |c: &ToolCall| matches!(c, ToolCall::AddImage { .. } | ToolCall::MakeSticker { .. });
+        let pictures = |c: &ToolCall| {
+            matches!(
+                c,
+                ToolCall::AddImage { .. }
+                    | ToolCall::MakeSticker { .. }
+                    | ToolCall::MakePicture { .. }
+            )
+        };
         let before = calls.get(..i)?;
         match layer {
             LayerRef::Last => (0..i)
@@ -1642,12 +1679,7 @@ impl Compiler<'_> {
         presets: &[PresetIn],
         animated: &mut HashMap<usize, Animated>,
     ) -> Result<(), Refused> {
-        let length = match calls.get(j) {
-            Some(ToolCall::MakeSticker { duration_us, .. }) => {
-                duration_us.unwrap_or(klipolo_model::media::image::IMAGE_US)
-            }
-            _ => klipolo_model::media::image::IMAGE_US,
-        };
+        let length = sticker_length(calls.get(j));
         let before = animated.remove(&j);
         let now = before.as_ref().and_then(|b| b.motion.clone());
         let moved =
@@ -1680,12 +1712,7 @@ impl Compiler<'_> {
                 "animate: typewriter is for words. Use another enter for the sticker.".to_owned(),
             ));
         }
-        let length = match calls.get(j) {
-            Some(ToolCall::MakeSticker { duration_us, .. }) => {
-                duration_us.unwrap_or(klipolo_model::media::image::IMAGE_US)
-            }
-            _ => klipolo_model::media::image::IMAGE_US,
-        };
+        let length = sticker_length(calls.get(j));
         let before = so_far.get(&j);
         let sound = match sound {
             Some(name) => Some(animate::sound(self, name)?.asset.clone()),
@@ -1989,6 +2016,17 @@ pub(crate) fn names_media(inputs: &Inputs, asked: &str, kinds: &[MediaKind]) -> 
             let want = cues::words(asked);
             !want.is_empty() && message.windows(want.len()).any(|w| w == want.as_slice())
         }
+    }
+}
+
+/// How long the drawn picture call `call` asks for shows: its length, else a sticker's or an explaining picture's.
+fn sticker_length(call: Option<&ToolCall>) -> Us {
+    match call {
+        Some(ToolCall::MakeSticker { duration_us, .. }) => {
+            duration_us.unwrap_or(klipolo_model::media::image::IMAGE_US)
+        }
+        Some(ToolCall::MakePicture { duration_us, .. }) => duration_us.unwrap_or(media::PICTURE_US),
+        _ => klipolo_model::media::image::IMAGE_US,
     }
 }
 

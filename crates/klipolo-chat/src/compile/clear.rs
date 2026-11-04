@@ -22,18 +22,21 @@
 use std::collections::HashMap;
 
 use klipolo_model::Project;
+use klipolo_model::contrib::builtin;
 use klipolo_model::fill_focus::FillFocus;
 use klipolo_model::framing::effective_framing;
 use klipolo_model::layout::{Anchor, BoxN};
 use klipolo_model::media::image::{IMAGE_MARGIN, Spot, corner_rect};
 use klipolo_model::media::text::PORTRAIT_CLEAR;
 use klipolo_model::ops::Op;
+use klipolo_model::params::ParamValue;
 use klipolo_model::project::{Asset, AssetKind, FormatKind};
 use klipolo_model::query::clip_at;
 use klipolo_model::time::Us;
-use klipolo_model::timeline::{ClipSource, FramingMode, ItemContent};
+use klipolo_model::timeline::{ClipSource, EffectInstance, FramingMode, ItemContent};
 
 use crate::context::SceneLog;
+use crate::tools::PictureLayout;
 
 /// A picture's share of the width where no corner is clear of the person.
 pub const CLEAR_SHARE: f64 = 0.28;
@@ -602,5 +605,132 @@ fn place_at(p: &Project, ops: &mut [Op], boxes: &[(FormatKind, BoxN)], anchor: A
                 item.layout.overrides.insert(format, rect);
             }
         }
+    }
+}
+
+/// A picture drawn to explain a moment, in a corner box, in shares of the 16:9 frame's width: about a third.
+const INSET_W: f64 = 0.36;
+/// Its share of the 1:1 frame's width: a little smaller, clear of a face in the middle.
+const SQUARE_INSET_W: f64 = 0.28;
+/// Its corners' rounding, as a share of its shorter side.
+const INSET_RADIUS: f64 = 0.06;
+/// The blur under a full picture shown whole in a format of another shape, in pixels (the effect's most is 64).
+const BACKDROP_BLUR_PX: f64 = 48.0;
+
+/// `asset`'s box shown whole in `format`'s frame (Fit, centred), or covering it (`cover`: cut at the frame's edges).
+fn whole(asset: &Asset, format: FormatKind, cover: bool) -> BoxN {
+    let aspect = if asset.width > 0 && asset.height > 0 {
+        f64::from(asset.width) / f64::from(asset.height)
+    } else {
+        16.0 / 9.0
+    };
+    let (fw, fh) = frame(format);
+    let ratio = aspect / (fw / fh);
+    let (w, h) = if (ratio >= 1.0) != cover {
+        (1.0, 1.0 / ratio)
+    } else {
+        (ratio, 1.0)
+    };
+    BoxN {
+        x: (1.0 - w) / 2.0,
+        y: (1.0 - h) / 2.0,
+        w,
+        h,
+    }
+}
+
+/// `ops`' picture layer of `asset`, a picture drawn to explain the moment at timeline `at_us` of `p`, placed for
+/// `layout` in each of `p`'s formats:
+/// - **full**: over the whole frame in the format it was drawn for, and shown whole (Fit, centred) in the others,
+///   never cut, over a blurred copy of itself that covers their frame (a layer just under it, with it in `ops`). The
+///   captions stay on top, as they draw over every layer.
+/// - **inset**: a box with rounded corners in a top corner: in 16:9 `INSET_W` of the width, on the side away from the
+///   speaker (the right where nothing says), clear of a face in the middle and of the captions below; in 9:16 the
+///   corner the person's own picture takes in a short (`own_corner`: beside the head, above the hook); in 1:1
+///   `SQUARE_INSET_W` of the width on the same side.
+pub(super) fn place_picture(
+    p: &Project,
+    ops: &mut Vec<Op>,
+    asset: &Asset,
+    (layout, at_us): (PictureLayout, Us),
+) {
+    let primary = p.settings.primary_format;
+    let Some(k) = ops.iter().position(|op| {
+        matches!(op, Op::AddItem { item, .. } if matches!(item.content, ItemContent::Image { .. }))
+    }) else {
+        return;
+    };
+    let boxes: Vec<(FormatKind, BoxN)> = match layout {
+        PictureLayout::Full => (p.settings.formats.iter())
+            .map(|&f| (f, whole(asset, f, false)))
+            .collect(),
+        PictureLayout::Inset => {
+            let left =
+                speaker_at(p, at_us, FormatKind::Landscape, false).is_some_and(|seen| seen.x > 0.5);
+            let spot = if left { Spot::TopLeft } else { Spot::TopRight };
+            (p.settings.formats.iter())
+                .map(|&f| {
+                    let rect = match f {
+                        FormatKind::Landscape => {
+                            corner_rect(asset.width, asset.height, INSET_W, spot, f)
+                        }
+                        FormatKind::Square => {
+                            corner_rect(asset.width, asset.height, SQUARE_INSET_W, spot, f)
+                        }
+                        FormatKind::Portrait => (own_corner(p, at_us, asset, false).0.into_iter())
+                            .find(|(g, _)| *g == FormatKind::Portrait)
+                            .map_or_else(
+                                || corner_rect(asset.width, asset.height, 0.2, spot, f),
+                                |(_, b)| b,
+                            ),
+                    };
+                    (f, rect)
+                })
+                .collect()
+        }
+    };
+    let mut backdrop = None;
+    if let Op::AddItem { item, .. } = &mut ops[k] {
+        item.layout.overrides.clear();
+        for &(format, rect) in &boxes {
+            if format == primary {
+                item.layout.rect = rect;
+                item.layout.anchor = Anchor::Center;
+            } else {
+                item.layout.overrides.insert(format, rect);
+            }
+        }
+        match layout {
+            PictureLayout::Inset => item.layout.radius = INSET_RADIUS,
+            // Shown whole in a format of another shape: a blurred copy covers the rest of the frame.
+            PictureLayout::Full if boxes.iter().any(|(_, b)| b.w < 0.999 || b.h < 0.999) => {
+                let mut under = item.clone();
+                under.id = klipolo_model::ids::new_id();
+                under.layout.overrides.clear();
+                for &(format, _) in &boxes {
+                    let cover = whole(asset, format, true);
+                    if format == primary {
+                        under.layout.rect = cover;
+                    } else {
+                        under.layout.overrides.insert(format, cover);
+                    }
+                }
+                let mut blur = EffectInstance::new(builtin::EFFECT_BLUR);
+                blur.id = "blur".into();
+                blur.params
+                    .insert("radius".into(), ParamValue::Number(BACKDROP_BLUR_PX));
+                under.effects = vec![blur];
+                backdrop = Some(under);
+            }
+            PictureLayout::Full => {}
+        }
+    }
+    if let (Some(under), Op::AddItem { track, attach, .. }) = (backdrop, &ops[k]) {
+        let add = Op::AddItem {
+            track: track.clone(),
+            item: under,
+            attach: *attach,
+        };
+        ops.insert(k, add);
     }
 }

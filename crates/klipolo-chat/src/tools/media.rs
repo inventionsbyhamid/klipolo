@@ -1,5 +1,5 @@
 //! The media tools: music, sound effects, words and pictures on screen from the library (`addMusic`, `addSound`,
-//! `addText`, `addImage`), and pictures Muse Image draws first (`makeSticker`, `makeTitleCard`). Each is one entry of
+//! `addText`, `addImage`), and pictures Muse Image draws first (`makeSticker`, `makePicture`, `makeTitleCard`). Each is one entry of
 //! `TOOLS`; the words they take for places, sizes and text presets are here.
 //!
 //! A time left null is the playhead, a length left null the default (`TEXT_SECS`, `PICTURE_SECS`, `TEMPLATE_SECS`);
@@ -149,6 +149,37 @@ pub const POSITIONS: [Position; 5] = [
 ];
 /// The sizes a picture takes.
 pub const SIZES: [PictureSize; 3] = [PictureSize::Small, PictureSize::Medium, PictureSize::Large];
+
+/// How a picture Muse Image draws to explain a moment shows (`makePicture`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PictureLayout {
+    /// Over the whole frame for its time, as a cutaway does.
+    Full,
+    /// In a box in a corner, clear of the face and the captions.
+    Inset,
+}
+
+impl PictureLayout {
+    /// The tool's word for it ("full").
+    pub fn key(self) -> &'static str {
+        match self {
+            PictureLayout::Full => "full",
+            PictureLayout::Inset => "inset",
+        }
+    }
+}
+
+/// The layouts a drawn picture takes.
+pub const PICTURE_LAYOUTS: [PictureLayout; 2] = [PictureLayout::Full, PictureLayout::Inset];
+
+/// How long a drawn picture shows when no length is given: long enough to take in, short enough to keep the talk going.
+pub const DRAWN_PICTURE_SECS: f64 = 3.0;
+
+impl Word for PictureLayout {
+    fn word(self) -> &'static str {
+        self.key()
+    }
+}
 
 impl Word for TextPreset {
     fn word(self) -> &'static str {
@@ -363,6 +394,39 @@ pub(super) const MAKE_STICKER: Tool = Tool {
         Ok(ToolCall::MakeSticker {
             prompt: a.text("prompt")?,
             position: a.nullable_word("position", &POSITIONS)?,
+            at_us: a.nullable_time("atSec")?,
+            at_words: a.nullable_quote("atWords")?,
+            duration_us: a.nullable_length("durationSec", &OVERLAY_SECS)?,
+        })
+    },
+};
+
+pub(super) const MAKE_PICTURE: Tool = Tool {
+    name: "makePicture",
+    description: "Have Muse Image draw a picture that explains what is said at a moment (a diagram, a scene, an \
+                  example), shown once drawn: full covers the frame for its time, inset sits in a corner box.",
+    parameters: || {
+        vec![
+            (
+                "prompt",
+                string("What it shows, a short phrase such as a fish population over 50 years."),
+            ),
+            (
+                "layout",
+                words(
+                    &PICTURE_LAYOUTS,
+                    "full over the frame, or inset in a corner.",
+                ),
+            ),
+            at_sec_or_words(),
+            at_words(),
+            duration_sec(DRAWN_PICTURE_SECS),
+        ]
+    },
+    read: |a| {
+        Ok(ToolCall::MakePicture {
+            prompt: a.text("prompt")?,
+            layout: a.word("layout", &PICTURE_LAYOUTS)?,
             at_us: a.nullable_time("atSec")?,
             at_words: a.nullable_quote("atWords")?,
             duration_us: a.nullable_length("durationSec", &OVERLAY_SECS)?,

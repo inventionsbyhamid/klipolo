@@ -706,6 +706,16 @@ fn every_call() -> Vec<(ToolCall, bool)> {
             false,
         ),
         (
+            ToolCall::MakePicture {
+                prompt: "a fish population".into(),
+                layout: klipolo_chat::tools::PictureLayout::Full,
+                at_us: Some(secs(3.0)),
+                at_words: None,
+                duration_us: None,
+            },
+            true,
+        ),
+        (
             ToolCall::MakeSticker {
                 prompt: "a rocket".into(),
                 position: None,

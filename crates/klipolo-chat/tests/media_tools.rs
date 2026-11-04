@@ -9,7 +9,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use klipolo_chat::tools::{PictureSize, Position, TextPreset};
+use klipolo_chat::tools::{PictureLayout, PictureSize, Position, TextPreset};
 use klipolo_chat::{
     AnalysisState, Audience, Compiled, FunctionCall, Inputs, Job, Library, LibraryItem,
     MakeSticker, MediaKind, Refs, SceneEntry, SceneLog, ToolCall, View, compile, compile_for_app,
@@ -1334,6 +1334,7 @@ fn make_sticker_becomes_a_job_not_an_op() {
             motion: None,
             sound: None,
             beside: None,
+            picture: None,
         })]
     );
     // The prompt names the picture in the library too: no dashes.
@@ -2606,4 +2607,135 @@ fn quotes_are_read_as_models_write_them() {
         )],
     );
     assert_eq!(the_layer(&p, &out).start_us, secs(0.5));
+}
+
+/// A picture Muse Image drew to explain a moment, `w` by `h`.
+fn drawn_picture(w: u32, h: u32) -> Asset {
+    asset("drawn", "image", "plane picture.png", 5.0, (w, h), false)
+}
+
+/// The `makePicture` call for `layout` at "flying" (12.0 s).
+fn picture_call(layout: &str) -> ToolCall {
+    call(
+        "makePicture",
+        json!({"prompt": "a plane over the sea", "layout": layout, "atSec": null, "atWords": "flying",
+               "durationSec": null}),
+    )
+}
+
+/// The one job `calls` make on `p`: a picture to draw.
+fn picture_job(p: &Project, calls: &[ToolCall]) -> klipolo_chat::MakeSticker {
+    let out = compile(
+        p,
+        &inputs(p, "show a picture of the flight when we go flying"),
+        calls,
+    );
+    assert_eq!(out.refusals, vec![], "{:#?}", out.refusals);
+    let [Job::MakeSticker(job)] = &out.jobs[..] else {
+        panic!("{:?}", out.jobs)
+    };
+    job.clone()
+}
+
+/// The picture layers `ops` add, in order.
+fn added_pictures(ops: &[Op]) -> Vec<Item> {
+    (ops.iter())
+        .filter_map(|op| match op {
+            Op::AddItem { item, .. } if matches!(item.content, ItemContent::Image { .. }) => {
+                Some(item.clone())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn make_picture_reads_its_prompt_layout_and_moment() {
+    let ToolCall::MakePicture {
+        prompt,
+        layout,
+        at_words,
+        duration_us,
+        ..
+    } = picture_call("inset")
+    else {
+        panic!("not a picture");
+    };
+    assert_eq!(prompt, "a plane over the sea");
+    assert_eq!(layout, PictureLayout::Inset);
+    assert_eq!(at_words.as_deref(), Some("flying"));
+    assert_eq!(duration_us, None);
+    // A layout it doesn't know is refused back.
+    assert!(
+        ToolCall::parse(&FunctionCall {
+            name: "makePicture".into(),
+            call_id: "c".into(),
+            arguments: json!({"prompt": "x", "layout": "huge", "atSec": null, "atWords": null,
+                              "durationSec": null})
+            .to_string(),
+        })
+        .is_err()
+    );
+}
+
+#[test]
+fn a_picture_is_drawn_for_its_words_and_shows_over_the_whole_frame() {
+    let p = project();
+    let job = picture_job(&p, &[picture_call("full")]);
+    assert_eq!(job.picture, Some(PictureLayout::Full));
+    assert_eq!((job.at_us, job.duration_us), (secs(12.0), secs(3.0)));
+    // It fades in and out.
+    let motion = job.motion.as_deref().expect("a motion");
+    assert!(
+        motion.enter.is_some() && motion.exit.is_some(),
+        "{motion:?}"
+    );
+    let ops = sticker_ops(&p, &job, &drawn_picture(1600, 900)).expect("placed");
+    let pictures = added_pictures(&ops);
+    assert_eq!(pictures.len(), 1, "{pictures:#?}");
+    assert_eq!(pictures[0].start_us, secs(12.0));
+    assert_eq!(pictures[0].duration_us, secs(3.0));
+    assert_eq!(pictures[0].layout.rect, klipolo_model::layout::BoxN::FULL);
+}
+
+#[test]
+fn an_inset_picture_sits_in_a_corner_clear_of_the_face_and_the_captions() {
+    let p = project();
+    let job = picture_job(&p, &[picture_call("inset")]);
+    assert_eq!(job.picture, Some(PictureLayout::Inset));
+    let ops = sticker_ops(&p, &job, &drawn_picture(1600, 900)).expect("placed");
+    let b = added_pictures(&ops)[0].layout.rect;
+    // About a third of the width, in the top right, off a face in the middle of the frame (a 9:16 crop's face zone,
+    // 0.405 to 0.595 across) and above the captions at the bottom; its corners rounded.
+    assert!((0.34..=0.4).contains(&b.w), "{b:?}");
+    assert!(b.x > 0.595 && b.x + b.w < 1.0 && b.y < 0.1, "{b:?}");
+    assert!(b.y + b.h < 0.75, "{b:?}");
+    assert!(added_pictures(&ops)[0].layout.radius > 0.0);
+}
+
+#[test]
+fn a_full_picture_is_shown_whole_in_9_16_over_a_blurred_copy() {
+    let mut p = project();
+    p.settings.formats = vec![FormatKind::Landscape, FormatKind::Portrait];
+    let job = picture_job(&p, &[picture_call("full")]);
+    let ops = sticker_ops(&p, &job, &drawn_picture(1600, 900)).expect("placed");
+    let pictures = added_pictures(&ops);
+    assert_eq!(pictures.len(), 2, "{pictures:#?}");
+    // Under it, a blurred copy covering the 9:16 frame; on top, the picture whole (Fit): the full width, 0.316 of the
+    // height, in the middle.
+    let (under, top) = (&pictures[0], &pictures[1]);
+    let fit = top.layout.overrides[&FormatKind::Portrait];
+    assert!(
+        (fit.w - 1.0).abs() < 1e-9 && (fit.h - 0.3164).abs() < 1e-3,
+        "{fit:?}"
+    );
+    assert!((fit.y + fit.h / 2.0 - 0.5).abs() < 1e-9, "{fit:?}");
+    let cover = under.layout.overrides[&FormatKind::Portrait];
+    assert!(cover.w > 1.0 && (cover.h - 1.0).abs() < 1e-9, "{cover:?}");
+    assert_eq!(under.effects.len(), 1);
+    assert_eq!(
+        under.effects[0].effect.as_str(),
+        klipolo_model::contrib::builtin::EFFECT_BLUR
+    );
+    assert!(top.effects.is_empty());
 }

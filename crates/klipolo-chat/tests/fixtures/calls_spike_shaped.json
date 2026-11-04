@@ -141,6 +141,10 @@
       "calls": [{"name": "makeSticker", "call_id": "call_29", "arguments": "{\"prompt\": \"paper plane\", \"position\": \"top-right\", \"atSec\": 56.0, \"durationSec\": null}"}]
     },
     {
+      "request": "show a picture of a fish population when he explains how it changes",
+      "calls": [{"name": "makePicture", "call_id": "call_29b", "arguments": "{\"prompt\": \"a fish population over 50 years\", \"layout\": \"full\", \"atSec\": null, \"atWords\": \"how it changes\", \"durationSec\": null}"}]
+    },
+    {
       "request": "make a title card saying Day 1 in Lisbon with trams behind it",
       "calls": [{"name": "makeTitleCard", "call_id": "call_30", "arguments": "{\"prompt\": \"Lisbon trams\", \"title\": \"Day 1 in Lisbon\", \"atSec\": null, \"durationSec\": null}"}]
     },

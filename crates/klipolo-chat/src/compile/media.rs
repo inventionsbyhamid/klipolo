@@ -19,6 +19,9 @@
 //!   each format's own area (in 9:16 the area the apps keep clear) when one was asked for. In a short, the person's own
 //!   picture with no place given (a logo) goes in a top corner off the face instead (`clear::own_corner`), for 3 s,
 //!   placed again once the follow's path is known (`place_beside_again`).
+//! - `makePicture`: a picture that explains a moment, as `makeSticker`'s job (`MakeSticker::picture`): drawn whole, shown
+//!   over the frame (whole in a format of another shape, over a blurred copy) or in a corner box
+//!   (`clear::place_picture`), fading in and out.
 //! - `makeSticker`: a `Job::MakeSticker` only, on the project as the message's additions leave it, anchored to the
 //!   footage it shows over as a layer attaches (`Attach`); once the picture is drawn the app places it with
 //!   `sticker_ops` (where and how long `sticker_placement` says, on the project as it is then). A job's prompt names the
@@ -71,7 +74,7 @@ use crate::context::{secs, within_video};
 use crate::evidence::{TOLERANCE_US, in_cut};
 use crate::library::{Found, LibraryItem, MediaKind, is_generic};
 use crate::sanitize;
-use crate::tools::{Entrance, Exit, PictureSize, Position, TextPreset, ToolCall};
+use crate::tools::{Entrance, Exit, PictureLayout, PictureSize, Position, TextPreset, ToolCall};
 use klipolo_model::media::image::Spot;
 
 /// The most names a refusal lists, then how many more there are: as many as Library shows of a kind.
@@ -944,6 +947,11 @@ pub fn sticker_ops(p: &Project, job: &MakeSticker, asset: &Asset) -> Option<Vec<
     let (start, duration) = sticker_placement(p, job)?;
     let mut ops = add_image_ops_at(p, asset, start, job.size.share(), job.position.spot()).ok()?;
     match job.beside {
+        // A picture to explain the moment: over the frame, or in a corner box.
+        _ if job.picture.is_some() => {
+            let layout = job.picture.unwrap_or(PictureLayout::Full);
+            clear::place_picture(p, &mut ops, asset, (layout, start));
+        }
         // A short's: beside the speaker, on the project as it is now (its follow's path, once it has one).
         Some(beside) => {
             let prefer = if beside.right {
@@ -1033,6 +1041,45 @@ pub(super) fn make_sticker(
         motion: beside.and_then(|_| popping(duration_us)).map(Box::new),
         sound: None,
         beside,
+        picture: None,
+    }))
+}
+
+/// How long a picture drawn to explain a moment shows when no length is given (`tools::DRAWN_PICTURE_SECS`).
+pub const PICTURE_US: Us = 3_000_000;
+
+/// A picture of `prompt` to draw to explain the moment `at`, shown in `layout` for `duration` (else `PICTURE_US`) once
+/// it is drawn (`picture_ops`), fading in and out unless an `animate` of it says otherwise. A job, as a sticker's is.
+pub(super) fn make_picture(
+    c: &Compiler,
+    with_additions: &Project,
+    prompt: &str,
+    layout: PictureLayout,
+    (at, duration): (At, Option<Us>),
+) -> Result<Job, Refused> {
+    let start = start(c, with_additions, "makePicture", at.field(), at)?;
+    let duration_us = length(
+        with_additions,
+        start,
+        duration.or(Some(PICTURE_US)),
+        PICTURE_US,
+    );
+    let change = animate::Change {
+        enter: Some(Entrance::Fade),
+        exit: Some(Exit::Fade),
+        emphasis: None,
+    };
+    Ok(Job::MakeSticker(MakeSticker {
+        prompt: sanitize::reply(prompt),
+        at_us: start,
+        duration_us,
+        position: Position::TopRight,
+        size: PictureSize::Medium,
+        anchor: anchor_at(&with_additions.timeline.main, start),
+        motion: animate::animated(None, &change, duration_us, None).map(Box::new),
+        sound: None,
+        beside: None,
+        picture: Some(layout),
     }))
 }
 
@@ -1072,6 +1119,7 @@ pub(super) fn cued_make_sticker(
             right: prefer == Side::Right,
             corner: false,
         }),
+        picture: None,
     })))
 }
 

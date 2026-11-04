@@ -58,7 +58,7 @@ pub use clips::{ClipRef, TransitionKind};
 pub use effects::{EffectChange, SettingValue};
 pub use error::{Problem, ToolError};
 pub use layer::{LayerChange, Order};
-pub use media::{PictureSize, Position, TextPreset};
+pub use media::{PictureLayout, PictureSize, Position, TextPreset};
 pub use motion::{KeyIn, PresetIn, Property, Slot};
 pub use recorded::{BubbleChange, BubbleSize, SizeStep, Sound};
 use schema::{
@@ -263,6 +263,15 @@ pub enum ToolCall {
         at_words: Option<String>,
         duration_us: Option<Us>,
     },
+    /// Have a picture of `prompt` drawn to explain a moment, shown in `layout` once it exists. `at_words` as
+    /// `AddText`'s.
+    MakePicture {
+        prompt: String,
+        layout: PictureLayout,
+        at_us: Option<Us>,
+        at_words: Option<String>,
+        duration_us: Option<Us>,
+    },
     /// Show `title` in the full-frame title card template, over a background of `prompt` drawn for it.
     MakeTitleCard {
         title: String,
@@ -433,6 +442,7 @@ impl ToolCall {
             ToolCall::AddText { .. } => "addText",
             ToolCall::AddImage { .. } => "addImage",
             ToolCall::MakeSticker { .. } => "makeSticker",
+            ToolCall::MakePicture { .. } => "makePicture",
             ToolCall::MakeTitleCard { .. } => "makeTitleCard",
             ToolCall::Animate { .. } => "animate",
             ToolCall::SetCameraMode { .. } => "setCameraMode",
@@ -493,6 +503,7 @@ impl ToolCall {
             | ToolCall::AddText { at_us, .. }
             | ToolCall::AddImage { at_us, .. }
             | ToolCall::MakeSticker { at_us, .. }
+            | ToolCall::MakePicture { at_us, .. }
             | ToolCall::MakeTitleCard { at_us, .. }
             | ToolCall::FreezeFrame { at_us, .. } => at_us.is_some(),
             ToolCall::SetCameraMode { clips, .. }
@@ -902,6 +913,7 @@ const TOOLS: &[Tool] = &[
     media::ADD_TEXT,
     media::ADD_IMAGE,
     media::MAKE_STICKER,
+    media::MAKE_PICTURE,
     media::MAKE_TITLE_CARD,
     animate::ANIMATE,
     motion::SET_MOTION,
