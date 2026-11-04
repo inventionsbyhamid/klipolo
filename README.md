@@ -399,8 +399,8 @@ You need a Mac with Apple Silicon or Intel and macOS 15 or later.
 3. **Allow Screen Recording** when macOS asks, to record your screen or an app. Klipolo asks for the camera and
    microphone when you first use them.
 4. **Turn on the AI features.** Open Settings (the Settings button at the top right, or Command comma) and pick one:
-   - **Access code.** Choose Access code, type the code and click Use code. No Meta account needed. Each Mac gets $2
-     of credit, and Klipolo shows what is left.
+   - **Access code.** If you were given one: choose Access code, type the code and click Use code. No Meta account
+     needed. Each Mac gets $2 of credit, and Klipolo shows what is left.
    - **My Meta API key.** Choose My Meta API key, paste your key and click Save key. Klipolo checks it with Meta
      first, then keeps it in your Mac's Keychain. Meta bills your key. Get a key at dev.meta.ai.
 
