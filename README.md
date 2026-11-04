@@ -418,6 +418,7 @@ editing and export work without a code or a key. The AI features need the intern
 | Node | 22 |
 | pnpm | 11 (`packageManager` is `pnpm@11.15.1`) |
 | FFmpeg | Klipolo's own LGPL FFmpeg 9.0.2, built by the script below. Never Homebrew's GPL build. |
+| nasm | On an Intel Mac, for FFmpeg's assembly (`brew install nasm`) |
 
 ### Steps
 
