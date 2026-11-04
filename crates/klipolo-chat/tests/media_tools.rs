@@ -2714,28 +2714,67 @@ fn an_inset_picture_sits_in_a_corner_clear_of_the_face_and_the_captions() {
 }
 
 #[test]
-fn a_full_picture_is_shown_whole_in_9_16_over_a_blurred_copy() {
+fn a_full_picture_is_shown_whole_in_9_16_as_one_layer() {
     let mut p = project();
     p.settings.formats = vec![FormatKind::Landscape, FormatKind::Portrait];
     let job = picture_job(&p, &[picture_call("full")]);
     let ops = sticker_ops(&p, &job, &drawn_picture(1600, 900)).expect("placed");
     let pictures = added_pictures(&ops);
-    assert_eq!(pictures.len(), 2, "{pictures:#?}");
-    // Under it, a blurred copy covering the 9:16 frame; on top, the picture whole (Fit): the full width, 0.316 of the
-    // height, in the middle.
-    let (under, top) = (&pictures[0], &pictures[1]);
-    let fit = top.layout.overrides[&FormatKind::Portrait];
+    // One layer, so it deletes and moves as one: whole (Fit) in 9:16, the full width and 0.316 of the height, in the
+    // middle.
+    assert_eq!(pictures.len(), 1, "{pictures:#?}");
+    let fit = pictures[0].layout.overrides[&FormatKind::Portrait];
     assert!(
         (fit.w - 1.0).abs() < 1e-9 && (fit.h - 0.3164).abs() < 1e-3,
         "{fit:?}"
     );
     assert!((fit.y + fit.h / 2.0 - 0.5).abs() < 1e-9, "{fit:?}");
-    let cover = under.layout.overrides[&FormatKind::Portrait];
-    assert!(cover.w > 1.0 && (cover.h - 1.0).abs() < 1e-9, "{cover:?}");
-    assert_eq!(under.effects.len(), 1);
-    assert_eq!(
-        under.effects[0].effect.as_str(),
-        klipolo_model::contrib::builtin::EFFECT_BLUR
+    assert!(pictures[0].effects.is_empty());
+}
+
+#[test]
+fn an_inset_picture_takes_the_side_the_scene_log_leaves_free() {
+    // The scene log puts the speaker on the right, and no follow says more: the inset goes top left.
+    let p = project();
+    let mut i = inputs(&p, "show a picture of the flight when we go flying");
+    for log in i.scenes.values_mut() {
+        for item in &mut log.items {
+            item.who = "the man on the right".into();
+        }
+    }
+    let out = compile(&p, &i, &[picture_call("inset")]);
+    let [Job::MakeSticker(job)] = &out.jobs[..] else {
+        panic!("{:?}", out.jobs)
+    };
+    let ops = sticker_ops(&p, job, &drawn_picture(1600, 900)).expect("placed");
+    let b = added_pictures(&ops)[0].layout.rect;
+    assert!(b.x < 0.05 && b.x + b.w < 0.405, "{b:?}");
+}
+
+#[test]
+fn an_inset_picture_in_9_16_is_readable_and_clear_of_the_face_and_the_captions() {
+    // A vertical video of a talk (Fill): under the face, where a short's hook goes, about half the width.
+    let mut p = project();
+    p.settings.formats = vec![FormatKind::Portrait];
+    p.settings.primary_format = FormatKind::Portrait;
+    let job = picture_job(&p, &[picture_call("inset")]);
+    let ops = sticker_ops(&p, &job, &drawn_picture(1600, 900)).expect("placed");
+    let b = added_pictures(&ops)[0].layout.rect;
+    assert!(b.w >= 0.45, "{b:?}");
+    assert!(b.y >= 0.465 - 1e-9 && b.y + b.h <= 0.62 + 1e-9, "{b:?}");
+    // The clip shown whole (Fit, as for a presenter's inset): the band above the picture, about 60 % of the width.
+    let mut fit = p.clone();
+    let mut framing = klipolo_model::framing::effective_framing(
+        &fit,
+        &fit.timeline.main[0],
+        FormatKind::Portrait,
     );
-    assert!(top.effects.is_empty());
+    framing.mode = klipolo_model::timeline::FramingMode::Fit;
+    fit.timeline.main[0]
+        .framing
+        .insert(FormatKind::Portrait, framing);
+    let ops = sticker_ops(&fit, &job, &drawn_picture(1600, 900)).expect("placed");
+    let b = added_pictures(&ops)[0].layout.rect;
+    assert!((0.55..=0.7).contains(&b.w), "{b:?}");
+    assert!(b.y >= 0.14 - 1e-9 && b.y + b.h <= 0.342, "{b:?}");
 }

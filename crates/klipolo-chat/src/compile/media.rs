@@ -56,12 +56,14 @@ use klipolo_model::motion::{self, Ease, Motion};
 use klipolo_model::ops::Op;
 use klipolo_model::params::{ParamKind, ParamValue};
 use klipolo_model::project::{Asset, AssetKind, FormatKind};
-use klipolo_model::query::{anchor_at, main_track_duration, resolve_attach, video_duration};
+use klipolo_model::query::{
+    anchor_at, clip_at, main_track_duration, resolve_attach, video_duration,
+};
 use klipolo_model::scene::check_scene;
 use klipolo_model::speech::{WordKind, is_mark, joins_unspaced, word_ranges};
 use klipolo_model::text_safety::clean_shown;
 use klipolo_model::time::{MIN_DURATION_US, Us};
-use klipolo_model::timeline::{ItemContent, Outline};
+use klipolo_model::timeline::{ClipSource, ItemContent, Outline};
 use klipolo_model::validate::MAX_TEXT;
 use klipolo_model::{Project, apply_ops};
 
@@ -950,7 +952,13 @@ pub fn sticker_ops(p: &Project, job: &MakeSticker, asset: &Asset) -> Option<Vec<
         // A picture to explain the moment: over the frame, or in a corner box.
         _ if job.picture.is_some() => {
             let layout = job.picture.unwrap_or(PictureLayout::Full);
-            clear::place_picture(p, &mut ops, asset, (layout, start));
+            // The side the compiler chose from the scene log, where no follow's path says.
+            let side = if job.position == Position::TopLeft {
+                Side::Left
+            } else {
+                Side::Right
+            };
+            clear::place_picture(p, &mut ops, asset, (layout, start, side));
         }
         // A short's: beside the speaker, on the project as it is now (its follow's path, once it has one).
         Some(beside) => {
@@ -1045,6 +1053,28 @@ pub(super) fn make_sticker(
     }))
 }
 
+/// The top corner a 16:9 inset picture takes at timeline `at` of `work` where no follow's path says where the speaker
+/// is: away from the side the scene log says they are on ("the man on the left"), else the right.
+fn away_from_who(c: &Compiler, work: &Project, at: Us) -> Position {
+    let Some((i, start)) = clip_at(&work.timeline.main, at) else {
+        return Position::TopRight;
+    };
+    let clip = &work.timeline.main[i];
+    let ClipSource::Asset { id } = &clip.source else {
+        return Position::TopRight;
+    };
+    let source = clip.source_in_us + ((at - start) as f64 * clip.speed) as Us;
+    let said = (c.inputs.scenes.get(id).into_iter())
+        .flat_map(|log| &log.items)
+        .filter(|item| item.start_us <= source && source < item.end_us)
+        .map(|item| item.who.to_lowercase())
+        .find(|who| who.contains("left") || who.contains("right"));
+    match said {
+        Some(who) if who.contains("right") && !who.contains("left") => Position::TopLeft,
+        _ => Position::TopRight,
+    }
+}
+
 /// How long a picture drawn to explain a moment shows when no length is given (`tools::DRAWN_PICTURE_SECS`).
 pub const PICTURE_US: Us = 3_000_000;
 
@@ -1073,7 +1103,7 @@ pub(super) fn make_picture(
         prompt: sanitize::reply(prompt),
         at_us: start,
         duration_us,
-        position: Position::TopRight,
+        position: away_from_who(c, with_additions, start),
         size: PictureSize::Medium,
         anchor: anchor_at(&with_additions.timeline.main, start),
         motion: animate::animated(None, &change, duration_us, None).map(Box::new),
