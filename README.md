@@ -19,8 +19,8 @@ while in beta.
 
 **1. Download** the disk image for your Mac:
 
-- Apple Silicon: [Klipolo for Apple Silicon](https://github.com/inventionsbyhamid/klipolo/releases/download/v0.1.0/Klipolo-0.1.0-aarch64.dmg)
-- Intel: [Klipolo for Intel](https://github.com/inventionsbyhamid/klipolo/releases/download/v0.1.0/Klipolo-0.1.0-x86_64.dmg)
+- Apple Silicon: [Klipolo for Apple Silicon](https://github.com/inventionsbyhamid/klipolo/releases/download/v0.1.1/Klipolo-0.1.1-aarch64.dmg)
+- Intel: [Klipolo for Intel](https://github.com/inventionsbyhamid/klipolo/releases/download/v0.1.1/Klipolo-0.1.1-x86_64.dmg)
 
 Open it and drag Klipolo to Applications.
 
