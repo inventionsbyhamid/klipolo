@@ -1,7 +1,7 @@
 {
   "name": "Klipolo",
   "short_name": "Klipolo",
-  "description": "The Mac video editor you talk to.",
+  "description": "The cross platform video editor you talk to.",
   "start_url": "/",
   "scope": "/",
   "display": "browser",

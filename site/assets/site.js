@@ -365,10 +365,11 @@ if ('IntersectionObserver' in window) {
 }
 
 /* -- the demo film --
-   Its two videos go in once the page has loaded and the stage is near, so they never compete with the first
-   paint. The muted loop plays only while half of it shows and the tab is visible, and only for a visitor who
-   hasn't asked for reduced motion or less data; it can be paused. "Watch the demo" plays the whole film, with
-   sound and controls, in the same place. */
+   The muted loop goes in once the page has loaded and the stage is near, so it never competes with the first
+   paint. It plays only while half of it shows and the tab is visible, and only for a visitor who
+   hasn't asked for reduced motion or less data; it can be paused. "Watch the demo" opens the film from YouTube in
+   a dialog, and nothing from YouTube loads before that click; closing it removes the player and brings the loop
+   back. Without scripting, the link simply goes to YouTube. */
 
 const unwrap = (el) => {
   for (const n of el.querySelectorAll('noscript[data-later]')) {
@@ -378,14 +379,16 @@ const unwrap = (el) => {
 };
 
 function film(stage) {
-  const play = stage.querySelector('[data-play]');
+  const play = stage.querySelector('[data-youtube]'); // its href is the film's one address
   const loop = d.querySelector('[data-loop]');
+  const elsewhere = d.querySelector('[data-youtube-link]');
+  const theater = d.querySelector('[data-theater]');
+  const id = (play.href.match(/(?:youtu\.be\/|[?&]v=|\/embed\/)([\w-]{11})/) || [])[1];
   const thrifty = Boolean(navigator.connection && navigator.connection.saveData);
   let teaser = null;
-  let full = null;
   let choice = null; // the visitor's own Pause or Play for the loop; until then reduced motion and data saving decide
   let shown = false; // half of the stage is on screen
-  let started = false; // the film was asked for
+  let started = false; // the film is open
 
   const wanted = () => (choice === null ? !still && !thrifty : choice);
   const label = () => { if (loop) loop.textContent = wanted() ? 'Pause the preview' : 'Play the preview'; };
@@ -399,25 +402,52 @@ function film(stage) {
     if (teaser) return;
     unwrap(stage);
     teaser = stage.querySelector('[data-teaser]');
-    full = stage.querySelector('[data-full]');
     teaser.muted = true;
     teaser.addEventListener('click', start);
     sync();
   };
-  function start() {
+  // The film opens in a dialog, with YouTube's player made only now. A click with a modifier key, or a browser
+  // without dialogs, follows the link to YouTube instead.
+  function start(e) {
+    if (!id || !theater || typeof theater.showModal !== 'function') return;
+    if (e && (e.button > 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)) return;
+    if (e) e.preventDefault();
     mount();
+    if (started) return;
     started = true;
     teaser.pause();
-    stage.classList.add('is-film');
-    play.hidden = true;
-    if (loop) loop.hidden = true;
-    full.tabIndex = 0;
-    full.focus({ preventScroll: true });
-    full.play()?.catch(() => {}); // if refused, the film's own controls are there to press
+    const player = d.createElement('iframe');
+    player.src = `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&playsinline=1`;
+    player.title = 'Klipolo demo';
+    player.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+    player.allowFullscreen = true;
+    player.referrerPolicy = 'strict-origin-when-cross-origin'; // YouTube's player needs to know which site embeds it
+    theater.querySelector('[data-theater-frame]').replaceChildren(player);
+    theater.showModal();
+    player.focus();
   }
 
-  play.hidden = false;
+  if (theater) {
+    let fromBackdrop = false;
+    const shut = () => { if (theater.open) theater.close(); };
+    theater.querySelector('[data-theater-close]').addEventListener('click', shut);
+    // Only a click that began and ended on the backdrop closes it, never a drag that strays out of the player.
+    theater.addEventListener('pointerdown', (e) => { fromBackdrop = e.target === theater; });
+    theater.addEventListener('click', (e) => { if (e.target === theater && fromBackdrop) shut(); });
+    // Closed by the button, Escape or the backdrop: the player goes, and with it the sound; the loop comes back.
+    theater.addEventListener('close', () => {
+      theater.querySelector('[data-theater-frame]').replaceChildren();
+      started = false;
+      play.focus({ preventScroll: true });
+      sync();
+    });
+  }
+  if (id && theater && typeof theater.showModal === 'function') play.setAttribute('aria-haspopup', 'dialog');
   play.addEventListener('click', start);
+  if (elsewhere && id) {
+    elsewhere.href = play.href;
+    elsewhere.hidden = false;
+  }
   if (loop) {
     label();
     loop.hidden = false;
