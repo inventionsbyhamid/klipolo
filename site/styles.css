@@ -496,6 +496,47 @@ ul[role="list"], ol[role="list"] { list-style: none; padding: 0; }
   .demo-toggle { position: static; display: block; margin: 2px 0 0 auto; }
 }
 
+/* ---------- the editor: the real window, framed the way macOS frames it ---------- */
+
+.editor {
+  padding-block: clamp(32px, 6vh, 72px) clamp(24px, 4vh, 48px);
+  display: grid;
+  gap: clamp(28px, 5vh, 48px);
+}
+/* The figure is the size container: 100cqw is the window's width, so the radius and the
+   shadow scale with the screenshot. Measurements are in the shot's own pixels (2880 x 1751). */
+.window {
+  container-type: inline-size;
+  display: grid;
+  gap: 16px;
+}
+.window__frame {
+  position: relative;
+  border-radius: calc(100cqw * 26 / 2880);
+  background: #141518;
+  /* A window shadow that shrinks with the window, so a phone gets a small one. */
+  box-shadow:
+    0 0 0 .5px rgb(0 0 0 / .5),
+    0 1px 2px rgb(23 24 26 / .12),
+    0 1.2cqw 3cqw -1cqw rgb(23 24 26 / .32),
+    0 3.6cqw 8cqw -2cqw rgb(23 24 26 / .34);
+}
+.window__shot {
+  width: 100%;
+  height: auto;
+  border-radius: inherit;
+}
+.window__note {
+  font-size: var(--t-small);
+  line-height: 1.5;
+  color: var(--quiet);
+  max-width: 60ch;
+}
+@media (prefers-color-scheme: dark) {
+  /* On black the shadow can't show, so the window gets the hairline macOS draws on dark windows. */
+  .window__frame { box-shadow: 0 0 0 1px rgb(255 255 255 / .16); }
+}
+
 /* ---------- story sections ---------- */
 
 main > section:not(.hero) {
