@@ -374,15 +374,17 @@ temporary files in memory. An admin command line adds codes, sets a code's cap a
 
 ## The website
 
-klipolo.com is the `site/` folder: HTML, CSS and one plain JavaScript module of about 17 KB, written by hand, with no
+klipolo.com is the `site/` folder: HTML, CSS and one plain JavaScript module of under 20 KB, written by hand, with no
 framework, no dependencies and no build step.
 
-- **Served by nginx** as static files, with gzip, long cache lifetimes for fonts and images, and a strict content
-  security policy.
-- **Self-hosted media.** The muted loop at the top (a 720p cut for phones) and the full demo film are files on the
-  same server; the film is also on YouTube. The loop's first frame is a plain image, so the first paint never waits
-  for a video. The loop plays only while it is on screen, and not when the visitor asks for reduced motion or saves
-  data, unless they press Play.
+- **Served by nginx** as static files, with gzip, long cache lifetimes for fonts and images, and a content security
+  policy.
+- **A self-hosted loop.** The muted loop at the top (a 720p cut for phones) is a file on the same server. Its first
+  frame is a plain image, so the first paint never waits for a video. It plays only while it is on screen, and not
+  when the visitor asks for reduced motion or saves data, unless they press Play.
+- **The film from YouTube, on click.** Watch the demo opens the film in a dialog, through a youtube-nocookie.com
+  embed that is made only on that click, so nothing from YouTube loads before it. Closing the dialog removes the
+  player. Without scripting, the link goes to YouTube.
 - **Images** in AVIF, WebP and JPEG at several widths, and the font (Schibsted Grotesk) self-hosted.
 - **Sound, off by default.** A switch turns on keystroke and tick sounds for the typing moments, from one small sprite
   (WebM Opus, with an M4A fallback). With reduced motion on, typing shows its words at once.
