@@ -612,11 +612,8 @@ ul[role="list"], ol[role="list"] { list-style: none; padding: 0; }
   .still { box-shadow: 0 0 0 1px rgb(255 255 255 / .14); }
 }
 
-/* Three caption styles side by side, each named under its strip. */
-.strips { display: grid; gap: 16px; }
-@media (min-width: 720px) {
-  .strips { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
+/* Three caption styles, one above another, each named under its strip. */
+.strips { display: grid; gap: 14px; }
 .still--strip { border-radius: 8px; }
 .strip__name {
   margin-top: 8px;
