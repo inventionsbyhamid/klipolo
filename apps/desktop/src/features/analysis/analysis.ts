@@ -47,10 +47,10 @@ export function howLong(seconds: number): string {
 
 /**
  * The offer's sentence: what Analyze does and how long it takes, what clips analyzed before cost, and with an access
- * code the credit left, or why Analyze is refused (Rust's sentence, which suggests fewer or shorter files: analysis
- * covers each file whole, however its clip is trimmed).
+ * code (or the free credit: `trial`) the credit left, or why Analyze is refused (Rust's sentence, which suggests fewer
+ * or shorter files: analysis covers each file whole, however its clip is trimmed).
  */
-export function offerText(estimate: Estimate, videos: boolean): string {
+export function offerText(estimate: Estimate, videos: boolean, trial = false): string {
   const them = estimate.clips.length === 1 ? 'it' : 'them';
   const parts = [
     videos
@@ -61,6 +61,8 @@ export function offerText(estimate: Estimate, videos: boolean): string {
   const cached = estimate.cached.length;
   if (cached > 0) parts.push(`${clipCount(cached)} analyzed before ${cached === 1 ? 'loads' : 'load'} at no cost.`);
   if (estimate.refusal) parts.push(estimate.refusal);
+  else if (estimate.creditLeftUsd != null && trial)
+    parts.push(`Free credit: ${dollars(estimate.creditLeftUsd)} left. No key needed.`);
   else if (estimate.creditLeftUsd != null)
     parts.push(`You have ${dollars(estimate.creditLeftUsd)} left on your access code.`);
   return parts.join(' ');
