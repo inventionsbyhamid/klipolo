@@ -2778,3 +2778,39 @@ fn an_inset_picture_in_9_16_is_readable_and_clear_of_the_face_and_the_captions()
     assert!((0.55..=0.7).contains(&b.w), "{b:?}");
     assert!(b.y >= 0.14 - 1e-9 && b.y + b.h <= 0.342, "{b:?}");
 }
+
+#[test]
+fn an_inset_picture_in_9_16_fits_the_band_the_clips_own_shape_leaves() {
+    // The clip shown whole (Fit) in 9:16, in its own shape: the picture goes in the blurred band above it while that
+    // band is tall enough to read, else under the face, never over the clip's picture's top.
+    let shown_whole = |(w, h): (u32, u32)| {
+        let mut p = project();
+        p.settings.formats = vec![FormatKind::Portrait];
+        p.settings.primary_format = FormatKind::Portrait;
+        (p.assets[0].width, p.assets[0].height) = (w, h);
+        let mut framing = klipolo_model::framing::effective_framing(
+            &p,
+            &p.timeline.main[0],
+            FormatKind::Portrait,
+        );
+        framing.mode = klipolo_model::timeline::FramingMode::Fit;
+        p.timeline.main[0]
+            .framing
+            .insert(FormatKind::Portrait, framing);
+        let job = picture_job(&p, &[picture_call("inset")]);
+        let ops = sticker_ops(&p, &job, &drawn_picture(1600, 900)).expect("placed");
+        added_pictures(&ops)[0].layout.rect
+    };
+    // 16:10: its picture starts at 0.324 of the height; the band above holds the inset.
+    let b = shown_whole((1920, 1200));
+    assert!(b.y >= 0.14 - 1e-9 && b.y + b.h <= 0.324, "{b:?}");
+    assert!(b.w >= 0.5, "{b:?}");
+    // 4:3: its picture starts at 0.289; the band above is shorter, and the inset stays above the picture.
+    let b = shown_whole((1440, 1080));
+    assert!(b.y >= 0.14 - 1e-9 && b.y + b.h <= 0.289, "{b:?}");
+    assert!(b.w >= 0.4, "{b:?}");
+    // Vertical: its picture fills the frame, so there is no band above; under the face, above the captions.
+    let b = shown_whole((1080, 1920));
+    assert!(b.y >= 0.465 - 1e-9 && b.y + b.h <= 0.62 + 1e-9, "{b:?}");
+    assert!(b.w >= 0.45, "{b:?}");
+}
