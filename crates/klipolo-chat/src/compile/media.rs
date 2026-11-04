@@ -14,7 +14,8 @@
 //!   own place, in 9:16 inside the area the apps keep clear.
 //! - `addImage`: the picture as the library's + puts one (`media::image::add_image_ops_at`), at a size and in a corner of
 //!   each format's own area (in 9:16 the area the apps keep clear) when one was asked for. In a short, the person's own
-//!   picture with no place given (a logo) goes in a top corner off the face instead (`clear::own_corner`), for 3 s.
+//!   picture with no place given (a logo) goes in a top corner off the face instead (`clear::own_corner`), for 3 s,
+//!   placed again once the follow's path is known (`place_beside_again`).
 //! - `makeSticker`: a `Job::MakeSticker` only, on the project as the message's additions leave it, anchored to the
 //!   footage it shows over as a layer attaches (`Attach`); once the picture is drawn the app places it with
 //!   `sticker_ops` (where and how long `sticker_placement` says, on the project as it is then). A job's prompt names the
@@ -778,6 +779,35 @@ fn in_short(c: &Compiler, work: &Project, start: Us) -> bool {
             && clear::face_in_portrait(work, start, c.follows, &c.inputs.scenes))
 }
 
+/// Whether `item`, given `position`, at timeline `start` of `work`, is the person's own picture in a short's top
+/// corner (`add_image`).
+fn goes_in_corner(
+    c: &Compiler,
+    work: &Project,
+    (item, position): (&LibraryItem, Option<Position>),
+    start: Us,
+) -> bool {
+    !item.pack && position.is_none() && in_short(c, work, start)
+}
+
+/// The picture `edit` (`add_image` of `file` given `position`, on `work`) put in a short's top corner, by id; None for
+/// any other picture.
+pub(super) fn in_corner(
+    c: &Compiler,
+    work: &Project,
+    (file, position): (&str, Option<Position>),
+    edit: &Edit,
+) -> Option<Id> {
+    let item = pick(c, "addImage", file, &[MediaKind::Image]).ok()?;
+    let (id, start) = (edit.ops.iter()).find_map(|op| match op {
+        Op::AddItem { item, .. } if matches!(item.content, ItemContent::Image { .. }) => {
+            Some((item.id.clone(), item.start_us))
+        }
+        _ => None,
+    })?;
+    goes_in_corner(c, work, (item, position), start).then_some(id)
+}
+
 pub(super) fn add_image(
     c: &Compiler,
     work: &Project,
@@ -822,7 +852,7 @@ pub(super) fn add_image(
     }
     // The person's own picture with no place given, in a short ("put my logo at the start"): a top corner off the
     // face, the hook and the captions, for the time asked or `CORNER_US`; the middle would be over the speaker.
-    if !item.pack && position.is_none() && in_short(c, work, start) {
+    if goes_in_corner(c, work, (item, position), start) {
         let len = length(work, start, duration.or(Some(CORNER_US)), IMAGE_US);
         let mut ops = add_image_ops_at(work, &item.asset, start, IMAGE_SIZE, Spot::TopLeft)
             .map_err(|e| to_model(format!("addImage: {e}")))?;
@@ -944,6 +974,7 @@ pub(super) fn make_sticker(
     let beside = position.is_none().then_some(Beside {
         follows: c.follows,
         right: true,
+        corner: false,
     });
     let held = if beside.is_some() {
         duration.or(Some(cues::HOLD_US))
@@ -998,6 +1029,7 @@ pub(super) fn cued_make_sticker(
         beside: Some(Beside {
             follows: c.follows,
             right: prefer == Side::Right,
+            corner: false,
         }),
     })))
 }

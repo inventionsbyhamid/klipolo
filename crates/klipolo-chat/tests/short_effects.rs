@@ -1235,19 +1235,24 @@ fn a_whoosh_trusts_voice_labels_only_within_one_transcription_part() {
     assert!(near(whooshes[0], cuts[3]), "{sounds:?} {cuts:?}");
 }
 
-/// Where the person's own picture with no place given may sit in a short's 9:16 version: in a top corner, about a fifth
-/// of the width, off the face zone, the hook and the captions.
-fn in_a_safe_corner(b: BoxN) -> bool {
-    let face = BoxN {
-        x: 0.2,
-        y: 0.08,
-        w: 0.6,
-        h: 0.38,
-    };
-    (0.17..=0.22).contains(&b.w)
-        && (b.x <= 0.05 || b.x + b.w >= 0.95)
+/// Where a face may be in 9:16 where nothing says where the speaker is.
+const FACE_ZONE: BoxN = BoxN {
+    x: 0.2,
+    y: 0.08,
+    w: 0.6,
+    h: 0.38,
+};
+
+/// Where the person's own picture with no place given may sit in a short's 9:16 version: in a top corner inside the
+/// apps' side margins (6 % each side), at least 13 % of the width, off `head` (where the speaker's head is, else the
+/// face zone), the hook and the captions.
+fn in_a_safe_corner(b: BoxN, head: BoxN) -> bool {
+    b.w >= 0.13
+        && b.x >= 0.06 - 1e-9
+        && b.x + b.w <= 0.94 + 1e-9
+        && (b.x <= 0.06 + 1e-6 || b.x + b.w >= 0.94 - 1e-6)
         && b.y <= 0.2
-        && !overlaps(b, face)
+        && !overlaps(b, head)
         && !overlaps(b, WORDS)
 }
 
@@ -1278,8 +1283,12 @@ fn the_persons_own_picture_with_no_place_goes_in_a_top_corner_of_a_short_off_the
         near(*at, in_short(&after, 0.5)) && near(*len, 3.0),
         "{pictures:?}"
     );
+    // The follow keeps the speaker in the middle: a fifth of the width beside their head.
     let b = portrait_box(&after, item);
-    assert!(in_a_safe_corner(b) && b.x < 0.5, "{b:?}");
+    assert!(
+        in_a_safe_corner(b, HEAD) && b.x < 0.5 && b.w >= 0.18,
+        "{b:?}"
+    );
     // Its 16:9 version: the same corner, as many pixels wide.
     let wide = item.layout.overrides[&FormatKind::Landscape];
     assert!(
@@ -1299,8 +1308,9 @@ fn the_persons_own_picture_with_no_place_goes_in_a_top_corner_of_a_short_off_the
     let (pictures, _) = layers(&after);
     let (_, at, len, item) = &pictures[0];
     assert!(near(*at, 0.0) && near(*len, 4.0), "{pictures:?}");
+    // Nothing says where the speaker is: beside the face zone.
     let b = portrait_box(&after, item);
-    assert!(in_a_safe_corner(b) && b.x < 0.5, "{b:?}");
+    assert!(in_a_safe_corner(b, FACE_ZONE) && b.x < 0.5, "{b:?}");
 
     // Where the follow holds the crop at the picture's left edge, the speaker may stand in the left corner: the right
     // one.
@@ -1314,8 +1324,11 @@ fn the_persons_own_picture_with_no_place_goes_in_a_top_corner_of_a_short_off_the
     let after = added(&p, &out);
     let (pictures, _) = layers(&after);
     let b = portrait_box(&after, &pictures[0].3);
-    let head_right = 0.1 / CROP + 0.22;
-    assert!(in_a_safe_corner(b) && b.x >= head_right, "{b:?}");
+    let head = BoxN {
+        x: 0.1 / CROP - 0.22,
+        ..HEAD
+    };
+    assert!(in_a_safe_corner(b, head) && b.x > 0.5, "{b:?}");
 }
 
 /// The share of a 16:9 picture's width a 9:16 crop shows.

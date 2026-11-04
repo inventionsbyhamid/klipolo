@@ -275,7 +275,8 @@ pub struct Compiled {
     /// stickers and sound effects (`cues`), placed and timed by what the short shows, or left out.
     pub told: Vec<(usize, String)>,
     /// The pictures in `additions` Klipolo placed beside the speaker (a short's stickers, and any sticker with no place
-    /// given), by layer id, for `place_beside_again` once the follow's path is known.
+    /// given) or in a short's top corner (the person's own picture with no place given), by layer id, for
+    /// `place_beside_again` once the follow's path is known.
     pub beside: Vec<(Id, Beside)>,
     /// The answer makes a short (`cues`): Klipolo's own rules place and time its stickers and sound effects.
     pub short: bool,
@@ -348,11 +349,13 @@ pub struct MakeSticker {
 }
 
 /// How a short's drawn sticker is placed beside the speaker once it comes: whether the answer followed the speaker
-/// (the follow keeps them in the middle of a cropped format), and the side it takes when both have the same room.
+/// (the follow keeps them in the middle of a cropped format), and the side it takes when both have the same room. With
+/// `corner`, the person's own picture in a short's top corner instead (`clear::own_corner`), off the speaker's head.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Beside {
     pub follows: bool,
     pub right: bool,
+    pub corner: bool,
 }
 
 /// A call that compiled to nothing, and why, in one plain sentence on one line.
@@ -1112,6 +1115,7 @@ impl Compiler<'_> {
                                 Beside {
                                     follows: self.follows,
                                     right,
+                                    corner: false,
                                 },
                             )
                         }));
@@ -1144,8 +1148,26 @@ impl Compiler<'_> {
                         let at = Beside {
                             follows: self.follows,
                             right: true,
+                            corner: false,
                         };
                         beside.extend(media::picture_id(edit).map(|id| (id, at)));
+                    }
+                    edit.map(|edit| (edit, None))
+                }
+                // The person's own picture with no place given, in a short, goes in a top corner off the face
+                // (`media::add_image`): placed again once the follow's path is known, so it never sits on the head.
+                ToolCall::AddImage { file, position, .. } => {
+                    let edit = self.addition(&adding.work, call);
+                    if let Ok(edit) = &edit
+                        && let Some(id) =
+                            media::in_corner(self, &adding.work, (file, *position), edit)
+                    {
+                        let at = Beside {
+                            follows: self.follows,
+                            right: false,
+                            corner: true,
+                        };
+                        beside.push((id, at));
                     }
                     edit.map(|edit| (edit, None))
                 }
@@ -1988,6 +2010,11 @@ pub fn place_beside_again(p: &Project, ops: &mut [Op], beside: &[(Id, Beside)]) 
         let Some(asset) = p.asset(asset_id) else {
             continue;
         };
+        if b.corner {
+            let (boxes, spot) = clear::own_corner(p, now.start_us, asset, b.follows);
+            clear::place_in_corner(p, std::slice::from_mut(op), (&boxes, spot));
+            continue;
+        }
         let prefer = if b.right {
             clear::Side::Right
         } else {
