@@ -218,7 +218,7 @@ function FreeCredit({ status }: { status: AiStatus | null }) {
   if (!text) return null;
   return (
     <div className="field-v">
-      {freeCreditUsedUp(status) ? (
+      {freeCreditUsedUp(status) || status?.notice ? (
         <Note text={text} />
       ) : (
         <span className="status-ok">

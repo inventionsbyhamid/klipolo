@@ -42,6 +42,14 @@ describe('SettingsDialog', () => {
     expect(dialog).not.toHaveTextContent('replaces your access code');
   });
 
+  it("says when the credit couldn't be checked as a note, without the check mark", () => {
+    const notice = "Couldn't reach Klipolo to check your credit. Check your internet connection.";
+    openOn({ mode: 'relay', trial: true, notice });
+    const note = screen.getByText(notice);
+    expect(note).toHaveClass('field-note');
+    expect(screen.queryByText(/No key needed/)).toBeNull();
+  });
+
   it('says when the free credit is used up', () => {
     openOn({ mode: 'relay', trial: true, budgetUsd: 5, spentUsd: 5, active: true, notice: 'Your free credit is used up. Add your own Meta key in Settings to keep using AI.' });
     expect(screen.getByRole('dialog', { name: 'Settings' })).toHaveTextContent('Your free credit is used up. Add your own Meta key in Settings to keep using AI.');
