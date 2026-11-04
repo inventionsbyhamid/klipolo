@@ -155,7 +155,14 @@ never branch on which.
 
 This is the message from the screenshot above, on a 12 minute lesson that Klipolo had already analyzed.
 
-```mermaid
+<p align="center">
+  <img src="docs/images/message-trace.png" alt="Sequence diagram of one message. You type: Remove the pauses longer than half a second, and add captions in the Clean style. The chat planner sends Muse Spark 1.3 the system prompt, 40 tools, the project context and the message. Spark answers with removeSilences and setCaptions. The compiler checks each call against a snapshot of the project and tells Spark captions done, pause cuts proposed. Spark closes with no more calls. Then the captions apply at once as one undo step, 101 pause cuts wait as one proposal in red, Klipolo replies, and you click Apply: 12:38.0 becomes 11:34.6.">
+</p>
+
+<details>
+<summary>Diagram source (Mermaid)</summary>
+
+```text
 sequenceDiagram
     actor You
     participant Chat as Chat planner<br/>(klipolo-chat)
@@ -174,6 +181,8 @@ sequenceDiagram
     Chat-->>You: "Clean captions are on. I proposed removing pauses<br/>longer than half a second, waiting for your approval."
     You->>Timeline: Apply: 12:38.0 becomes 11:34.6
 ```
+
+</details>
 
 1. **The request.** The system prompt, the tools and the project context go first, the same bytes for every message
    on one project revision so Meta's prompt cache reuses them, then the conversation, then your message.
@@ -197,38 +206,47 @@ The code: the loop is `crates/klipolo-chat/src/planner.rs` (`MAX_STEPS = 10`), t
 
 Klipolo is a Tauri 2 app. Rust crates do the work, a React page draws the editor, and each crate has one job.
 
-```mermaid
-flowchart LR
+<p align="center">
+  <img src="docs/images/architecture.png" alt="Architecture diagram. On the Mac, the editor page (React) talks to the app shell (klipolo-app, Tauri 2) through typed commands and events. The shell uses the chat planner and compiler (klipolo-chat), the engine (klipolo-engine, wgpu on Metal and FFmpeg), the recorder (klipolo-capture), the analysis (klipolo-analysis) and the MCP server (klipolo-mcp). Chat and the engine use the project model (klipolo-model). The MCP server uses chat's tools and compiler, and any MCP client reaches it over a stdio bridge or HTTP on 127.0.0.1. The analysis uses the Meta client (klipolo-meta), which calls Meta's Model API directly with your own key or through the Klipolo relay with an access code; word timing goes through the relay for everyone.">
+</p>
+
+<details>
+<summary>Diagram source (Mermaid)</summary>
+
+```text
+flowchart TB
+    agent["Any MCP client<br/>(an AI agent)"]
     subgraph mac["Klipolo on your Mac"]
         page["Editor page<br/>apps/desktop<br/>React 19 + TypeScript"]
         shell["App shell<br/>klipolo-app<br/>Tauri 2, thin commands"]
-        chat["Chat planner + compiler<br/>klipolo-chat"]
-        model["Project model<br/>klipolo-model<br/>ops, validation, undo"]
-        engine["Engine<br/>klipolo-engine<br/>wgpu on Metal + FFmpeg"]
-        rec["Recorder<br/>klipolo-capture<br/>worker process"]
-        analysis["Analysis<br/>klipolo-analysis<br/>traits + Meta adapters"]
-        metac["Meta client<br/>klipolo-meta"]
         mcp["MCP server<br/>klipolo-mcp"]
+        chat["Chat planner + compiler<br/>klipolo-chat"]
+        rec["Recorder<br/>klipolo-capture<br/>separate process"]
+        engine["Engine<br/>klipolo-engine<br/>wgpu on Metal + FFmpeg"]
+        analysis["Analysis<br/>klipolo-analysis<br/>traits + Meta adapters"]
+        model["Project model<br/>klipolo-model<br/>ops, validation, undo"]
+        metac["Meta client<br/>klipolo-meta"]
     end
-    agent["Any MCP client<br/>(an AI agent)"]
     relay["Klipolo relay<br/>services/relay<br/>budgets + MMS aligner"]
-    meta["Meta's Model API<br/>Muse Spark, Voice Transcribe,<br/>SAM 3.1, Muse Image"]
+    meta["Meta's Model API<br/>Muse Spark, Muse Image<br/>Voice Transcribe, SAM 3.1"]
 
     page <-->|typed commands and events| shell
-    shell --> chat
-    shell --> engine
-    shell --> rec
-    shell --> analysis
     shell --> mcp
+    shell --> chat
+    shell --> rec
+    shell --> engine
+    shell --> analysis
+    agent <-->|stdio bridge or<br/>HTTP on 127.0.0.1| mcp
+    mcp -->|same tools,<br/>same compiler| chat
     chat --> model
     engine --> model
-    mcp -->|same tools, same compiler| chat
     analysis --> metac
     metac -->|your own key| meta
-    metac -->|access code, and word timing for all| relay
+    metac -->|access code, and<br/>word timing for all| relay
     relay --> meta
-    agent <-->|stdio bridge or HTTP on 127.0.0.1| mcp
 ```
+
+</details>
 
 ### The crates and apps
 
@@ -289,27 +307,15 @@ machine for video work.
 | Launch until the window shows | **about 3 s** (2.4 to 3.4 s) | one launch, not repeated, the first after installing 0.1.1: the process start time from `ps` (to the second) against the app's own log line when its window showed |
 | Memory, idle with a project open | **446 MB** resident in all: the app's process 160.5 MB, the three WebKit processes that started with it 285.8 MB | one reading with `ps -o rss`, 33 minutes after launch, the Mac idle; resident sizes count shared system libraries once in each process, so the real total is lower |
 
-### Electron, from published sources
+### For scale
 
-We did not build an Electron version of Klipolo, so these are other people's numbers, each with its source. They
-show what the runtime alone, and two open source Electron media apps, weigh.
-
-| What | Size | Source |
-| --- | --- | --- |
-| The Electron runtime alone for macOS, v45.2.2, before any app code | 125.0 MB zipped (Intel), 121.0 MB (Apple Silicon) | [Electron v45.2.2 release](https://github.com/electron/electron/releases/tag/v45.2.2) |
-| LosslessCut 3.70.2, an open source Electron video cutter built on FFmpeg | 177.9 MB disk image (Intel), 165.8 MB (Apple Silicon) | [LosslessCut v3.70.2 release](https://github.com/mifi/lossless-cut/releases/tag/v3.70.2) |
-| Kap 3.6.0, an open source Electron screen recorder for macOS | 122.7 MB disk image (Intel), 124.7 MB (Apple Silicon) | [Kap v3.6.0 release](https://github.com/wulkano/Kap/releases/tag/v3.6.0) |
-| Tauri's own benchmark, a hello world app on Linux CI | Electron: 166.5 MB binary, 476 MB peak memory (September 2023, the last Electron run). Tauri: 3.0 MB binary, 358 MB peak memory (Nov 2026) | [electron-recent.json](https://github.com/tauri-apps/benchmark_results/blob/gh-pages/electron-recent.json) and [tauri-recent-linux.json](https://github.com/tauri-apps/benchmark_results/blob/gh-pages/tauri-recent-linux.json), the last entry of each (`*_hello_world`) |
-
-MB here is 1,000,000 bytes, as the Mac's Finder counts, from the exact sizes in GitHub's release API. GitHub's
-release pages count 1,048,576 bytes to the MB, so they show the same files as 119 MB and 115 MB (Electron), 170 MB
-and 158 MB (LosslessCut), and 117 MB and 119 MB (Kap). In those units Klipolo's disk images are 41.4 MB (Apple Silicon)
-and 44.6 MB (Intel).
-
-What this says, plainly: the download is where a Rust core wins most clearly. Klipolo's disk images, FFmpeg and its
-sound pack included, are 43.4 MB (Apple Silicon) and 46.8 MB (Intel): under 40% of the Electron runtime's own
-download for the same Mac (121.0 MB and 125.0 MB), and about a quarter of LosslessCut's. Memory is closer: in Tauri's benchmark a hello world peaks at 358 MB against
-Electron's 476 MB, because a web view costs memory either way. That is why Klipolo keeps the video work out of it.
+Two other open source Mac media apps, from their own release pages: LosslessCut 3.70.2, a video cutter that also
+ships FFmpeg, is a 177.9 MB disk image for Intel and 165.8 MB for Apple Silicon
+([release](https://github.com/mifi/lossless-cut/releases/tag/v3.70.2)), and Kap 3.6.0, a screen recorder, is 122.7 MB
+and 124.7 MB ([release](https://github.com/wulkano/Kap/releases/tag/v3.6.0)). Klipolo's disk image, FFmpeg and its
+sound pack included, is about a quarter of LosslessCut's. MB here is 1,000,000 bytes, as the Mac's Finder counts.
+GitHub's release pages count 1,048,576 bytes to the MB, so they show those files as 170 MB and 158 MB (LosslessCut)
+and 117 MB and 119 MB (Kap), and Klipolo's as 44.6 MB (Intel) and 41.4 MB (Apple Silicon).
 
 ## MCP: let other apps edit
 
@@ -490,10 +496,6 @@ assets/            Fonts and the pack of music, sounds, stickers and backgrounds
 docs/images/       The screenshots in this README
 site/              klipolo.com (static, hand written, no build step)
 ```
-
-## Known limits
-
-- The Apple Silicon version is built and notarized on an Intel Mac, and most testing ran on Intel Macs.
 
 ## What's next
 
