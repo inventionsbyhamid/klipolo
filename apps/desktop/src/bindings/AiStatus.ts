@@ -7,6 +7,11 @@ import type { SessionSpend } from "./SessionSpend";
  */
 export type AiStatus = { mode: AiMode, 
 /**
+ * Whether the free credit built into Klipolo pays (`mode` is `relay`, and the person saved neither a key nor a
+ * code). Its code is never in the status.
+ */
+trial?: boolean, 
+/**
  * The access code's credit, in US dollars, when the relay said.
  */
 budgetUsd?: number, 
@@ -19,7 +24,7 @@ spentUsd?: number,
  */
 keyHint?: string, 
 /**
- * The access code, shown in full (it isn't a secret to the person who typed it).
+ * The access code, shown in full (it isn't a secret to the person who typed it). Never the free credit's.
  */
 code?: string, 
 /**

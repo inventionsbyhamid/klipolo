@@ -6,7 +6,9 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use klipolo_app::credentials::{AiStatus, Credentials, Endpoints, SecretStore, device_id};
+use klipolo_app::credentials::{
+    AiStatus, Credentials, Endpoints, SecretStore, built_in_trial_code, device_id,
+};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use super::analysis::AnalysisHandle;
@@ -19,8 +21,8 @@ pub(crate) const AI_STATUS_EVENT: &str = "ai-status";
 /// The app's credentials and its one shared Meta adapter.
 pub(crate) type CredentialsState = Arc<Credentials>;
 
-/// The credentials saved on this Mac, with this device's id from `support` (app support `Klipolo/`). Reads the
-/// Keychain; makes no network call.
+/// The credentials saved on this Mac, with this device's id from `support` (app support `Klipolo/`) and the free credit
+/// built into this copy, if any. Reads the Keychain; makes no network call.
 pub(crate) fn load(support: Option<&Path>) -> CredentialsState {
     let device = support
         .and_then(|dir| {
@@ -30,7 +32,10 @@ pub(crate) fn load(support: Option<&Path>) -> CredentialsState {
         })
         // Without app support the id lasts this run only; the relay sees a new device next time.
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    Arc::new(Credentials::load(store(), Endpoints::for_app(), device))
+    Arc::new(
+        Credentials::load(store(), Endpoints::for_app(), device)
+            .with_trial_code(built_in_trial_code()),
+    )
 }
 
 #[cfg(target_os = "macos")]
@@ -111,7 +116,8 @@ pub(crate) async fn settings_set_code(
     Ok(status)
 }
 
-/// Removes the key and the code: AI features ask for one again; editing and export keep working.
+/// Removes the key and the code: the free credit pays again when this copy has one, else AI features ask for a key or
+/// code; editing and export keep working.
 #[tauri::command]
 pub(crate) async fn settings_clear(
     app: AppHandle,
