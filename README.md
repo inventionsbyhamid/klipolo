@@ -369,6 +369,24 @@ The container is capped at 8 CPUs and 6 GB, opens no ports of its own, keeps its
 temporary files in memory. An admin command line adds codes, sets a code's cap and device limit, and shows the spend.
 `services/relay/README.md` has the routes, the settings and the client contract.
 
+## The website
+
+klipolo.com is the `site/` folder: HTML, CSS and one plain JavaScript module of about 17 KB, written by hand, with no
+framework, no dependencies and no build step.
+
+- **Served by nginx** as static files, with gzip, long cache lifetimes for fonts and images, and a strict content
+  security policy.
+- **Self-hosted media.** The muted loop at the top (a 720p cut for phones) and the full demo film are files on the
+  same server; the film is also on YouTube. The loop's first frame is a plain image, so the first paint never waits
+  for a video. The loop plays only while it is on screen, and not when the visitor asks for reduced motion or saves
+  data, unless they press Play.
+- **Images** in AVIF, WebP and JPEG at several widths, and the font (Schibsted Grotesk) self-hosted.
+- **Sound, off by default.** A switch turns on keystroke and tick sounds for the typing moments, from one small sprite
+  (WebM Opus, with an M4A fallback). With reduced motion on, typing shows its words at once.
+- **Lighthouse 12:** performance 100 on desktop and 99 to 100 on mobile, accessibility 96. Measured in headless
+  Chromium with simulated throttling, the site served by nginx with its live config, the median of 3 desktop and 5
+  mobile runs, on the home page as it was on 4 November, before the demo film moved to the top.
+
 ## Why Rust
 
 A video editor spends its life in hot loops: decoding, compositing, timing words, applying edits on long projects.
