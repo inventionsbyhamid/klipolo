@@ -147,8 +147,9 @@ Where each one is called:
   with the sticker cut-out in `crates/klipolo-app/src/media/sticker.rs`.
 - The MCP demo agent (Muse Spark driving Klipolo over MCP): `scripts/mcp-demo-agent/agent.py`.
 
-All of them go through one client, `crates/klipolo-meta`. With your own key it calls Meta directly. With an access
-code it goes through Klipolo's relay. Callers never branch on which.
+All of them go through one client, `crates/klipolo-meta`. With your own key it calls Meta directly; with an access
+code it goes through Klipolo's relay. Word timing (MMS) runs on the relay either way, which keeps no audio. Callers
+never branch on which.
 
 ### One message, end to end
 
@@ -222,7 +223,7 @@ flowchart LR
     mcp -->|same tools, same compiler| chat
     analysis --> metac
     metac -->|your own key| meta
-    metac -->|access code| relay
+    metac -->|access code, and word timing for all| relay
     relay --> meta
     agent <-->|stdio bridge or HTTP on 127.0.0.1| mcp
 ```
