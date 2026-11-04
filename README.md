@@ -16,15 +16,15 @@
   <a href="#install"><img src="https://img.shields.io/badge/macOS-15%2B-111111?logo=apple&logoColor=white" alt="macOS 15 or later"></a>
   <a href="#install"><img src="https://img.shields.io/badge/Apple%20Silicon%20%7C%20Intel-supported-111111" alt="Apple Silicon and Intel"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-AGPL--3.0-0b5fff" alt="Licence: AGPL-3.0"></a>
-  <a href="https://github.com/inventionsbyhamid/klipolo/releases/tag/v0.1.1"><img src="https://img.shields.io/badge/release-v0.1.1-e0301a" alt="Release v0.1.1"></a>
+  <a href="https://github.com/inventionsbyhamid/klipolo/releases/tag/v0.1.2"><img src="https://img.shields.io/badge/release-v0.1.2-e0301a" alt="Release v0.1.2"></a>
   <a href="#why-rust"><img src="https://img.shields.io/badge/Rust-Tauri%202%20%2B%20wgpu-b7410e?logo=rust&logoColor=white" alt="Rust, Tauri 2 and wgpu"></a>
   <a href="#mcp-let-other-apps-edit"><img src="https://img.shields.io/badge/MCP-server-6b46c1" alt="MCP server"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/inventionsbyhamid/klipolo/releases/download/v0.1.1/Klipolo-0.1.1-aarch64.dmg"><img src="https://img.shields.io/badge/Download-Apple%20Silicon-e0301a?style=for-the-badge&logo=apple&logoColor=white" alt="Download Klipolo for Apple Silicon"></a>
+  <a href="https://github.com/inventionsbyhamid/klipolo/releases/download/v0.1.2/Klipolo-0.1.2-aarch64.dmg"><img src="https://img.shields.io/badge/Download-Apple%20Silicon-e0301a?style=for-the-badge&logo=apple&logoColor=white" alt="Download Klipolo for Apple Silicon"></a>
   &nbsp;
-  <a href="https://github.com/inventionsbyhamid/klipolo/releases/download/v0.1.1/Klipolo-0.1.1-x86_64.dmg"><img src="https://img.shields.io/badge/Download-Intel-e0301a?style=for-the-badge&logo=apple&logoColor=white" alt="Download Klipolo for Intel"></a>
+  <a href="https://github.com/inventionsbyhamid/klipolo/releases/download/v0.1.2/Klipolo-0.1.2-x86_64.dmg"><img src="https://img.shields.io/badge/Download-Intel-e0301a?style=for-the-badge&logo=apple&logoColor=white" alt="Download Klipolo for Intel"></a>
 </p>
 
 <p align="center">
@@ -397,8 +397,8 @@ became of the proposal.
 You need a Mac with Apple Silicon or Intel and macOS 15 or later.
 
 1. **Download** the disk image for your Mac:
-   [Klipolo for Apple Silicon](https://github.com/inventionsbyhamid/klipolo/releases/download/v0.1.1/Klipolo-0.1.1-aarch64.dmg)
-   (43.4 MB) or [Klipolo for Intel](https://github.com/inventionsbyhamid/klipolo/releases/download/v0.1.1/Klipolo-0.1.1-x86_64.dmg)
+   [Klipolo for Apple Silicon](https://github.com/inventionsbyhamid/klipolo/releases/download/v0.1.2/Klipolo-0.1.2-aarch64.dmg)
+   (43.4 MB) or [Klipolo for Intel](https://github.com/inventionsbyhamid/klipolo/releases/download/v0.1.2/Klipolo-0.1.2-x86_64.dmg)
    (46.8 MB).
    Not sure which? About This Mac lists a **Chip** on Apple Silicon and an Intel **Processor** on Intel.
 2. **Open it and drag Klipolo to Applications.** Both disk images are signed with a Developer ID, notarized by
