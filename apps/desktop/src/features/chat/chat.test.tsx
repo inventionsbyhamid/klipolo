@@ -1008,6 +1008,23 @@ describe('chat: more on proposals and the panel', () => {
     expect(fake.applied).toEqual([]);
   });
 
+  it('says the free credit left while it pays, and when it is used up, with the way to Settings', async () => {
+    useAi.setState({ status: { mode: 'relay', trial: true, budgetUsd: 5, spentUsd: 0.2, active: true } });
+    chat();
+    const { unmount } = renderWithProviders(<ChatPanel />);
+    expect(screen.getByText('Free credit: $4.80 left. No key needed.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open Settings' })).toBeNull();
+    unmount();
+
+    const usedUp = 'Your free credit is used up. Add your own Meta key in Settings to keep using AI.';
+    useAi.setState({ status: { mode: 'relay', trial: true, budgetUsd: 5, spentUsd: 5, active: true, notice: usedUp } });
+    renderWithProviders(<ChatPanel />);
+    expect(screen.getByText(usedUp)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Open Settings' }));
+    expect(useAi.getState().settingsOpen).toBe(true);
+    useAi.setState({ settingsOpen: false });
+  });
+
   it('says why chat is off when the access code was turned off, with the way to Settings', async () => {
     const notice = 'This access code is no longer active. Enter another code or add your own Meta key.';
     useAi.setState({ status: { mode: 'relay', code: 'KLIP-TEST-0001', active: false, notice } });
