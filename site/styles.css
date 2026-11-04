@@ -503,8 +503,8 @@ ul[role="list"], ol[role="list"] { list-style: none; padding: 0; }
   display: grid;
   gap: clamp(28px, 5vh, 48px);
 }
-/* The figure is the size container: 100cqw is the window's width, so the radius and the
-   shadow scale with the screenshot. Measurements are in the shot's own pixels (2880 x 1751). */
+/* The figure is the size container: 100cqw is the window's width, so the radius, the shadow and the
+   typed line scale with the screenshot. Measurements are in the shot's own pixels (2880 x 1751). */
 .window {
   container-type: inline-size;
   display: grid;
@@ -535,6 +535,35 @@ ul[role="list"], ol[role="list"] { list-style: none; padding: 0; }
 @media (prefers-color-scheme: dark) {
   /* On black the shadow can't show, so the window gets the hairline macOS draws on dark windows. */
   .window__frame { box-shadow: 0 0 0 1px rgb(255 255 255 / .16); }
+}
+
+/* A request typed into the chat's own box, over its placeholder. */
+.window__ask {
+  --caret: #e0301a;
+  position: absolute;
+  left: calc(100% * 2194 / 2880);
+  top: calc(100% * 1559 / 1751);
+  width: calc(100% * 508 / 2880);
+  height: calc(100% * 65 / 1751);
+  display: flex;
+  align-items: center;
+  padding-left: calc(100cqw * 5 / 2880);
+  background: #2a2e34;
+  color: #eceef1;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  font-size: calc(100cqw * 28 / 2880);
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+}
+.window__ask.is-asking { opacity: 1; }
+.window__typed { overflow: hidden; }
+/* Below this width the shot's own text is too small to read, so nothing is typed over it. */
+@container (max-width: 719px) {
+  .window__ask { display: none; }
 }
 
 /* ---------- story sections ---------- */

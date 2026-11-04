@@ -280,6 +280,7 @@ const typers = new Map();
 for (const el of d.querySelectorAll('[data-type], [data-ask]')) typers.set(el, typer(el));
 const typerIn = (el, sel) => typers.get(el.querySelector(sel));
 const at = (ms, fn) => { if (!still) setTimeout(fn, ms); };
+const ASK = 'make a 60 second short';
 
 const moments = {
   async problem(el) {
@@ -328,6 +329,15 @@ const moments = {
     if (preview) preview.textContent = 'Kept the 5 best moments. 0:58, vertical.';
     Sound.tick(0.6, el);
   },
+  // The editor's screenshot: one request typed into the chat's own box. It isn't sent.
+  async ask(el) {
+    const line = el.querySelector('[data-typed]');
+    if (still || !line) return;
+    await hold(el, 700);
+    el.classList.add('is-asking');
+    await hold(el, 300);
+    await typeInto(line, ASK, 0.4, el);
+  },
   promise(el) {
     at(2300, () => Sound.key(0.85, el)); // the instant line
   },
@@ -345,14 +355,16 @@ function fire(el) {
 
 const momentEls = d.querySelectorAll('[data-moment]');
 if ('IntersectionObserver' in window) {
-  const io = new IntersectionObserver((entries) => {
+  const once = (opts) => new IntersectionObserver((entries, io) => {
     for (const e of entries) {
       if (!e.isIntersecting) continue;
       io.unobserve(e.target);
       fire(e.target);
     }
-  }, { rootMargin: '0px 0px -30% 0px' });
-  momentEls.forEach((el) => { watch(el); io.observe(el); });
+  }, opts);
+  const io = once({ rootMargin: '0px 0px -30% 0px' });
+  const whole = once({ threshold: 1 }); // a small moment, such as one line, starts once all of it is on screen
+  momentEls.forEach((el) => { watch(el); ('whole' in el.dataset ? whole : io).observe(el); });
 } else {
   momentEls.forEach(fire);
 }
