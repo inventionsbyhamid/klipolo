@@ -28,6 +28,10 @@
 </p>
 
 <p align="center">
+  <a href="https://youtu.be/JAT5tXGfvbs"><img src="https://img.shields.io/badge/Watch%20the%20demo-2%3A41-111111?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch the demo (2:41)"></a>
+</p>
+
+<p align="center">
   <img src="docs/images/hero-pictures.jpg" alt="The Klipolo editor. In the chat, the person asked for two pictures that explain a biology lesson. The preview shows the one Muse Image drew over the whole frame: a brown bear turning into a polar bear across a snowy landscape. Below, the 12 minute lesson on the timeline with its pauses already cut.">
 </p>
 
