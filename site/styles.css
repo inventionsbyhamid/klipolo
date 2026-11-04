@@ -456,25 +456,39 @@ ul[role="list"], ol[role="list"] { list-style: none; padding: 0; }
   gap: 0 24px;
 }
 .film__credit {
+  flex: 1 1 30ch;
   font-size: var(--t-small);
   line-height: 1.5;
   color: var(--quiet);
   max-width: 90ch;
 }
-.film__loop {
-  min-height: 40px;
+/* Two small text controls: the film on YouTube, and the loop's pause. */
+.film__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 20px;
   margin-left: auto;
+}
+.film__yt,
+.film__loop {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
   padding: 0 2px;
   border: 0;
   background: none;
   color: var(--quiet);
   font-size: var(--t-small);
   font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
   text-decoration: underline;
   text-decoration-color: var(--line);
+  text-decoration-thickness: 1px;
   text-underline-offset: .25em;
 }
+.film__yt:hover,
 .film__loop:hover { color: var(--ink); text-decoration-color: currentColor; }
 
 /* ---------- the editor: the real window, framed the way macOS frames it ---------- */
