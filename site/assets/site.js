@@ -571,3 +571,31 @@ function takeDemo(take) {
 
 const take = d.querySelector('[data-take]');
 if (take) takeDemo(take);
+
+/* -- stills: their pictures go in once the page has loaded, so they never compete with the first paint --
+   A group that comes near before that goes in at once. Either way the browser's own lazy loading
+   then fetches each picture as it nears the window, even after a jump straight past it. */
+
+const later = d.querySelectorAll('[data-later-group]');
+const showStills = (g) => {
+  for (const n of g.querySelectorAll('noscript[data-later]')) {
+    n.insertAdjacentHTML('beforebegin', n.textContent);
+    n.remove();
+  }
+};
+const showAll = () => later.forEach(showStills);
+if ('IntersectionObserver' in window) {
+  const near = new IntersectionObserver((es) => {
+    for (const e of es) {
+      if (!e.isIntersecting) continue;
+      near.unobserve(e.target);
+      showStills(e.target);
+    }
+  }, { rootMargin: '600px 0px' });
+  later.forEach((g) => near.observe(g));
+  const idle = (fn) => (window.requestIdleCallback ? requestIdleCallback(fn, { timeout: 2000 }) : setTimeout(fn, 200));
+  if (d.readyState === 'complete') idle(showAll);
+  else addEventListener('load', () => idle(showAll), { once: true });
+} else {
+  showAll();
+}

@@ -16,7 +16,7 @@
 <link rel="manifest" href="/site.webmanifest">
 <link rel="preload" href="/assets/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/styles.css">
-<script type="module" src="/assets/site.js?v=4"></script>
+<script type="module" src="/assets/site.js?v=5"></script>
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Klipolo">
 <meta property="og:title" content="Klipolo, the Mac video editor you talk to">
@@ -84,6 +84,17 @@
   </div>
 </section>
 
+<!--
+  SLOT: THE 60 SECOND TEASER
+  The music-led teaser goes here when it is made. Keep it a click to play, with sound only after that click,
+  and a poster frame with width and height set. For example:
+  <section class="teaser" aria-label="Klipolo in 60 seconds">
+    <video controls preload="none" playsinline width="1920" height="1080" poster="/assets/img/teaser-poster.jpg">
+      <source src="/assets/video/teaser.mp4" type="video/mp4">
+    </video>
+  </section>
+-->
+
 <section class="editor" aria-labelledby="editor-title">
   <h2 class="say" id="editor-title">Here’s the editor.</h2>
   <figure class="window">
@@ -97,6 +108,190 @@
     </div>
     <figcaption class="window__note">A new project. Drop in a video or record your screen, then ask the chat for an edit.</figcaption>
   </figure>
+</section>
+
+<section class="features" aria-labelledby="features-title">
+  <h2 class="say" id="features-title">What it does.</h2>
+
+  <div class="group" data-later-group aria-labelledby="group-record">
+    <h3 class="group__title" id="group-record">Record</h3>
+    <ul class="tiles" role="list">
+      <li class="tile">
+        <figure class="tile__fig">
+          <div class="still" style="aspect-ratio: 1440 / 865">
+            <noscript data-later>
+              <picture>
+                <source type="image/avif" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/record-dialog-560.avif 560w, /assets/img/record-dialog-1120.avif 1120w">
+                <source type="image/webp" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/record-dialog-560.webp 560w, /assets/img/record-dialog-1120.webp 1120w">
+                <img class="still__img" src="/assets/img/record-dialog-560.jpg" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/record-dialog-560.jpg 560w, /assets/img/record-dialog-1120.jpg 1120w" width="1440" height="865" loading="lazy" decoding="async" alt="Klipolo’s Record window. Under What to record: Whole screen, One app and Record yourself, with Whole screen chosen and a thumbnail of the built-in display. Below, the microphone with a red level meter, the camera set to No camera, and the Record button.">
+              </picture>
+            </noscript>
+          </div>
+          <figcaption class="tile__text">Record the whole screen, one app or just yourself, with your mic and camera.</figcaption>
+        </figure>
+      </li>
+      <li class="tile">
+        <figure class="tile__fig">
+          <div class="still" style="aspect-ratio: 775 / 420">
+            <noscript data-later>
+              <picture>
+                <source type="image/avif" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/record-menu-560.avif 560w, /assets/img/record-menu-775.avif 775w">
+                <source type="image/webp" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/record-menu-560.webp 560w, /assets/img/record-menu-775.webp 775w">
+                <img class="still__img" src="/assets/img/record-menu-560.jpg" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/record-menu-560.jpg 560w, /assets/img/record-menu-775.jpg 775w" width="775" height="420" loading="lazy" decoding="async" alt="Klipolo’s menu in the macOS menu bar during a recording, at 0:39. It says Klipolo closed. The recording goes on until you stop it here. Below are Pause, Mark this moment, and Stop and save.">
+              </picture>
+            </noscript>
+          </div>
+          <figcaption class="tile__text">Pause, mark a moment or stop from the menu bar, even after Klipolo closes.</figcaption>
+        </figure>
+      </li>
+      <li class="tile tile--wide">
+        <figure class="tile__fig">
+          <div class="still" style="aspect-ratio: 2160 / 1340">
+            <noscript data-later>
+              <picture>
+                <source type="image/avif" sizes="(min-width: 1316px) 1200px, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/record-zoom-1200.avif 1200w, /assets/img/record-zoom-2160.avif 2160w">
+                <source type="image/webp" sizes="(min-width: 1316px) 1200px, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/record-zoom-1200.webp 1200w, /assets/img/record-zoom-2160.webp 2160w">
+                <img class="still__img" src="/assets/img/record-zoom-1200.jpg" sizes="(min-width: 1316px) 1200px, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/record-zoom-1200.jpg 1200w, /assets/img/record-zoom-2160.jpg 2160w" width="2160" height="1340" loading="lazy" decoding="async" alt="The editor after a screen recording. The preview is zoomed in on the Nucleus label of a biology slide, and the timeline shows a Zoom 2x segment above the recording where the click happened.">
+              </picture>
+            </noscript>
+          </div>
+          <figcaption class="tile__text">Your clicks become zooms on the timeline, so people see what you pointed at.</figcaption>
+        </figure>
+      </li>
+    </ul>
+  </div>
+
+  <div class="group" data-later-group aria-labelledby="group-edit">
+    <h3 class="group__title" id="group-edit">Edit by message</h3>
+    <ul class="tiles" role="list">
+      <li class="tile tile--wide">
+        <figure class="tile__fig">
+          <div class="still" style="aspect-ratio: 2020 / 880">
+            <noscript data-later>
+              <picture>
+                <source type="image/avif" sizes="(min-width: 1316px) 1200px, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/edit-pauses-1200.avif 560w, /assets/img/edit-pauses-2020.avif 715w">
+                <source type="image/webp" sizes="(min-width: 1316px) 1200px, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/edit-pauses-1200.webp 560w, /assets/img/edit-pauses-2020.webp 715w">
+                <img class="still__img" src="/assets/img/edit-pauses-1200.jpg" sizes="(min-width: 1316px) 1200px, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/edit-pauses-1200.jpg 560w, /assets/img/edit-pauses-2020.jpg 715w" width="2020" height="880" loading="lazy" decoding="async" alt="The editor with a 12 minute lesson. In the chat, the request reads: Remove the pauses longer than half a second, and add captions in the Clean style. The reply says Clean captions are on and the cut waits for approval. A card proposes Cut 101 pauses, 63.4 seconds in total, 12:38.0 now and 11:34.6 after, with Apply and Discard. Red pause cuts mark the timeline from end to end.">
+              </picture>
+            </noscript>
+          </div>
+          <figcaption class="tile__text">Ask in plain words, and every cut waits in red for your Apply.</figcaption>
+        </figure>
+      </li>
+      <li class="tile">
+        <figure class="tile__fig">
+          <div class="still" style="aspect-ratio: 715 / 1014">
+            <noscript data-later>
+              <picture>
+                <source type="image/avif" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/edit-pictures-560.avif 560w, /assets/img/edit-pictures-715.avif 715w">
+                <source type="image/webp" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/edit-pictures-560.webp 560w, /assets/img/edit-pictures-715.webp 715w">
+                <img class="still__img" src="/assets/img/edit-pictures-560.jpg" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/edit-pictures-560.jpg 560w, /assets/img/edit-pictures-715.jpg 715w" width="715" height="1014" loading="lazy" decoding="async" alt="Picture cards in the chat, drawn by Muse Image, under the reply Added the title card at the start and put both comparison drawings in the top right: a snowy polar landscape with wildlife as a title card background, a sticker of a polar bear next to a brown bear, and a sticker of a small fish next to a large fish.">
+              </picture>
+            </noscript>
+          </div>
+          <figcaption class="tile__text">Muse Image draws a title card background and stickers for the moments you name.</figcaption>
+        </figure>
+      </li>
+      <li class="tile">
+        <figure class="tile__fig">
+          <ul class="strips" role="list">
+            <li class="strip">
+              <div class="still still--strip" style="aspect-ratio: 1260 / 440">
+                <noscript data-later>
+                  <picture>
+                    <source type="image/avif" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/caption-clean-560.avif 560w, /assets/img/caption-clean-1120.avif 1120w">
+                    <source type="image/webp" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/caption-clean-560.webp 560w, /assets/img/caption-clean-1120.webp 1120w">
+                    <img class="still__img" src="/assets/img/caption-clean-560.jpg" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/caption-clean-560.jpg 560w, /assets/img/caption-clean-1120.jpg 1120w" width="1260" height="440" loading="lazy" decoding="async" alt="Clean captions: a plain white line, that means can reproduce better, over a lesson slide of elephants in grass.">
+                  </picture>
+                </noscript>
+              </div>
+              <p class="strip__name">Clean</p>
+            </li>
+            <li class="strip">
+              <div class="still still--strip" style="aspect-ratio: 1080 / 377">
+                <noscript data-later>
+                  <picture>
+                    <source type="image/avif" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/caption-wordpop-560.avif 560w, /assets/img/caption-wordpop-1080.avif 1080w">
+                    <source type="image/webp" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/caption-wordpop-560.webp 560w, /assets/img/caption-wordpop-1080.webp 1080w">
+                    <img class="still__img" src="/assets/img/caption-wordpop-560.jpg" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/caption-wordpop-560.jpg 560w, /assets/img/caption-wordpop-1080.jpg 1080w" width="1080" height="377" loading="lazy" decoding="async" alt="Word pop captions in a vertical short: NATURAL VARIATIONS in large white and green capitals.">
+                  </picture>
+                </noscript>
+              </div>
+              <p class="strip__name">Word pop</p>
+            </li>
+            <li class="strip">
+              <div class="still still--strip" style="aspect-ratio: 553 / 193">
+                <noscript data-later>
+                  <picture>
+                    <source type="image/avif" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/caption-karaoke-553.avif 553w">
+                    <source type="image/webp" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/caption-karaoke-553.webp 553w">
+                    <img class="still__img" src="/assets/img/caption-karaoke-553.jpg" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/caption-karaoke-553.jpg 553w" width="553" height="193" loading="lazy" decoding="async" alt="Karaoke captions in a vertical teaser over two lines, and this is, then exactly what has, with the word and lit in yellow as it is spoken.">
+                  </picture>
+                </noscript>
+              </div>
+              <p class="strip__name">Karaoke</p>
+            </li>
+          </ul>
+          <figcaption class="tile__text">Captions come in seven styles, two made for shorts, and every word is timed.</figcaption>
+        </figure>
+      </li>
+      <li class="tile tile--wide">
+        <figure class="tile__fig">
+          <div class="still" style="aspect-ratio: 2880 / 1440">
+            <noscript data-later>
+              <picture>
+                <source type="image/avif" sizes="(min-width: 1316px) 1200px, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/edit-mcp-1200.avif 1200w, /assets/img/edit-mcp-2400.avif 2400w">
+                <source type="image/webp" sizes="(min-width: 1316px) 1200px, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/edit-mcp-1200.webp 1200w, /assets/img/edit-mcp-2400.webp 2400w">
+                <img class="still__img" src="/assets/img/edit-mcp-1200.jpg" sizes="(min-width: 1316px) 1200px, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/edit-mcp-1200.jpg 1200w, /assets/img/edit-mcp-2400.jpg 2400w" width="2880" height="1440" loading="lazy" decoding="async" alt="An AI agent in a terminal on the left and Klipolo on the right. The agent reports that the lesson is now a vertical teaser. Klipolo’s preview is 9:16 with the hook Fish shrank 40% in 50 years?! over a blurred background, and its chat lists the steps: Applied, Make it vertical, Turn on captions, Blur the video behind it, and Add the words Fish shrank 40% in 50 years?!, each with Undo.">
+              </picture>
+            </noscript>
+          </div>
+          <figcaption class="tile__text">AI agents can edit with Klipolo over MCP, and each step lands in the chat with its own Undo.</figcaption>
+        </figure>
+      </li>
+      <!--
+        SLOT: THE VERTICAL SHORT
+        A still of the finished vertical short goes here once it is filmed again on the fixed build.
+        Copy the edit-pauses tile above, with the new images and a sentence true to the still.
+      -->
+    </ul>
+  </div>
+
+  <div class="group" data-later-group aria-labelledby="group-share">
+    <h3 class="group__title" id="group-share">Share</h3>
+    <ul class="tiles" role="list">
+      <li class="tile">
+        <figure class="tile__fig">
+          <div class="still" style="aspect-ratio: 1124 / 1013">
+            <noscript data-later>
+              <picture>
+                <source type="image/avif" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/share-export-560.avif 560w, /assets/img/share-export-1120.avif 1120w">
+                <source type="image/webp" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/share-export-560.webp 560w, /assets/img/share-export-1120.webp 1120w">
+                <img class="still__img" src="/assets/img/share-export-560.jpg" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/share-export-560.jpg 560w, /assets/img/share-export-1120.jpg 1120w" width="1124" height="1013" loading="lazy" decoding="async" alt="The Export window: formats 16:9 at 1920 by 1080, 9:16 at 1080 by 1920 and 1:1 at 1080 by 1080, quality set to High, Also save captions as a file switched on with SRT chosen, saving to Movies, Klipolo, and an Export 1 video button.">
+              </picture>
+            </noscript>
+          </div>
+          <figcaption class="tile__text">Export 16:9, 9:16 or 1:1, and save the captions as SRT or WebVTT too.</figcaption>
+        </figure>
+      </li>
+      <li class="tile">
+        <figure class="tile__fig">
+          <div class="still" style="aspect-ratio: 1124 / 714">
+            <noscript data-later>
+              <picture>
+                <source type="image/avif" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/share-done-560.avif 560w, /assets/img/share-done-1120.avif 1120w">
+                <source type="image/webp" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/share-done-560.webp 560w, /assets/img/share-done-1120.webp 1120w">
+                <img class="still__img" src="/assets/img/share-done-560.jpg" sizes="(min-width: 1316px) 588px, (min-width: 720px) 45vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/share-done-560.jpg 560w, /assets/img/share-done-1120.jpg 1120w" width="1124" height="714" loading="lazy" decoding="async" alt="Exported 1 video, saved in Movies, Klipolo: a 1080 by 1920 MP4 of 40.1 MB. The Share menu is open with AirDrop, Mail and Messages.">
+              </picture>
+            </noscript>
+          </div>
+          <figcaption class="tile__text">Share the finished video from the same window, by AirDrop, Mail or Messages.</figcaption>
+        </figure>
+      </li>
+    </ul>
+  </div>
+
+  <p class="features__credit">The lesson in these stills is <a class="text-link" href="https://www.youtube.com/watch?v=HIrLEGU7Fg8">Principles of Natural Selection 2021 Google Slides</a> by Nathan Barten, CC BY 3.0, edited in Klipolo. He does not endorse Klipolo.</p>
 </section>
 
 <section class="problem" data-moment="problem" aria-labelledby="problem-title">
