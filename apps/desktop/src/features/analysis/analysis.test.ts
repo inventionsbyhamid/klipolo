@@ -61,6 +61,12 @@ describe('the offer', () => {
     expect(offerText(estimate({ cached: ['c'] }), true)).toContain('1 clip analyzed before loads at no cost.');
   });
 
+  it('says the free credit left, with no key needed', () => {
+    expect(offerText(estimate({ creditLeftUsd: 4.8 }), false, true)).toBe(
+      'Klipolo transcribes them and times each word. Takes about 2 minutes. Free credit: $4.80 left. No key needed.',
+    );
+  });
+
   it('gives the refusal instead of the credit', () => {
     const refusal =
       'Your access code has $0.02 left, and this needs about $0.07. Analyze fewer or shorter files, or add your own ' +

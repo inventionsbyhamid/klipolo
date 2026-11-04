@@ -187,8 +187,8 @@ function JobRow({ files }: { files: Asset[] }) {
 
 /**
  * The analysis banner at the top of the preview. After an import it offers "Analyze 2 clips for about
- * $0.04" (clips analyzed before load at once, at no cost); with an access code it shows the credit left and refuses,
- * with why, when the estimate is over it. While clips are analysed it lists each with its step; a clip that failed
+ * $0.04" (clips analyzed before load at once, at no cost); with an access code or the free credit it shows the credit
+ * left and refuses, with why, when the estimate is over it. While clips are analysed it lists each with its step; a clip that failed
  * keeps what finished and offers Retry. A take counts as one clip throughout, whatever files its voice is in. Without
  * a key or code it asks for one in Settings. A clip whose file is gone is never offered: it is listed under the offer
  * with what to do.
@@ -205,6 +205,7 @@ export function AnalysisBanner() {
   const assets = useProject((s) => s.snapshot?.project.assets ?? NO_ASSETS);
   const recordings = useProject((s) => s.snapshot?.project.recordings ?? NO_RECORDINGS);
   const needsKey = useNeedsKey();
+  const trial = useAi((s) => s.status?.trial === true);
 
   const at = (files: Asset[]) => takeState(files.map((f) => stateOf(states, f.id)));
   const rows = rowsOf(
@@ -330,7 +331,7 @@ export function AnalysisBanner() {
       </span>
       <div>
         <p className="analysis-title">{offerTitle(counted(estimate, takes))}</p>
-        <p className="analysis-text">{error ?? offerText(counted(estimate, takes), videos)}</p>
+        <p className="analysis-text">{error ?? offerText(counted(estimate, takes), videos, trial)}</p>
       </div>
       <div className="analysis-actions">
         <button type="button" tabIndex={0} className="btn btn-ghost" onClick={notNow}>

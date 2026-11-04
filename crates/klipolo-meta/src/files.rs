@@ -7,7 +7,6 @@ use reqwest::multipart::{Form, Part};
 use reqwest::{Body, StatusCode};
 use serde::Deserialize;
 
-use crate::client::check;
 use crate::error::redact;
 use crate::{MetaClient, MetaError};
 
@@ -77,7 +76,7 @@ impl MetaClient {
                 message: Some(SAM_NEEDS_NEWER_RELAY.into()),
             });
         }
-        let response = check(response, &self.secrets(), self.short_timeout).await?;
+        let response = self.check(response).await?;
         let uploaded: Uploaded = self.read_json(response).await?;
         Ok(uploaded.id)
     }
@@ -103,7 +102,7 @@ impl MetaClient {
         if response.status() == StatusCode::NOT_FOUND {
             return Ok(());
         }
-        check(response, &self.secrets(), self.short_timeout).await?;
+        self.check(response).await?;
         Ok(())
     }
 }

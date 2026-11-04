@@ -84,6 +84,18 @@ describe('the top bar chip', () => {
     });
     expect(chipView({ mode: 'key', keyHint: '6789' })).toEqual({ icon: 'key', label: 'Meta key', missing: false });
   });
+
+  it('shows the free credit left, never a code, and when it is used up', () => {
+    const trial: AiStatus = { mode: 'relay', trial: true, budgetUsd: 5, spentUsd: 0.2, active: true };
+    expect(chipView(trial)).toEqual({ icon: 'ticket', label: 'Free credit:', left: '$4.80', missing: false });
+    expect(chipView({ mode: 'relay', trial: true })).toEqual({ icon: 'ticket', label: 'Free credit', missing: false });
+    expect(chipView({ ...trial, spentUsd: 5 })).toEqual({ icon: 'ticket', label: 'Free credit used up', missing: true });
+    expect(chipView({ ...trial, active: false })).toEqual({
+      icon: 'ticket',
+      label: 'Free credit used up',
+      missing: true,
+    });
+  });
 });
 
 describe('choosing how to pay', () => {

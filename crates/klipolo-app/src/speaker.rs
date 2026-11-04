@@ -47,8 +47,9 @@ pub const NO_ONE: &str = "Klipolo couldn't find a person to follow in this clip.
 /// Said when matching voices to people stopped partway: no voice is used.
 pub const UNMATCHED: &str =
     "Klipolo couldn't tell who is speaking, so the crop follows the main person.";
-/// Said when an access code has too little credit left for the relay to take a call with video.
-pub const LOW_CREDIT_VOICES: &str = "Your access code has too little credit left to tell who is speaking, so the crop follows the main person.";
+/// Said when an access code (or the free credit) has too little credit left for the relay to take a call with video.
+pub const LOW_CREDIT_VOICES: &str =
+    "There is too little credit left to tell who is speaking, so the crop follows the main person.";
 /// Said when who to keep can't be made from what was tracked before: the tracking isn't in the cache any more.
 pub const NOT_TRACKED: &str =
     "This footage isn't tracked any more. Follow the speaker again first.";
@@ -739,7 +740,8 @@ impl Speaker {
         out
     }
 
-    /// Why `usd` is refused: more than an access code's credit left. Free (all tracked before) asks nothing.
+    /// Why `usd` is refused: more than an access code's (or the free credit's) credit left. Free (all tracked before)
+    /// asks nothing.
     async fn over_credit(&self, usd: f64) -> Option<String> {
         if usd <= 0.0 {
             return None;
@@ -750,7 +752,7 @@ impl Speaker {
         };
         (usd > left).then(|| {
             format!(
-                "Your access code has ${left:.2} left, and following the speaker needs {}. Add your own Meta key in \
+                "You have ${left:.2} of credit left, and following the speaker needs {}. Add your own Meta key in \
                  Settings.",
                 about(usd)
             )

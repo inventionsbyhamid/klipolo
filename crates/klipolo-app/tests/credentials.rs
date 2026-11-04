@@ -815,6 +815,221 @@ async fn clearing_keeps_the_device_and_drops_the_key_and_code() {
     assert_eq!(ready.problem, None);
 }
 
+/// The trial code tests build in, as the app builds in `KLIPOLO_TRIAL_CODE`.
+const TRIAL: &str = "KLIP-TRIAL-TEST";
+const USED_UP: &str =
+    "Your free credit is used up. Add your own Meta key in Settings to keep using AI.";
+
+fn trial_registration(
+    server: &MockServer,
+    answer: ResponseTemplate,
+    times: u64,
+) -> impl std::future::Future<Output = ()> + '_ {
+    Mock::given(method("POST"))
+        .and(path("/v1/devices"))
+        .and(body_json(
+            json!({ "device_id": DEVICE, "access_code": TRIAL }),
+        ))
+        .respond_with(answer)
+        .expect(times)
+        .mount(server)
+}
+
+fn on_trial(store: Arc<MemoryStore>, relay: &MockServer) -> Credentials {
+    Credentials::load(store, endpoints(CLOSED, &relay.uri()), DEVICE.into())
+        .with_trial_code(Some(secret(TRIAL)))
+}
+
+#[tokio::test]
+async fn the_free_credit_pays_with_nothing_saved_and_registers_once_a_run() {
+    let relay = MockServer::start().await;
+    trial_registration(&relay, registered(NEW_TOKEN, 5.0, 0.2), 1).await;
+    Mock::given(method("GET"))
+        .and(path("/v1/devices/me"))
+        .and(header(
+            "authorization",
+            format!("Bearer {NEW_TOKEN}").as_str(),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(device(true, 5.0, 0.2)))
+        .expect(1)
+        .mount(&relay)
+        .await;
+    let store = Arc::new(MemoryStore::default());
+    // A token saved before (another code's, or none's): the free credit doesn't pay with it until it registered.
+    store.set(RELAY_TOKEN, &secret(TOKEN)).unwrap();
+    let credentials = on_trial(store.clone(), &relay);
+    assert!(credentials.meta().is_none());
+
+    let ready = credentials.ready().await;
+    assert_eq!(ready.problem, None);
+    let meta = ready.meta.expect("the free credit pays");
+    assert!(meta.client().is_relay());
+    assert_eq!(meta.client().used_up_message(), Some(USED_UP));
+    // The token is saved; the trial code never is.
+    assert_eq!(stored(&store, RELAY_TOKEN).as_deref(), Some(NEW_TOKEN));
+    assert_eq!(stored(&store, RELAY_CODE), None);
+
+    let status = credentials.status().await;
+    assert_eq!(
+        status,
+        AiStatus {
+            mode: AiMode::Relay,
+            trial: true,
+            budget_usd: Some(5.0),
+            spent_usd: Some(0.2),
+            active: Some(true),
+            ..AiStatus::default()
+        }
+    );
+    assert!(!format!("{status:?}").contains(TRIAL));
+    assert!(!serde_json::to_string(&status).unwrap().contains(TRIAL));
+    // Registered this run: the next use doesn't register again.
+    assert!(credentials.ready().await.meta.is_some());
+}
+
+#[tokio::test]
+async fn without_a_trial_code_nothing_saved_still_asks_for_a_key_or_code() {
+    let relay = MockServer::start().await;
+    no_requests(&relay).await;
+    let credentials = Credentials::load(
+        Arc::new(MemoryStore::default()),
+        endpoints(CLOSED, &relay.uri()),
+        DEVICE.into(),
+    )
+    .with_trial_code(None);
+
+    assert!(credentials.meta().is_none());
+    let ready = credentials.ready().await;
+    assert!(ready.meta.is_none());
+    assert_eq!(ready.problem, None);
+    assert_eq!(credentials.status().await, AiStatus::default());
+    assert_eq!(credentials.clear().await.unwrap(), AiStatus::default());
+}
+
+#[tokio::test]
+async fn a_key_or_code_of_the_persons_wins_and_remove_goes_back_to_the_free_credit() {
+    let relay = MockServer::start().await;
+    trial_registration(&relay, registered(NEW_TOKEN, 5.0, 0.0), 2).await;
+    Mock::given(method("POST"))
+        .and(path("/v1/devices"))
+        .and(body_json(
+            json!({ "device_id": DEVICE, "access_code": CODE }),
+        ))
+        .respond_with(registered(TOKEN, 2.0, 0.0))
+        .expect(1)
+        .mount(&relay)
+        .await;
+    let store = Arc::new(MemoryStore::default());
+    store.set(META_API_KEY, &secret(KEY)).unwrap();
+    store.set(RELAY_TOKEN, &secret(TOKEN)).unwrap();
+    let credentials = on_trial(store.clone(), &relay);
+
+    // The key wins: Meta directly, no free credit in the status, and no call to the relay to say so.
+    let meta = credentials.meta().expect("the key's adapter");
+    assert!(!meta.client().is_relay());
+    assert_eq!(meta.client().used_up_message(), None);
+    let status = credentials.status().await;
+    assert_eq!((status.mode, status.trial), (AiMode::Key, false));
+
+    // Remove: the free credit pays again, registered with its code.
+    let trial = AiStatus {
+        mode: AiMode::Relay,
+        trial: true,
+        budget_usd: Some(5.0),
+        spent_usd: Some(0.0),
+        active: Some(true),
+        ..AiStatus::default()
+    };
+    assert_eq!(credentials.clear().await.unwrap(), trial);
+    assert_eq!(stored(&store, META_API_KEY), None);
+    assert_eq!(stored(&store, RELAY_CODE), None);
+    assert!(
+        credentials
+            .meta()
+            .expect("the free credit's adapter")
+            .client()
+            .is_relay()
+    );
+
+    // The person's own code wins too, and shows; its adapter says the relay's own sentences.
+    let status = credentials.set_code(CODE).await.unwrap();
+    assert_eq!((status.trial, status.code.as_deref()), (false, Some(CODE)));
+    assert_eq!(stored(&store, RELAY_CODE).as_deref(), Some(CODE));
+    assert_eq!(credentials.meta().unwrap().client().used_up_message(), None);
+
+    // Removing it registers with the trial code again: the relay knew the device by the person's code.
+    assert_eq!(credentials.clear().await.unwrap(), trial);
+    assert_eq!(stored(&store, RELAY_CODE), None);
+}
+
+#[tokio::test]
+async fn the_free_credit_used_up_or_turned_off_says_so() {
+    let shared_used_up = json!({
+        "error": "budget",
+        "message": "Klipolo's shared AI credit is used up for now. Add your own Meta key in Settings."
+    });
+    let turned_off = json!({ "error": "invalid_code", "message": INVALID_CODE });
+    for refusal in [
+        ResponseTemplate::new(402).set_body_json(shared_used_up),
+        ResponseTemplate::new(403).set_body_json(turned_off),
+    ] {
+        let relay = MockServer::start().await;
+        trial_registration(&relay, refusal, 2).await;
+        let credentials = on_trial(Arc::new(MemoryStore::default()), &relay)
+            .with_register_backoff(Duration::ZERO);
+
+        let ready = credentials.ready().await;
+        assert!(ready.meta.is_none());
+        assert_eq!(ready.problem.as_deref(), Some(USED_UP));
+        let status = credentials.status().await;
+        assert_eq!(
+            status,
+            AiStatus {
+                mode: AiMode::Relay,
+                trial: true,
+                active: Some(false),
+                notice: Some(USED_UP.into()),
+                ..AiStatus::default()
+            }
+        );
+    }
+
+    // Out of reach is not used up: the free credit may still pay once the relay answers.
+    let offline = Credentials::load(
+        Arc::new(MemoryStore::default()),
+        endpoints(CLOSED, CLOSED),
+        DEVICE.into(),
+    )
+    .with_trial_code(Some(secret(TRIAL)));
+    let status = offline.status().await;
+    assert_eq!(
+        (status.trial, status.active, status.notice.as_deref()),
+        (
+            true,
+            None,
+            Some("Couldn't reach Klipolo to check your credit. Check your internet connection.")
+        )
+    );
+
+    // Registered, then nothing left (the relay cuts the budget to the trial's), or turned off.
+    for (relay_ai, budget, spent) in [(true, 5.0, 5.0), (true, 1.2, 1.2), (false, 0.0, 0.4)] {
+        let relay = MockServer::start().await;
+        let mut answer = device(relay_ai, budget, spent);
+        answer["token"] = json!(NEW_TOKEN);
+        trial_registration(&relay, ResponseTemplate::new(200).set_body_json(answer), 1).await;
+        let credentials = on_trial(Arc::new(MemoryStore::default()), &relay);
+
+        let status = credentials.status().await;
+        assert_eq!(
+            status.notice.as_deref(),
+            Some(USED_UP),
+            "{relay_ai} {budget} {spent}"
+        );
+        assert!(status.trial);
+        assert_eq!(status.code, None);
+    }
+}
+
 /// The real Keychain, under a test service of its own (never the app's). Run on the Mac by hand:
 /// `cargo test -p klipolo-app --test credentials -- --ignored keychain`.
 #[cfg(target_os = "macos")]

@@ -1,6 +1,6 @@
 import { useLingui } from '@lingui/react/macro';
 import { Fragment, useLayoutEffect, useRef } from 'react';
-import { openSettings, useAi } from '../../ai/aiStatus';
+import { freeCreditText, freeCreditUsedUp, openSettings, useAi } from '../../ai/aiStatus';
 import { NeedsKey } from '../../ai/NeedsKey';
 import { Icon } from '../../layout/Icon';
 import { offerAgain, stateOf, useAnalysedClips, useAnalysis, useSomeNotAnalysed } from '../../state/analysis';
@@ -60,8 +60,38 @@ function ChatOff() {
 }
 
 /**
+ * While the free credit pays and chat can run: what is left of it and that no key is needed, or that it is used up,
+ * with the way to Settings.
+ */
+function FreeCredit() {
+  const { t } = useLingui();
+  const text = useAi((s) => freeCreditText(s.status));
+  const usedUp = useAi((s) => freeCreditUsedUp(s.status));
+  if (!text) return null;
+  return (
+    <p className="note" role="status">
+      <Icon name="info" />
+      <span>{text}</span>
+      {usedUp && (
+        <button
+          type="button"
+          // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
+          tabIndex={0}
+          className="btn btn-secondary btn-sm"
+          style={{ gridColumn: 2, justifySelf: 'start' }}
+          onClick={openSettings}
+        >
+          {t({ id: 'chatPanel.empty.settings', message: 'Open Settings' })}
+        </button>
+      )}
+    </p>
+  );
+}
+
+/**
  * "Ask for an edit", its suggestions (greyed while chat can't run), the NeedsKey card when there is no key or code, why
- * chat is off when an access code was turned off, and a note while the clips aren't analysed or are being analysed.
+ * chat is off when an access code was turned off, what is left of the free credit while it pays, and a note while the
+ * clips aren't analysed or are being analysed.
  */
 function EmptyChat() {
   const { t } = useLingui();
@@ -79,6 +109,7 @@ function EmptyChat() {
       </p>
       {!allowed && <NeedsKey />}
       {!allowed && <ChatOff />}
+      {allowed && <FreeCredit />}
       {allowed ? (
         <div className="suggestions">
           {SUGGESTIONS.map((s) => (

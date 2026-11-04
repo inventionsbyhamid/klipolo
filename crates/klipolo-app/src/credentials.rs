@@ -4,12 +4,19 @@
 //! code live only in the secret store (the macOS Keychain: service `com.klipolo.app`, accounts `meta-api-key`,
 //! `relay-token`, `relay-code`). Nothing here writes them to a file, a log line or an error.
 //!
+//! **Free credit.** A copy of Klipolo may be built with a trial code (`KLIPOLO_TRIAL_CODE` when it was compiled:
+//! [`built_in_trial_code`]). With neither a key nor a code of the person's, that code pays, through the relay, as an
+//! access code would: so AI works with nothing to type. It is never saved in the secret store, shown, logged or put in
+//! an error, and a key or code the person saves wins over it; removing theirs goes back to it.
+//!
 //! **The relay's device rules.** Every device registers with Klipolo's relay, because word timing runs there in both
 //! modes. Registering again rotates the token and replaces the device's code with the one sent, so sending none
 //! clears it. So:
 //! - a device registers once, the first time AI is used ([`Credentials::ready`]), with its code if one was entered;
 //! - it never registers again while a token is saved, except after the relay refused that token (401), and then the
 //!   saved code goes with it;
+//! - on the free credit, it registers with the trial code once a run before that code pays, as a token saved before
+//!   may have been registered with another code or none;
 //! - entering a code registers with that code (that is how the relay learns it);
 //! - credit and spend come from `GET /v1/devices/me`, never from registering.
 //!
@@ -55,6 +62,9 @@ const CREDIT_OFFLINE: &str =
     "Couldn't reach Klipolo to check your credit. Check your internet connection.";
 pub(crate) const CODE_INACTIVE: &str =
     "This access code is no longer active. Enter another code or add your own Meta key.";
+/// What the free credit says once it is used up or turned off (this device's share or the trial's whole budget).
+pub(crate) const TRIAL_USED_UP: &str =
+    "Your free credit is used up. Add your own Meta key in Settings to keep using AI.";
 const RELAY_BUSY: &str = "Klipolo's server is busy right now. Try again in a moment.";
 const RELAY_UNREADABLE: &str = "Klipolo's server sent an answer the app couldn't read. Try again.";
 const STORE_FAILED: &str = "Klipolo couldn't save this in your Mac's Keychain. Try again.";
@@ -117,6 +127,10 @@ pub enum AiMode {
 #[ts(export)]
 pub struct AiStatus {
     pub mode: AiMode,
+    /// Whether the free credit built into Klipolo pays (`mode` is `relay`, and the person saved neither a key nor a
+    /// code). Its code is never in the status.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub trial: bool,
     /// The access code's credit, in US dollars, when the relay said.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -129,7 +143,7 @@ pub struct AiStatus {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub key_hint: Option<String>,
-    /// The access code, shown in full (it isn't a secret to the person who typed it).
+    /// The access code, shown in full (it isn't a secret to the person who typed it). Never the free credit's.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub code: Option<String>,
@@ -174,8 +188,8 @@ pub const REGISTER_BACKOFF: Duration = Duration::from_secs(60);
 /// What an AI feature gets from [`Credentials::ready`].
 #[derive(Clone, Debug)]
 pub struct Ready {
-    /// The shared adapter. None without a key or code, or with a code whose device isn't registered (no token, so
-    /// nothing can pay).
+    /// The shared adapter. None without a key or code (the person's or the free credit's), or with a code whose device
+    /// isn't registered (no token, so nothing can pay).
     pub meta: Option<Meta>,
     /// Why the device isn't registered with the relay, as a sentence for the person. With a key, the feature runs and
     /// words are timed approximately meanwhile; with a code, nothing runs until it registers. None when registered,
@@ -205,12 +219,16 @@ impl From<StoreError> for SettingsError {
     }
 }
 
-/// The secrets as saved, read once and then kept in step with every change.
+/// The secrets as saved, read once and then kept in step with every change, and the free credit's code.
 #[derive(Clone, Default)]
 struct Held {
     key: Option<SecretString>,
     token: Option<SecretString>,
     code: Option<SecretString>,
+    /// The trial code built in ([`Credentials::with_trial_code`]): never read from or written to the store.
+    trial: Option<SecretString>,
+    /// Whether `token` was registered with `trial` during this run.
+    token_on_trial: bool,
 }
 
 impl Held {
@@ -226,13 +244,54 @@ impl Held {
             key: get(META_API_KEY),
             token: get(RELAY_TOKEN),
             code: get(RELAY_CODE),
+            trial: None,
+            token_on_trial: false,
         }
     }
+
+    /// Whether the free credit pays: a trial code is built in, and the person saved neither a key nor a code.
+    fn on_trial(&self) -> bool {
+        self.trial.is_some() && self.key.is_none() && self.code.is_none()
+    }
+
+    /// The code the device registers with: the person's own, else (without a key) the trial code.
+    fn registration_code(&self) -> Option<&SecretString> {
+        self.code
+            .as_ref()
+            .or_else(|| self.trial.as_ref().filter(|_| self.key.is_none()))
+    }
+
+    /// The code that pays for AI: the registration code, when no key wins over it.
+    fn code_in_use(&self) -> Option<&SecretString> {
+        self.registration_code().filter(|_| self.key.is_none())
+    }
+
+    /// The relay token that may be used: the saved one, but on the free credit only one registered with the trial code
+    /// this run (a token saved before may be another code's, or none's).
+    fn usable_token(&self) -> Option<&SecretString> {
+        self.token
+            .as_ref()
+            .filter(|_| !self.on_trial() || self.token_on_trial)
+    }
+}
+
+/// The trial code built into this copy of Klipolo: `KLIPOLO_TRIAL_CODE` when it was compiled, none when that was unset
+/// or empty. It pays for AI while the person has saved neither a key nor a code ([`Credentials::with_trial_code`]).
+pub fn built_in_trial_code() -> Option<SecretString> {
+    trial_code(option_env!("KLIPOLO_TRIAL_CODE"))
+}
+
+fn trial_code(built_in: Option<&str>) -> Option<SecretString> {
+    built_in
+        .map(str::trim)
+        .filter(|code| !code.is_empty())
+        .map(|code| SecretString::from(code.to_owned()))
 }
 
 /// The client AI features use, from what `store` holds: the key (with the device's relay token for word timing) when
 /// there is one, else the access code's relay token; None with neither. Meta's base URL is the app's
-/// (`Endpoints::for_app`).
+/// (`Endpoints::for_app`). The free credit isn't considered: it pays only after this run registered with it
+/// ([`Credentials`]).
 pub fn ai_client(store: &dyn SecretStore, relay_base: &str) -> Option<MetaClient> {
     let endpoints = Endpoints {
         meta_base: Endpoints::for_app().meta_base,
@@ -242,7 +301,7 @@ pub fn ai_client(store: &dyn SecretStore, relay_base: &str) -> Option<MetaClient
 }
 
 fn client_for(held: &Held, endpoints: &Endpoints) -> Option<MetaClient> {
-    let client = match (&held.key, &held.code, &held.token) {
+    let client = match (&held.key, held.code_in_use(), held.usable_token()) {
         (Some(key), _, token) => {
             let direct =
                 MetaClient::direct(key.clone()).with_meta_base(endpoints.meta_base.clone());
@@ -252,6 +311,9 @@ fn client_for(held: &Held, endpoints: &Endpoints) -> Option<MetaClient> {
             }
         }
         // A token alone (registered for word timing) doesn't pay for Meta's models.
+        (None, Some(_), Some(token)) if held.on_trial() => {
+            MetaClient::relay(token.clone()).with_used_up_message(TRIAL_USED_UP)
+        }
         (None, Some(_), Some(token)) => MetaClient::relay(token.clone()),
         _ => return None,
     };
@@ -296,6 +358,16 @@ impl Credentials {
         }
     }
 
+    /// The trial code that pays while the person has saved neither a key nor a code ([`built_in_trial_code`] in the
+    /// app; none by default). Makes no network call: the device registers with it when AI is first used.
+    pub fn with_trial_code(self, code: Option<SecretString>) -> Self {
+        self.change(|held| {
+            held.trial = code;
+            held.token_on_trial = false;
+        });
+        self
+    }
+
     /// How long a registration may take ([`REGISTER_TIMEOUT`] by default).
     pub fn with_register_timeout(mut self, limit: Duration) -> Self {
         self.register_timeout = limit;
@@ -314,7 +386,8 @@ impl Credentials {
         &self.device_id
     }
 
-    /// The shared adapter as it is now (None without a key or code). Clones share its slots.
+    /// The shared adapter as it is now (None without a key or code, the free credit's included). Clones share its
+    /// slots.
     pub fn meta(&self) -> Option<Meta> {
         lock(&self.meta).clone()
     }
@@ -330,7 +403,7 @@ impl Credentials {
     }
 
     /// The adapter for an AI feature about to run. The first time, the device registers with the relay (with the
-    /// saved code, if any), so word timing works in key mode too.
+    /// saved code, if any, else without a key the free credit's), so word timing works in key mode too.
     ///
     /// If registering fails, `problem` says why. With a key the feature still runs (`meta` is the key's adapter, words
     /// are timed approximately). With a code there is no token to pay with, so `meta` is None: show `problem`, not the
@@ -339,7 +412,7 @@ impl Credentials {
     pub async fn ready(&self) -> Ready {
         let unregistered = {
             let held = lock(&self.held);
-            held.token.is_none() && (held.key.is_some() || held.code.is_some())
+            held.usable_token().is_none() && (held.key.is_some() || held.code_in_use().is_some())
         };
         let problem = if !unregistered {
             None
@@ -350,11 +423,13 @@ impl Credentials {
             let held = lock(&self.held).clone();
             if let Some(problem) = self.recent_failure() {
                 Some(problem)
-            } else if held.token.is_some() || (held.key.is_none() && held.code.is_none()) {
+            } else if held.usable_token().is_some()
+                || (held.key.is_none() && held.code_in_use().is_none())
+            {
                 // Another caller registered, or Remove landed, while this one waited.
                 None
             } else {
-                match self.register(held.code.as_ref()).await {
+                match self.register(held.registration_code()).await {
                     Ok(_) => None,
                     Err(error) => {
                         let offline = if held.key.is_some() {
@@ -362,7 +437,7 @@ impl Credentials {
                         } else {
                             DEVICE_OFFLINE
                         };
-                        let problem = relay_error(&error, offline).message;
+                        let problem = relay_error_for(&error, offline, held.on_trial()).message;
                         *lock(&self.failed) = Some((Instant::now(), problem.clone()));
                         Some(problem)
                     }
@@ -388,28 +463,32 @@ impl Credentials {
     pub async fn recover_unauthorized(&self) -> Result<(), SettingsError> {
         let _turn = self.changes.lock().await;
         let held = lock(&self.held).clone();
-        if let Some(token) = &held.token {
+        let trial = held.on_trial();
+        if let Some(token) = held.usable_token() {
             match self.device_status(token).await {
                 Ok(_) => return Ok(()),
                 Err(MetaError::Unauthorized) => {}
-                Err(error) => return Err(relay_error(&error, CREDIT_OFFLINE)),
+                Err(error) => return Err(relay_error_for(&error, CREDIT_OFFLINE, trial)),
             }
         }
-        self.register(held.code.as_ref())
+        let offline = if trial { DEVICE_OFFLINE } else { CODE_OFFLINE };
+        self.register(held.registration_code())
             .await
             .map(drop)
-            .map_err(|e| relay_error(&e, CODE_OFFLINE))
+            .map_err(|e| relay_error_for(&e, offline, trial))
     }
 
-    /// What Settings shows. With an access code this asks the relay for the credit and spend (re-registering only if
-    /// the relay refused the token); a key or nothing needs no network call. If the credentials changed while the relay
-    /// was asked (Remove, a key or another code saved), the answer is built from the credentials as they are now.
+    /// What Settings shows. With an access code (or the free credit) this asks the relay for the credit and spend
+    /// (re-registering only if the relay refused the token, or the free credit's isn't registered yet this run); a key
+    /// or nothing needs no network call. If the credentials changed while the relay was asked (Remove, a key or another
+    /// code saved), the answer is built from the credentials as they are now.
     pub async fn status(&self) -> AiStatus {
         let (held, asked) = self.snapshot();
-        let Some(code) = relay_code(&held) else {
+        let Some(code) = held.code_in_use() else {
             return local_status(&held);
         };
-        let info = match &held.token {
+        let trial = held.on_trial();
+        let info = match held.usable_token() {
             Some(token) => match self.device_status(token).await {
                 Err(MetaError::Unauthorized) => self.register_again_unless_changed(token).await,
                 answer => answer,
@@ -419,7 +498,7 @@ impl Credentials {
             None => {
                 let _turn = self.changes.lock().await;
                 let now = lock(&self.held).clone();
-                match (relay_code(&now), &now.token) {
+                match (now.code_in_use(), now.usable_token()) {
                     (None, _) => return local_status(&now),
                     (Some(_), Some(token)) => self.device_status(token).await,
                     (Some(code), None) => self.register(Some(code)).await,
@@ -428,23 +507,28 @@ impl Credentials {
         };
         let (now, current) = self.snapshot();
         if current != asked {
-            match relay_code(&now) {
+            match now.code_in_use() {
                 // Remove or a key landed while the relay answered: that answer is about credentials no longer in use.
                 None => return local_status(&now),
                 // Another code: the answer was about the old one.
                 Some(now_code) if now_code.expose_secret() != code.expose_secret() => {
-                    return relay_base_status(now_code);
+                    return relay_base_status(now_code, now.on_trial());
                 }
                 // The same code (only its token changed): the device's credit is still the answer.
                 Some(_) => {}
             }
         }
         match info {
-            Ok(info) => relay_status(code, &info),
-            Err(error) => AiStatus {
-                notice: Some(relay_error(&error, CREDIT_OFFLINE).message),
-                ..relay_base_status(code)
-            },
+            Ok(info) => relay_status(code, trial, &info),
+            Err(error) => {
+                let notice = relay_error_for(&error, CREDIT_OFFLINE, trial).message;
+                AiStatus {
+                    // The relay refused the free credit (used up, or its code turned off): nothing can pay with it.
+                    active: (trial && notice == TRIAL_USED_UP).then_some(false),
+                    notice: Some(notice),
+                    ..relay_base_status(code, trial)
+                }
+            }
         }
     }
 
@@ -494,20 +578,28 @@ impl Credentials {
             held.key = None;
             held.code = Some(code.clone());
         });
-        Ok(relay_status(&code, &info))
+        Ok(relay_status(&code, false, &info))
     }
 
     /// Removes the key and the code. The device keeps its relay token, so word timing works again as soon as either is
-    /// added, without registering again.
+    /// added, without registering again. With a trial code built in, the free credit pays again: the status is the
+    /// relay's for it (the device registers with it first, unless it did this run).
     pub async fn clear(&self) -> Result<AiStatus, SettingsError> {
-        let _turn = self.changes.lock().await;
-        self.store.delete(META_API_KEY)?;
-        self.store.delete(RELAY_CODE)?;
-        self.change(|held| {
-            held.key = None;
-            held.code = None;
-        });
-        Ok(AiStatus::default())
+        let trial = {
+            let _turn = self.changes.lock().await;
+            self.store.delete(META_API_KEY)?;
+            self.store.delete(RELAY_CODE)?;
+            self.change(|held| {
+                held.key = None;
+                held.code = None;
+            });
+            lock(&self.held).on_trial()
+        };
+        Ok(if trial {
+            self.status().await
+        } else {
+            AiStatus::default()
+        })
     }
 
     /// Registers the device with `code` (or none) and saves the new token. The caller holds `changes`. Gives up after
@@ -531,7 +623,13 @@ impl Credentials {
             // Kept for this run; the next launch registers again (with the saved code).
             tracing::warn!(%error, "secret store");
         }
-        self.change(|held| held.token = Some(token.clone()));
+        self.change(|held| {
+            held.token_on_trial = matches!(
+                (code, &held.trial),
+                (Some(code), Some(trial)) if code.expose_secret() == trial.expose_secret()
+            );
+            held.token = Some(token.clone());
+        });
         Ok(info)
     }
 
@@ -547,7 +645,7 @@ impl Credentials {
             Some(token) if token.expose_secret() != refused.expose_secret() => {
                 self.device_status(token).await
             }
-            _ => self.register(held.code.as_ref()).await,
+            _ => self.register(held.registration_code()).await,
         }
     }
 
@@ -580,11 +678,6 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// The access code in use: one is saved and no key wins over it.
-fn relay_code(held: &Held) -> Option<&SecretString> {
-    held.code.as_ref().filter(|_| held.key.is_none())
-}
-
 /// The status that needs no relay: the key's, or none.
 fn local_status(held: &Held) -> AiStatus {
     match &held.key {
@@ -601,21 +694,31 @@ fn key_status(key: &SecretString) -> AiStatus {
     }
 }
 
-fn relay_base_status(code: &SecretString) -> AiStatus {
+/// The status of `code` before the relay said anything: the person's code in full, or (`trial`) only that the free
+/// credit pays, never its code.
+fn relay_base_status(code: &SecretString, trial: bool) -> AiStatus {
     AiStatus {
         mode: AiMode::Relay,
-        code: Some(code.expose_secret().to_owned()),
+        trial,
+        code: (!trial).then(|| code.expose_secret().to_owned()),
         ..AiStatus::default()
     }
 }
 
-fn relay_status(code: &SecretString, info: &DeviceInfo) -> AiStatus {
+/// The status of `code` as the relay told it. The free credit (`trial`) says it is used up when the relay turned it
+/// off or nothing is left of it (this device's share, or the trial's whole budget: the relay cuts the budget to that).
+fn relay_status(code: &SecretString, trial: bool, info: &DeviceInfo) -> AiStatus {
+    let notice = if trial {
+        (!info.relay_ai || info.budget_usd - info.spent_usd < 0.005).then_some(TRIAL_USED_UP)
+    } else {
+        (!info.relay_ai).then_some(CODE_INACTIVE)
+    };
     AiStatus {
         budget_usd: Some(info.budget_usd),
         spent_usd: Some(info.spent_usd),
         active: Some(info.relay_ai),
-        notice: (!info.relay_ai).then(|| CODE_INACTIVE.to_owned()),
-        ..relay_base_status(code)
+        notice: notice.map(str::to_owned),
+        ..relay_base_status(code, trial)
     }
 }
 
@@ -631,6 +734,18 @@ fn relay_error(error: &MetaError, offline: &str) -> SettingsError {
         MetaError::Decode(_) => RELAY_UNREADABLE.to_owned(),
         other => other.relay_user_message(),
     })
+}
+
+/// [`relay_error`], but on the free credit (`trial`) a refusal for credit or of the code (402, 403: used up, or turned
+/// off) is the free credit used up.
+fn relay_error_for(error: &MetaError, offline: &str, trial: bool) -> SettingsError {
+    match error {
+        MetaError::Budget { .. } | MetaError::NotAllowed { .. } if trial => {
+            tracing::warn!(%error, "relay");
+            SettingsError::new(TRIAL_USED_UP)
+        }
+        _ => relay_error(error, offline),
+    }
 }
 
 #[cfg(test)]
@@ -653,5 +768,15 @@ mod tests {
             }
         );
         assert_eq!(Endpoints::for_build(true, elsewhere), elsewhere());
+    }
+
+    /// A trial code is built in only when `KLIPOLO_TRIAL_CODE` held one: unset, empty or blank builds none.
+    #[test]
+    fn a_trial_code_is_built_in_only_when_set() {
+        assert!(trial_code(None).is_none());
+        assert!(trial_code(Some("")).is_none());
+        assert!(trial_code(Some(" \n")).is_none());
+        let code = trial_code(Some(" KLIP-TRIAL-TEST\n")).expect("a code");
+        assert_eq!(code.expose_secret(), "KLIP-TRIAL-TEST");
     }
 }

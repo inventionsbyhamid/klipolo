@@ -6,6 +6,10 @@
 # built (the AGPL's source offer for this version), and check-bundle.sh fails a bundle whose NOTICE.txt still has the
 # {{SOURCE_URL}} or {{SOURCE_COMMIT}} placeholder. That commit must be pushed there, tagged v<version>, before the disk
 # image is shared.
+# KLIPOLO_TRIAL_CODE is the relay access code built into the app as its free credit (read at compile time: klipolo-app's
+# credentials::built_in_trial_code), so AI works with no key or code to type. A release without it is refused unless
+# KLIPOLO_NO_TRIAL=1 asks for a copy with no free credit. The script says which ("trial credit: built in" or "none"),
+# checks the built app holds the code, and never prints the code.
 # 1. Checks: the source code address, a clean checkout (a release builds a commit), 8 GB free, rustup's cargo with the
 #    target installed, and the LGPL FFmpeg prefix for the arch in .build/ffmpeg-9.0 (scripts/link-ffmpeg.sh), checked
 #    by scripts/verify-ffmpeg-prefix.sh: exactly the prefix that ships.
@@ -43,6 +47,14 @@ is_source_url "${KLIPOLO_SOURCE_URL:-}" || {
   echo "refused: set KLIPOLO_SOURCE_URL to the public https:// address of Klipolo's source code (NOTICE.txt gives it)" >&2
   exit 2
 }
+# The free credit's code without the spaces around it, as the app reads it (built_in_trial_code trims it too).
+trial_code=${KLIPOLO_TRIAL_CODE:-}
+trial_code=${trial_code#"${trial_code%%[![:space:]]*}"}
+trial_code=${trial_code%"${trial_code##*[![:space:]]}"}
+if [ -z "$trial_code" ] && [ "${KLIPOLO_NO_TRIAL:-}" != 1 ]; then
+  echo "refused: set KLIPOLO_TRIAL_CODE (or KLIPOLO_NO_TRIAL=1 for a build without free credit)" >&2
+  exit 2
+fi
 cd "$repo"
 started=$(date +%s)
 
@@ -105,6 +117,14 @@ config="{\"version\":\"$version\",\"bundle\":{\"macOS\":{\"signingIdentity\":\"-
 config+="\"frameworks\":[$frameworks]},\"resources\":{\"../../.build/release/$arch/licenses/\":\"licenses/\"}}}"
 export FFMPEG_DIR=$prefix KLIPOLO_FFMPEG_PREFIX=$prefix PKG_CONFIG_LIBDIR=$prefix/lib/pkgconfig PKG_CONFIG_PATH=
 export PKG_CONFIG_ALLOW_CROSS=1 MACOSX_DEPLOYMENT_TARGET=15.0 CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-4}
+# Passed through to cargo (rustc reads it for option_env!, and rebuilds the app when it changes); never printed.
+if [ -n "$trial_code" ]; then
+  export KLIPOLO_TRIAL_CODE=$trial_code
+  echo "trial credit: built in"
+else
+  export KLIPOLO_TRIAL_CODE=
+  echo "trial credit: none"
+fi
 home=$(cd ~ && pwd -P)
 cargo_home=$(cd "${CARGO_HOME:-$home/.cargo}" && pwd -P)
 # rustc applies the last matching prefix: the repository (under the home folder) maps to ".", the rest of it to "~".
@@ -127,6 +147,14 @@ plist=$app/Contents/Info.plist
 [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = "$version" ] || { echo "FAIL: the app isn't $version" >&2; exit 1; }
 [ "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$plist")" = 15.0 ] || { echo "FAIL: LSMinimumSystemVersion isn't 15.0" >&2; exit 1; }
 "$here/check-bundle.sh" "$app" "$ffarch" || { echo "the bundle check failed: nothing was signed with the Developer ID" >&2; exit 1; }
+# The free credit is in the app: the code is read from a pipe (never an argument, so never in the process list) and
+# only the count of matches is printed.
+if [ -n "$trial_code" ]; then
+  main=$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")
+  found=$(grep -a -c -F -f <(printf '%s\n' "$trial_code") "$main" || true)
+  [ "${found:-0}" -gt 0 ] || { echo "FAIL: the app binary doesn't hold the free credit's code" >&2; exit 1; }
+  echo "trial credit: in the app binary ($found matches)"
+fi
 
 # 5. Signed, notarized, stapled, then checked as a user's Mac would.
 "$here/sign.sh" "$app"

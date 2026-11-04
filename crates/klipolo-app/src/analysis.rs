@@ -56,7 +56,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinHandle;
 use ts_rs::TS;
 
-use crate::credentials::{AiMode, AiStatus, CODE_INACTIVE, Credentials};
+use crate::credentials::{AiMode, AiStatus, CODE_INACTIVE, Credentials, TRIAL_USED_UP};
 use holds::Holds;
 pub use media::{EngineMedia, Media};
 use run::{Outcome, Run};
@@ -1075,9 +1075,9 @@ fn price(meta: &Meta, clip: &Clip, cached: &Cached) -> f64 {
     usd
 }
 
-/// With an access code: the credit left (when the relay said), less what the runs going have `reserved`, and why `usd`
-/// of analysis is refused (a code turned off, or more than is left). Analysis covers each file whole, however its clip
-/// is trimmed, so the way on is fewer or shorter files.
+/// With an access code (or the free credit): the credit left (when the relay said), less what the runs going have
+/// `reserved`, and why `usd` of analysis is refused (a code turned off, or more than is left; the free credit used up).
+/// Analysis covers each file whole, however its clip is trimmed, so the way on is fewer or shorter files.
 fn credit(status: &AiStatus, usd: f64, reserved: f64) -> (Option<f64>, Option<String>) {
     if status.mode != AiMode::Relay {
         return (None, None);
@@ -1094,9 +1094,17 @@ fn credit(status: &AiStatus, usd: f64, reserved: f64) -> (Option<f64>, Option<St
         return (left, Some(notice));
     }
     let refusal = left.filter(|&left| usd > left).map(|left| {
+        if status.trial && left < 0.005 {
+            return TRIAL_USED_UP.to_owned();
+        }
+        let whose = if status.trial {
+            "Your free credit"
+        } else {
+            "Your access code"
+        };
         format!(
-            "Your access code has ${left:.2} left, and this needs {}. Analyze fewer or shorter files, or add your own \
-             Meta key in Settings.",
+            "{whose} has ${left:.2} left, and this needs {}. Analyze fewer or shorter files, or add your own Meta key \
+             in Settings.",
             about(usd)
         )
     });
@@ -1308,5 +1316,35 @@ mod tests {
             ..AiStatus::default()
         };
         assert_eq!(credit(&key, 9.0, 0.0), (None, None));
+    }
+
+    #[test]
+    fn the_free_credit_is_refused_in_its_own_words() {
+        let trial = |budget, spent| AiStatus {
+            mode: AiMode::Relay,
+            trial: true,
+            budget_usd: Some(budget),
+            spent_usd: Some(spent),
+            active: Some(true),
+            ..AiStatus::default()
+        };
+        assert_eq!(credit(&trial(5.0, 1.0), 0.07, 0.0), (Some(4.0), None));
+        assert_eq!(
+            credit(&trial(5.0, 4.97), 0.07, 0.0).1.as_deref(),
+            Some(
+                "Your free credit has $0.03 left, and this needs about $0.07. Analyze fewer or shorter files, or add \
+                 your own Meta key in Settings."
+            )
+        );
+        assert_eq!(
+            credit(&trial(5.0, 5.0), 0.004, 0.0).1.as_deref(),
+            Some(TRIAL_USED_UP)
+        );
+        let off = AiStatus {
+            active: Some(false),
+            notice: Some(TRIAL_USED_UP.into()),
+            ..trial(5.0, 0.0)
+        };
+        assert_eq!(credit(&off, 0.0, 0.0).1.as_deref(), Some(TRIAL_USED_UP));
     }
 }

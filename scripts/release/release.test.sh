@@ -375,6 +375,16 @@ refused_build() {  # refused_build <KLIPOLO_SOURCE_URL or "unset">
   [ "$rc" -eq 2 ] && grep -qF 'refused: set KLIPOLO_SOURCE_URL' <<< "$out"
 }
 expect "build-mac.sh refuses to start without KLIPOLO_SOURCE_URL" pass refused_build unset
+# build-mac.sh refuses a copy with no free credit, unless KLIPOLO_NO_TRIAL=1 asks for one.
+trial_refused() {  # trial_refused <KLIPOLO_NO_TRIAL>: whether the build stopped for the missing KLIPOLO_TRIAL_CODE
+  local out
+  out=$(env -u KLIPOLO_TRIAL_CODE KLIPOLO_NO_TRIAL="$1" KLIPOLO_SOURCE_URL=https://github.com/owner/klipolo \
+    "$repo/scripts/release/build-mac.sh" x86_64 0.1.0 2>&1)
+  grep -qF 'refused: set KLIPOLO_TRIAL_CODE' <<< "$out"
+}
+trial_not_refused() { ! trial_refused 1; }
+expect "build-mac.sh refuses to start without KLIPOLO_TRIAL_CODE" pass trial_refused ""
+expect "build-mac.sh builds without free credit when KLIPOLO_NO_TRIAL=1" pass trial_not_refused
 # build-mac.sh checks the third-party notices are current once the page's packages are in, before the app is built.
 notices_checked() {
   awk '/^pnpm install --frozen-lockfile$/ && !i {i = NR} /third-party\.sh" --check$/ && !c {c = NR}

@@ -20,6 +20,35 @@ export function needsKey(status: AiStatus | null): boolean {
   return status?.mode === 'none';
 }
 
+/** What the free credit says once it is used up (Rust says the same in the status's notice). */
+const FREE_CREDIT_USED_UP = 'Your free credit is used up. Add your own Meta key in Settings to keep using AI.';
+
+/** The free credit left in dollars, rounded to the cent, when the free credit pays and the relay said; else null. */
+export function freeCreditLeft(status: AiStatus | null): number | null {
+  if (!status?.trial || status.budgetUsd == null || status.spentUsd == null) return null;
+  return Math.max(0, Math.round((status.budgetUsd - Math.max(0, status.spentUsd)) * 100) / 100);
+}
+
+/** Whether the free credit pays and nothing is left of it, or the relay turned it off. */
+export function freeCreditUsedUp(status: AiStatus | null): boolean {
+  if (!status?.trial) return false;
+  const left = freeCreditLeft(status);
+  return status.active === false || (left !== null && left <= 0);
+}
+
+/**
+ * What every AI surface says while the free credit built into Klipolo pays: "Free credit: $4.80 left. No key needed.",
+ * that it is used up, or why the credit is unknown (Rust's notice). Null when it doesn't pay (a key, the person's own
+ * code, or nothing).
+ */
+export function freeCreditText(status: AiStatus | null): string | null {
+  if (!status?.trial) return null;
+  if (freeCreditUsedUp(status)) return FREE_CREDIT_USED_UP;
+  if (status.notice) return status.notice;
+  const left = freeCreditLeft(status);
+  return left === null ? 'Free credit. No key needed.' : `Free credit: $${left.toFixed(2)} left. No key needed.`;
+}
+
 /** Whether AI features should ask for a key or code right now. */
 export function useNeedsKey(): boolean {
   return useAi((s) => needsKey(s.status));
