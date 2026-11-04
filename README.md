@@ -266,7 +266,7 @@ flowchart LR
   adapters, so no vendor type reaches the pipeline, the compiler or the page, and tests use fakes of each trait.
 - **Built-ins are data.** Caption styles, shader effects, generators and title templates ship as data files
   (`crates/klipolo-model/captions/styles/*.json`, `crates/klipolo-model/presets/*/contrib.json` beside a WGSL
-  shader or a scene JSON), so a new one is data, not code.
+  shader or a scene JSON), so a new one is a data file plus one line that lists it.
 
 ## Why Rust
 
