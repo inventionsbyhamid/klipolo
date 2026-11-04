@@ -164,6 +164,43 @@ ul[role="list"], ol[role="list"] { list-style: none; padding: 0; }
 
 .top__end { display: flex; align-items: center; gap: 12px; }
 
+/* The sound switch: off until the visitor turns it on. */
+.sound {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 13px 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--quiet);
+  font-size: var(--t-small);
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color .2s, border-color .2s;
+}
+.sound:hover { color: var(--ink); }
+.sound[aria-pressed="true"] { color: var(--ink); border-color: var(--quiet); }
+.sound__icon {
+  width: 18px; height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.sound__cone { fill: currentColor; stroke: none; }
+.sound__wave { opacity: 0; transition: opacity .3s; }
+.sound[aria-pressed="true"] .sound__wave { opacity: 1; }
+.sound[aria-pressed="true"] .sound__wave--2 { transition-delay: .08s; }
+.sound[aria-pressed="true"] .sound__off { opacity: 0; }
+.sound__off { transition: opacity .2s; }
+.sound__state { min-width: 1.6em; }
+.sound:focus-visible { outline-offset: 3px; border-radius: 999px; }
+
 /* A quiet button. */
 .pill {
   display: inline-flex;

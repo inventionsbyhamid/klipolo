@@ -16,7 +16,7 @@
 <link rel="manifest" href="/site.webmanifest">
 <link rel="preload" href="/assets/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/styles.css">
-<script type="module" src="/assets/site.js?v=2"></script>
+<script type="module" src="/assets/site.js?v=3"></script>
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Klipolo">
 <meta property="og:title" content="Klipolo, the Mac video editor you talk to">
@@ -40,6 +40,10 @@
     <span class="mark__name">Klipolo</span>
   </a>
   <div class="top__end">
+    <button class="sound" type="button" data-sound aria-pressed="false" hidden>
+      <svg class="sound__icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path class="sound__cone" d="M3.5 7.5h3l4-3.5v12l-4-3.5h-3z"/><path class="sound__wave sound__wave--1" d="M13 7.6a3.4 3.4 0 0 1 0 4.8"/><path class="sound__wave sound__wave--2" d="M15.2 5.4a6.5 6.5 0 0 1 0 9.2"/><path class="sound__off" d="M13.2 7.8l4.4 4.4m0-4.4l-4.4 4.4"/></svg>
+      <span>Sound</span><span class="sound__state" aria-hidden="true" data-sound-state>off</span>
+    </button>
     <a class="pill" href="#download">Download</a>
   </div>
 </header>
