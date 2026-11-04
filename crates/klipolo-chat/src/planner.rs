@@ -45,7 +45,7 @@ use klipolo_model::Project;
 use klipolo_model::time::US_PER_SEC;
 use serde::{Deserialize, Serialize};
 
-use crate::compile::{Audience, Compiled, Inputs, compile, names_media};
+use crate::compile::{Audience, Compiled, Inputs, asks_picture, compile, names_media};
 use crate::context::ChatContext;
 use crate::library::MediaKind;
 use crate::model::{Item, LanguageModel, ModelError, ModelRequest, ModelResponse};
@@ -443,8 +443,8 @@ pub async fn plan(
 
 /// Whether refused `call` only styles or decorates a short, which Klipolo's own rules decide (where its stickers and
 /// sound effects go and how they come in): an animation or motion, a change of a picture or sound this answer added,
-/// or a sound, picture or drawn sticker the person didn't name. Its refusal is never said as part of the message left
-/// undone; a named one, and every real edit, is.
+/// a sound, picture or drawn sticker the person didn't name, or a drawn picture the person didn't ask for. Its
+/// refusal is never said as part of the message left undone; a named one, and every real edit, is.
 fn decorates(call: &ToolCall, inputs: &Inputs) -> bool {
     let added = |layer: &LayerRef| match layer {
         LayerRef::Last => true,
@@ -462,6 +462,7 @@ fn decorates(call: &ToolCall, inputs: &Inputs) -> bool {
         ToolCall::AddSound { name, .. } => !names_media(inputs, name, &[MediaKind::Sound]),
         ToolCall::AddImage { file, .. } => !names_media(inputs, file, &[MediaKind::Image]),
         ToolCall::MakeSticker { prompt, .. } => !names_media(inputs, prompt, &[MediaKind::Image]),
+        ToolCall::MakePicture { .. } => !asks_picture(&inputs.message),
         _ => false,
     }
 }

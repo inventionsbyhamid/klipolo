@@ -1058,7 +1058,7 @@ const NO_PICTURE_ASKED: &str =
     "makePicture: the person didn't ask for a picture, so this short has none. Leave it out.";
 
 /// Whether `message` asks for a picture, a diagram or another visual to explain something.
-fn asks_picture(message: &str) -> bool {
+pub(crate) fn asks_picture(message: &str) -> bool {
     const ASKED: [&str; 14] = [
         "picture",
         "image",

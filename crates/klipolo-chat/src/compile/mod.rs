@@ -106,6 +106,7 @@ pub use clear::{FACE_ZONE, UNDER_FACE};
 pub use clips::{NO_ROOM, NO_ROOM_ANYWHERE, NO_TRANSITIONS, REVERSING};
 use map::Map;
 use media::At;
+pub(crate) use media::asks_picture;
 pub use media::{sticker_ops, sticker_placement};
 pub(crate) use recorded::recording_name;
 pub(crate) use sources::{OwnTrack, kind_of};
