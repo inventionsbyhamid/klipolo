@@ -365,8 +365,8 @@ if ('IntersectionObserver' in window) {
 }
 
 /* -- the demo film --
-   Its two videos go in once the page has loaded and the stage is near, so they never compete with the first
-   paint. The muted loop plays only while half of it shows and the tab is visible, and only for a visitor who
+   The muted loop goes in once the page has loaded and the stage is near, so it never competes with the first
+   paint. It plays only while half of it shows and the tab is visible, and only for a visitor who
    hasn't asked for reduced motion or less data; it can be paused. "Watch the demo" opens the film from YouTube in
    a dialog, and nothing from YouTube loads before that click; closing it removes the player and brings the loop
    back. Without scripting, the link simply goes to YouTube. */
