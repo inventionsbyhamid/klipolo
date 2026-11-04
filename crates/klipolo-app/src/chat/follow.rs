@@ -221,6 +221,9 @@ pub(super) struct Follows {
     /// A follow was asked for and nothing of it landed (nobody found, the tracking failed, no clip can follow): the
     /// model's words may claim it (`PlanOut::without_follow`).
     pub failed: bool,
+    /// The follow landed otherwise than the model was told: every clip shows its footage whole for a presenter's corner
+    /// inset, so its words may claim someone is kept in frame (`PlanOut::without_follow`).
+    pub differs: bool,
 }
 
 /// Runs `out`'s follow jobs (and the offer for a new vertical or square version) on the project the message leaves
@@ -323,7 +326,8 @@ pub(super) async fn follow_jobs(
                         .filter(|(id, _)| followed.inset(id))
                         .count();
                     let whole = shown_whole(&target, &formats);
-                    let said = if insets == followed.paths.len() {
+                    follows.differs = insets == followed.paths.len();
+                    let said = if follows.differs {
                         format!(
                             "{TRACKER} found only a small corner inset, so {whole} {when}. {cost}"
                         )

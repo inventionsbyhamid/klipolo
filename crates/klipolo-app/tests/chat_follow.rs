@@ -914,7 +914,8 @@ async fn the_persons_logo_moves_to_the_corner_away_from_the_speaker_once_the_fol
     );
 }
 
-/// Chat's follow of the speaker on `setup`, the model's closing words "Done.": the reply's notes and the project then.
+/// Chat's follow of the speaker on `setup`, the model's closing words claiming it as done: the reply and the project
+/// then.
 async fn follow_the_speaker(setup: &Setup) -> (Value, Project) {
     let (session, projects) = chat(
         setup,
@@ -923,7 +924,7 @@ async fn follow_the_speaker(setup: &Setup) -> (Value, Project) {
             "followSubject",
             r#"{"description": "speaker", "focus": null}"#,
         )],
-        "Done.",
+        "Done. The speaker stays in frame in the vertical version.",
     );
     let r = reply(
         &session
@@ -956,14 +957,14 @@ async fn a_presenter_in_a_small_corner_inset_is_shown_whole_on_a_blurred_backgro
     });
     let (r, now) = follow_the_speaker(&setup).await;
     assert_eq!(setup.sam.asked(), [PERSON]);
+    // The model's words claimed the speaker is kept in frame: Klipolo's one true sentence is said instead.
     assert_eq!(
-        r["notes"],
-        serde_json::json!([
-            "SAM 3.1 found only a small corner inset, so the vertical version shows the whole picture on a blurred \
-             background now. Tracking cost $0.02."
-        ]),
+        r["text"],
+        "SAM 3.1 found only a small corner inset, so the vertical version shows the whole picture on a blurred \
+         background now. Tracking cost $0.02.",
         "{r:#}"
     );
+    assert_eq!(r["notes"], serde_json::json!([]), "{r:#}");
     assert_eq!(
         portrait(&now),
         (klipolo_model::timeline::FramingMode::Fit, false)

@@ -574,9 +574,10 @@ impl ChatSession {
                 if !follows.note.is_empty() {
                     out.note = format!("{} {}", out.note, follows.note).trim().to_owned();
                 }
-                // The model was told the follow was done before it ran: when it came to nothing, its words may claim
-                // it. What else was done is said instead, or else what the follow came to is the reply.
-                if follows.failed
+                // The model was told the follow was done before it ran: when it came to nothing, or every clip shows
+                // its footage whole for a presenter's inset, its words may claim someone is kept in frame. What else was
+                // done is said instead, or else what the follow came to is the reply.
+                if (follows.failed || follows.differs)
                     && let Some(instead) = out.without_follow.take()
                 {
                     out.reply = if instead.is_empty() {
