@@ -16,7 +16,7 @@
 <link rel="manifest" href="/site.webmanifest">
 <link rel="preload" href="/assets/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/styles.css">
-<script type="module" src="/assets/site.js?v=2"></script>
+<script type="module" src="/assets/site.js?v=3"></script>
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Klipolo">
 <meta property="og:title" content="Klipolo, the Mac video editor you talk to">
@@ -40,6 +40,10 @@
     <span class="mark__name">Klipolo</span>
   </a>
   <div class="top__end">
+    <button class="sound" type="button" data-sound aria-pressed="false" hidden>
+      <svg class="sound__icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path class="sound__cone" d="M3.5 7.5h3l4-3.5v12l-4-3.5h-3z"/><path class="sound__wave sound__wave--1" d="M13 7.6a3.4 3.4 0 0 1 0 4.8"/><path class="sound__wave sound__wave--2" d="M15.2 5.4a6.5 6.5 0 0 1 0 9.2"/><path class="sound__off" d="M13.2 7.8l4.4 4.4m0-4.4l-4.4 4.4"/></svg>
+      <span>Sound</span><span class="sound__state" aria-hidden="true" data-sound-state>off</span>
+    </button>
     <a class="pill" href="#download">Download</a>
   </div>
 </header>
@@ -78,6 +82,21 @@
     <p class="sr-only">A short demo plays here. It shows the transcript of a one minute, twelve second video. Typed requests edit it. “Cut the ums” removes the filler words. “Remove the long pauses” closes the silences. “Make it 30 seconds” drops the two weakest sentences. “Add captions” lights the words up as they are spoken. The video ends at 28 seconds: Okay, so, this is how I plan a whole week of videos. I write the hooks first, before I film anything. And the rest gets easy, because I know where it’s going. And honestly, try it once and you’ll see.</p>
     <button class="demo-toggle" type="button" data-demo-toggle hidden>Pause the demo</button>
   </div>
+</section>
+
+<section class="editor" aria-labelledby="editor-title">
+  <h2 class="say" id="editor-title">Here’s the editor.</h2>
+  <figure class="window">
+    <div class="window__frame">
+      <picture>
+        <source type="image/avif" sizes="(min-width: 1316px) 1200px, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/editor-800.avif 800w, /assets/img/editor-1200.avif 1200w, /assets/img/editor-1600.avif 1600w, /assets/img/editor-2400.avif 2400w">
+        <source type="image/webp" sizes="(min-width: 1316px) 1200px, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/editor-800.webp 800w, /assets/img/editor-1200.webp 1200w, /assets/img/editor-1600.webp 1600w, /assets/img/editor-2400.webp 2400w">
+        <img class="window__shot" src="/assets/img/editor-1200.jpg" sizes="(min-width: 1316px) 1200px, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/editor-800.jpg 800w, /assets/img/editor-1200.jpg 1200w, /assets/img/editor-1600.jpg 1600w, /assets/img/editor-2400.jpg 2400w" width="2880" height="1751" loading="lazy" decoding="async" alt="The Klipolo editor on a new, empty project. The library on the left has no clips yet. The middle says Drop videos here, with buttons to choose files or record your screen. The timeline below is empty. On the right, the chat says Ask for an edit and suggests requests such as cut the ums and long pauses, make a 60 second highlight and add captions, above a box that says Say what you want.">
+      </picture>
+      <p class="window__ask" data-moment="ask" data-whole aria-hidden="true"><span class="window__typed" data-typed></span><span class="caret"></span></p>
+    </div>
+    <figcaption class="window__note">A new project. Drop in a video or record your screen, then ask the chat for an edit.</figcaption>
+  </figure>
 </section>
 
 <section class="problem" data-moment="problem" aria-labelledby="problem-title">
