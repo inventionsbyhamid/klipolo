@@ -1437,3 +1437,47 @@ fn a_whoosh_at_a_cut_that_has_one_already_plays_once_when_the_short_is_cut_again
         out.told
     );
 }
+
+/// The words in the hook's place in 9:16 on `p`.
+fn hooks(p: &Project) -> Vec<&Item> {
+    (p.timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .filter(|i| klipolo_model::captions::in_hook_band(p, i))
+        .collect()
+}
+
+#[test]
+fn a_second_hook_is_never_drawn_over_the_first() {
+    // In one answer: a second kinetic title at the opening is refused back, with what to do instead.
+    let p = project();
+    let mut calls = base();
+    calls.push(call(
+        "addText",
+        json!({"text": "w2 w3 w4", "preset": "title", "atSec": null, "atWords": "w2 w3 w4",
+               "durationSec": 3.0, "animation": "kinetic", "font": null}),
+    ));
+    let out = compile(&p, &inputs(&p, MESSAGE), &calls);
+    let refused: Vec<usize> = out.refusals.iter().map(|r| r.call_index).collect();
+    assert_eq!(refused, vec![5], "{:#?}", out.refusals);
+    assert!(
+        out.refusals[0].reason.contains("styleText"),
+        "{:#?}",
+        out.refusals
+    );
+    let after = &out.proposal.as_ref().expect("the cut").review.after;
+    assert_eq!(hooks(after).len(), 1);
+    // The same message again on the project the first answer's changes went into (its cut never applied): that
+    // answer's hook is there, so this one's is refused back, naming it.
+    let first = added(&p, &compile(&p, &inputs(&p, MESSAGE), &base()));
+    assert_eq!(hooks(&first).len(), 1);
+    let out = compile(&first, &inputs(&first, MESSAGE), &base());
+    let refused: Vec<usize> = out.refusals.iter().map(|r| r.call_index).collect();
+    assert_eq!(refused, vec![4], "{:#?}", out.refusals);
+    assert!(
+        out.refusals[0].reason.contains("(t1)"),
+        "{:#?}",
+        out.refusals
+    );
+    let after = &out.proposal.as_ref().expect("the cut").review.after;
+    assert_eq!(hooks(after).len(), 1);
+}

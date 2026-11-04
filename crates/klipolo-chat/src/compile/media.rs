@@ -11,7 +11,8 @@
 //! - `addText`: the person's own words (`persons_words`; words of the model's own are refused back, for it to ask), or
 //!   another app's as it gave them (`apps_words`), in one of the four text presets, placed by the model's
 //!   `media::text::add_text_ops` exactly as the canvas's Add title and the library's presets place it: each format's
-//!   own place, in 9:16 inside the area the apps keep clear.
+//!   own place, in 9:16 inside the area the apps keep clear. A kinetic hook under the face is refused back where words
+//!   show in the hook's place then already (`hook_there`): those are changed, never drawn over.
 //! - `addImage`: the picture as the library's + puts one (`media::image::add_image_ops_at`), at a size and in a corner of
 //!   each format's own area (in 9:16 the area the apps keep clear) when one was asked for. In a short, the person's own
 //!   picture with no place given (a logo) goes in a top corner off the face instead (`clear::own_corner`), for 3 s,
@@ -614,12 +615,21 @@ pub(super) fn add_text(
     if let Some(name) = font {
         in_font(c, &mut ops, name)?;
     }
+    let len = length(work, start, duration, TEXT_US);
     if kinetic {
         rising_letters(&mut ops, &shown);
         clear::hook_under_face(work, &mut ops);
+        // One hook in its place at a time: words there already (an earlier answer's short, or this one's) are changed,
+        // never drawn over.
+        if let Some(there) = hook_there(c, work, (start, start + len)) {
+            return Err(to_model(format!(
+                "addText: {there} show in the hook's place then already. Change those words with styleText (their \
+                 text), or put these words at another time."
+            )));
+        }
     }
     Ok(Edit {
-        ops: lasting(ops, length(work, start, duration, TEXT_US)),
+        ops: lasting(ops, len),
         label: label(
             "addText",
             vec![
@@ -630,6 +640,35 @@ pub(super) fn add_text(
                 ),
             ],
         ),
+    })
+}
+
+/// The words in the hook's place in 9:16 (`captions::in_hook_band`) on `work` over `(from, to)`, as the model names
+/// them: their text, and their ref where the context listed them ("the words \"FISH ARE SMALLER\" (t1)"). None
+/// when nothing is there.
+fn hook_there(c: &Compiler, work: &Project, (from, to): (Us, Us)) -> Option<String> {
+    let item = (work.timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .find(|i| {
+            i.start_us < to && from < i.end_us() && klipolo_model::captions::in_hook_band(work, i)
+        })?;
+    let text = match &item.content {
+        ItemContent::Text { text, .. } => text.clone(),
+        ItemContent::Generator { params, .. } => match params.get("title") {
+            Some(ParamValue::Text(title)) => title.clone(),
+            _ => String::new(),
+        },
+        _ => String::new(),
+    };
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let refs = &c.inputs.refs;
+    let short = (1..)
+        .map(|k| format!("t{k}"))
+        .take_while(|r| refs.text(r).is_some())
+        .find(|r| refs.text(r) == Some(item.id.as_str()));
+    Some(match short {
+        Some(r) => format!("the words {text:?} ({r})"),
+        None => format!("the words {text:?}, added by this answer,"),
     })
 }
 
