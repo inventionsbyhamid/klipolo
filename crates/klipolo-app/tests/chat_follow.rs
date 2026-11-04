@@ -818,3 +818,77 @@ async fn a_sticker_moves_beside_the_head_where_the_follow_keeps_the_speaker() {
         "not beside the head in 16:9: {wide:?}"
     );
 }
+
+/// The person's own picture with no place given and a follow of the speaker, in one message: the picture goes in a top
+/// corner, and once the follow's path lands with it, in the corner away from a speaker near the picture's left edge,
+/// never on their head.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_persons_logo_moves_to_the_corner_away_from_the_speaker_once_the_follow_lands() {
+    let mut setup = setup_with(TwoPeople {
+        at_edge: true,
+        ..TwoPeople::default()
+    });
+    setup.project.assets.push(Asset {
+        id: "logo".into(),
+        kind: AssetKind::Image,
+        path: setup
+            .dir
+            .path()
+            .join("logo.png")
+            .to_string_lossy()
+            .into_owned(),
+        name: "logo.png".into(),
+        duration_us: 0,
+        width: 512,
+        height: 512,
+        fps: 0.0,
+        rotation: None,
+        has_audio: false,
+        audio_lead_us: None,
+        made_with: None,
+    });
+    let (session, projects) = chat(
+        &setup,
+        vec![
+            fc(
+                "f",
+                "followSubject",
+                r#"{"description": "speaker", "focus": null}"#,
+            ),
+            fc(
+                "l",
+                "addImage",
+                r#"{"file": "logo.png", "size": null, "position": null, "atSec": 0, "atWords": null, "durationSec": null}"#,
+            ),
+        ],
+        "The speaker stays in frame, with your logo at the start.",
+    );
+    let r = reply(
+        &session
+            .send(request(
+                "Keep the speaker in frame and put my logo at the start.",
+            ))
+            .await
+            .unwrap(),
+    );
+    assert!(r["applied"].is_object(), "{r:#}");
+    let now = projects.now().unwrap().project;
+    let logo = (now.timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .find(|i| {
+            matches!(
+                &i.content,
+                klipolo_model::timeline::ItemContent::Image { asset_id } if asset_id == "logo"
+            )
+        })
+        .expect("the logo");
+    // 9:16 is the main format: its own box. The speaker (at 0.1 of the picture) sits at 0.316 of the frame, their head
+    // 0.22 of the width either side: the logo is in the right corner, inside the apps' margin.
+    let b = logo.layout.rect;
+    let head_right = 0.1 / (9.0 / 16.0 / (16.0 / 9.0)) + 0.22;
+    assert!(b.x >= head_right, "on the head: {b:?}");
+    assert!(
+        b.x + b.w <= 0.94 + 1e-9 && b.y <= 0.2,
+        "not in the corner: {b:?}"
+    );
+}
