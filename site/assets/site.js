@@ -56,7 +56,7 @@ const hold = async (el, ms, stop) => {
 
 const Sound = (() => {
   const KEY = 'klipolo:sound';
-  // Sprite positions, [start, length] in seconds. k0–k7 are the keystrokes.
+  // Sprite positions, [start, length] in seconds. k0 to k7 are the keystrokes.
   const MAP = {
     k0: [0.12, 0.065], k1: [0.3047, 0.065], k2: [0.4894, 0.06], k3: [0.6691, 0.052], k4: [0.8407, 0.065],
     k5: [1.0254, 0.057], k6: [1.2021, 0.064], k7: [1.3855, 0.063], thock: [1.5677, 0.147], tick: [1.8346, 0.056],
