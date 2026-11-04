@@ -68,8 +68,9 @@
 
   <!--
     THE DEMO FILM
-    The files live under /media/, outside git: klipolo-teaser.mp4 (muted loop) and klipolo-demo.mp4 (the film).
-    A new cut of either is a file replacement under the same name; nothing here changes.
+    The files live under /media/, outside git: klipolo-teaser.mp4 (the muted loop), klipolo-teaser-720.mp4 (the loop
+    for phones) and klipolo-demo.mp4 (the film).
+    A new cut of any of them is a file replacement under the same name; nothing here changes.
     The loop's first frame is a plain image under it, so the first paint never waits for a video.
     With scripting on, site.js puts the two videos in once the page has loaded and the stage is near.
   -->
@@ -83,6 +84,7 @@
       </picture>
       <noscript data-later>
         <video class="film__teaser" data-teaser muted loop playsinline disablepictureinpicture disableremoteplayback preload="metadata" width="1920" height="1080" aria-hidden="true" tabindex="-1">
+          <source src="/media/klipolo-teaser-720.mp4" type="video/mp4" media="(max-width: 959px)">
           <source src="/media/klipolo-teaser.mp4" type="video/mp4">
         </video>
         <video class="film__full" data-full controls playsinline preload="none" width="1920" height="1080" poster="/assets/img/demo-poster.webp" aria-label="The Klipolo demo">
