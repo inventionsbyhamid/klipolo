@@ -571,3 +571,25 @@ function takeDemo(take) {
 
 const take = d.querySelector('[data-take]');
 if (take) takeDemo(take);
+
+/* -- stills: each group's pictures go in as it comes near, so they never compete with the first paint -- */
+
+const later = d.querySelectorAll('[data-later-group]');
+const showStills = (g) => {
+  for (const n of g.querySelectorAll('noscript[data-later]')) {
+    n.insertAdjacentHTML('beforebegin', n.textContent);
+    n.remove();
+  }
+};
+if ('IntersectionObserver' in window) {
+  const near = new IntersectionObserver((es) => {
+    for (const e of es) {
+      if (!e.isIntersecting) continue;
+      near.unobserve(e.target);
+      showStills(e.target);
+    }
+  }, { rootMargin: '600px 0px' });
+  later.forEach((g) => near.observe(g));
+} else {
+  later.forEach(showStills);
+}
