@@ -1,6 +1,13 @@
 import { type CSSProperties, type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import type { AiStatus } from '../bindings/AiStatus';
-import { closeSettings, openSettings, refreshAiStatus, useAi } from '../ai/aiStatus';
+import {
+  closeSettings,
+  freeCreditText,
+  freeCreditUsedUp,
+  openSettings,
+  refreshAiStatus,
+  useAi,
+} from '../ai/aiStatus';
 import { AiIcon } from '../ai/icons';
 import { CopiesSettings } from '../features/media-jobs/CopiesSettings';
 import { Icon } from '../layout/Icon';
@@ -24,7 +31,8 @@ import './settings.css';
 const FOCUSABLE = 'button:not(:disabled), input:not(:disabled), [tabindex="0"]';
 
 /**
- * Settings: how Klipolo pays for Meta's models, an access code or the person's own key,
+ * Settings: how Klipolo pays for Meta's models (the free credit built in, while the person adds nothing), an access
+ * code or the person's own key,
  * whether other apps may edit the open project (`OtherApps`), whether editing copies are made by themselves
  * (`CopiesSettings`, the same switch as the top bar's pill), Google Fonts and the downloaded fonts (`FontsSettings`), and
  * the theme (`AppearanceSettings`).
@@ -132,6 +140,7 @@ function Settings() {
             <AiIcon name="x" />
           </button>
         </div>
+        <FreeCredit status={status} />
         <PayChoices choice={choice} onPick={pick} onArrow={setChoice} />
         {choice === 'code' ? <CodeSection status={status} /> : <KeySection status={status} />}
         <OtherApps />
@@ -200,11 +209,34 @@ function PayChoices({
   );
 }
 
+/**
+ * While the free credit pays: what is left of it and that no key is needed, or that it is used up. An access code and
+ * a key stay on offer below it. Nothing otherwise.
+ */
+function FreeCredit({ status }: { status: AiStatus | null }) {
+  const text = freeCreditText(status);
+  if (!text) return null;
+  return (
+    <div className="field-v">
+      {freeCreditUsedUp(status) ? (
+        <Note text={text} />
+      ) : (
+        <span className="status-ok">
+          <Icon name="check" />
+          {text}
+        </span>
+      )}
+      <SessionSpend status={status} />
+    </div>
+  );
+}
+
 const FINE_PRINT =
   'When the code runs out, the AI features pause. Editing and export keep working, and you can switch to your own key at any time.';
 
 function CodeSection({ status }: { status: AiStatus | null }) {
-  const saved = status?.mode === 'relay' ? status : null;
+  // The free credit's code is Klipolo's, not the person's: the field stays empty for theirs.
+  const saved = status?.mode === 'relay' && !status.trial ? status : null;
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState<'save' | 'remove' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -358,7 +390,7 @@ function KeySection({ status }: { status: AiStatus | null }) {
         </span>
       ) : (
         <span className="hint">
-          {status?.mode === 'relay'
+          {status?.mode === 'relay' && !status.trial
             ? 'Saving a key replaces your access code. Klipolo checks it with Meta first.'
             : "Klipolo checks it with Meta first, then keeps it in your Mac's Keychain. Get a key at dev.meta.ai."}
         </span>

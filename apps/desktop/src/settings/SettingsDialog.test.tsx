@@ -27,6 +27,27 @@ beforeEach(() => {
 });
 
 describe('SettingsDialog', () => {
+  it('shows the free credit left with nothing to type, and still offers a code and a key', async () => {
+    openOn({ mode: 'relay', trial: true, budgetUsd: 5, spentUsd: 0.2, active: true });
+    const dialog = screen.getByRole('dialog', { name: 'Settings' });
+    expect(dialog).toHaveTextContent('Free credit: $4.80 left. No key needed.');
+    // The free credit's code is never shown: the code field is empty, for the person's own.
+    const code = screen.getByLabelText('Access code');
+    expect(code).toHaveValue('');
+    expect(code).not.toHaveAttribute('readonly');
+    expect(screen.getByRole('button', { name: 'Use code' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
+    await userEvent.click(screen.getByRole('radio', { name: /My Meta API key/ }));
+    expect(screen.getByLabelText('Meta API key')).toHaveValue('');
+    expect(dialog).not.toHaveTextContent('replaces your access code');
+  });
+
+  it('says when the free credit is used up', () => {
+    openOn({ mode: 'relay', trial: true, budgetUsd: 5, spentUsd: 5, active: true, notice: 'Your free credit is used up. Add your own Meta key in Settings to keep using AI.' });
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toHaveTextContent('Your free credit is used up. Add your own Meta key in Settings to keep using AI.');
+    expect(screen.queryByText(/No key needed/)).toBeNull();
+  });
+
   it('opens with Command comma and closes with Esc, giving focus back', async () => {
     vi.mocked(aiBridge.status).mockResolvedValue({ mode: 'none' });
     useAi.setState({ status: { mode: 'none' } });
