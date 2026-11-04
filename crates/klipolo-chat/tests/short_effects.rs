@@ -1502,3 +1502,19 @@ fn a_rerun_short_never_doubles_a_sticker_its_pop_or_the_payoff_chime() {
     let after = &out.proposal.as_ref().expect("the cut").review.after;
     assert_eq!(count(after), (1, 1, 1));
 }
+
+#[test]
+fn the_persons_logo_never_takes_a_shorts_sticker_slot() {
+    // The person's logo (a wide wordmark, small on the frame, with no pop) a few seconds before a sticker's word: the
+    // sticker still shows.
+    let mut p = project();
+    let logo = asset("logo", "image", "logo.png", 5.0, (1024, 256));
+    let ops = klipolo_model::media::image::add_image_ops(&p, &logo, secs(32.5)).unwrap();
+    p = klipolo_model::apply_ops(&p, &ops).unwrap();
+    let mut calls = base();
+    calls.extend(sticker("Rocket", 70));
+    let out = compile(&p, &inputs(&p, MESSAGE), &calls);
+    let (pictures, _) = layers(&short(&out));
+    let rockets = pictures.iter().filter(|(n, ..)| n == "Rocket").count();
+    assert_eq!(rockets, 1, "{pictures:?}");
+}

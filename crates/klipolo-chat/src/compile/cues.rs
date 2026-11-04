@@ -11,7 +11,7 @@
 //!   part does (one that can't show `MIN_HOLD_US` there is left out), popping in and fading out. In the short's time,
 //!   in call order (a later round never takes out one an earlier was told is in): none while the hook shows, none in
 //!   its last `END_CLEAR_US`, at least `STICKER_GAP_US` between two, and at most one per `STICKERS_PER_US` of it,
-//!   counting the sticker-sized pictures the short shows already (a rerun's earlier stickers never get a twin). One
+//!   counting the stickers the short shows already (`stickers_there`: a rerun's never get a twin). One
 //!   the person named stays where its word is. Where each goes is `clear::beside_speaker`'s, alternating sides when
 //!   both have the same room. An `animate` of one is Klipolo's already.
 //! - **Sounds** follow what is seen, once the answer has any sound effect (an `addSound`, or an `animate` with a
@@ -27,6 +27,7 @@
 
 use std::collections::HashMap;
 
+use klipolo_model::contrib::builtin;
 use klipolo_model::project::{Asset, AssetKind};
 use klipolo_model::query::{clip_at, clip_starts, main_track_duration};
 use klipolo_model::time::{RangeUs, Us, kept_parts};
@@ -44,6 +45,8 @@ use crate::tools::ToolCall;
 pub const LEAD_US: Us = 100_000;
 /// How long a sticker shows.
 pub const HOLD_US: Us = 1_500_000;
+/// The longest a picture the project has already shows to count as a sticker (`Cues::stickers_there`).
+const STICKER_US: Us = 3_000_000;
 /// The least a sticker shows before its part ends; with less room it is left out.
 pub const MIN_HOLD_US: Us = 1_200_000;
 /// A sticker ends this long before its part does.
@@ -469,13 +472,23 @@ impl Cues {
         self.parts.iter().map(RangeUs::len).sum()
     }
 
-    /// Where the short shows the sticker-sized pictures the project has already (less than half the frame each way),
-    /// in the short's time.
+    /// Where the short shows the stickers the project has already, in the short's time: the pack's pictures, and
+    /// pictures that pop in for a sticker's moment (at most `STICKER_US`), as a short's or a sticker call's do. The
+    /// person's logo or a watermark is none.
     fn stickers_there(&self, c: &Compiler) -> Vec<Us> {
+        let pop = builtin::motion("pop");
+        let pack = |id: &str| (c.inputs.library.items.iter()).any(|l| l.pack && l.asset.id == id);
         (c.snapshot.timeline.tracks.iter())
             .flat_map(|t| &t.items)
-            .filter(|i| matches!(i.content, ItemContent::Image { .. }))
-            .filter(|i| i.layout.rect.w < 0.5 && i.layout.rect.h < 0.5)
+            .filter(|i| match &i.content {
+                ItemContent::Image { asset_id } => {
+                    let pops = (i.layout.motion.as_ref())
+                        .and_then(|m| m.enter.as_ref())
+                        .is_some_and(|e| e.preset == pop);
+                    pack(asset_id) || (pops && i.duration_us <= STICKER_US)
+                }
+                _ => false,
+            })
             .filter(|i| self.part_of(i.start_us).is_some())
             .map(|i| self.short_time(i.start_us))
             .collect()
