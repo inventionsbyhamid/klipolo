@@ -306,8 +306,9 @@ fn body_code(body: &[u8], secrets: &[&str]) -> Option<String> {
 }
 
 /// `error`, from a refused call's `body`, as a [`MetaError::Budget`] saying `sentence` when it refused for credit: a
-/// 402 about credit (one naming credit, or with no message; the relay's daily cap on video tracking is not) or the
-/// relay's 403 `no_relay_ai`. Any other error is kept.
+/// 402 about credit used up (one naming credit, or with no message; not the relay's daily cap on video tracking, nor
+/// its "not enough credit left for this request", which leaves credit for smaller calls) or the relay's 403
+/// `no_relay_ai`. Any other error is kept.
 pub(crate) fn used_up(
     error: MetaError,
     body: &[u8],
@@ -315,7 +316,9 @@ pub(crate) fn used_up(
     sentence: &str,
 ) -> MetaError {
     let for_credit = match &error {
-        MetaError::Budget { message } => message.is_empty() || message.contains("credit"),
+        MetaError::Budget { message } => {
+            message.is_empty() || (message.contains("credit") && !message.contains("enough"))
+        }
         MetaError::NotAllowed { .. } => {
             body_code(body, secrets).as_deref() == Some(NO_RELAY_AI_CODE)
         }

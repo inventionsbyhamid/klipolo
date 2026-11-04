@@ -381,11 +381,18 @@ async fn a_used_up_message_replaces_the_relays_refusals_for_credit() {
     for body in [
         json!({"error": "budget", "message": BUDGET_MESSAGE}),
         json!({"error": "budget", "message": "Klipolo's shared AI credit is used up for now. Add your own Meta key in Settings."}),
-        json!({"error": "budget", "message": "This device does not have enough Klipolo credit left for this request. Add your own Meta key in Settings."}),
         json!({}),
     ] {
         assert_eq!(refused(402, body.clone()).await, used_up, "{body}");
     }
+    // Too little left for this one call is not used up: smaller calls still go through.
+    let not_enough = "This device does not have enough Klipolo credit left for this request. Add your own Meta key in Settings.";
+    assert_eq!(
+        refused(402, json!({"error": "budget", "message": not_enough})).await,
+        MetaError::Budget {
+            message: not_enough.into()
+        }
+    );
     let off = json!({"error": "no_relay_ai", "message": "Klipolo AI is off for this device. Add an access code or your own Meta key in Settings."});
     assert_eq!(refused(403, off).await, used_up);
 
