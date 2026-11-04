@@ -1053,6 +1053,34 @@ pub(super) fn make_sticker(
     }))
 }
 
+/// What the model is told of a `makePicture` in a short whose person asked for no picture.
+const NO_PICTURE_ASKED: &str =
+    "makePicture: the person didn't ask for a picture, so this short has none. Leave it out.";
+
+/// Whether `message` asks for a picture, a diagram or another visual to explain something.
+fn asks_picture(message: &str) -> bool {
+    const ASKED: [&str; 14] = [
+        "picture",
+        "image",
+        "diagram",
+        "illustration",
+        "visual",
+        "drawing",
+        "photo",
+        "chart",
+        "graphic",
+        "cutaway",
+        "broll",
+        "map",
+        "infographic",
+        "illustrate",
+    ];
+    cues::words(message).iter().any(|w| {
+        let one = w.strip_suffix('s').unwrap_or(w);
+        ASKED.contains(&one) || ASKED.contains(&w.as_str())
+    })
+}
+
 /// The top corner a 16:9 inset picture takes at timeline `at` of `work` where no follow's path says where the speaker
 /// is: away from the side the scene log says they are on ("the man on the left"), else the right.
 fn away_from_who(c: &Compiler, work: &Project, at: Us) -> Position {
@@ -1087,6 +1115,10 @@ pub(super) fn make_picture(
     layout: PictureLayout,
     (at, duration): (At, Option<Us>),
 ) -> Result<Job, Refused> {
+    // A short's pictures are the person's to ask for: one nobody asked for would cover the speaker and wait on a card.
+    if c.cues.as_ref().is_some_and(|q| q.makes_short) && !asks_picture(&c.inputs.message) {
+        return Err(to_model(NO_PICTURE_ASKED.to_owned()));
+    }
     let start = start(c, with_additions, "makePicture", at.field(), at)?;
     let duration_us = length(
         with_additions,
@@ -1094,6 +1126,20 @@ pub(super) fn make_picture(
         duration.or(Some(PICTURE_US)),
         PICTURE_US,
     );
+    // Never over the hook: words in its place then (a short's hook) keep the frame to themselves.
+    let hook = (with_additions.timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .find(|i| {
+            i.start_us < start + duration_us
+                && start < i.end_us()
+                && klipolo_model::captions::in_hook_band(with_additions, i)
+        });
+    if let Some(hook) = hook {
+        return Err(to_model(format!(
+            "makePicture: the hook shows until {} s, and a picture never covers it. Place it after.",
+            secs(hook.end_us())
+        )));
+    }
     let change = animate::Change {
         enter: Some(Entrance::Fade),
         exit: Some(Exit::Fade),

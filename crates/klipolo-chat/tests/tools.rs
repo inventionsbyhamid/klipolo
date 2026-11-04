@@ -1769,7 +1769,7 @@ fn the_recipe_says_when_to_draw_a_picture_and_when_a_sticker() {
     let prompt = klipolo_chat::prompt::system_prompt();
     assert!(
         prompt.contains("a sticker for a small reaction")
-            && prompt.contains("makePicture to explain what is said"),
+            && prompt.contains("only when the person asks for a picture"),
         "{prompt}"
     );
     assert!(

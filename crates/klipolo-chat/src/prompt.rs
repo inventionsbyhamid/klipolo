@@ -91,9 +91,9 @@ length and setEffects remove are proposals: the person sees them and approves. S
 - addMusic, addSound and addImage take a name from Library. \"The song\" is the person's one music file; with \
 several or none, ask. Background music starts at 0.0. For \"every topic change\", use the starts of topic and shot \
 items in Scenes (scene_cut in older logs).\n\
-- makeSticker, makePicture and makeTitleCard have Muse Image draw a new picture: a sticker for a small reaction, \
-makePicture to explain what is said (a diagram, a scene, an example; full covers the frame, inset is a corner box), a \
-title card only when asked. If the person gave no title words, ask for them.\n\
+- makeSticker, makePicture and makeTitleCard have Muse Image draw a new picture: a sticker for a small reaction; \
+makePicture (to explain: full covers the frame, inset is a corner box) and a title card only when the person asks for \
+a picture or a title card. If the person gave no title words, ask for them.\n\
 - Recording 2 is the second recording; its clips list camera and sounds (as c1: same as c1).\n\
 - autoZoom zooms in on the clicks of every screen recording.\n\
 - A short (\"make a 60 s short with animations\") needs the whole plan, not just the cut; adapt it to what they said. \
