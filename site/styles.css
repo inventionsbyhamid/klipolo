@@ -292,25 +292,36 @@ ul[role="list"], ol[role="list"] { list-style: none; padding: 0; }
 @keyframes blink { 50% { opacity: 0; } }
 
 
-/* ---------- hero: the take ---------- */
+/* ---------- hero ---------- */
 
+/* The headline, the downloads and the film, all on the first screen. */
 .hero {
   width: var(--w);
   margin-inline: auto;
-  padding-top: clamp(96px, 13vh, 136px);
-  padding-bottom: clamp(56px, 9vh, 112px);
+  padding-top: clamp(88px, 13vh, 128px);
+  padding-bottom: clamp(40px, 7vh, 88px);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: "title" "side" "demo";
+  grid-template-areas: "title" "side" "film";
   gap: 18px;
 }
 @media (min-width: 960px) {
   .hero {
     grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
-    grid-template-areas: "title side" "demo demo";
-    gap: clamp(40px, 7vh, 72px) 48px;
+    grid-template-areas: "title side" "film film";
+    gap: clamp(28px, 5vh, 48px) 48px;
     align-items: end;
   }
+}
+/* Wide screens: the words on the left, the film beside them. */
+@media (min-width: 1100px) {
+  .hero {
+    grid-template-columns: minmax(0, 4.5fr) minmax(0, 7.5fr);
+    grid-template-areas: "title film" "side film";
+    gap: 28px clamp(40px, 4vw, 64px);
+    align-items: start;
+  }
+  .hero__title { align-self: end; }
 }
 
 .hero__title {
@@ -325,6 +336,9 @@ ul[role="list"], ol[role="list"] { list-style: none; padding: 0; }
 @media (min-width: 600px) {
   .hero__phrase { white-space: nowrap; }
 }
+@media (min-width: 1100px) {
+  .hero__title { font-size: clamp(3rem, 1rem + 3.2vw, 4.5rem); }
+}
 .hero__side {
   grid-area: side;
   display: grid;
@@ -338,79 +352,18 @@ ul[role="list"], ol[role="list"] { list-style: none; padding: 0; }
   color: var(--quiet);
   max-width: 28ch;
 }
-.hero__note { font-size: var(--t-small); color: var(--quiet); margin-top: -6px; }
-.hero__demo {
-  grid-area: demo;
-  position: relative;
-  max-width: 60rem;
-  margin-top: 26px;
-}
-@media (min-width: 960px) {
-  .hero__demo { margin-top: 0; }
+.hero__note { font-size: var(--t-small); color: var(--quiet); margin-top: -6px; text-wrap: pretty; }
+.hero__film { grid-area: film; align-self: center; }
+@media (max-width: 959px) {
+  .hero__film { margin-top: 10px; }
 }
 
-.take { --tsize: clamp(1.1875rem, .9rem + 1.2vw, 1.875rem); }
-.take__clip { transition: opacity .5s var(--ease-out); }
-.take.is-rewinding .take__clip { opacity: 0; transition-duration: .4s; }
-
-/* The clip's duration: a hairline, with the running time riding its end. */
-.take__meta {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: clamp(14px, 2.4vh, 24px);
-}
-.take__rule {
-  flex: 1;
-  height: 1px;
-  background: var(--quiet);
-  opacity: .45;
-  transform-origin: left center;
-  transition: transform .7s var(--ease-edit);
-}
-.take__time {
-  font-size: 1rem;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: .01em;
-  transition: transform .7s var(--ease-edit);
-}
-
-.take__words {
-  position: relative;
-  font-size: var(--tsize);
-  line-height: 1.6;
-  letter-spacing: -.008em;
-}
-.take__words .w { display: inline-block; }
-
-/* A pause: a quiet mark with its length, between two hairlines. */
-.g {
-  font-size: .5em;
-  font-weight: 500;
-  letter-spacing: .02em;
-  color: var(--quiet);
-  vertical-align: .32em;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.g::before, .g::after {
-  content: "";
-  display: inline-block;
-  width: 1.6em;
-  height: 1px;
-  margin: 0 .5em;
-  background: currentColor;
-  vertical-align: .32em;
-  opacity: .8;
-}
-
+/* A typed command line, as in the problem section's answer. */
 .cmd {
   display: flex;
   align-items: center;
   min-height: 1.5em;
   margin-top: clamp(16px, 2.6vh, 26px);
-  padding-right: 8em;
   font-size: var(--t-line);
   font-weight: 500;
   letter-spacing: -.02em;
@@ -419,93 +372,13 @@ ul[role="list"], ol[role="list"] { list-style: none; padding: 0; }
 }
 .cmd__text { overflow: hidden; }
 
-/* The edited take, shown beside the raw one when nothing animates. */
-.take__after { margin-top: clamp(28px, 5vh, 48px); }
-.take__after .take__rule { flex: 0 0 auto; width: calc((100% - 4.5em) * .389); }
-.take .cmd { display: none; }
-
-/* Live: the paragraph is laid out invisibly; visible words are placed over it and glide. */
-.take.is-live .take__after { display: none; }
-.take.is-live .cmd { display: flex; }
-.take.is-live .take__words { visibility: hidden; }
-.take.is-live .wv,
-.take.is-live .take__under { visibility: visible; }
-.take.is-live .take__words .w.is-gone { display: none; }
-.take.is-live .take__words.is-measuring .w.is-gone { display: inline-block; }
-.wv {
-  position: absolute;
-  left: 0;
-  top: 0;
-  white-space: nowrap;
-  transition: transform .62s var(--ease-edit), opacity .32s var(--ease-out);
-}
-.take.no-tx .wv,
-.take.no-tx .take__under { transition: none; }
-.wv.is-out { opacity: 0; }
-.wv.f::after {
-  content: "";
-  position: absolute;
-  left: -.06em;
-  right: -.06em;
-  top: 52%;
-  height: max(2px, .075em);
-  border-radius: 1px;
-  background: var(--caret);
-  transform: scaleX(0);
-  transform-origin: left center;
-  transition: transform .2s var(--ease-out);
-}
-.wv.f.is-struck::after { transform: none; }
-.take.is-reading .wv { opacity: .24; transition: transform .62s var(--ease-edit), opacity .14s linear; }
-.take.is-reading .wv.is-said { opacity: 1; }
-.take .wv.is-out,
-.take .wv.is-hop { opacity: 0; }
-.take .wv.is-hop { transition: opacity .12s linear; }
-.take__under {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100px;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--caret);
-  opacity: 0;
-  transform-origin: left center;
-  transition: transform .16s var(--ease-out), opacity .25s;
-  pointer-events: none;
-}
-.take.is-reading .take__under { opacity: 1; }
-
-.demo-toggle {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  min-height: 40px;
-  padding: 0 2px;
-  border: 0;
-  background: none;
-  color: var(--quiet);
-  font-size: var(--t-small);
-  font-weight: 500;
-  cursor: pointer;
-  text-decoration: underline;
-  text-decoration-color: var(--line);
-  text-underline-offset: .25em;
-}
-.demo-toggle:hover { color: var(--ink); text-decoration-color: currentColor; }
-@media (max-width: 599px) {
-  .cmd { padding-right: 0; }
-  .demo-toggle { position: static; display: block; margin: 2px 0 0 auto; }
-}
-
 /* ---------- the demo film: a muted loop in view, the whole film with sound on a click ---------- */
 
 /* The section is the size container: 100cqw is the stage's width, so its shadow scales like the editor window's. */
 .film {
   container-type: inline-size;
-  padding-block: 0 clamp(24px, 4vh, 48px);
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 /* The stage keeps 16:9 before its videos go in, so nothing below it moves. */
 .film__stage {
@@ -524,16 +397,18 @@ ul[role="list"], ol[role="list"] { list-style: none; padding: 0; }
 @media (prefers-color-scheme: dark) {
   .film__stage { box-shadow: 0 0 0 1px rgb(255 255 255 / .16); }
 }
+.film__poster,
 .film__stage video {
   grid-area: 1 / 1;
   display: block;
   width: 100%;
   height: 100%;
   min-width: 0;
-  background: #000;
 }
+/* The loop's first frame, under the loop: it shows until the loop plays, and stays with reduced motion. */
+.film__poster img { width: 100%; height: 100%; object-fit: cover; }
 .film__teaser { object-fit: cover; cursor: pointer; }
-.film__full { object-fit: contain; }
+.film__full { object-fit: contain; background: #000; }
 /* Without scripting the film shows with its own controls; with it, the loop shows until the film is asked for. */
 .film__stage .film__teaser,
 .js .film__stage .film__full { display: none; }
@@ -578,29 +453,45 @@ ul[role="list"], ol[role="list"] { list-style: none; padding: 0; }
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 2px 24px;
+  gap: 0 24px;
 }
 .film__credit {
+  flex: 1 1 30ch;
   font-size: var(--t-small);
   line-height: 1.5;
   color: var(--quiet);
   max-width: 90ch;
 }
-.film__loop {
-  min-height: 40px;
+/* Two small text controls: the film on YouTube, and the loop's pause. */
+.film__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 20px;
   margin-left: auto;
+}
+.film__yt,
+.film__loop {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
   padding: 0 2px;
   border: 0;
   background: none;
   color: var(--quiet);
   font-size: var(--t-small);
   font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
   text-decoration: underline;
   text-decoration-color: var(--line);
+  text-decoration-thickness: 1px;
   text-underline-offset: .25em;
 }
+.film__yt:hover,
 .film__loop:hover { color: var(--ink); text-decoration-color: currentColor; }
+/* Hidden, the switch keeps its place unseen, so the credit beside it never reflows. */
+.film__loop[hidden] { display: inline-flex !important; visibility: hidden; }
 
 /* ---------- the editor: the real window, framed the way macOS frames it ---------- */
 
@@ -717,10 +608,7 @@ main > section:not(.hero) {
   transform-origin: left center;
 }
 .problem__after { display: grid; gap: clamp(18px, 3vh, 28px); }
-.cmd--answer {
-  margin-top: clamp(4px, 1vh, 12px);
-  padding-right: 0;
-}
+.cmd--answer { margin-top: clamp(4px, 1vh, 12px); }
 .problem .cmd--answer { display: none; }
 
 .turn {
