@@ -36,13 +36,17 @@ const recheck = () => {
   h.forEach((r) => r());
   Sound.hush();
 };
+// A demo counts as in view while half of it shows, or it fills half the window: scrolled past, it goes quiet.
+const steps = Array.from({ length: 21 }, (_, i) => i / 20);
 const view = 'IntersectionObserver' in window && new IntersectionObserver((es) => {
   for (const e of es) {
-    if (e.isIntersecting) seen.add(e.target);
+    const shown = e.intersectionRect.height;
+    const enough = Math.min(e.boundingClientRect.height, innerHeight) * 0.5;
+    if (e.isIntersecting && shown >= enough) seen.add(e.target);
     else seen.delete(e.target);
   }
   recheck();
-});
+}, { threshold: steps });
 d.addEventListener('visibilitychange', recheck);
 const watch = (el) => { if (view) view.observe(el); };
 const live = (el) => !d.hidden && (!view || seen.has(el));
