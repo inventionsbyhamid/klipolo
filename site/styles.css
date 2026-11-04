@@ -352,7 +352,7 @@ ul[role="list"], ol[role="list"] { list-style: none; padding: 0; }
   color: var(--quiet);
   max-width: 28ch;
 }
-.hero__note { font-size: var(--t-small); color: var(--quiet); margin-top: -6px; }
+.hero__note { font-size: var(--t-small); color: var(--quiet); margin-top: -6px; text-wrap: pretty; }
 .hero__film { grid-area: film; align-self: center; }
 @media (max-width: 959px) {
   .hero__film { margin-top: 10px; }
