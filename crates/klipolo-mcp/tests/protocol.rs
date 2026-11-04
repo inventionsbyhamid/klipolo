@@ -230,7 +230,7 @@ fn tools_list_is_chat_tools_minus_conversation_tools_plus_reads() {
                         }
                     }
                 }
-                if matches!(name, "makeTitleCard" | "makeSticker") {
+                if matches!(name, "makeTitleCard" | "makeSticker" | "makePicture") {
                     ours["description"] = json!("");
                     chats["description"] = json!("");
                 }
@@ -274,6 +274,10 @@ fn tools_list_is_chat_tools_minus_conversation_tools_plus_reads() {
     assert_eq!(
         tool("makeSticker")["description"],
         json!(klipolo_mcp::words::STICKER_TOOL)
+    );
+    assert_eq!(
+        tool("makePicture")["description"],
+        json!(klipolo_mcp::words::PICTURE_TOOL)
     );
     assert_eq!(
         chat_tool("makeSticker")["description"],
