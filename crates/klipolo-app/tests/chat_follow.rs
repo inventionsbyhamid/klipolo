@@ -41,11 +41,22 @@ fn s(seconds: f64) -> Us {
 
 /// SAM as it answered on the demo's footage: two people far apart on every frame for "person" (7 on the left, 3 on
 /// the right), and nobody for any other phrase ("woman astronaut"). Keeps every phrase it was asked for. With
-/// `at_edge`, the one on the left stands at the picture's edge.
+/// `at_edge`, the one on the left stands at the picture's edge; with `inset`, a presenter's small box in the bottom
+/// left corner instead (a face camera over a screen lesson), alone or beside one person in full.
 #[derive(Default)]
 struct TwoPeople {
     asked: Mutex<Vec<String>>,
     at_edge: bool,
+    inset: Inset,
+}
+
+/// Who `TwoPeople` finds besides, or instead of, its two people.
+#[derive(Clone, Copy, Default, PartialEq)]
+enum Inset {
+    #[default]
+    No,
+    Only,
+    BesideOne,
 }
 
 impl TwoPeople {
@@ -84,10 +95,20 @@ impl SubjectTracker for TwoPeople {
                 confidence: Some(0.9),
             };
             let left = if self.at_edge { 0.1 } else { 0.25 };
-            let people = if phrase == PERSON {
-                vec![at(3, 0.75), at(7, left)]
-            } else {
-                Vec::new()
+            // About the demo lesson's face box: 11 % of the picture across, 22 % down, in its bottom left corner.
+            let inset = TrackedBox {
+                id: 5,
+                left: 0.02,
+                top: 0.77,
+                right: 0.13,
+                bottom: 0.99,
+                confidence: Some(0.9),
+            };
+            let people = match (phrase == PERSON, self.inset) {
+                (false, _) => Vec::new(),
+                (true, Inset::No) => vec![at(3, 0.75), at(7, left)],
+                (true, Inset::Only) => vec![inset],
+                (true, Inset::BesideOne) => vec![inset, at(3, 0.6)],
             };
             Ok(Tracking {
                 frames: (0..frames)
@@ -890,5 +911,98 @@ async fn the_persons_logo_moves_to_the_corner_away_from_the_speaker_once_the_fol
     assert!(
         b.x + b.w <= 0.94 + 1e-9 && b.y <= 0.2,
         "not in the corner: {b:?}"
+    );
+}
+
+/// Chat's follow of the speaker on `setup`, the model's closing words "Done.": the reply's notes and the project then.
+async fn follow_the_speaker(setup: &Setup) -> (Value, Project) {
+    let (session, projects) = chat(
+        setup,
+        vec![fc(
+            "f",
+            "followSubject",
+            r#"{"description": "speaker", "focus": null}"#,
+        )],
+        "Done.",
+    );
+    let r = reply(
+        &session
+            .send(request("Keep the speaker in frame."))
+            .await
+            .unwrap(),
+    );
+    (r, (*projects.now().unwrap().project).clone())
+}
+
+/// The main clip's 9:16 framing and whether its crop follows a speaker there.
+fn portrait(p: &Project) -> (klipolo_model::timeline::FramingMode, bool) {
+    let clip = &p.timeline.main[0];
+    let mode = klipolo_model::framing::effective_framing(p, clip, Portrait).mode;
+    let follows = matches!(
+        clip.fill_focus.get(&Portrait),
+        Some(FillFocus::Speaker { .. })
+    );
+    (mode, follows)
+}
+
+/// A screen lesson whose only person is a presenter's small box in a corner: SAM tracks it as ever (and the reply
+/// says what that cost), but the vertical version shows the whole picture, Fit on a blurred background, instead of a
+/// crop held at the picture's edge on the box.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_presenter_in_a_small_corner_inset_is_shown_whole_on_a_blurred_background() {
+    let setup = setup_with(TwoPeople {
+        inset: Inset::Only,
+        ..TwoPeople::default()
+    });
+    let (r, now) = follow_the_speaker(&setup).await;
+    assert_eq!(setup.sam.asked(), [PERSON]);
+    assert_eq!(
+        r["notes"],
+        serde_json::json!([
+            "SAM 3.1 found only a small corner inset, so the vertical version shows the whole picture on a blurred \
+             background now. Tracking cost $0.02."
+        ]),
+        "{r:#}"
+    );
+    assert_eq!(
+        portrait(&now),
+        (klipolo_model::timeline::FramingMode::Fit, false)
+    );
+    assert_eq!(
+        now.background.kind,
+        klipolo_model::project::BackgroundKind::Blur
+    );
+}
+
+/// People in full are followed as ever: the crop keeps whoever speaks, and the background stays as it was.
+#[tokio::test(flavor = "multi_thread")]
+async fn people_in_full_are_still_followed() {
+    let setup = setup();
+    let (_, now) = follow_the_speaker(&setup).await;
+    assert_eq!(
+        portrait(&now),
+        (klipolo_model::timeline::FramingMode::Fill, true)
+    );
+    assert_eq!(
+        now.background.kind,
+        klipolo_model::project::BackgroundKind::None
+    );
+}
+
+/// A corner inset beside someone in full isn't an inset alone: the crop follows as ever.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_inset_beside_someone_in_full_is_still_followed() {
+    let setup = setup_with(TwoPeople {
+        inset: Inset::BesideOne,
+        ..TwoPeople::default()
+    });
+    let (_, now) = follow_the_speaker(&setup).await;
+    assert_eq!(
+        portrait(&now),
+        (klipolo_model::timeline::FramingMode::Fill, true)
+    );
+    assert_eq!(
+        now.background.kind,
+        klipolo_model::project::BackgroundKind::None
     );
 }

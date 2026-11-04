@@ -24,7 +24,7 @@ use klipolo_analysis::cache::{Dir, content_key};
 use klipolo_analysis::providers::{BoxFuture, Heard, SubjectTracker, VoiceMatcher};
 use klipolo_analysis::subject::clips::{
     Footage, Speech, camera_voice, clip_people, follow_op_keeping, followable_formats, footage,
-    speaker_path, voice_windows,
+    in_inset, inset_op, speaker_path, voice_windows,
 };
 use klipolo_analysis::subject::voices::{self, Asking, MAX_WINDOWS, VoiceTurn, Window};
 use klipolo_analysis::subject::{self, Ask, FPS, PERSON, SubjectCopy, SubjectTrack};
@@ -32,7 +32,7 @@ use klipolo_model::fill_focus::{FocusPath, Keep, Person, Voice};
 use klipolo_model::history::SnapshotPatch;
 use klipolo_model::ids::Id;
 use klipolo_model::ops::Op;
-use klipolo_model::project::{FormatKind, Project};
+use klipolo_model::project::{Background, BackgroundKind, FormatKind, Project};
 use klipolo_model::time::RangeUs;
 use serde::Serialize;
 use ts_rs::TS;
@@ -107,6 +107,9 @@ pub struct Followed {
     pub paid_usd: f64,
     /// Why no voice could be matched to the people (`UNMATCHED`, `LOW_CREDIT_VOICES`), to say to the person.
     pub note: Option<String>,
+    /// The clips whose only people are a presenter's corner inset (`clips::in_inset`): chat shows their footage whole
+    /// instead of following (`short_ops`).
+    pub insets: Vec<Id>,
 }
 
 impl Followed {
@@ -126,6 +129,49 @@ impl Followed {
                 (!paths.is_empty()).then(|| follow_op_keeping(p, clip, &paths, &keep, &people))
             })
             .collect()
+    }
+
+    /// [`Followed::ops`] for chat: a clip whose only people are a presenter's corner inset is framed Fit in the formats
+    /// it would follow in instead (`clips::inset_op`), its footage shown whole with the inset in it, on a blurred
+    /// background where the project shows none behind the video.
+    pub fn short_ops(&self, p: &Project) -> Vec<Op> {
+        let mut ops: Vec<Op> = (self.paths.iter())
+            .filter(|(id, _)| !self.insets.contains(id))
+            .filter_map(|(id, paths)| {
+                let clip = p.timeline.main.iter().find(|c| &c.id == id)?;
+                let formats: Vec<FormatKind> = paths.keys().copied().collect();
+                let still = followable_formats(p, clip, &formats);
+                let paths: BTreeMap<FormatKind, FocusPath> = (paths.iter())
+                    .filter(|(f, _)| still.contains(f))
+                    .map(|(f, path)| (*f, path.clone()))
+                    .collect();
+                let (keep, people) = self.kept.get(id).cloned().unwrap_or_default();
+                (!paths.is_empty()).then(|| follow_op_keeping(p, clip, &paths, &keep, &people))
+            })
+            .collect();
+        let insets: Vec<Op> = (self.paths.iter())
+            .filter(|(id, _)| self.insets.contains(id))
+            .filter_map(|(id, paths)| {
+                let clip = p.timeline.main.iter().find(|c| &c.id == id)?;
+                let formats: Vec<FormatKind> = paths.keys().copied().collect();
+                inset_op(p, clip, &formats)
+            })
+            .collect();
+        if !insets.is_empty() && p.background.kind == BackgroundKind::None {
+            ops.push(Op::SetBackground {
+                background: Background {
+                    kind: BackgroundKind::Blur,
+                    ..p.background.clone()
+                },
+            });
+        }
+        ops.extend(insets);
+        ops
+    }
+
+    /// Whether `short_ops` shows clip `id`'s footage whole for its presenter's inset.
+    pub fn inset(&self, id: &str) -> bool {
+        self.insets.iter().any(|i| i == id)
     }
 }
 
@@ -558,6 +604,9 @@ impl Speaker {
                 } else {
                     Vec::new()
                 };
+                if phrase == PERSON && in_inset(clip, &target.footage, own) {
+                    followed.insets.push(target.id.clone());
+                }
                 followed.kept.insert(target.id.clone(), (keep, people));
                 followed.paths.push((target.id.clone(), paths));
             }

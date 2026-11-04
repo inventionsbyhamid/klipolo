@@ -6,6 +6,9 @@
 //!   follow then follow in every format whose Fill crops them, as part of the message's additions (one undo step), or
 //!   of its proposal when it has one (they land when the person applies it). The reply says what it cost. The stickers
 //!   chat placed beside the speaker (`Compiled::beside`) are placed again beside the head where the path keeps them.
+//!   Where the only people SAM found in a clip are a presenter's small corner inset (a face camera over a screen
+//!   lesson), that clip shows its footage whole instead, Fit on a blurred background (`Followed::short_ops`), and the
+//!   reply says so.
 //! - **A vertical or square version** of camera footage made without asking to follow: footage tracked before follows
 //!   at no charge; otherwise the reply offers it with its price.
 //!
@@ -28,7 +31,7 @@ use klipolo_model::coded::ErrorParam;
 use klipolo_model::fill_focus::{Keep, KeepRange, MAX_KEEP_RANGES, Who};
 use klipolo_model::ids::Id;
 use klipolo_model::ops::{Op, Origin};
-use klipolo_model::project::FormatKind;
+use klipolo_model::project::{BackgroundKind, FormatKind};
 use klipolo_model::query::{clip_starts, piece_of};
 use klipolo_model::time::{Us, unscaled};
 use klipolo_model::{Project, Transaction};
@@ -279,7 +282,8 @@ pub(super) async fn follow_jobs(
                 follows.failed = true;
             }
             Ok(followed) => {
-                let ops = followed.ops(&target);
+                // A clip whose only people are a presenter's corner inset shows its footage whole instead.
+                let ops = followed.short_ops(&target);
                 // Where the stickers Klipolo placed beside the speaker go once the path lands with these changes.
                 let followed_target = (!ops.is_empty() && !out.compiled.beside.is_empty())
                     .then(|| apply_ops(&target, &ops).ok())
@@ -312,8 +316,24 @@ pub(super) async fn follow_jobs(
                     } else {
                         "now"
                     };
-                    let kept = kept_in_frame(&target, &formats, &who_kept(&phrase, &followed));
-                    follows.said.push(format!("{kept} {when}. {cost}"));
+                    let insets = (followed.paths.iter())
+                        .filter(|(id, _)| followed.inset(id))
+                        .count();
+                    let whole = shown_whole(&target, &formats);
+                    let said = if insets == followed.paths.len() {
+                        format!(
+                            "{TRACKER} found only a small corner inset, so {whole} {when}. {cost}"
+                        )
+                    } else {
+                        let kept = kept_in_frame(&target, &formats, &who_kept(&phrase, &followed));
+                        let also = if insets > 0 {
+                            format!(" Where {TRACKER} found only a small corner inset, {whole}.")
+                        } else {
+                            String::new()
+                        };
+                        format!("{kept} {when}.{also} {cost}")
+                    };
+                    follows.said.push(said);
                     follows.note = format!(
                         "Followed {phrase} ({when}), for {}.",
                         dollars(followed.paid_usd)
@@ -617,6 +637,22 @@ fn attach(out: &mut PlanOut, work: &Project, ops: Vec<Op>, phrase: &str) -> bool
 pub fn kept_in_frame(p: &Project, formats: &[FormatKind], who: &str) -> String {
     let (which, keep) = versions(p, formats);
     format!("The {which} {keep} the {who} in frame")
+}
+
+/// The tracker chat's follows use, as the reply names it.
+const TRACKER: &str = "SAM 3.1";
+
+/// What a follow did where the only person it found is a presenter's corner inset (`Followed::short_ops`): "the
+/// vertical version shows the whole picture on a blurred background". The background is named only where it is
+/// blurred.
+fn shown_whole(p: &Project, formats: &[FormatKind]) -> String {
+    let (which, keep) = versions(p, formats);
+    let show = if keep == "keeps" { "shows" } else { "show" };
+    let behind = match p.background.kind {
+        BackgroundKind::None | BackgroundKind::Blur => " on a blurred background",
+        _ => "",
+    };
+    format!("the {which} {show} the whole picture{behind}")
 }
 
 /// "Tracking cost $0.02.", or that it cost nothing.
