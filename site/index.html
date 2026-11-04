@@ -70,13 +70,19 @@
     THE DEMO FILM
     The files live under /media/, outside git: klipolo-teaser.mp4 (muted loop) and klipolo-demo.mp4 (the film).
     A new cut of either is a file replacement under the same name; nothing here changes.
+    The loop's first frame is a plain image under it, so the first paint never waits for a video.
     With scripting on, site.js puts the two videos in once the page has loaded and the stage is near.
   -->
   <section class="film hero__film" id="demo" aria-labelledby="film-title">
     <h2 class="sr-only" id="film-title">The demo</h2>
     <div class="film__stage" data-film>
+      <picture class="film__poster">
+        <source type="image/avif" sizes="(min-width: 1316px) 716px, (min-width: 1100px) 54.5vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/demo-teaser-640.avif 640w, /assets/img/demo-teaser-960.avif 960w, /assets/img/demo-teaser-1280.avif 1280w, /assets/img/demo-teaser-1920.avif 1920w">
+        <source type="image/webp" sizes="(min-width: 1316px) 716px, (min-width: 1100px) 54.5vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/demo-teaser-640.webp 640w, /assets/img/demo-teaser-960.webp 960w, /assets/img/demo-teaser-1280.webp 1280w, /assets/img/demo-teaser-1920.webp 1920w">
+        <img src="/assets/img/demo-teaser-960.jpg" sizes="(min-width: 1316px) 716px, (min-width: 1100px) 54.5vw, (min-width: 364px) 91.2vw, calc(100vw - 32px)" srcset="/assets/img/demo-teaser-640.jpg 640w, /assets/img/demo-teaser-960.jpg 960w, /assets/img/demo-teaser-1280.jpg 1280w, /assets/img/demo-teaser-1920.jpg 1920w" width="1920" height="1080" fetchpriority="high" decoding="async" alt="">
+      </picture>
       <noscript data-later>
-        <video class="film__teaser" data-teaser muted loop playsinline disablepictureinpicture disableremoteplayback preload="metadata" width="1920" height="1080" poster="/assets/img/demo-teaser-poster.webp" aria-hidden="true" tabindex="-1">
+        <video class="film__teaser" data-teaser muted loop playsinline disablepictureinpicture disableremoteplayback preload="metadata" width="1920" height="1080" aria-hidden="true" tabindex="-1">
           <source src="/media/klipolo-teaser.mp4" type="video/mp4">
         </video>
         <video class="film__full" data-full controls playsinline preload="none" width="1920" height="1080" poster="/assets/img/demo-poster.webp" aria-label="The Klipolo demo">
