@@ -284,8 +284,9 @@ pub(super) async fn follow_jobs(
             Ok(followed) => {
                 // A clip whose only people are a presenter's corner inset shows its footage whole instead.
                 let ops = followed.short_ops(&target);
-                // Where the stickers Klipolo placed beside the speaker go once the path lands with these changes.
-                let followed_target = (!ops.is_empty() && !out.compiled.beside.is_empty())
+                // Where the stickers Klipolo placed beside the speaker, and the hook, go once the path lands with these
+                // changes.
+                let followed_target = (!ops.is_empty())
                     .then(|| apply_ops(&target, &ops).ok())
                     .flatten();
                 let cost = cost_said(followed.paid_usd);
@@ -310,6 +311,8 @@ pub(super) async fn follow_jobs(
                             &mut tx.ops,
                             &out.compiled.beside,
                         );
+                        // A clip shown whole for its inset: the hook goes up above the picture.
+                        klipolo_chat::place_hook_again(followed_target, &mut tx.ops);
                     }
                     let when = if out.compiled.proposal.is_some() {
                         "once you apply this"

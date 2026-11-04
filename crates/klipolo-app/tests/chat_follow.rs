@@ -1006,3 +1006,124 @@ async fn an_inset_beside_someone_in_full_is_still_followed() {
         klipolo_model::project::BackgroundKind::None
     );
 }
+
+/// A short's hook and a sticker over a presenter's corner inset: once the follow shows the picture whole (Fit, 16:9 in
+/// 9:16 from 0.342 to 0.658 of the height), the hook moves up into the blurred band above it, the 9:16 captions wait
+/// while it shows, and the sticker sits in that band too, at its own time: nothing on the picture, its inset or the
+/// captions below it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_shorts_hook_and_sticker_over_a_presenters_inset_go_above_the_whole_picture() {
+    let setup = setup_with(TwoPeople {
+        inset: Inset::Only,
+        ..TwoPeople::default()
+    });
+    let heart = klipolo_chat::LibraryItem {
+        name: "Heart".into(),
+        kind: klipolo_chat::MediaKind::Image,
+        asset: Asset {
+            id: "klipolo-pack-heart".into(),
+            kind: AssetKind::Image,
+            path: "/pack/heart.png".into(),
+            name: "heart.png".into(),
+            duration_us: 0,
+            width: 1024,
+            height: 1024,
+            fps: 0.0,
+            rotation: None,
+            has_audio: false,
+            audio_lead_us: None,
+            made_with: None,
+        },
+        pack: true,
+        tags: vec!["heart".into()],
+    };
+    let model = Steps::new(vec![
+        ModelResponse {
+            text: String::new(),
+            calls: vec![
+                fc(
+                    "f",
+                    "followSubject",
+                    r#"{"description": "speaker", "focus": null}"#,
+                ),
+                fc(
+                    "c",
+                    "setCaptions",
+                    r#"{"on": true, "style": "word-pop", "set": null}"#,
+                ),
+                fc(
+                    "t",
+                    "addText",
+                    r#"{"text": "Going for all", "preset": "title", "atSec": 0.5, "atWords": null, "durationSec": 2.5, "animation": "kinetic", "font": null}"#,
+                ),
+                fc(
+                    "h",
+                    "addImage",
+                    r#"{"file": "Heart", "size": null, "position": null, "atSec": 10, "atWords": null, "durationSec": null}"#,
+                ),
+            ],
+            usage_usd: 0.004,
+        },
+        ModelResponse {
+            text: "Done.".into(),
+            calls: Vec::new(),
+            usage_usd: 0.002,
+        },
+    ]);
+    let projects = Arc::new(
+        MemoryProjects::open(setup.project.clone(), setup.dir.path().join("talk.klipolo"))
+            .unwrap()
+            .with_pack(vec![heart]),
+    );
+    let session = Arc::new(ChatSession::new(
+        projects.clone(),
+        Arc::new(Found),
+        Arc::new(Paying(model)),
+    ));
+    session.set_speaker(setup.speaker.clone());
+    let r = reply(
+        &session
+            .send(request(
+                "Keep the speaker in frame, add captions, open with the words going for all, and a heart.",
+            ))
+            .await
+            .unwrap(),
+    );
+    assert!(r["applied"].is_object(), "{r:#}");
+    let now = projects.now().unwrap().project;
+    assert_eq!(
+        portrait(&now),
+        (klipolo_model::timeline::FramingMode::Fit, false)
+    );
+    let items: Vec<&klipolo_model::timeline::Item> =
+        now.timeline.tracks.iter().flat_map(|t| &t.items).collect();
+    let hook = (items.iter())
+        .find(|i| klipolo_model::captions::in_hook_band(&now, i))
+        .expect("the hook");
+    let sticker = (items.iter())
+        .find(|i| {
+            matches!(
+                i.content,
+                klipolo_model::timeline::ItemContent::Image { .. }
+            )
+        })
+        .expect("the heart");
+    // 9:16 is the main format: their own boxes. The picture is from 0.342 to 0.658 of the height.
+    let picture_top = 0.5 - (9.0 / 16.0) / (16.0 / 9.0) / 2.0;
+    for (what, b) in [("hook", hook.layout.rect), ("heart", sticker.layout.rect)] {
+        assert!(
+            b.y >= 0.14 && b.y + b.h <= picture_top,
+            "{what} not above the picture: {b:?}"
+        );
+    }
+    assert_eq!(hook.layout.rect, klipolo_model::captions::HOOK_ABOVE);
+    // The hook and the heart never show at once.
+    assert!(sticker.start_us >= hook.end_us(), "{sticker:?} {hook:?}");
+    // The captions wait while the hook shows, and come back after.
+    let mid = (hook.start_us + hook.end_us()) / 2;
+    assert!(klipolo_model::captions::hook_holds_captions(&now, mid));
+    assert!(!klipolo_model::captions::hook_holds_captions(
+        &now,
+        hook.end_us() + 100_000
+    ));
+}

@@ -20,7 +20,7 @@ pub use compile::{
     ANALYZE_FIRST, AnalysisState, Audience, Beside, Compiled, CursorTakes, FontNamer, FontNames,
     Inputs, Job, MakeSticker, NO_FILLERS, NamedFont, Proposal, ROUGH_FILLERS, ROUGH_FILLERS_STAY,
     Refusal, STILL_LISTENING, STILL_WATCHING, UNDO_AFTER_CHANGES, UNDO_FIRST, compile,
-    compile_for_app, place_beside_again, sticker_ops, sticker_placement,
+    compile_for_app, place_beside_again, place_hook_again, sticker_ops, sticker_placement,
 };
 pub use context::{
     ChatContext, FullTranscript, MAX_CONTEXT_TOKENS, Refs, SceneEntry, SceneLog, SpeakerTurn,

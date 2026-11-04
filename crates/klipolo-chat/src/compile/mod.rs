@@ -1986,6 +1986,32 @@ pub(crate) fn names_media(inputs: &Inputs, asked: &str, kinds: &[MediaKind]) -> 
     }
 }
 
+/// `ops` (a message's additions) with a short's hook placed again on `p`, the project once the message's follow has
+/// landed: in the band above the picture where its clip is now shown whole in 9:16 (`captions::hook_place`, as for a
+/// presenter's corner inset), else where it was. Words not in the hook's place, or that `p` doesn't hold, stay put.
+pub fn place_hook_again(p: &Project, ops: &mut [Op]) {
+    for op in ops {
+        let Op::AddItem { item, .. } = op else {
+            continue;
+        };
+        if !klipolo_model::captions::in_hook_band(p, item) {
+            continue;
+        }
+        let Some(now) = (p.timeline.tracks.iter())
+            .flat_map(|t| &t.items)
+            .find(|i| i.id == item.id)
+        else {
+            continue;
+        };
+        let place = klipolo_model::captions::hook_place(p, now.start_us);
+        if p.settings.primary_format == FormatKind::Portrait {
+            item.layout.rect = place;
+        } else {
+            item.layout.overrides.insert(FormatKind::Portrait, place);
+        }
+    }
+}
+
 /// `ops` (a message's additions) with the pictures Klipolo placed beside the speaker (`Compiled::beside`) placed again
 /// on `p`, the project once the message's follow has landed: beside the head where the follow's path now keeps the
 /// speaker, which may be off the middle where the crop meets the picture's edge. Each is found in `p` by its id, at
