@@ -60,7 +60,7 @@ API key ([Install](#install)).
       <img src="site/assets/img/record-dialog-560.jpg" alt="Klipolo's Record window: Whole screen, One app or Record yourself, a microphone with a level meter, a camera choice and the Record button.">
       <h3>Record in the app</h3>
       Your whole screen or one app, with your mic and camera, or just yourself on camera. Each source goes to its own
-      file, written by a worker process that keeps recording if the editor crashes. Clicks get auto zoom, and the
+      file, written by a separate recorder process. Clicks get auto zoom, and the
       vertical version follows your cursor.
     </td>
     <td width="50%" valign="top">
@@ -286,7 +286,6 @@ machine for video work.
 | Each edit on a two hour, 3,000 clip project | **under 10 ms** to apply (split 9.2 ms, ripple delete 5.1 ms, roll 3.5 ms, slip 3.3 ms), then 2 to 8 ms for the engine to update | median of 5 runs, a release build of 2 November, on a generated project (`crates/klipolo-engine/examples/perf_harness/long.rs`) |
 | Save and open that project | **3.1 ms** to write its JSON (0.95 MB), **6.2 ms** to parse and check it | median of 5 runs, in memory (no disk) |
 | A caption frame at 1080p | **about 1 ms** of CPU (0.48 ms for Word pop to 1.06 ms for Highlight, at the median over four styles) and 4.4 to 5.7 ms of GPU | 1,800 frames each, paced at 60 fps |
-| The recorder, killed with `kill -9` | 20 kills at random moments: every source recovered, losing at most 0.7 s of video and 0.2 s of audio | a test with synthetic sources (`crates/klipolo-capture/tests/kill.rs`), run on Linux by the gate, not on this Mac |
 | Launch until the window shows | **about 3 s** (2.4 to 3.4 s) | one launch, not repeated, the first after installing 0.1.1: the process start time from `ps` (to the second) against the app's own log line when its window showed |
 | Memory, idle with a project open | **446 MB** resident in all: the app's process 160.5 MB, the three WebKit processes that started with it 285.8 MB | one reading with `ps -o rss`, 33 minutes after launch, the Mac idle; resident sizes count shared system libraries once in each process, so the real total is lower |
 
