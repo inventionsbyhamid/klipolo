@@ -273,7 +273,7 @@ flowchart TB
 | `crates/klipolo-app` | The Tauri shell. Its commands are thin: they call into the crates above and wire the Meta adapters in. | all but sam and speech-wire |
 | `apps/desktop` | The editor page, React 19 and TypeScript. Its types for Rust's data are generated from the Rust code (ts-rs). | |
 | `services/relay` | A small Python service (FastAPI, SQLite) at api.klipolo.com: registers devices, caps each one's spend, forwards only an allowlist of Meta models, and runs the MMS aligner on CPU. See [The relay](#the-relay). | |
-| `site` | klipolo.com: hand-written HTML, CSS and one JavaScript module, served by nginx. See [The website](#the-website). | |
+| `site` | klipolo.com: hand written HTML, CSS and one JavaScript module, served by nginx. See [The website](#the-website). | |
 | `scripts/mcp-demo-agent` | A small script where Muse Spark edits the open project through Klipolo's MCP tools. | |
 
 ### Why it is modular
