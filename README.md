@@ -406,8 +406,8 @@ machine for video work.
 
 | What | Klipolo | How it was measured |
 | --- | --- | --- |
-| Disk image, 0.1.1 | **43.4 MB** for Apple Silicon (43,424,717 bytes), **46.8 MB** for Intel (46,787,526 bytes) | the released files' sizes |
-| Installed app, 0.1.1 | **77.7 MB** for Apple Silicon, **85.5 MB** for Intel: the app binary 35.2 MB and 39.0 MB, FFmpeg's libraries 21.8 MB and 25.7 MB, fonts 6.0 MB, the music, sound and sticker pack 14.4 MB | `du -sk` of each release build's `Klipolo.app` and its parts (75,924 and 83,488 KiB in all) |
+| Disk image, 0.1.2 | **43.4 MB** for Apple Silicon (43,422,844 bytes), **46.8 MB** for Intel (46,794,028 bytes) | the released files' sizes |
+| Installed app, 0.1.2 | **77.9 MB** for Apple Silicon, **85.6 MB** for Intel: the app binary 35.2 MB and 39.0 MB, FFmpeg's libraries 21.8 MB and 25.7 MB, fonts 6.0 MB, the music, sound and sticker pack 14.5 MB | `du -sk` of each release build's `Klipolo.app` and its parts (76,040 and 83,600 KiB in all) |
 | Each edit on a two hour, 3,000 clip project | **under 10 ms** to apply (split 9.2 ms, ripple delete 5.1 ms, roll 3.5 ms, slip 3.3 ms), then 2 to 8 ms for the engine to update | median of 5 runs, a release build of 2 November, on a generated project (`crates/klipolo-engine/examples/perf_harness/long.rs`) |
 | Save and open that project | **3.1 ms** to write its JSON (0.95 MB), **6.2 ms** to parse and check it | median of 5 runs, in memory (no disk) |
 | A caption frame at 1080p | **about 1 ms** of CPU (0.48 ms for Word pop to 1.06 ms for Highlight, at the median over four styles) and 4.4 to 5.7 ms of GPU | 1,800 frames each, paced at 60 fps |
