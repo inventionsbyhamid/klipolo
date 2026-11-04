@@ -293,10 +293,10 @@ show what the runtime alone, and two open source Electron media apps, weigh.
 
 | What | Size | Source |
 | --- | --- | --- |
-| The Electron runtime alone for macOS, v45.2.2, before any app code | 125.0 MB zipped (Intel), 121.0 MB (Apple Silicon) | [electron/electron release v45.2.2](https://github.com/electron/electron/releases/tag/v45.2.2) |
-| LosslessCut 3.70.2, an open source Electron video cutter built on FFmpeg | 177.9 MB disk image (Intel), 165.8 MB (Apple Silicon) | [mifi/lossless-cut release v3.70.2](https://github.com/mifi/lossless-cut/releases/tag/v3.70.2) |
-| Kap 3.6.0, an open source Electron screen recorder for macOS | 122.7 MB disk image (Intel), 124.7 MB (Apple Silicon) | [wulkano/Kap release v3.6.0](https://github.com/wulkano/Kap/releases/tag/v3.6.0) |
-| Tauri's own benchmark, a hello world app on Linux CI | Electron: 166.5 MB binary, 476 MB peak memory (September 2023, the last Electron run). Tauri: 3.0 MB binary, 358 MB peak memory (Nov 2026) | [tauri-apps/benchmark_results](https://github.com/tauri-apps/benchmark_results), its [data files](https://github.com/tauri-apps/benchmark_results/tree/gh-pages) |
+| The Electron runtime alone for macOS, v45.2.2, before any app code | 125.0 MB zipped (Intel), 121.0 MB (Apple Silicon) | [Electron v45.2.2 release](https://github.com/electron/electron/releases/tag/v45.2.2) |
+| LosslessCut 3.70.2, an open source Electron video cutter built on FFmpeg | 177.9 MB disk image (Intel), 165.8 MB (Apple Silicon) | [LosslessCut v3.70.2 release](https://github.com/mifi/lossless-cut/releases/tag/v3.70.2) |
+| Kap 3.6.0, an open source Electron screen recorder for macOS | 122.7 MB disk image (Intel), 124.7 MB (Apple Silicon) | [Kap v3.6.0 release](https://github.com/wulkano/Kap/releases/tag/v3.6.0) |
+| Tauri's own benchmark, a hello world app on Linux CI | Electron: 166.5 MB binary, 476 MB peak memory (September 2023, the last Electron run). Tauri: 3.0 MB binary, 358 MB peak memory (Nov 2026) | [Tauri's benchmark results](https://github.com/tauri-apps/benchmark_results) and their [data files](https://github.com/tauri-apps/benchmark_results/tree/gh-pages) |
 
 What this says, plainly: the download is where a Rust core wins most clearly. Klipolo's Intel disk image, FFmpeg
 and its sound pack included, is 46.8 MB: under 40% of the Electron runtime's own 125.0 MB download for the same Mac,
