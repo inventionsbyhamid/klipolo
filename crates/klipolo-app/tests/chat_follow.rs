@@ -924,7 +924,7 @@ async fn follow_the_speaker(setup: &Setup) -> (Value, Project) {
             "followSubject",
             r#"{"description": "speaker", "focus": null}"#,
         )],
-        "Done. The speaker stays in frame in the vertical version.",
+        "Your short is ready. The speaker stays in frame in the vertical version. Captions are on.",
     );
     let r = reply(
         &session
@@ -957,14 +957,17 @@ async fn a_presenter_in_a_small_corner_inset_is_shown_whole_on_a_blurred_backgro
     });
     let (r, now) = follow_the_speaker(&setup).await;
     assert_eq!(setup.sam.asked(), [PERSON]);
-    // The model's words claimed the speaker is kept in frame: Klipolo's one true sentence is said instead.
+    // The model's words keep all but their sentence saying the speaker stays in frame; Klipolo's one sentence on what
+    // the follow did comes after them.
+    assert_eq!(r["text"], "Your short is ready. Captions are on.", "{r:#}");
     assert_eq!(
-        r["text"],
-        "SAM 3.1 found only a small corner inset, so the vertical version shows the whole picture on a blurred \
-         background now. Tracking cost $0.02.",
+        r["notes"],
+        serde_json::json!([
+            "SAM 3.1 found only a small corner inset, so the vertical version shows the whole picture on a blurred \
+             background now. Tracking cost $0.02."
+        ]),
         "{r:#}"
     );
-    assert_eq!(r["notes"], serde_json::json!([]), "{r:#}");
     assert_eq!(
         portrait(&now),
         (klipolo_model::timeline::FramingMode::Fit, false)

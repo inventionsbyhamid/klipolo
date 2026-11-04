@@ -221,8 +221,8 @@ pub(super) struct Follows {
     /// A follow was asked for and nothing of it landed (nobody found, the tracking failed, no clip can follow): the
     /// model's words may claim it (`PlanOut::without_follow`).
     pub failed: bool,
-    /// The follow landed otherwise than the model was told: every clip shows its footage whole for a presenter's corner
-    /// inset, so its words may claim someone is kept in frame (`PlanOut::without_follow`).
+    /// Every clip shows its footage whole for a presenter's corner inset: a sentence of the model's words that still
+    /// says someone is kept in frame goes (`without_framing_claims`).
     pub differs: bool,
 }
 
@@ -644,6 +644,45 @@ fn attach(out: &mut PlanOut, work: &Project, ops: Vec<Op>, phrase: &str) -> bool
 pub fn kept_in_frame(p: &Project, formats: &[FormatKind], who: &str) -> String {
     let (which, keep) = versions(p, formats);
     format!("The {which} {keep} the {who} in frame")
+}
+
+/// Words that say how a crop frames someone ("keeps her in frame", "the camera follows him"): a sentence of the model's
+/// with one is left out where every clip shows its footage whole instead.
+const FRAMING_WORDS: [&str; 7] = [
+    "in frame",
+    "in the frame",
+    "in view",
+    "framed",
+    "centred",
+    "centered",
+    "follow",
+];
+
+/// `reply` without its sentences that say how someone is framed (`FRAMING_WORDS`); the others as they were.
+pub(super) fn without_framing_claims(reply: &str) -> String {
+    let mut kept: Vec<&str> = Vec::new();
+    let mut start = 0;
+    let bytes = reply.as_bytes();
+    for (i, c) in reply.char_indices() {
+        let ends = matches!(c, '.' | '!' | '?')
+            && bytes.get(i + 1).is_none_or(|b| b.is_ascii_whitespace());
+        if ends {
+            kept.push(&reply[start..=i]);
+            start = i + 1;
+        }
+    }
+    if start < reply.len() {
+        kept.push(&reply[start..]);
+    }
+    kept.into_iter()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .filter(|s| {
+            let lower = s.to_lowercase();
+            !FRAMING_WORDS.iter().any(|w| lower.contains(w))
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// The tracker chat's follows use, as the reply names it.

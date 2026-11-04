@@ -574,10 +574,17 @@ impl ChatSession {
                 if !follows.note.is_empty() {
                     out.note = format!("{} {}", out.note, follows.note).trim().to_owned();
                 }
-                // The model was told the follow was done before it ran: when it came to nothing, or every clip shows
-                // its footage whole for a presenter's inset, its words may claim someone is kept in frame. What else was
-                // done is said instead, or else what the follow came to is the reply.
-                if (follows.failed || follows.differs)
+                // The model was told the follow was done before it ran: when it came to nothing, its words may claim
+                // it. What else was done is said instead, or else what the follow came to is the reply.
+                // Every clip shows its footage whole for a presenter's inset: the model was told Klipolo frames it, but
+                // a sentence of its words that still says someone is kept in frame goes. Klipolo's note follows.
+                if follows.differs && !follows.failed {
+                    out.reply = follow::without_framing_claims(&out.reply);
+                    if out.reply.is_empty() {
+                        out.reply = std::mem::take(&mut follows.said).join(" ");
+                    }
+                }
+                if follows.failed
                     && let Some(instead) = out.without_follow.take()
                 {
                     out.reply = if instead.is_empty() {
